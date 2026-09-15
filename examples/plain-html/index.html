@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Northwind Analytics — iso-iterate example</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!--
+  A page with no build step, no bundler and no React of its own.
+  The one line at the bottom of <body> is the entire integration; it is the
+  tag `npx iso-iterate serve` prints (and shows at http://127.0.0.1:4123).
+
+    npx iso-iterate serve                                   # from the repo root
+    python3 -m http.server 8799 --directory examples/plain-html
+    open http://localhost:8799
+
+  Notes land in .iteration-feedback.json next to where `serve` runs; read
+  them with `npx iso-iterate` from the same directory.
+-->
+<style>
+  :root {
+    --bg: #08090c; --panel: #101218; --line: #1e2129;
+    --fg: #e8eaef; --muted: #8b91a1; --accent: #5b8cff;
+    --font-sans: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 15px/1.6 var(--font-sans); }
+  .wrap { max-width: 62rem; margin: 0 auto; padding: 2rem 1.5rem 6rem; }
+  header { display: flex; align-items: center; justify-content: space-between;
+           padding: 1rem 0 2.5rem; }
+  .logo { display: flex; align-items: center; gap: .6rem; font-weight: 650; letter-spacing: -.01em; }
+  .logo i { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); display: block; }
+  nav span { color: var(--muted); margin-left: 1.4rem; font-size: .9rem; cursor: pointer; }
+  nav span:hover { color: var(--fg); }
+  h1 { font-size: clamp(1.9rem, 4vw, 2.9rem); line-height: 1.1; letter-spacing: -.025em; margin: 0 0 .8rem; }
+  .lede { color: var(--muted); font-size: 1.05rem; max-width: 34rem; margin: 0 0 1.8rem; }
+  .cta { display: inline-flex; align-items: center; gap: .5rem; background: var(--accent);
+         color: #fff; border: 0; border-radius: 8px; padding: .7rem 1.2rem; font: inherit;
+         font-weight: 600; cursor: pointer; }
+  .cta.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+  .row { display: flex; gap: .7rem; flex-wrap: wrap; }
+  .grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); margin: 3.5rem 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1.2rem; }
+  .kpi { font-size: 1.9rem; font-weight: 650; letter-spacing: -.02em; }
+  .kpi + p { color: var(--muted); font-size: .85rem; margin: .2rem 0 0; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { text-align: left; padding: .65rem .5rem; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; font-size: .8rem; text-transform: uppercase;
+       letter-spacing: .06em; }
+  .pill { display: inline-block; font-size: .72rem; padding: .16rem .5rem; border-radius: 99px;
+          border: 1px solid var(--line); color: var(--muted); }
+  .pill.ok { color: #6ee7a8; border-color: #1c4436; }
+  h2 { font-size: 1.1rem; letter-spacing: -.01em; margin: 3rem 0 1rem; }
+  .hint { color: var(--muted); font-size: .85rem; border-left: 2px solid var(--accent);
+          padding-left: .9rem; margin: 3rem 0 0; }
+  code { font-family: ui-monospace, monospace; font-size: .85em; color: var(--fg); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo"><i></i> Northwind Analytics</div>
+    <nav><span>Product</span><span>Pricing</span><span>Docs</span><span>Sign in</span></nav>
+  </header>
+
+  <h1 id="hero-heading">Every query your team runs, in one place.</h1>
+  <p class="lede">Point Northwind at a warehouse and it maps the schema, watches
+     the slow queries and tells you which index would have paid for itself.</p>
+  <div class="row">
+    <button type="button" class="cta" id="primary-cta">Join the waitlist</button>
+    <button type="button" class="cta ghost" id="secondary-cta">Read the docs</button>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="kpi" id="kpi-latency">412 ms</div><p>p95 query latency</p></div>
+    <div class="card"><div class="kpi" id="kpi-scanned">1.9 TB</div><p>Scanned this week</p></div>
+    <div class="card"><div class="kpi" id="kpi-savings">$1,240</div><p>Estimated monthly saving</p></div>
+  </div>
+
+  <h2 id="table-heading">Slowest statements</h2>
+  <table id="queries-table">
+    <thead><tr><th>Statement</th><th>Calls</th><th>Mean</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td><code>SELECT * FROM orders JOIN …</code></td><td>18,204</td><td>1.8 s</td>
+          <td><span class="pill">needs index</span></td></tr>
+      <tr><td><code>UPDATE inventory SET …</code></td><td>9,551</td><td>640 ms</td>
+          <td><span class="pill ok">healthy</span></td></tr>
+      <tr><td><code>SELECT count(*) FROM events …</code></td><td>44,900</td><td>2.4 s</td>
+          <td><span class="pill">needs index</span></td></tr>
+    </tbody>
+  </table>
+
+  <p class="hint">Open the panel at the bottom right and type a note, Enter
+     sends. For a note about one element, press the crosshair, hover anything
+     on this page and click to pin it. Then run <code>npx iso-iterate</code>
+     where <code>serve</code> is running to read what you wrote.</p>
+</div>
+
+<!-- The entire integration. Dev only. -->
+<script src="http://127.0.0.1:4123/iso-iterate.js" defer></script>
+</body>
+</html>

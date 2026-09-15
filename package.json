@@ -1,0 +1,90 @@
+{
+  "name": "iso-iterate",
+  "version": "0.3.2",
+  "type": "module",
+  "license": "MIT",
+  "description": "A feedback loop between a person reviewing a running web app and the coding agent building it. A dev-only panel bottom right of the page takes notes, pins them to real elements with a click, and writes them to a JSON file in the repo with route, selector and window size; a CLI lets the agent read them and mark them done. The same panel switches variants: alternative copies of a source file that the Vite plugin serves in place of the real one, or a host's own variant state. Vite plugin, framework-free route handler, or one script tag for any dev server.",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    "./react": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./serve": {
+      "types": "./dist/serve.d.ts",
+      "import": "./dist/serve.js"
+    },
+    "./vite": {
+      "types": "./dist/vite-plugin.d.ts",
+      "import": "./dist/vite-plugin.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    }
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "bin": {
+    "iso-iterate": "./dist/cli.js"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
+    "lint:fix": "biome lint --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsup",
+    "check": "pnpm typecheck && pnpm lint && pnpm build && pnpm test",
+    "prepublishOnly": "pnpm check"
+  },
+  "peerDependencies": {
+    "react": "^18 || ^19",
+    "react-dom": "^18 || ^19",
+    "vite": "^5 || ^6 || ^7 || ^8"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.7",
+    "@types/node": "24.13.3",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "jsdom": "^30.0.1",
+    "react": "^19",
+    "react-dom": "^19",
+    "tsup": "^8",
+    "typescript": "^5",
+    "vite": "^7",
+    "vitest": "^4.1.10"
+  },
+  "keywords": [
+    "feedback",
+    "review",
+    "dev-tool",
+    "vite-plugin",
+    "coding-agent",
+    "annotations",
+    "design-review",
+    "variants",
+    "claude",
+    "iteration"
+  ],
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aaroi/iso-iterate.git"
+  },
+  "homepage": "https://github.com/aaroi/iso-iterate#readme",
+  "bugs": "https://github.com/aaroi/iso-iterate/issues"
+}

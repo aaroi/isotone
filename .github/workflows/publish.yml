@@ -1,0 +1,39 @@
+# Every push to main runs the full gate. If package.json carries a version
+# npm has not seen, the same run publishes it — so a release is "bump the
+# version, push". Publishing authenticates via npm trusted publishing (OIDC):
+# no token lives in this repo, and it satisfies npm's 2FA requirement.
+name: check & publish
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write # the OIDC token npm trusted publishing exchanges
+
+jobs:
+  check-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+      # trusted publishing needs npm >= 11.5.1
+      - run: npm install -g npm@latest
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - name: publish when the version is new
+        run: |
+          LOCAL="$(node -p "require('./package.json').version")"
+          PUBLISHED="$(npm view iso-iterate version 2>/dev/null || echo none)"
+          if [ "$LOCAL" = "$PUBLISHED" ]; then
+            echo "iso-iterate@$LOCAL is already on npm — nothing to publish"
+          else
+            npm publish
+          fi
