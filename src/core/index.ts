@@ -226,14 +226,17 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     window.localStorage.removeItem(key);
   }
 
-  async function listNotes(route: string): Promise<IterationNote[]> {
+  /** Notes for one route, or every note on every route when `route` is omitted. */
+  async function listNotes(route?: string): Promise<IterationNote[]> {
     if (!endpoint) {
       return localAll()
-        .filter((i) => i.route === route)
+        .filter((i) => route === undefined || i.route === route)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     }
     await migrateLocalBacklog().catch(() => {});
-    const res = await request(`${endpoint}?route=${encodeURIComponent(route)}`);
+    const res = await request(
+      route === undefined ? `${endpoint}?all=1` : `${endpoint}?route=${encodeURIComponent(route)}`,
+    );
     if (!res.ok) throw new Error(`Loading iteration notes failed (${res.status})`);
     return (await res.json()) as IterationNote[];
   }

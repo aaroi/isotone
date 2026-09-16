@@ -222,9 +222,17 @@ export function notesResponse(file: string, req: NotesRequest): NotesResponse {
 
   if (method === 'GET') {
     const route = String(query.route ?? '');
+    const all = query.all !== undefined && String(query.all) !== '' && String(query.all) !== '0';
     const notes = readNotes(file);
+    // `?all=1` is the panel's list: every note on every route, done ones
+    // included, so feedback accumulates in one place whatever page is open.
+    // `?route=` scopes to a page; neither means the agent's pending backlog.
     const rows = (
-      route ? notes.filter((n) => n.route === route) : notes.filter((n) => !n.done)
+      all
+        ? notes
+        : route
+          ? notes.filter((n) => n.route === route)
+          : notes.filter((n) => !n.done)
     )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map(toItem);

@@ -68,7 +68,8 @@ the copy's imports as they are: it is served under the real file's module id.
 `variant use default` goes back. Mark the note done once the variant exists;
 the reviewer decides between Default and it in the panel. Ids are lowercase
 letters, digits and hyphens. A variant made without `--route` shows on every
-route, which is what an app on a memory router (every screen at `/`) needs.
+route, which is what an app on a memory router (every screen at `/`) needs;
+a route ending in `/*` (`--route /items/*`) covers every page under it.
 
 The panel shows one selector per decision, only on the page where that
 element lives, and the reviewer can have one pick per decision active at the

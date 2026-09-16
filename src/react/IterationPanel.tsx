@@ -315,8 +315,10 @@ export function IterationPanel({
   // biome-ignore lint/correctness/useExhaustiveDependencies: refetch is an open-time action; store is stable.
   useEffect(() => {
     if (!open || !notesAvailable || !showNotes) return;
+    // Every route's notes, so feedback accumulates in one list whatever page
+    // is open; each row says which page it belongs to.
     store
-      .listNotes(route)
+      .listNotes()
       .then((fresh) => {
         setNotes((prev) =>
           prev?.some((n) => n.id.startsWith('pending-')) ? prev : fresh,
@@ -545,14 +547,22 @@ export function IterationPanel({
                         {note.done ? '✓ done' : timeLabel(note.createdAt)}
                       </span>
                     </div>
-                    {note.element && (
-                      <div className="iso-iter-meta">
+                    <div className="iso-iter-meta">
+                      <span
+                        className={
+                          note.route === route ? 'iso-iter-route iso-iter-route-here' : 'iso-iter-route'
+                        }
+                        title={note.route === route ? 'This page' : `On ${note.route}`}
+                      >
+                        {note.route}
+                      </span>
+                      {note.element && (
                         <span className="iso-iter-el" title={note.element.selector}>
                           ↳ {note.element.tag}
                           {note.element.text ? ` · ${note.element.text}` : ''}
                         </span>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </button>
                   <button
                     type="button"

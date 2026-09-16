@@ -239,6 +239,20 @@ export const PANEL_CSS = `
 .iso-iter-note:hover .iso-iter-when {
   opacity: 0;
 }
+.iso-iter-route {
+  display: inline-block;
+  max-width: 14em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--iso-mono);
+  font-size: 10px;
+  opacity: 0.55;
+  margin-right: 8px;
+}
+.iso-iter-route-here {
+  opacity: 0.8;
+}
 .iso-iter-meta {
   display: flex;
   align-items: baseline;

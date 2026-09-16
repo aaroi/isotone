@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.3
+
+- The Notes tab lists every note from every page, newest first, with the
+  page named on each row, so feedback accumulates in one place whatever
+  page is open. The notes endpoint answers `?all=1` for that; `?route=` and
+  the agent's pending list are unchanged.
+- A variant route ending in `/*` covers the base page and every page under
+  it.
+
 ## 0.3.2
 
 - A variant's selector shows only on the route it was made for, active or

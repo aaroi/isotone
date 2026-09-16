@@ -6,7 +6,7 @@
 import { existsSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-import { overlayGroups } from '../core/variants';
+import { overlayGroups, variantAppliesTo } from '../core/variants';
 import { readNotes } from '../store';
 import {
   addVariantFile,
@@ -119,7 +119,7 @@ function cmdList(rest: string[], io: CliIO, opts: VariantsStoreOptions): number 
   const variants = listVariants(opts);
   const active = readActive(opts);
   const rows =
-    route && !allRoutes ? variants.filter((v) => !v.route || v.route === route) : variants;
+    route && !allRoutes ? variants.filter((v) => variantAppliesTo(v.route, route)) : variants;
 
   if (rows.length === 0) {
     out(io, route ? `No variants for "${route}".` : 'No variants.');

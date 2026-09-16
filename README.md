@@ -100,7 +100,8 @@ Vite.
 - The crosshair pins an element: hover highlights, click attaches.
 - Click a note to edit it. Delete appears on hover.
 - Unsent text survives closing the panel.
-- Done notes leave the list as the agent marks them.
+- The list holds every note from every page, newest first, with the page
+  named on each row. Done notes leave it as the agent marks them.
 
 The panel renders in a shadow root, so its styles and the page's never mix.
 It matches the page's light or dark background on its own, and hides itself
@@ -119,7 +120,8 @@ of the real file. Variants that override the same files, or share a
 `--group`, are alternatives of one decision and appear as one selector with
 Default and each option; unrelated variants get their own selectors and can
 be active at the same time. A selector shows only on the variant's route;
-a variant made without a route shows everywhere.
+a route ending in `/*` covers every page under it, and a variant made
+without a route shows everywhere.
 
 **A host with its own variant system** hands the panel a `VariantsSource`:
 

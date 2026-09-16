@@ -443,10 +443,25 @@ function groupLabel(id: string, members: OverlayVariant[]): string {
  * the place to switch it back is that route's page. Pure, so the panel and
  * the tests can build it from a listing.
  */
+/**
+ * Does a variant scoped to `pattern` belong on `route`? No pattern means
+ * everywhere; an exact route means that page; a pattern ending in `/*`
+ * means the base and every page under it, so a variant made on one
+ * detail page (`/items/42`) can be filed for `/items/*` and show on all.
+ */
+export function variantAppliesTo(pattern: string | undefined, route: string): boolean {
+  if (!pattern) return true;
+  if (pattern.endsWith('/*')) {
+    const base = pattern.slice(0, -2);
+    return route === base || route.startsWith(`${base}/`);
+  }
+  return pattern === route;
+}
+
 export function overlayAxes(list: OverlayVariantsList, route: string): SelectVariantAxis[] {
   const axes: SelectVariantAxis[] = [];
   for (const group of overlayGroups(list.variants)) {
-    const mine = group.members.filter((v) => !v.route || v.route === route);
+    const mine = group.members.filter((v) => variantAppliesTo(v.route, route));
     if (mine.length === 0) continue;
     axes.push({
       id: group.id,
