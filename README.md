@@ -148,6 +148,44 @@ review; `variants: { ignored: true }` keeps them local. The active pointer,
 `.iso-iterate/active.json`, is local and never committed. `ISO_VARIANT=<id>`
 (a comma-separated list) bakes variants into a `vite build` for a preview.
 
+### Knobs
+
+Some decisions are a number, not an alternative file: how far a fade
+reaches, how dense a dot field is. Declare those in
+`.iso-iterate/knobs.json`, a JSON array of range or colour axes with an
+optional `route` (a pattern like a variant's, or a list of them):
+
+```json
+[
+  {
+    "kind": "range",
+    "id": "fade-from",
+    "label": "Fade starts",
+    "min": 0,
+    "max": 100,
+    "step": 1,
+    "defaultValue": 0,
+    "unit": "%",
+    "route": ["/computers/*", "/databases/*"]
+  }
+]
+```
+
+The panel renders each knob as a slider on its routes. A value reaches the
+page as a custom property on `<html>`, `--knob-<id>`, with the unit
+appended, so the source reads it with the committed default as the
+fallback:
+
+```css
+mask-image: radial-gradient(ellipse, black var(--knob-fade-from, 0%), transparent 100%);
+```
+
+Knob values live in the reviewer's browser, not on the server. "Save as
+defaults" files the moved knobs in the same `[set-defaults]` note as the
+variant picks, as `Knobs: Fade starts 40% (fade-from)` with a `knobs`
+payload of `fade-from:40`; the agent writes the number into the source and
+into the knob file's `defaultValue`.
+
 ## What live switching needs from the host
 
 A switch is delivered as a Vite hot update, so it swaps in place exactly

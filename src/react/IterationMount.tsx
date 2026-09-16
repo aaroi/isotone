@@ -3,9 +3,10 @@ import { createRoot } from 'react-dom/client';
 import { createIterationStore, type RouteGateOptions } from '../core/index';
 import {
   createOverlayVariantsSource,
+  knobDelta,
   OVERLAY_DEFAULT_OPTION,
-  VARIANTS_ENDPOINT,
   type VariantsSource,
+  VARIANTS_ENDPOINT,
 } from '../core/variants';
 import { IterationPanel } from './IterationPanel';
 import { ensurePanelStyles } from './styles';
@@ -213,17 +214,32 @@ function overlaySourceWithSave(
         const named = axis.label === label ? label : `${axis.label}: ${label}`;
         return [{ id, named, element: variant?.element ?? null }];
       });
+    // Knobs the reviewer moved off their defaults ride in the same note, as
+    // the value the panel showed, so the agent can write the number in.
+    const moved = knobDelta(source.knobs.axes, source.knobs.values);
     // Only the decision, nothing about the other variants: they stay until
     // the reviewer says otherwise, in their own words.
-    const feedback = picked.length
-      ? `[set-defaults] Make the default: ${picked.map((p) => `"${p.named}" (${p.id})`).join('; ')}.`
+    const parts: string[] = [];
+    if (picked.length) {
+      parts.push(`Make the default: ${picked.map((p) => `"${p.named}" (${p.id})`).join('; ')}.`);
+    }
+    if (moved.length) {
+      parts.push(`Knobs: ${moved.map((m) => `${m.axis.label} ${m.shown} (${m.axis.id})`).join('; ')}.`);
+    }
+    const feedback = parts.length
+      ? `[set-defaults] ${parts.join(' ')}`
       : '[set-defaults] The current defaults stay on this route.';
     await notes.saveNote(
       getRoute(),
       feedback,
       picked[0]?.element ?? null,
       null,
-      { variants: picked.length ? picked.map((p) => p.id).join(', ') : OVERLAY_DEFAULT_OPTION },
+      {
+        variants: picked.length ? picked.map((p) => p.id).join(', ') : OVERLAY_DEFAULT_OPTION,
+        ...(moved.length
+          ? { knobs: moved.map((m) => `${m.axis.id}:${m.value}`).join(', ') }
+          : {}),
+      },
       { w: window.innerWidth, h: window.innerHeight },
     );
   };

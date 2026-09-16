@@ -135,7 +135,7 @@ describe('the Vite adapter, served', () => {
   it('serves the variants endpoint, path-relative to its mount', async () => {
     const res = await fetch(`${origin}${VARIANTS_ENDPOINT}`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ variants: [], active: [] });
+    expect(await res.json()).toEqual({ variants: [], active: [], knobs: [] });
     const unknown = await fetch(`${origin}${VARIANTS_ENDPOINT}/active`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

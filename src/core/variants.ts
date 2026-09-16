@@ -331,15 +331,79 @@ export interface OverlayVariantStatus extends OverlayVariant {
   missing: string[];
 }
 
+/**
+ * A knob: a range or colour axis the host declares in `.iso-iterate/knobs.json`
+ * next to its overlay variants. The panel renders it as a slider (or a colour
+ * pick) on the routes it names, and the value reaches the page as a CSS
+ * custom property on `<html>`, `--knob-<id>`, with the axis unit appended
+ * (`--knob-fade-from: 40%`). The host reads it with a fallback that is the
+ * committed default: `var(--knob-fade-from, 0%)`. "Save as defaults" files
+ * the moved knobs in the same `[set-defaults]` note as the variant picks, so
+ * the agent writes the numbers into the source and the knob file.
+ */
+export type KnobAxis = (RangeVariantAxis | ColorVariantAxis) & {
+  /** Route pattern(s) the knob belongs on, like a variant's `route`; absent means every route. */
+  route?: string | string[];
+};
+
 /** `GET` body of the variants endpoint. */
 export interface OverlayVariantsList {
   variants: OverlayVariantStatus[];
   /** The active variant ids, at most one per group; `[]` is the default. */
   active: string[];
+  /** The host's knobs, every route; the client filters by route. */
+  knobs?: KnobAxis[];
+}
+
+/** The custom property a knob writes: `--knob-<id>`. */
+export function knobVar(id: string): string {
+  return `--knob-${id}`;
+}
+
+/** The property's value: a range carries its unit, a colour is its hex. */
+export function knobCssValue(axis: KnobAxis, value: string): string {
+  return axis.kind === 'range' ? `${value}${axis.unit ?? ''}` : value;
+}
+
+/** The knobs that belong on `route`. */
+export function knobsFor(knobs: KnobAxis[] | undefined, route: string): KnobAxis[] {
+  return (knobs ?? []).filter((k) => {
+    const patterns = k.route === undefined ? [undefined] : ([] as (string | undefined)[]).concat(k.route);
+    return patterns.some((p) => variantAppliesTo(p, route));
+  });
+}
+
+/** Write every knob's value onto the root element; missing values clear the property. */
+export function applyKnobValues(
+  knobs: KnobAxis[],
+  values: VariantSelections,
+  root: { style: { setProperty(name: string, value: string): void; removeProperty(name: string): void } },
+): void {
+  for (const k of knobs) {
+    const v = values[k.id];
+    if (v === undefined || v === axisDefault(k)) root.style.removeProperty(knobVar(k.id));
+    else root.style.setProperty(knobVar(k.id), knobCssValue(k, v));
+  }
+}
+
+/** The knobs that sit off their default, with the value the panel showed. */
+export function knobDelta(
+  knobs: KnobAxis[],
+  values: VariantSelections,
+): { axis: KnobAxis; value: string; shown: string }[] {
+  return knobs.flatMap((k) => {
+    const v = values[k.id];
+    if (v === undefined || v === axisDefault(k)) return [];
+    const shown = k.kind === 'range' ? formatRangeValue(k, v) : v;
+    return [{ axis: k, value: v, shown }];
+  });
 }
 
 /** The endpoint path the client calls. */
 export const VARIANTS_ENDPOINT = '/api/iteration/variants';
+
+/** Where the browser keeps knob values between reloads. */
+export const KNOBS_STORAGE_KEY = 'iso-iterate:knobs';
 
 /** The option id that means "no variant, the real files". */
 export const OVERLAY_DEFAULT_OPTION = 'default';
@@ -509,13 +573,59 @@ export function createOverlayVariantsSource(cfg: {
   /** Absolute or same-origin URL of the variants endpoint. */
   endpoint: string;
   getRoute: () => string;
-}): VariantsSource & { refresh(): Promise<void>; readonly list: OverlayVariantsList | null } {
+  /** Where knob values live between reloads; omit for none (tests). Default: `localStorage`. */
+  storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
+  /** The element knobs write their properties on. Default: `document.documentElement`. */
+  knobRoot?: Parameters<typeof applyKnobValues>[2] | null;
+}): VariantsSource & {
+  refresh(): Promise<void>;
+  readonly list: OverlayVariantsList | null;
+  /** The knobs on the current route and their values, for the save note. */
+  readonly knobs: { axes: KnobAxis[]; values: VariantSelections };
+} {
   let list: OverlayVariantsList | null = null;
   const listeners = new Set<() => void>();
   const emit = () => {
     for (const l of listeners) l();
   };
-  const axes = (): SelectVariantAxis[] => (list ? overlayAxes(list, cfg.getRoute()) : []);
+  const selects = (): SelectVariantAxis[] => (list ? overlayAxes(list, cfg.getRoute()) : []);
+  const knobAxes = (): KnobAxis[] => knobsFor(list?.knobs, cfg.getRoute());
+  const axes = (): VariantAxis[] => [...selects(), ...knobAxes()];
+
+  // Knob values are review-time state, kept in the browser rather than on
+  // the server: a slider is a look, not a file swap.
+  const storage =
+    cfg.storage === undefined
+      ? typeof localStorage === 'undefined'
+        ? null
+        : localStorage
+      : cfg.storage;
+  const knobRoot =
+    cfg.knobRoot === undefined
+      ? typeof document === 'undefined'
+        ? null
+        : document.documentElement
+      : cfg.knobRoot;
+  let knobValues: VariantSelections = (() => {
+    try {
+      const raw = storage?.getItem(KNOBS_STORAGE_KEY);
+      const parsed = raw ? (JSON.parse(raw) as unknown) : null;
+      return parsed && typeof parsed === 'object' ? (parsed as VariantSelections) : {};
+    } catch {
+      return {};
+    }
+  })();
+  const persistKnobs = () => {
+    try {
+      if (Object.keys(knobValues).length === 0) storage?.removeItem(KNOBS_STORAGE_KEY);
+      else storage?.setItem(KNOBS_STORAGE_KEY, JSON.stringify(knobValues));
+    } catch {
+      // Storage full or blocked: the values still apply for this page view.
+    }
+  };
+  const applyKnobs = () => {
+    if (knobRoot) applyKnobValues(list?.knobs ?? [], knobValues, knobRoot);
+  };
   async function activate(active: string[]) {
     const res = await request(`${cfg.endpoint}/active`, {
       method: 'POST',
@@ -531,24 +641,40 @@ export function createOverlayVariantsSource(cfg: {
     get list() {
       return list;
     },
+    get knobs() {
+      return { axes: knobAxes(), values: { ...knobValues } };
+    },
     async refresh() {
       const res = await request(cfg.endpoint);
       if (!res.ok) throw new Error(`Loading variants failed (${res.status})`);
       list = (await res.json()) as OverlayVariantsList;
+      applyKnobs();
       emit();
     },
     getAxes: axes,
     getSelections() {
       const active = new Set(list?.active ?? []);
-      return Object.fromEntries(
-        axes().map((axis) => [
+      const picks = Object.fromEntries(
+        selects().map((axis) => [
           axis.id,
           axis.options.find((o) => active.has(o.id))?.id ?? OVERLAY_DEFAULT_OPTION,
         ]),
       );
+      for (const k of knobAxes()) picks[k.id] = knobValues[k.id] ?? axisDefault(k);
+      return picks;
     },
     setSelection(axisId, value) {
-      const axis = axes().find((a) => a.id === axisId);
+      const knob = knobAxes().find((k) => k.id === axisId);
+      if (knob) {
+        if (!isValidSelection(knob, value)) return;
+        if (value === axisDefault(knob)) delete knobValues[axisId];
+        else knobValues = { ...knobValues, [axisId]: value };
+        persistKnobs();
+        applyKnobs();
+        emit();
+        return;
+      }
+      const axis = selects().find((a) => a.id === axisId);
       if (!axis || !isValidSelection(axis, value)) return;
       // The group's members leave the set and the pick joins it; the other
       // groups' picks ride along untouched.
@@ -558,6 +684,9 @@ export function createOverlayVariantsSource(cfg: {
       void activate(next).catch(() => {});
     },
     reset() {
+      knobValues = {};
+      persistKnobs();
+      applyKnobs();
       void activate([]).catch(() => {});
     },
     subscribe(listener) {

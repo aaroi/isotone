@@ -5,6 +5,12 @@ import {
   type OverlayVariantStatus,
   overlayAxes,
   overlayGroups,
+  applyKnobValues,
+  knobCssValue,
+  knobDelta,
+  knobsFor,
+  knobVar,
+  type KnobAxis,
 } from '../src/core/variants';
 
 function variant(
@@ -150,5 +156,65 @@ describe('overlayAxes', () => {
       '/here',
     );
     expect(axis.options.map((o) => o.id)).toEqual([OVERLAY_DEFAULT_OPTION, 'a']);
+  });
+});
+
+describe('knobs', () => {
+  const fade: KnobAxis = {
+    kind: 'range',
+    id: 'fade-from',
+    label: 'Fade starts',
+    min: 0,
+    max: 100,
+    step: 1,
+    defaultValue: 0,
+    unit: '%',
+    route: ['/computers/*', '/databases/*'],
+  };
+  const dots: KnobAxis = {
+    kind: 'range',
+    id: 'dot-alpha',
+    label: 'Dot brightness',
+    min: 0,
+    max: 1,
+    step: 0.01,
+    defaultValue: 0.1,
+  };
+  const ink: KnobAxis = {
+    kind: 'color',
+    id: 'ink',
+    label: 'Ink',
+    defaultColor: '#ffffff',
+    swatches: [],
+    route: '/settings',
+  };
+
+  it('belongs on the routes it names, and everywhere when it names none', () => {
+    expect(knobsFor([fade, dots, ink], '/computers/cmp_1').map((k) => k.id)).toEqual([
+      'fade-from',
+      'dot-alpha',
+    ]);
+    expect(knobsFor([fade, dots, ink], '/settings').map((k) => k.id)).toEqual(['dot-alpha', 'ink']);
+    expect(knobsFor(undefined, '/')).toEqual([]);
+  });
+
+  it('writes the value with its unit as --knob-<id>, and clears it at the default', () => {
+    const set = new Map<string, string>();
+    const root = {
+      style: {
+        setProperty: (n: string, v: string) => void set.set(n, v),
+        removeProperty: (n: string) => void set.delete(n),
+      },
+    };
+    applyKnobValues([fade, dots, ink], { 'fade-from': '40', 'dot-alpha': '0.1', ink: '#ff0000' }, root);
+    expect(set.get(knobVar('fade-from'))).toBe('40%');
+    expect(set.has(knobVar('dot-alpha'))).toBe(false);
+    expect(set.get(knobVar('ink'))).toBe('#ff0000');
+    expect(knobCssValue(dots, '0.25')).toBe('0.25');
+  });
+
+  it('reports only the knobs off their default, as the panel showed them', () => {
+    const moved = knobDelta([fade, dots], { 'fade-from': '40', 'dot-alpha': '0.1' });
+    expect(moved.map((m) => [m.axis.id, m.value, m.shown])).toEqual([['fade-from', '40', '40%']]);
   });
 });

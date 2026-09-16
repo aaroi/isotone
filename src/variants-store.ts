@@ -24,7 +24,14 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import type { IterationElement } from './core/index';
-import { OVERLAY_GROUP_ID, type OverlayVariant, type OverlayVariantStatus } from './core/variants';
+import {
+  type ColorVariantAxis,
+  type KnobAxis,
+  OVERLAY_GROUP_ID,
+  type OverlayVariant,
+  type OverlayVariantStatus,
+  type RangeVariantAxis,
+} from './core/variants';
 import { ensureFileIgnored, type NotesRequest, type NotesResponse } from './store';
 
 /** Default location of the variants tree, relative to the project root. */
@@ -33,6 +40,10 @@ export const DEFAULT_VARIANTS_DIR = '.iso-iterate/variants';
 /** Relative to root. Holds `{ "active": ["<id>", ...] }`, at most one id per
  *  group. The Vite plugin keeps this out of git; nothing here assumes that. */
 export const ACTIVE_FILE = '.iso-iterate/active.json';
+
+/** Relative to root. A JSON array of {@link KnobAxis}; committed, since the
+ *  defaults in it are part of the design. Missing or malformed reads as none. */
+export const KNOBS_FILE = '.iso-iterate/knobs.json';
 
 export interface VariantsStoreOptions {
   /** Project root: Vite's root or the CLI's cwd. Absolute. */
@@ -560,6 +571,33 @@ export function activeConflict(
  * file the later one is dropped, so `load` never has to choose. The file's
  * older shape, one id or `null`, still reads.
  */
+/** The host's knobs, dropping entries that are not a usable axis. */
+export function readKnobs(opts: VariantsStoreOptions): KnobAxis[] {
+  const file = resolve(opts.root, KNOBS_FILE);
+  if (!existsSync(file)) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((k): k is KnobAxis => {
+    if (!k || typeof k !== 'object') return false;
+    const a = k as Partial<KnobAxis>;
+    if (typeof a.id !== 'string' || !isValidVariantId(a.id) || typeof a.label !== 'string') return false;
+    if (a.kind === 'range') {
+      const r = a as Partial<RangeVariantAxis>;
+      return [r.min, r.max, r.step, r.defaultValue].every((n) => typeof n === 'number' && Number.isFinite(n));
+    }
+    if (a.kind === 'color') {
+      const c = a as Partial<ColorVariantAxis>;
+      return typeof c.defaultColor === 'string' && Array.isArray(c.swatches);
+    }
+    return false;
+  });
+}
+
 export function readActive(opts: VariantsStoreOptions): string[] {
   const file = join(resolve(opts.root), ACTIVE_FILE);
   if (!existsSync(file)) return [];
@@ -612,7 +650,7 @@ export function variantsResponse(opts: VariantsStoreOptions, req: NotesRequest):
   });
 
   if (method === 'GET' && path === '/') {
-    return json(200, { variants: listVariants(opts), active: readActive(opts) });
+    return json(200, { variants: listVariants(opts), active: readActive(opts), knobs: readKnobs(opts) });
   }
 
   if (method === 'POST' && path === '/active') {

@@ -21,6 +21,7 @@ import {
   listVariants,
   promoteVariant,
   readActive,
+  readKnobs,
   readVariant,
   removeVariantFile,
   resolveOverride,
@@ -563,5 +564,31 @@ describe('promoteVariant guards', () => {
       /no base recorded for src\/Button\.tsx \(not a git repo when the override was made\)/,
     );
     expect(() => promoteVariant(opts, 'nb')).not.toThrow(/changed since/);
+  });
+});
+
+describe('knobs file', () => {
+  it('reads usable axes and drops the rest; missing or malformed is none', () => {
+    const root = mkdtempSync(join(tmpdir(), 'iso-knobs-'));
+    try {
+      const opts = { root };
+      expect(readKnobs(opts)).toEqual([]);
+      mkdirSync(join(root, '.iso-iterate'), { recursive: true });
+      writeFileSync(join(root, '.iso-iterate/knobs.json'), 'nope');
+      expect(readKnobs(opts)).toEqual([]);
+      writeFileSync(
+        join(root, '.iso-iterate/knobs.json'),
+        JSON.stringify([
+          { kind: 'range', id: 'fade', label: 'Fade', min: 0, max: 1, step: 0.1, defaultValue: 0 },
+          { kind: 'range', id: 'Bad Id', label: 'x', min: 0, max: 1, step: 0.1, defaultValue: 0 },
+          { kind: 'range', id: 'nomin', label: 'x', max: 1, step: 0.1, defaultValue: 0 },
+          { kind: 'color', id: 'ink', label: 'Ink', defaultColor: '#fff', swatches: [] },
+          'junk',
+        ]),
+      );
+      expect(readKnobs(opts).map((k) => k.id)).toEqual(['fade', 'ink']);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
