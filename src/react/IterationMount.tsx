@@ -204,6 +204,8 @@ function overlaySourceWithSave(
     // In axis order, so the note reads top to bottom like the panel did.
     const picked = source
       .getAxes()
+      // Knobs are numbers, not alternatives; they ride in their own clause below.
+      .filter((axis) => axis.kind === undefined || axis.kind === 'select')
       .flatMap((axis) => {
         const id = selections[axis.id];
         if (!id || id === OVERLAY_DEFAULT_OPTION) return [];
