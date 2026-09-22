@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.4
+
+- The Vite plugin's mount loader goes in the document `<head>` instead of
+  before `</body>`, and the panel's host is appended at runtime, not written
+  into the served HTML. A whole-document React Router app hydrates the body,
+  so a stray `<script>` there made React report "Encountered a script tag
+  while rendering React component", discard the server tree and drop the host
+  whenever hydration failed, which a browser extension that has already
+  stuck a node into the page reliably triggers. `<head>` is never part of the
+  body React hydrates, so the loader is invisible to hydration whatever the
+  extension does.
+- `mountIteration` now watches `<html>` and re-appends the host (shadow root
+  and panel state intact) if a full-body re-render evicts it, instead of
+  leaving a blank corner until the next reload or mounting a second copy.
+
 ## 0.3.3
 
 - The Notes tab lists every note from every page, newest first, with the

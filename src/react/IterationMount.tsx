@@ -82,6 +82,12 @@ function withDocumentUntouched<T>(create: () => T): T {
  * The host element carries `data-iso-iterate`, and that is load-bearing:
  * `document.elementFromPoint` retargets to the host for anything inside a
  * shadow root, so the element picker's self-exclusion matches on it.
+ *
+ * The host is created at runtime by `mountIteration` (never part of any HTML
+ * React hydrates) and is watched by a MutationObserver: if a whole-document
+ * render — a React Router hydration failure made worse by an extension, for
+ * instance — replaces `<body>` and drops the host, it is re-appended to the
+ * new body, shadow root and all, instead of a fresh mount losing panel state.
  */
 export function mountIteration(opts: MountIterationOptions): () => void {
   const getRoute = opts.getRoute ?? (() => window.location.pathname);
@@ -107,11 +113,29 @@ export function mountIteration(opts: MountIterationOptions): () => void {
 
   const host = document.createElement('div');
   host.setAttribute('data-iso-iterate', 'root');
-  document.body.appendChild(host);
+  const attachHost = () => {
+    if (!host.isConnected) document.body.appendChild(host);
+    return host;
+  };
+  attachHost();
   const shadow = host.attachShadow({ mode: 'open' });
   // Eagerly, so the panel never paints one frame unstyled.
   ensurePanelStyles(shadow);
   const root = withDocumentUntouched(() => createRoot(shadow));
+
+  // Re-attach the host if a full-document render evicts it from body. In a
+  // whole-document React Router app an extension-triggered hydration failure
+  // makes React replace `document.body` wholesale; our host (appended at
+  // runtime, never part of what React rendered) falls away with the old body.
+  // Re-appending the SAME element restores the panel with its shadow root and
+  // state intact — no second render, no duplication. The observer is on
+  // `<html>` so a bare `body.replaceChildren()` also counts as a change; body
+  // alone catches appendChild-of-a-new-body but not replaceChildren.
+  const guard = new MutationObserver(() => {
+    if (disposed) return;
+    if (!host.isConnected) attachHost();
+  });
+  guard.observe(document.documentElement, { childList: true, subtree: true });
 
   function render() {
     root.render(
@@ -170,6 +194,7 @@ export function mountIteration(opts: MountIterationOptions): () => void {
   return () => {
     disposed = true;
     for (const off of listeners) off();
+    guard.disconnect();
     // Deferred, not synchronous: a React host calls this from an effect
     // cleanup, and unmounting our root while the host's render is in flight
     // is a race React 19 rejects ("Attempted to synchronously unmount a root

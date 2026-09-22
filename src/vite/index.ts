@@ -8,8 +8,23 @@
  *
  * Injection is framework-agnostic: React Router and many SPA dev servers do
  * not run Vite's `transformIndexHtml`, so we instead wrap the HTML response
- * body in a `configureServer` middleware and append the mount script before
- * `</body>`. Works across Vite, RR7, and Next dev.
+ * body in a `configureServer` middleware and splice the mount loader into the
+ * document's `<head>`. Works across Vite, RR7, and Next dev.
+ *
+ * The loader lives in `<head>` rather than before `</body>` for React 19:
+ * a whole-document React Router app hydrates the entire body (and React
+ * reports "Encountered a script tag while rendering React component", then
+ * discards the server tree, whenever a stray `<script>` or anything else it
+ * did not render sits in `document.body` on mismatch — a browser extension
+ * that has already stuck a node in is exactly that). A `<script>` in `<head>`
+ * is never part of the body React owns and hydrates, so it is invisible to
+ * hydration no matter what the extension does, and it runs before the app's
+ * async client entry mounts. The panel is still mounted at runtime: the loader
+ * waits for `load`, then imports the panel and appends the host, exactly as
+ * `mountIteration` does when a host calls it. Nothing the app renders carries
+ * a script tag anymore. The only thing that can still drop the host is a
+ * full-body re-render after a failed hydration — the MutationObserver in
+ * `mountIteration` re-appends the host against that.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
@@ -493,7 +508,7 @@ function answer(
   }
 }
 
-/** Source for the virtual mount module: a static import Vite resolves. */
+/** Source for the virtual mount module. */
 /**
  * Source for the virtual mount module.
  *
@@ -507,6 +522,11 @@ function answer(
  * switch, re-evaluated modules without React re-rendering anything. After
  * `load` every host script has run, so the host decides the order and the
  * panel merely appears a moment later.
+ *
+ * `mountIteration` appends its host to `document.body` itself, so this loader
+ * does no DOM work. The mount is still deferred past the host's own render
+ * (see IterationMount); keeping the host append out of the injected HTML is
+ * what leaves a `<script>` out of what React hydrates.
  */
 function mountModuleSource(rule: RouteGateOptions, key: string, variants: boolean): string {
   return `
@@ -595,16 +615,41 @@ function injectHtmlResponse(res: ServerResponse, code: string): void {
     const cb = args.find((a): a is () => void => typeof a === 'function');
     buffering = false;
     const body = Buffer.concat(chunks).toString('utf8');
-    if (body.includes('<html') && body.includes('</body>')) {
+    if (body.includes('<html') && (body.includes('<head') || body.includes('</body>'))) {
       const script = `<script type="module" data-iso-iterate-inject>${code}</script>`;
       if (!res.headersSent) originalSetHeader('Cache-Control', 'no-store');
-      return originalEnd(
-        withNativeFetch(body).replace('</body>', `${script}</body>`),
-        cb,
-      );
+      return originalEnd(withNativeFetch(injectIntoHead(body, script)), cb);
     }
     return originalEnd(Buffer.concat(chunks), cb);
   }) as unknown as ServerResponse['end'];
+}
+
+/**
+ * Put the mount loader script in `<head>`, after the opening head tag. React
+ * never hydrates head contents it receives as part of a server document —
+ * `<head>` is a special host that React replaces wholesale, unlike `<body>`,
+ * and any stray script inside it is inert for React — so this cannot trip the
+ * "script tag while rendering React component" warning or the hydration
+ * discard that follows it in a whole-document React Router app. Falls back to
+ * just before `</head>`, then just before `</body>` for a fragment without a
+ * head, then appends, matching what `withNativeFetch` does below.
+ */
+function injectIntoHead(html: string, script: string): string {
+  const head = html.match(/<head[^>]*>/i);
+  if (head?.index !== undefined) {
+    const at = head.index + head[0].length;
+    return `${html.slice(0, at)}${script}${html.slice(at)}`;
+  }
+  const headEnd = html.match(/<\/head>/i);
+  if (headEnd?.index !== undefined) {
+    return `${html.slice(0, headEnd.index)}${script}${html.slice(headEnd.index)}`;
+  }
+  const body = html.match(/<body[^>]*>/i);
+  if (body?.index !== undefined) {
+    const at = body.index + body[0].length;
+    return `${html.slice(0, at)}${script}${html.slice(at)}`;
+  }
+  return `${html}${script}`;
 }
 
 /**

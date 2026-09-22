@@ -119,17 +119,36 @@ describe('the Vite adapter, served', () => {
     ).text();
     // The host's own markup survives...
     expect(html).toContain('<div id="app"></div>');
-    // ...and the mount rides in before </body>, carrying real transformed code
-    // (an empty script would mean transformRequest silently failed).
+    // ...and the mount rides in, carrying real transformed code (an empty
+    // script would mean transformRequest silently failed).
     expect(html).toContain('data-iso-iterate-inject');
     const script = html.slice(
       html.indexOf('data-iso-iterate-inject'),
-      html.indexOf('</body>'),
+      html.indexOf('</head>'),
     );
     expect(script).toContain('mountIteration');
     expect(script.length).toBeGreaterThan(200);
     // Variants are on by default, so the mount asks for the overlay source.
     expect(script).toContain('overlay');
+  });
+
+  it('injects into <head>, never into the body a react tree owns', async () => {
+    const html = await (
+      await fetch(`${origin}/`, { headers: { accept: 'text/html' } })
+    ).text();
+    expect(html).toContain('data-iso-iterate-inject');
+    // The loader script sits inside <head> (right after the opening tag,
+    // sharing it with the native-fetch capture it must run after, and ahead
+    // of the host's own head content)...
+    const head = html.slice(html.indexOf('<head>') + '<head>'.length, html.indexOf('</head>'));
+    expect(head).toMatch(/(^|>)[ \t]*<script type="module" data-iso-iterate-inject>/);
+    // ...and nothing between <body> and </body> carries a script tag. A
+    // whole-document React Router app hydrates the body; a stray script there
+    // makes React 19 warn "Encountered a script tag while rendering React
+    // component" and discard the server tree. Head contents are not part of
+    // the hydrated body.
+    const body = html.slice(html.indexOf('<body'), html.indexOf('</body>') || html.length);
+    expect(body).not.toContain('<script');
   });
 
   it('serves the variants endpoint, path-relative to its mount', async () => {
@@ -192,7 +211,10 @@ describe('the Vite adapter, served', () => {
     expect(html.match(/<html/g)).toHaveLength(1);
     expect(html.match(/data-iso-iterate-inject/g)).toHaveLength(1);
     expect(html).toContain('<main id="ssr">streamed</main>');
-    expect(html.indexOf('data-iso-iterate-inject')).toBeGreaterThan(html.indexOf('</main>'));
+    // The loader goes in <head>, so it precedes the streamed body content.
+    expect(html.indexOf('data-iso-iterate-inject')).toBeLessThan(html.indexOf('<body'));
+    // The SSR fixture's own body keeps exactly one <script> (none of iso's).
+    expect(html.slice(html.indexOf('<body'), html.indexOf('</body>')).match(/<script/g)).toBeNull();
     // The upstream length described the un-injected document.
     const length = res.headers.get('content-length');
     if (length) expect(Number(length)).toBe(new TextEncoder().encode(html).length);

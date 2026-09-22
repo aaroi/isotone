@@ -68,4 +68,30 @@ describe('mountIteration next to a document-level host root', () => {
     await act(async () => host.unmount());
     dispose(off);
   });
+
+  it('re-attaches the host (shadow root and panel intact) when the body is replaced', async () => {
+    const off = mountIteration({ endpoint: '/api/iteration/notes' });
+    // Let the deferred mount run and the observer take over.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    const host = document.querySelector('[data-iso-iterate="root"]');
+    expect(host).not.toBeNull();
+    expect(host?.shadowRoot).not.toBeNull();
+
+    // A whole-document React app that fails hydration re-renders the body
+    // from scratch, dropping any runtime host div the way our host is dropped.
+    document.body.replaceChildren();
+    // The MutationObserver delivers in a microtask; flush it.
+    await act(async () => {});
+
+    // The observer re-appends the SAME host; nothing was re-mounted, so the
+    // shadow root survives instead of a duplicate host appearing.
+    expect(document.body.contains(host)).toBe(true);
+    expect(document.querySelectorAll('[data-iso-iterate="root"]')).toHaveLength(1);
+    expect(host?.shadowRoot).not.toBeNull();
+
+    dispose(off);
+  });
 });
