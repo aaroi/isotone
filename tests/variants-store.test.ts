@@ -649,49 +649,12 @@ describe('knobs file', () => {
   });
 });
 
-describe('selector management', () => {
-  it('removes only the requested option, preserves defaults and other groups, and backs up files', () => {
-    const { root, opts } = tempRepo();
-    createVariant(opts, { id: 'one', group: 'button' }); addVariantFile(opts, 'one', 'src/Button.tsx');
-    createVariant(opts, { id: 'two', group: 'button' }); addVariantFile(opts, 'two', 'src/Button.tsx');
-    createVariant(opts, { id: 'other', group: 'other' });
-    writeActive(opts, ['one', 'other']);
-    const response = variantsResponse(opts, { method: 'POST', url: '/manage', body: { axisId: 'button', action: 'remove-option', optionId: 'one' } });
-    expect(response.status).toBe(200);
-    expect(readActive(opts)).toEqual(['other']);
-    expect(listVariants(opts).map(v => v.id).sort()).toEqual(['other', 'two']);
-    expect(readFileSync(join(root, 'src/Button.tsx'), 'utf8')).toContain('line one');
-    expect(existsSync(join(root, '.isotone/removed'))).toBe(true);
-    expect(response.body).toMatchObject({ changedFiles: ['src/Button.tsx'] });
-    expect(variantsResponse(opts, { method: 'POST', url: '/manage', body: { axisId: 'button', action: 'remove-option', optionId: 'default' } }).status).toBe(400);
-  });
-  it('keeps the default source and removes a whole group without affecting another decision', () => {
-    const { root, opts } = tempRepo();
-    createVariant(opts, { id: 'one', group: 'button' }); addVariantFile(opts, 'one', 'src/Button.tsx');
-    createVariant(opts, { id: 'two', group: 'button' });
-    createVariant(opts, { id: 'other', group: 'other' });
-    const response = variantsResponse(opts, { method: 'POST', url: '/manage', body: { axisId: 'button', action: 'keep-default' } });
-    expect(response.status).toBe(200);
-    expect(listVariants(opts).map(v => v.id)).toEqual(['other']);
-    expect(existsSync(join(root, 'src/Button.tsx'))).toBe(true);
-    expect(variantsResponse(opts, { method: 'POST', url: '/manage', body: { axisId: '../', action: 'remove-axis' } }).status).toBe(404);
-  });
-});
-
-describe('scoped selector removal', () => {
-  it('does not remove alternatives on other routes in a shared group', () => {
+describe('selector requests', () => {
+  it('does not mutate variants through the old management endpoint', () => {
     const { opts } = tempRepo();
-    createVariant(opts, { id: 'here', group: 'shared', route: '/here' });
-    createVariant(opts, { id: 'there', group: 'shared', route: '/there' });
-    expect(variantsResponse(opts, { method: 'POST', url: '/manage', body: { axisId: 'shared', action: 'remove-axis', route: '/here' } }).status).toBe(200);
-    expect(listVariants(opts).map(v => v.id)).toEqual(['there']);
-  });
-  it('removes a colour preset without removing the colour selector or its default', () => {
-    const { root, opts } = tempRepo();
-    mkdirSync(join(root, '.isotone'), { recursive: true });
-    writeFileSync(join(root, '.isotone/knobs.json'), JSON.stringify([{ kind: 'color', id: 'accent', label: 'Accent', defaultColor: '#112233', swatches: [{ id: 'default', label: 'Default', value: '#112233' }, { id: 'other', label: 'Other', value: '#445566' }] }]));
-    const result = variantsResponse(opts, { method: 'POST', url: '/manage', body: { axisId: 'accent', action: 'remove-option', optionId: 'other' } });
-    expect(result.status).toBe(200);
-    expect(readKnobs(opts)[0]).toMatchObject({ id: 'accent', swatches: [{ id: 'default', label: 'Default', value: '#112233' }] });
+    createVariant(opts, { id: 'one', group: 'button' });
+    const response = variantsResponse(opts, { method: 'POST', url: '/manage', body: { axisId: 'button', action: 'remove-axis' } });
+    expect(response.status).toBe(405);
+    expect(listVariants(opts).map(v => v.id)).toEqual(['one']);
   });
 });

@@ -21,8 +21,7 @@ try {
   run(['install', '--offline', '--ignore-scripts', '--omit=peer', '--no-audit', '--no-fund', '--package-lock=false', join(scratch, packed.filename)], consumer);
   writeFileSync(join(consumer, 'check.mjs'), `
 import { strict as assert } from 'node:assert';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { runCli } from 'isotone/cli';
 import * as core from 'isotone/core';
@@ -38,16 +37,6 @@ assert.equal(await runCli(['init', '--yes', '--json'], io), 0);
 assert.equal(JSON.parse(output).approach, 'serve');
 assert.equal(existsSync('AGENTS.md'), true);
 assert.match(execFileSync(process.execPath, ['node_modules/isotone/dist/cli.js', '--help'], { encoding: 'utf8' }), /--json/);
-mkdirSync('legacy');
-writeFileSync('legacy/package.json', JSON.stringify({ private: true, devDependencies: { 'iso-iterate': '^0.3.4' } }));
-writeFileSync('legacy/app.ts', "import { iteration } from 'iso-iterate/vite';");
-writeFileSync('legacy/.iteration-feedback.json', '[]');
-output = '';
-assert.equal(await runCli(['migrate', '--write', '--json'], { ...io, cwd: resolve('legacy') }), 0);
-assert.equal(JSON.parse(output).applied, true);
-assert.equal(JSON.parse(readFileSync('legacy/package.json', 'utf8')).devDependencies['iso-iterate'], undefined);
-assert.ok(readFileSync('legacy/app.ts', 'utf8').includes("from 'isotone/vite'"));
-assert.equal(readFileSync('legacy/.iteration-feedback.json', 'utf8'), '[]');
 const app = await serveIteration({ file: 'notes.json', port: 0, theme: 'system', checkForUpdates: false });
 try {
   const bundle = await (await fetch(app.bundleUrl)).text();
@@ -57,7 +46,7 @@ try {
   assert.equal(note.status, 201);
   assert.equal(readNotes('notes.json').length, 1);
 } finally { await app.close(); }
-console.log('Packed package: isolated install, public imports, CLI migration, bundle and notes endpoint passed.');
+console.log('Packed package: isolated install, public imports, CLI, bundle and notes endpoint passed.');
 `);
   execFileSync(process.execPath, ['check.mjs'], { cwd: consumer, stdio: 'inherit' });
 } finally {

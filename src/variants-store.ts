@@ -14,7 +14,6 @@ import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   existsSync,
-  cpSync,
   mkdirSync,
   lstatSync,
   readdirSync,
@@ -31,13 +30,11 @@ import {
   type ColorVariantAxis,
   type KnobAxis,
   OVERLAY_GROUP_ID,
-  overlayGroups,
-  variantAppliesTo,
   type OverlayVariant,
   type OverlayVariantStatus,
   type RangeVariantAxis,
 } from './core/variants';
-import { ensureFileIgnored, ensureDirIgnored, type NotesRequest, type NotesResponse } from './store';
+import { ensureFileIgnored, type NotesRequest, type NotesResponse } from './store';
 import { withFileLock, writeJson } from './file-store';
 
 /** Default location of the variants tree, relative to the project root. */
@@ -710,7 +707,7 @@ export function writeActive(opts: VariantsStoreOptions, ids: string[]): void {
   const file = join(resolve(opts.root), ACTIVE_FILE);
   mkdirSync(dirname(file), { recursive: true });
   const active = Array.from(new Set(ids));
-    writeJson(file, { active } satisfies ActiveFileShape);
+  writeJson(file, { active } satisfies ActiveFileShape);
   // Which variants a machine is looking at is local state, never a commit;
   // the CLI writes this too, so the exclusion cannot live in the plugin alone.
   ensureFileIgnored(file);
@@ -735,45 +732,6 @@ export function variantsResponse(opts: VariantsStoreOptions, req: NotesRequest):
 
   if (method === 'GET' && path === '/') {
     return json(200, { variants: listVariants(opts), active: readActive(opts), knobs: readKnobs(opts) });
-  }
-
-  if (method === 'POST' && path === '/manage') {
-    const body = req.body as { axisId?: unknown; action?: unknown; optionId?: unknown; route?: unknown } | null;
-    if (!body || typeof body.axisId !== 'string' || !['remove-option', 'remove-axis', 'keep-default'].includes(String(body.action))) {
-      return json(400, { error: 'A selector id and a valid action are required.' });
-    }
-    const variants = listVariants(opts);
-    const group = overlayGroups(variants).find((g) => g.id === body.axisId);
-    const knobs = readKnobs(opts);
-    const knob = knobs.find((k) => k.id === body.axisId);
-    if (!group && !knob) return json(404, { error: 'This selector no longer exists.' });
-    let removed = (group?.members ?? []).filter(v => typeof body.route !== 'string' || variantAppliesTo(v.route, body.route));
-    let nextKnobs = knobs.filter(k => k.id !== knob?.id);
-    if (body.action === 'remove-option' && knob) {
-      if (knob.kind !== 'color') return json(400, { error: 'This selector has no removable options.' });
-      const swatch = knob.swatches.find(s => s.id === body.optionId);
-      if (!swatch || swatch.value.toLowerCase() === knob.defaultColor.toLowerCase()) return json(400, { error: 'The default colour cannot be removed.' });
-      nextKnobs = knobs.map(k => k.id === knob.id ? { ...knob, swatches: knob.swatches.filter(s => s.id !== body.optionId) } : k);
-    } else if (body.action === 'remove-option') {
-      if (!group || typeof body.optionId !== 'string' || !removed.some((v) => v.id === body.optionId)) {
-        return json(400, { error: 'Only an alternative option can be removed. The default belongs to the source.' });
-      }
-      removed = removed.filter((v) => v.id === body.optionId);
-    }
-    // Save a local recovery copy before removing any definitions or files.
-    const recovery = join(resolve(opts.root), '.isotone', 'removed', randomUUID());
-    try {
-      mkdirSync(recovery, { recursive: true });
-      ensureDirIgnored(dirname(recovery));
-      for (const v of removed) cpSync(variantDir(opts, v.id), join(recovery, v.id), { recursive: true });
-      if (knob) writeFileSync(join(recovery, 'knobs.json'), JSON.stringify(knobs, null, 2));
-      const changedFiles = removed.flatMap((v) => Object.keys(v.files));
-      for (const v of removed) dropVariant(opts, v.id);
-      if (knob) writeFileSync(join(resolve(opts.root), KNOBS_FILE), `${JSON.stringify(nextKnobs, null, 2)}\n`);
-      return json(200, { variants: listVariants(opts), active: readActive(opts), knobs: readKnobs(opts), changedFiles });
-    } catch (error) {
-      return json(500, { error: error instanceof Error ? error.message : 'Could not remove the selector.' });
-    }
   }
 
   if (method === 'POST' && path === '/active') {

@@ -9,6 +9,8 @@
  */
 import { request } from './request';
 import { FEEDBACK_STORAGE_KEY, readBrowserStorage, writeBrowserStorage } from './browser-storage';
+import { MAX_FEEDBACK_LENGTH } from './limits';
+import { createNoteId } from './id';
 
 /** A UI element picked with the panel's selector mode. */
 export interface IterationElement {
@@ -241,6 +243,10 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     const backlog = localAll();
     if (backlog.length === 0) return;
     for (const item of backlog) {
+      // Notes saved by an older client may exceed today's server limit.
+      // Keep them in the browser, but let valid notes behind them sync.
+      if (item.feedback.trim().length > MAX_FEEDBACK_LENGTH) continue;
+      let rejected = false;
       const saved = await request(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -256,8 +262,17 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
           ...(item.payload !== undefined ? { payload: item.payload } : {}),
           ...(item.viewport ? { viewport: item.viewport } : {}),
         }),
-      }, async (res) => res.ok ? await res.json() as { id?: unknown } : null);
-      if (!saved || typeof saved.id !== 'string' || !saved.id) return; // Keep unacknowledged notes.
+      }, async (res) => {
+        if (!res.ok) {
+          rejected = res.status >= 400 && res.status < 500;
+          return null;
+        }
+        return await res.json() as { id?: unknown };
+      });
+      if (!saved || typeof saved.id !== 'string' || !saved.id) {
+        if (rejected) continue;
+        return; // A transient failure or missing acknowledgement stops the retry.
+      }
       // A save may have happened while the request was in flight. Remove
       // only the exact snapshot acknowledged by the server, never the queue.
       acknowledge(item);
@@ -340,7 +355,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
       if (existing.elements) existing.element = existing.elements[0] ?? null;
       savedId = existing.id;
     } else {
-      savedId = id ?? crypto.randomUUID();
+      savedId = id ?? createNoteId();
       all.push({
         id: savedId,
         route,
@@ -369,6 +384,9 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     viewport?: { w: number; h: number },
     context?: NoteContext,
   ): Promise<string> {
+    if (feedback.trim().length > MAX_FEEDBACK_LENGTH) {
+      throw new RangeError(`Feedback must be at most ${MAX_FEEDBACK_LENGTH} characters.`);
+    }
     if (!endpoint) {
       const savedId = saveLocal(route, feedback, element, id, payload, viewport, context);
       lastSave = "local";
@@ -376,7 +394,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     }
     // Stable across a lost response and its retry: the server treats this as
     // an upsert, so reconnecting cannot create a second copy of the note.
-    const savedId = id ?? (feedback.startsWith('[set-defaults]') ? null : crypto.randomUUID());
+    const savedId = id ?? (feedback.startsWith('[set-defaults]') ? null : createNoteId());
     const pendingBefore = localAll().find((note) => note.id === savedId);
     const saveOffline = () => {
       const localId = saveLocal(route, feedback, element, savedId, payload, viewport, context);
@@ -416,7 +434,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     }
     if (!result || typeof result.id !== 'string' || !result.id) return saveOffline();
     if (pendingBefore) acknowledge(pendingBefore);
-    lastSave = 'server';
+    lastSave = localAll().length ? 'local' : 'server';
     return result.id;
   }
 
@@ -442,6 +460,9 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     /** Where the last save landed, for the panel's sync notice. */
     get lastSave(): SaveLocation | null {
       return lastSave;
+    },
+    get hasUnsyncedNotes(): boolean {
+      return localAll().length > 0;
     },
   };
 }

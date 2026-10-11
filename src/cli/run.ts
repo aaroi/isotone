@@ -27,14 +27,12 @@ import { runInit } from './init';
 import { type CliIO, errOut, findNoteByPrefix, has, makeIo, out, parseArgs, valueFor } from './util';
 import { runVariant } from './variant';
 import { runCheckUpdate } from './update';
-import { runMigrate } from './migrate';
 
 export type { CliIO } from './util';
 
 export async function runCli(argv: string[], ioInput: Partial<CliIO> = {}): Promise<number> {
   const io = makeIo(ioInput);
   try {
-    if (argv[0] === 'migrate') return runMigrate(argv.slice(1), io);
     if (argv[0] === 'check-update') return await runCheckUpdate(argv.slice(1), io);
     if (argv[0] === 'serve') return await runServe(argv.slice(1), io);
     if (argv[0] === 'variant') return await runVariant(argv.slice(1), io);
@@ -78,7 +76,6 @@ function printHelp(io: CliIO): void {
   out(io);
   out(io, 'Setting a repo up');
   out(io, '  isotone init [--approach overlay|host|serve] [--yes] [--json]');
-  out(io, '  isotone migrate [--write] [--json] [--manager npm|pnpm|yarn|bun]');
 }
 
 /**

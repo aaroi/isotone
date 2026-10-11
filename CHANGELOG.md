@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1
+
+- Keep long feedback in the composer with a clear 4,000-character limit; older
+  overlong or rejected offline notes no longer block later notes from syncing.
+- Save notes on HTTP development hosts where `crypto.randomUUID` is unavailable.
+- Remove the unused selector deletion endpoint and its direct `knobs.json` write.
+  Selector removal remains a feedback request for the coding agent.
+- Replace the automatic project migration command with a short manual guide.
+
 ## 0.4.0
 
 - Rename the package and CLI to Isotone (`isotone`), with a previewable migration
@@ -36,6 +45,10 @@
   acknowledgements before clearing offline feedback.
 - Serialize variant edits across agent processes to preserve concurrent additions.
 - Make `init --help` read-only even when combined with setup flags.
+
+0.4.0 behavior changes: notes over 4,000 characters are rejected rather than
+silently cut, and the standalone `serve` command binds to loopback only; it no
+longer accepts `0.0.0.0`.
 
 ## 0.3.4
 

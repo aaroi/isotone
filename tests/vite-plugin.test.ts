@@ -784,8 +784,8 @@ describe('overlay variants in handleHotUpdate()', () => {
   });
 });
 
-describe('removing an active alternative', () => {
-  it('restores the real module even after the removed manifest is gone', async () => {
+describe('selector removal requests', () => {
+  it('does not mutate active alternatives through the retired endpoint', async () => {
     const { root, source } = tempProject();
     const hooks = plugin(root, 'serve');
     const server = fakeServer(root);
@@ -794,10 +794,9 @@ describe('removing an active alternative', () => {
     await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b', 't'] });
     server.watcher.emit.mockClear();
     const removed = await request(server, VARIANTS_ENDPOINT, 'POST', '/manage', { axisId: 'b', action: 'remove-option', optionId: 'b', route: '/' });
-    expect(removed.status).toBe(200);
-    expect(readActive({ root })).toEqual(['t']);
-    expect(server.watcher.emit).toHaveBeenCalledWith('change', source);
-    expect(hooks.load(source)).toBeNull();
-    expect(hooks.handleHotUpdate({ file: source, server })).toBeUndefined();
+    expect(removed.status).toBe(405);
+    expect(readActive({ root })).toEqual(['b', 't']);
+    expect(server.watcher.emit).not.toHaveBeenCalled();
+    expect(hooks.load(source)).not.toBeNull();
   });
 });

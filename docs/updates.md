@@ -35,9 +35,9 @@ The suggested command pins the specific version you just checked, rather than a
 `latest` tag that could move before installation. For example:
 
 ```sh
-npm install -D --save-exact isotone@0.4.0
-pnpm add -D --exact isotone@0.4.0
-yarn add -D --exact isotone@0.4.0
+npm install -D --save-exact isotone@0.4.1
+pnpm add -D --exact isotone@0.4.1
+yarn add -D --exact isotone@0.4.1
 ```
 
 These examples illustrate the syntax; use the version reported by your check.

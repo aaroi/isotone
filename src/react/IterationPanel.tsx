@@ -1,5 +1,7 @@
 import { showOverflowTitle } from './tooltips';
 import { FEEDBACK_STORAGE_KEY, readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '../core/browser-storage';
+import { MAX_FEEDBACK_LENGTH } from '../core/limits';
+import { createNoteId } from '../core/id';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   createIterationStore,
@@ -192,7 +194,7 @@ export function IterationPanel({
         // An old refresh must not restore deleted notes or undo optimistic edits.
         if (request !== noteRequest.current || revision !== noteRevision.current || pendingWrites.current) return;
         setNotes(fresh);
-        setUnsynced(false);
+        setUnsynced(store.hasUnsyncedNotes);
       })
       .catch(() => {});
   }
@@ -268,10 +270,14 @@ export function IterationPanel({
   async function send() {
     const value = text.trim();
     if (!value) return;
+    if (value.length > MAX_FEEDBACK_LENGTH) {
+      setNotice(`Feedback must be at most ${MAX_FEEDBACK_LENGTH} characters.`);
+      return;
+    }
     const context = { elements: targets, variant: variantTarget, ...(editing?.variantAction ? { variantAction: editing.variantAction } : {}) };
     const noteRoute = editing?.route ?? route;
     const element = targets[0] ?? null;
-    const tempId = editing?.id ?? `pending-${crypto.randomUUID()}`;
+    const tempId = editing?.id ?? `pending-${createNoteId()}`;
     const entry: IterationNote = {
       ...(editing ?? {}),
       id: tempId,

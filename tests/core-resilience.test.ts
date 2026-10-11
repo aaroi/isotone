@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createIterationStore, type IterationNote } from '../src/core';
+import { FEEDBACK_STORAGE_KEY } from '../src/core/browser-storage';
+import { MAX_FEEDBACK_LENGTH } from '../src/core/limits';
 import { createOverlayVariantsSource, createVariantsSource, visibleAxes, type OverlayVariantsList, type SelectVariantAxis } from '../src/core/variants';
 import { request } from '../src/core/request';
 
@@ -64,6 +66,46 @@ describe('offline recovery', () => {
     await remote.listNotes();
     expect(posted).toEqual([first, second, second]);
     expect(await local.listNotes()).toMatchObject([{ id: second }]);
+  });
+
+  it('rejects overlong feedback before an offline save can block the queue', async () => {
+    storage();
+    const fetcher = vi.fn(async () => { throw new Error('Offline'); });
+    vi.stubGlobal('fetch', fetcher);
+    const store = createIterationStore({ endpoint: '/notes' });
+    await expect(store.saveNote('/', 'x'.repeat(MAX_FEEDBACK_LENGTH + 1), null, null))
+      .rejects.toThrow(`at most ${MAX_FEEDBACK_LENGTH} characters`);
+    expect(await createIterationStore().listNotes()).toEqual([]);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('keeps old or rejected notes locally while syncing later valid notes', async () => {
+    const values = storage();
+    const old = { id: 'old-long', route: '/', feedback: 'x'.repeat(MAX_FEEDBACK_LENGTH + 1),
+      element: null, done: false, createdAt: '2026-01-01T00:00:00Z' };
+    const rejected = { ...old, id: 'rejected', feedback: 'Server rejects this', createdAt: '2026-01-01T00:00:01Z' };
+    const later = { ...old, id: 'later', feedback: 'Sync this', createdAt: '2026-01-01T00:00:02Z' };
+    values.set(FEEDBACK_STORAGE_KEY, JSON.stringify([old, rejected, later]));
+    const posted: string[] = [];
+    const remote: IterationNote[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        const item = JSON.parse(String(init.body)) as IterationNote;
+        posted.push(item.id);
+        if (item.id === rejected.id) return Response.json({ error: 'invalid' }, { status: 400 });
+        remote.push(item);
+        return Response.json({ id: item.id });
+      }
+      return Response.json(remote);
+    }));
+    const store = createIterationStore({ endpoint: '/notes' });
+    expect((await store.listNotes()).map(note => note.id)).toEqual(['later', 'rejected', 'old-long']);
+    expect(posted).toEqual(['rejected', 'later']);
+    expect(remote.map(note => note.id)).toEqual(['later']);
+    expect(store.hasUnsyncedNotes).toBe(true);
+    expect((await createIterationStore().listNotes()).map(note => note.id)).toEqual(['rejected', 'old-long']);
+    await store.saveNote('/', 'New successful note', null, null);
+    expect(store.lastSave).toBe('local');
   });
 
   it('keeps new notes and newer edits made while a backlog request is in flight', async () => {

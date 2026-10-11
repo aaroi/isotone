@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import type { IterationElement, NoteContext, VariantReference, VariantRemoval } from './core/index';
+import { MAX_FEEDBACK_LENGTH } from './core/limits';
 import { withFileLock, writeJson } from './file-store';
 
 export interface StoredNote extends NoteContext {
@@ -288,7 +289,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     if (cleanFeedback === '') {
       return json(400, { error: 'feedback is required' });
     }
-    if (cleanFeedback.length > 4000) return json(400, { error: 'feedback must be at most 4000 characters' });
+    if (cleanFeedback.length > MAX_FEEDBACK_LENGTH) return json(400, { error: `feedback must be at most ${MAX_FEEDBACK_LENGTH} characters` });
     if (payload !== undefined && !withinPayloadCap(payload)) {
       return json(400, {
         error: `payload exceeds ${PAYLOAD_MAX} bytes or is not serializable`,

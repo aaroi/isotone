@@ -67,7 +67,7 @@ it('preserves every file when separate agents add to the same variant', async ()
     const runtime = join(root, 'runtime');
     // Run the current sources in child processes without rebuilding the
     // package or requiring a TypeScript loader in the supported Node versions.
-    for (const source of ['variants-store', 'store', 'file-store', 'core/variants', 'core/request', 'core/browser-storage']) {
+    for (const source of ['variants-store', 'store', 'file-store', 'core/variants', 'core/request', 'core/browser-storage', 'core/id', 'core/limits']) {
       const output = join(runtime, `${source}.mjs`);
       mkdirSync(dirname(output), { recursive: true });
       const compiled = ts.transpileModule(readFileSync(new URL(`../src/${source}.ts`, import.meta.url), 'utf8'), {
