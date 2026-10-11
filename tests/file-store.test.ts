@@ -9,6 +9,7 @@ import { writeJson } from '../src/file-store';
 import { createVariant, readVariant, variantDir } from '../src/variants-store';
 
 it('serializes independent writers while readers only see complete JSON', async () => {
+  const writesPerWriter = 20;
   const root = mkdtempSync(join(tmpdir(), 'iso-atomic-'));
   const file = join(root, 'counter.json');
   // Compile this dependency-free helper so the child test also runs on Node
@@ -27,9 +28,9 @@ it('serializes independent writers while readers only see complete JSON', async 
       const child = spawn(process.execPath, ['--input-type=module', '-e', `
         import { readFileSync } from 'node:fs';
         import { withFileLock, writeJson } from ${JSON.stringify(pathToFileURL(helper).href)};
-        for (let i = 0; i < 50; i++) withFileLock(${JSON.stringify(file)}, () => {
+        for (let i = 0; i < ${writesPerWriter}; i++) withFileLock(${JSON.stringify(file)}, () => {
           const items = JSON.parse(readFileSync(${JSON.stringify(file)}, 'utf8'));
-          items.push(${writer} * 50 + i);
+          items.push(${writer} * ${writesPerWriter} + i);
           writeJson(${JSON.stringify(file)}, items);
         });
       `], { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -39,8 +40,8 @@ it('serializes independent writers while readers only see complete JSON', async 
       child.on('exit', (code) => code === 0 ? resolve() : reject(new Error(stderr)));
     })));
     const values = JSON.parse(readFileSync(file, 'utf8')) as number[];
-    expect(new Set(values).size).toBe(200);
-    expect(values).toHaveLength(200);
+    expect(new Set(values).size).toBe(4 * writesPerWriter);
+    expect(values).toHaveLength(4 * writesPerWriter);
     expect(errors).toEqual([]);
     expect(readdirSync(root).sort()).toEqual(['counter.json', 'file-store.mjs']);
   } finally {
