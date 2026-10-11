@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.0.1
+
+- ci: tag successful npm publishes before registry propagation (#6)
+
 ## 1.0.0
 
 - Put host-project setup and feedback handling first in the agent guide, and
