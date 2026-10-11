@@ -11,12 +11,15 @@
  * different owner) can both sit on top of it.
  */
 import { execFileSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   existsSync,
+  cpSync,
   mkdirSync,
+  lstatSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -28,11 +31,14 @@ import {
   type ColorVariantAxis,
   type KnobAxis,
   OVERLAY_GROUP_ID,
+  overlayGroups,
+  variantAppliesTo,
   type OverlayVariant,
   type OverlayVariantStatus,
   type RangeVariantAxis,
 } from './core/variants';
-import { ensureFileIgnored, type NotesRequest, type NotesResponse } from './store';
+import { ensureFileIgnored, ensureDirIgnored, type NotesRequest, type NotesResponse } from './store';
+import { withFileLock, writeJson } from './file-store';
 
 /** Default location of the variants tree, relative to the project root. */
 export const DEFAULT_VARIANTS_DIR = '.iso-iterate/variants';
@@ -56,6 +62,12 @@ interface ActiveFileShape {
   active: string[];
 }
 
+/** Agents in separate processes may edit the same manifest. Keep their
+ * read-modify-write operations together, including promotion and removal. */
+function mutateVariants<T>(opts: VariantsStoreOptions, change: () => T): T {
+  return withFileLock(join(variantsDir(opts), '.mutation'), change);
+}
+
 /* ── paths ────────────────────────────────────────────────────────────── */
 
 export function variantsDir(opts: VariantsStoreOptions): string {
@@ -64,6 +76,7 @@ export function variantsDir(opts: VariantsStoreOptions): string {
 }
 
 export function variantDir(opts: VariantsStoreOptions, id: string): string {
+  if (!isValidVariantId(id)) throw new Error(`Invalid variant id "${id}"`);
   return join(variantsDir(opts), id);
 }
 
@@ -81,7 +94,23 @@ function toPosixPath(p: string): string {
  *  different drive on Windows, an absolute path back out) — either way the
  *  caller asked for something outside the tree we're allowed to touch. */
 function isEscaping(rel: string): boolean {
-  return rel.startsWith('..') || isAbsolute(rel);
+  return rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
+}
+
+/** Check existing ancestors too: a lexical child may be a symlink outside
+ * the tree, including a not-yet-created file beneath a symlinked directory. */
+function staysInside(base: string, file: string): boolean {
+  const canonical = (path: string): string => {
+    let existing = resolve(path);
+    while (dirname(existing) !== existing) {
+      try { lstatSync(existing); break; } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        existing = dirname(existing);
+      }
+    }
+    return resolve(realpathSync(existing), relative(existing, resolve(path)));
+  };
+  return !isEscaping(relative(canonical(base), canonical(file)));
 }
 
 /**
@@ -93,7 +122,7 @@ function isEscaping(rel: string): boolean {
 function repoRelativeKey(root: string, file: string): { abs: string; key: string } {
   const abs = isAbsolute(file) ? resolve(file) : resolve(root, file);
   const rel = relative(root, abs);
-  if (!rel || isEscaping(rel)) {
+  if (!rel || isEscaping(rel) || !isSafeManifestKey(toPosixPath(rel)) || !staysInside(root, abs)) {
     throw new Error(`"${file}" escapes the project root`);
   }
   return { abs, key: toPosixPath(rel) };
@@ -109,8 +138,8 @@ function repoRelativeKey(root: string, file: string): { abs: string; key: string
  * is not a variant at all.
  */
 function isSafeManifestKey(key: string): boolean {
-  if (!key || isAbsolute(key) || key.includes('\\')) return false;
-  return !key.split('/').some((segment) => segment === '..');
+  if (!key || isAbsolute(key) || /[\\:\0]/.test(key) || key === 'variant.json') return false;
+  return !key.split('/').some((segment) => !segment || segment === '.' || segment === '..' || segment === '.git');
 }
 
 function isPlausibleVariant(v: unknown): v is OverlayVariant {
@@ -120,12 +149,15 @@ function isPlausibleVariant(v: unknown): v is OverlayVariant {
     typeof o.id === 'string' &&
     typeof o.label === 'string' &&
     typeof o.createdAt === 'string' &&
-    (o.group === undefined || typeof o.group === 'string') &&
+    (o.route === undefined || typeof o.route === 'string') &&
+    (o.description === undefined || typeof o.description === 'string') &&
+    (o.group === undefined || (typeof o.group === 'string' && OVERLAY_GROUP_ID.test(o.group))) &&
     (o.groupLabel === undefined || typeof o.groupLabel === 'string') &&
     !!o.files &&
     typeof o.files === 'object' &&
     !Array.isArray(o.files) &&
-    Object.keys(o.files).every(isSafeManifestKey)
+    Object.entries(o.files).every(([key, entry]) => isSafeManifestKey(key) && entry && typeof entry === 'object' &&
+      ('base' in entry) && (entry.base === null || (typeof entry.base === 'string' && /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(entry.base))))
   );
 }
 
@@ -138,7 +170,9 @@ export function readVariant(opts: VariantsStoreOptions, id: string): OverlayVari
   if (!existsSync(file)) return null;
   try {
     const data = JSON.parse(readFileSync(file, 'utf8'));
-    return isPlausibleVariant(data) ? data : null;
+    const dir = variantDir(opts, id);
+    return isPlausibleVariant(data) && data.id === id && staysInside(variantsDir(opts), file) &&
+      Object.keys(data.files).every((key) => staysInside(opts.root, join(opts.root, key)) && staysInside(dir, join(dir, key))) ? data : null;
   } catch {
     // Junk directory: unreadable or not JSON. listVariants skips it.
     return null;
@@ -146,9 +180,11 @@ export function readVariant(opts: VariantsStoreOptions, id: string): OverlayVari
 }
 
 export function writeVariant(opts: VariantsStoreOptions, v: OverlayVariant): void {
+  if (!isPlausibleVariant(v)) throw new Error('Invalid variant manifest');
   const dir = variantDir(opts, v.id);
+  if (!staysInside(variantsDir(opts), dir)) throw new Error('Variant directory escapes the variants tree');
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'variant.json'), `${JSON.stringify(v, null, 2)}\n`);
+  writeJson(join(dir, 'variant.json'), v);
 }
 
 /** Whether a tracked file has drifted from what its override was derived
@@ -168,6 +204,7 @@ export function listVariants(opts: VariantsStoreOptions): OverlayVariantStatus[]
     .map((e) => e.name);
 
   const statuses: OverlayVariantStatus[] = [];
+  const hashes = new Map<string, string | null>();
   for (const id of ids) {
     const manifest = readVariant(opts, id);
     if (!manifest) continue; // no manifest, or invalid JSON: not a variant
@@ -179,7 +216,9 @@ export function listVariants(opts: VariantsStoreOptions): OverlayVariantStatus[]
         missing.push(file);
         continue;
       }
-      if (isStale(entry.base, currentBlob(join(root, file)))) stale.push(file);
+      const hashKey = `${entry.base?.length}:${file}`;
+      if (!hashes.has(hashKey)) hashes.set(hashKey, hashFile(join(root, file), entry.base));
+      if (isStale(entry.base, hashes.get(hashKey) ?? null)) stale.push(file);
     }
     statuses.push({ ...manifest, stale, missing });
   }
@@ -200,27 +239,29 @@ export function createVariant(
     groupLabel?: string;
   },
 ): OverlayVariant {
-  if (!isValidVariantId(input.id)) {
-    throw new Error(`Invalid variant id "${input.id}"`);
-  }
-  if (input.group !== undefined) assertGroupId(input.group);
-  if (readVariant(opts, input.id)) {
-    throw new Error(`Variant "${input.id}" already exists`);
-  }
-  const variant: OverlayVariant = {
-    id: input.id,
-    label: input.label || input.id,
-    createdAt: new Date().toISOString(),
-    files: {},
-    ...(input.route !== undefined ? { route: input.route } : {}),
-    ...(input.element !== undefined ? { element: input.element } : {}),
-    ...(input.note !== undefined ? { note: input.note } : {}),
-    ...(input.description !== undefined ? { description: input.description } : {}),
-    ...(input.group !== undefined ? { group: input.group } : {}),
-    ...(input.groupLabel !== undefined ? { groupLabel: input.groupLabel } : {}),
-  };
-  writeVariant(opts, variant);
-  return variant;
+  return mutateVariants(opts, () => {
+    if (!isValidVariantId(input.id)) {
+      throw new Error(`Invalid variant id "${input.id}"`);
+    }
+    if (input.group !== undefined) assertGroupId(input.group);
+    if (readVariant(opts, input.id)) {
+      throw new Error(`Variant "${input.id}" already exists`);
+    }
+    const variant: OverlayVariant = {
+      id: input.id,
+      label: input.label || input.id,
+      createdAt: new Date().toISOString(),
+      files: {},
+      ...(input.route !== undefined ? { route: input.route } : {}),
+      ...(input.element !== undefined ? { element: input.element } : {}),
+      ...(input.note !== undefined ? { note: input.note } : {}),
+      ...(input.description !== undefined ? { description: input.description } : {}),
+      ...(input.group !== undefined ? { group: input.group } : {}),
+      ...(input.groupLabel !== undefined ? { groupLabel: input.groupLabel } : {}),
+    };
+    writeVariant(opts, variant);
+    return variant;
+  });
 }
 
 function assertGroupId(group: string): void {
@@ -238,13 +279,15 @@ export function setVariantGroup(
   group: string,
   groupLabel?: string,
 ): OverlayVariant {
-  const manifest = readVariant(opts, id);
-  if (!manifest) throw new Error(`No variant "${id}"`);
-  assertGroupId(group);
-  manifest.group = group;
-  if (groupLabel !== undefined) manifest.groupLabel = groupLabel;
-  writeVariant(opts, manifest);
-  return manifest;
+  return mutateVariants(opts, () => {
+    const manifest = readVariant(opts, id);
+    if (!manifest) throw new Error(`No variant "${id}"`);
+    assertGroupId(group);
+    manifest.group = group;
+    if (groupLabel !== undefined) manifest.groupLabel = groupLabel;
+    writeVariant(opts, manifest);
+    return manifest;
+  });
 }
 
 export function addVariantFile(
@@ -252,20 +295,23 @@ export function addVariantFile(
   id: string,
   file: string,
 ): OverlayVariant {
-  const manifest = readVariant(opts, id);
-  if (!manifest) throw new Error(`No variant "${id}"`);
-  const root = resolve(opts.root);
-  const { abs: sourceAbs, key } = repoRelativeKey(root, file);
-  // Idempotent: a file already tracked keeps its override and its base
-  // untouched. Re-adding is a no-op, not a refresh (sync is how you refresh).
-  if (key in manifest.files) return manifest;
-  if (!existsSync(sourceAbs)) throw new Error(`"${file}" does not exist`);
-  const destAbs = join(variantDir(opts, id), key);
-  mkdirSync(dirname(destAbs), { recursive: true });
-  writeFileSync(destAbs, readFileSync(sourceAbs));
-  manifest.files[key] = { base: blobOf(sourceAbs) };
-  writeVariant(opts, manifest);
-  return manifest;
+  return mutateVariants(opts, () => {
+    const manifest = readVariant(opts, id);
+    if (!manifest) throw new Error(`No variant "${id}"`);
+    const root = resolve(opts.root);
+    const { abs: sourceAbs, key } = repoRelativeKey(root, file);
+    // Idempotent: a file already tracked keeps its override and its base
+    // untouched. Re-adding is a no-op, not a refresh (sync is how you refresh).
+    if (Object.hasOwn(manifest.files, key)) return manifest;
+    if (!existsSync(sourceAbs)) throw new Error(`"${file}" does not exist`);
+    const destAbs = join(variantDir(opts, id), key);
+    if (!staysInside(variantDir(opts, id), destAbs)) throw new Error('Override path escapes the variant directory');
+    mkdirSync(dirname(destAbs), { recursive: true });
+    writeFileSync(destAbs, readFileSync(sourceAbs));
+    manifest.files = { ...manifest.files, [key]: { base: blobOf(sourceAbs) } };
+    writeVariant(opts, manifest);
+    return manifest;
+  });
 }
 
 export function removeVariantFile(
@@ -273,16 +319,18 @@ export function removeVariantFile(
   id: string,
   file: string,
 ): OverlayVariant {
-  const manifest = readVariant(opts, id);
-  if (!manifest) throw new Error(`No variant "${id}"`);
-  const root = resolve(opts.root);
-  const { key } = repoRelativeKey(root, file);
-  if (key in manifest.files) {
-    delete manifest.files[key];
-    rmSync(join(variantDir(opts, id), key), { force: true });
-    writeVariant(opts, manifest);
-  }
-  return manifest;
+  return mutateVariants(opts, () => {
+    const manifest = readVariant(opts, id);
+    if (!manifest) throw new Error(`No variant "${id}"`);
+    const root = resolve(opts.root);
+    const { key } = repoRelativeKey(root, file);
+    if (Object.hasOwn(manifest.files, key)) {
+      delete manifest.files[key];
+      rmSync(join(variantDir(opts, id), key), { force: true });
+      writeVariant(opts, manifest);
+    }
+    return manifest;
+  });
 }
 
 /** The marker `git merge-file` leaves at the top of a conflicted hunk, with
@@ -302,59 +350,64 @@ export function promoteVariant(
   id: string,
   { force = false }: { force?: boolean } = {},
 ): { files: string[] } {
-  // Checked before the manifest read so the rmSync below can never be
-  // handed a directory the id escaped into.
-  if (!isValidVariantId(id)) throw new Error(`Invalid variant id "${id}"`);
-  const manifest = readVariant(opts, id);
-  if (!manifest) throw new Error(`No variant "${id}"`);
-  const active = readActive(opts);
-  const root = resolve(opts.root);
-  const vDir = variantDir(opts, id);
-  if (!force) {
-    const status = listVariants(opts).find((v) => v.id === id);
-    if (status?.stale.length) {
-      // A null base is stale by definition, but the file did not necessarily
-      // change: there was simply no git to record what it looked like.
-      const reasons = status.stale.map((file) =>
-        manifest.files[file]?.base === null
-          ? `no base recorded for ${file} (not a git repo when the override was made)`
-          : `${file} changed since the override was made`,
-      );
-      throw new Error(
-        `"${id}" is stale (${reasons.join('; ')}). Run \`variant sync ${id}\` first, or promote with --force.`,
-      );
+  return mutateVariants(opts, () => {
+    // Checked before the manifest read so the rmSync below can never be
+    // handed a directory the id escaped into.
+    if (!isValidVariantId(id)) throw new Error(`Invalid variant id "${id}"`);
+    const manifest = readVariant(opts, id);
+    if (!manifest) throw new Error(`No variant "${id}"`);
+    const active = readActive(opts);
+    const root = resolve(opts.root);
+    const vDir = variantDir(opts, id);
+    const missing = Object.keys(manifest.files).filter((key) => !existsSync(join(vDir, key)));
+    if (missing.length) throw new Error(`"${id}" has missing overrides: ${missing.join(', ')}. Restore or remove them before promoting.`);
+    if (!force) {
+      const status = listVariants(opts).find((v) => v.id === id);
+      if (status?.stale.length) {
+        // A null base is stale by definition, but the file did not necessarily
+        // change: there was simply no git to record what it looked like.
+        const reasons = status.stale.map((file) =>
+          manifest.files[file]?.base === null
+            ? `no base recorded for ${file} (not a git repo when the override was made)`
+            : `${file} changed since the override was made`,
+        );
+        throw new Error(
+          `"${id}" is stale (${reasons.join('; ')}). Run \`variant sync ${id}\` first, or promote with --force.`,
+        );
+      }
+      const conflicted = Object.keys(manifest.files).filter((key) => {
+        const overrideAbs = join(vDir, key);
+        return existsSync(overrideAbs) && readFileSync(overrideAbs, 'utf8').includes(CONFLICT_MARKER);
+      });
+      if (conflicted.length) {
+        throw new Error(
+          `"${id}" has unresolved conflict markers in ${conflicted.join(', ')}. Resolve them, or promote with --force.`,
+        );
+      }
     }
-    const conflicted = Object.keys(manifest.files).filter((key) => {
+    const files: string[] = [];
+    for (const key of Object.keys(manifest.files)) {
       const overrideAbs = join(vDir, key);
-      return existsSync(overrideAbs) && readFileSync(overrideAbs, 'utf8').includes(CONFLICT_MARKER);
-    });
-    if (conflicted.length) {
-      throw new Error(
-        `"${id}" has unresolved conflict markers in ${conflicted.join(', ')}. Resolve them, or promote with --force.`,
-      );
+      const destAbs = join(root, key);
+      mkdirSync(dirname(destAbs), { recursive: true });
+      writeFileSync(destAbs, readFileSync(overrideAbs));
+      files.push(key);
     }
-  }
-  const files: string[] = [];
-  for (const key of Object.keys(manifest.files)) {
-    const overrideAbs = join(vDir, key);
-    if (!existsSync(overrideAbs)) continue; // manifest says missing; nothing to land
-    const destAbs = join(root, key);
-    mkdirSync(dirname(destAbs), { recursive: true });
-    writeFileSync(destAbs, readFileSync(overrideAbs));
-    files.push(key);
-  }
-  rmSync(vDir, { recursive: true, force: true });
-  if (active.includes(id)) writeActive(opts, active.filter((a) => a !== id));
-  return { files };
+    rmSync(vDir, { recursive: true, force: true });
+    if (active.includes(id)) writeActive(opts, active.filter((a) => a !== id));
+    return { files };
+  });
 }
 
 export function dropVariant(opts: VariantsStoreOptions, id: string): void {
-  // `variant drop ..` would otherwise resolve to the variants dir's parent
-  // and rmSync it, recursively.
-  if (!isValidVariantId(id)) throw new Error(`Invalid variant id "${id}"`);
-  const active = readActive(opts);
-  rmSync(variantDir(opts, id), { recursive: true, force: true });
-  if (active.includes(id)) writeActive(opts, active.filter((a) => a !== id));
+  mutateVariants(opts, () => {
+    // `variant drop ..` would otherwise resolve to the variants dir's parent
+    // and rmSync it, recursively.
+    if (!isValidVariantId(id)) throw new Error(`Invalid variant id "${id}"`);
+    const active = readActive(opts);
+    rmSync(variantDir(opts, id), { recursive: true, force: true });
+    if (active.includes(id)) writeActive(opts, active.filter((a) => a !== id));
+  });
 }
 
 /* ── git blob hashing ─────────────────────────────────────────────────── */
@@ -367,7 +420,7 @@ export function dropVariant(opts: VariantsStoreOptions, id: string): void {
  */
 export function blobOf(absPath: string): string | null {
   try {
-    return execFileSync('git', ['hash-object', '-w', absPath], {
+    return execFileSync('git', ['hash-object', '--no-filters', '-w', absPath], {
       cwd: dirname(absPath),
       encoding: 'utf8',
     }).trim();
@@ -378,13 +431,24 @@ export function blobOf(absPath: string): string | null {
 
 export function currentBlob(absPath: string): string | null {
   try {
-    return execFileSync('git', ['hash-object', absPath], {
+    return execFileSync('git', ['hash-object', '--no-filters', absPath], {
       cwd: dirname(absPath),
       encoding: 'utf8',
     }).trim();
   } catch {
     return null;
   }
+}
+
+/** Git blob hashing is just a header and the file bytes. Existing bases tell
+ * us the repository's hash format, avoiding a process per file on every poll. */
+function hashFile(file: string, base: string | null): string | null {
+  if (base === null) return null;
+  try {
+    const contents = readFileSync(file);
+    return createHash(base.length === 64 ? 'sha256' : 'sha1')
+      .update(`blob ${contents.length}\0`).update(contents).digest('hex');
+  } catch { return null; }
 }
 
 function catFile(cwd: string, hash: string): string | null {
@@ -440,68 +504,70 @@ export function syncVariant(
   opts: VariantsStoreOptions,
   id: string,
 ): { merged: string[]; conflicts: string[]; unchanged: string[] } {
-  const manifest = readVariant(opts, id);
-  if (!manifest) throw new Error(`No variant "${id}"`);
-  const root = resolve(opts.root);
-  const vDir = variantDir(opts, id);
+  return mutateVariants(opts, () => {
+    const manifest = readVariant(opts, id);
+    if (!manifest) throw new Error(`No variant "${id}"`);
+    const root = resolve(opts.root);
+    const vDir = variantDir(opts, id);
 
-  const merged: string[] = [];
-  const conflicts: string[] = [];
-  const unchanged: string[] = [];
-  let dirty = false;
+    const merged: string[] = [];
+    const conflicts: string[] = [];
+    const unchanged: string[] = [];
+    let dirty = false;
 
-  for (const [file, entry] of Object.entries(manifest.files)) {
-    const currentAbs = join(root, file);
-    const overrideAbs = join(vDir, file);
-    const currentHash = currentBlob(currentAbs);
+    for (const [file, entry] of Object.entries(manifest.files)) {
+      const currentAbs = join(root, file);
+      const overrideAbs = join(vDir, file);
+      const currentHash = currentBlob(currentAbs);
 
-    if (!isStale(entry.base, currentHash)) {
-      unchanged.push(file);
-      continue;
-    }
-
-    // No base to diff against (never hashed, or the blob is unreachable), or
-    // no current file to merge into: nothing to three-way merge, so the
-    // override is left as-is and flagged for a person to sort out.
-    const baseContent = entry.base !== null ? catFile(dirname(currentAbs), entry.base) : null;
-    if (baseContent === null || currentHash === null) {
-      conflicts.push(file);
-      continue;
-    }
-
-    const baseTmp = join(tmpdir(), `iso-iterate-base-${randomUUID()}`);
-    writeFileSync(baseTmp, baseContent);
-    try {
-      const result = mergeFile(overrideAbs, baseTmp, currentAbs);
-      if (result.status === 0) {
-        writeFileSync(overrideAbs, result.stdout);
-        entry.base = currentHash;
-        dirty = true;
-        merged.push(file);
-      } else if (isConflictStatus(result.status)) {
-        // The markers go into the override for a person to resolve, and the
-        // base advances anyway, the way git records a conflicted merge:
-        // the current file is now what the override was reconciled against,
-        // so resolving the markers is all that stands between it and
-        // promote. Left behind, the base would make the resolved file read
-        // as stale and a second sync would re-conflict the same hunks; the
-        // marker check in promoteVariant is the guard that remains.
-        writeFileSync(overrideAbs, result.stdout);
-        entry.base = currentHash;
-        dirty = true;
-        conflicts.push(file);
-      } else {
-        // Git failed outright; its empty stdout must not replace the
-        // override, and the base stays where it was.
-        conflicts.push(file);
+      if (!isStale(entry.base, currentHash)) {
+        unchanged.push(file);
+        continue;
       }
-    } finally {
-      rmSync(baseTmp, { force: true });
-    }
-  }
 
-  if (dirty) writeVariant(opts, manifest);
-  return { merged, conflicts, unchanged };
+      // No base to diff against (never hashed, or the blob is unreachable), or
+      // no current file to merge into: nothing to three-way merge, so the
+      // override is left as-is and flagged for a person to sort out.
+      const baseContent = entry.base !== null ? catFile(dirname(currentAbs), entry.base) : null;
+      if (baseContent === null || currentHash === null) {
+        conflicts.push(file);
+        continue;
+      }
+
+      const baseTmp = join(tmpdir(), `iso-iterate-base-${randomUUID()}`);
+      writeFileSync(baseTmp, baseContent);
+      try {
+        const result = mergeFile(overrideAbs, baseTmp, currentAbs);
+        if (result.status === 0) {
+          writeFileSync(overrideAbs, result.stdout);
+          entry.base = currentHash;
+          dirty = true;
+          merged.push(file);
+        } else if (isConflictStatus(result.status)) {
+          // The markers go into the override for a person to resolve, and the
+          // base advances anyway, the way git records a conflicted merge:
+          // the current file is now what the override was reconciled against,
+          // so resolving the markers is all that stands between it and
+          // promote. Left behind, the base would make the resolved file read
+          // as stale and a second sync would re-conflict the same hunks; the
+          // marker check in promoteVariant is the guard that remains.
+          writeFileSync(overrideAbs, result.stdout);
+          entry.base = currentHash;
+          dirty = true;
+          conflicts.push(file);
+        } else {
+          // Git failed outright; its empty stdout must not replace the
+          // override, and the base stays where it was.
+          conflicts.push(file);
+        }
+      } finally {
+        rmSync(baseTmp, { force: true });
+      }
+    }
+
+    if (dirty) writeVariant(opts, manifest);
+    return { merged, conflicts, unchanged };
+  });
 }
 
 /* ── active variants / vite load() lookup ─────────────────────────── */
@@ -524,7 +590,7 @@ export function resolveOverride(
   const key = toPosixPath(relToRoot);
   for (const id of active) {
     const manifest = readVariant(opts, id);
-    if (!manifest || !(key in manifest.files)) continue;
+    if (!manifest || !Object.hasOwn(manifest.files, key)) continue;
     const overrideAbs = join(variantDir(opts, id), key);
     if (existsSync(overrideAbs)) return overrideAbs;
   }
@@ -582,19 +648,35 @@ export function readKnobs(opts: VariantsStoreOptions): KnobAxis[] {
     return [];
   }
   if (!Array.isArray(parsed)) return [];
+  const seen = new Set<string>();
   return parsed.filter((k): k is KnobAxis => {
     if (!k || typeof k !== 'object') return false;
     const a = k as Partial<KnobAxis>;
     if (typeof a.id !== 'string' || !isValidVariantId(a.id) || typeof a.label !== 'string') return false;
+    if (a.route !== undefined && typeof a.route !== 'string' &&
+      (!Array.isArray(a.route) || !a.route.every((route) => typeof route === 'string'))) return false;
+    if (a.showWhen !== undefined && (!a.showWhen || typeof a.showWhen.axis !== 'string' ||
+      (a.showWhen.equals !== undefined && typeof a.showWhen.equals !== 'string') ||
+      (a.showWhen.not !== undefined && typeof a.showWhen.not !== 'string'))) return false;
+    if (a.section !== undefined && typeof a.section !== 'string') return false;
     if (a.kind === 'range') {
-      const r = a as Partial<RangeVariantAxis>;
-      return [r.min, r.max, r.step, r.defaultValue].every((n) => typeof n === 'number' && Number.isFinite(n));
+      const { min, max, step, defaultValue } = a as Partial<RangeVariantAxis>;
+      if (typeof min !== 'number' || typeof max !== 'number' || typeof step !== 'number' || typeof defaultValue !== 'number') return false;
+      return [min, max, step, defaultValue, max - min].every(Number.isFinite) &&
+        min < max && step > 0 && defaultValue >= min && defaultValue <= max &&
+        (a.unit === undefined || typeof a.unit === 'string');
     }
     if (a.kind === 'color') {
       const c = a as Partial<ColorVariantAxis>;
-      return typeof c.defaultColor === 'string' && Array.isArray(c.swatches);
+      const hex = (value: unknown) => typeof value === 'string' && /^#(?:[a-f0-9]{3}|[a-f0-9]{6})$/i.test(value);
+      return hex(c.defaultColor) && Array.isArray(c.swatches) && c.swatches.every((s) =>
+        s && typeof s.id === 'string' && typeof s.label === 'string' && hex(s.value));
     }
     return false;
+  }).filter((axis) => {
+    if (seen.has(axis.id)) return false;
+    seen.add(axis.id);
+    return true;
   });
 }
 
@@ -609,9 +691,11 @@ export function readActive(opts: VariantsStoreOptions): string[] {
   }
   const ids = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [];
   const kept: string[] = [];
+  const seen = new Set<string>();
   const owner = new Set<string>();
   for (const id of ids) {
-    if (typeof id !== 'string' || kept.includes(id)) continue;
+    if (typeof id !== 'string' || seen.has(id)) continue;
+    seen.add(id);
     const manifest = readVariant(opts, id);
     if (!manifest) continue;
     const files = Object.keys(manifest.files);
@@ -626,7 +710,7 @@ export function writeActive(opts: VariantsStoreOptions, ids: string[]): void {
   const file = join(resolve(opts.root), ACTIVE_FILE);
   mkdirSync(dirname(file), { recursive: true });
   const active = Array.from(new Set(ids));
-  writeFileSync(file, `${JSON.stringify({ active } satisfies ActiveFileShape, null, 2)}\n`);
+    writeJson(file, { active } satisfies ActiveFileShape);
   // Which variants a machine is looking at is local state, never a commit;
   // the CLI writes this too, so the exclusion cannot live in the plugin alone.
   ensureFileIgnored(file);
@@ -645,12 +729,51 @@ export function variantsResponse(opts: VariantsStoreOptions, req: NotesRequest):
   const path = (req.url ?? '/').split('?')[0] || '/';
   const json = (status: number, body: unknown): NotesResponse => ({
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8' },
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
     body,
   });
 
   if (method === 'GET' && path === '/') {
     return json(200, { variants: listVariants(opts), active: readActive(opts), knobs: readKnobs(opts) });
+  }
+
+  if (method === 'POST' && path === '/manage') {
+    const body = req.body as { axisId?: unknown; action?: unknown; optionId?: unknown; route?: unknown } | null;
+    if (!body || typeof body.axisId !== 'string' || !['remove-option', 'remove-axis', 'keep-default'].includes(String(body.action))) {
+      return json(400, { error: 'A selector id and a valid action are required.' });
+    }
+    const variants = listVariants(opts);
+    const group = overlayGroups(variants).find((g) => g.id === body.axisId);
+    const knobs = readKnobs(opts);
+    const knob = knobs.find((k) => k.id === body.axisId);
+    if (!group && !knob) return json(404, { error: 'This selector no longer exists.' });
+    let removed = (group?.members ?? []).filter(v => typeof body.route !== 'string' || variantAppliesTo(v.route, body.route));
+    let nextKnobs = knobs.filter(k => k.id !== knob?.id);
+    if (body.action === 'remove-option' && knob) {
+      if (knob.kind !== 'color') return json(400, { error: 'This selector has no removable options.' });
+      const swatch = knob.swatches.find(s => s.id === body.optionId);
+      if (!swatch || swatch.value.toLowerCase() === knob.defaultColor.toLowerCase()) return json(400, { error: 'The default colour cannot be removed.' });
+      nextKnobs = knobs.map(k => k.id === knob.id ? { ...knob, swatches: knob.swatches.filter(s => s.id !== body.optionId) } : k);
+    } else if (body.action === 'remove-option') {
+      if (!group || typeof body.optionId !== 'string' || !removed.some((v) => v.id === body.optionId)) {
+        return json(400, { error: 'Only an alternative option can be removed. The default belongs to the source.' });
+      }
+      removed = removed.filter((v) => v.id === body.optionId);
+    }
+    // Save a local recovery copy before removing any definitions or files.
+    const recovery = join(resolve(opts.root), '.iso-iterate', 'removed', randomUUID());
+    try {
+      mkdirSync(recovery, { recursive: true });
+      ensureDirIgnored(dirname(recovery));
+      for (const v of removed) cpSync(variantDir(opts, v.id), join(recovery, v.id), { recursive: true });
+      if (knob) writeFileSync(join(recovery, 'knobs.json'), JSON.stringify(knobs, null, 2));
+      const changedFiles = removed.flatMap((v) => Object.keys(v.files));
+      for (const v of removed) dropVariant(opts, v.id);
+      if (knob) writeFileSync(join(resolve(opts.root), KNOBS_FILE), `${JSON.stringify(nextKnobs, null, 2)}\n`);
+      return json(200, { variants: listVariants(opts), active: readActive(opts), knobs: readKnobs(opts), changedFiles });
+    } catch (error) {
+      return json(500, { error: error instanceof Error ? error.message : 'Could not remove the selector.' });
+    }
   }
 
   if (method === 'POST' && path === '/active') {

@@ -22,6 +22,8 @@ declare global {
   }
 }
 
+// A bookmarklet or a hot-reloaded integration can evaluate this script again.
+window.__isoIterate?.unmount();
 let off: (() => void) | null = null;
 
 const api: IsoIterateGlobal = {

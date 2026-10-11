@@ -7,6 +7,7 @@
  * module has no React and no Vite dependency and is fully unit-testable in a
  * `node` env.
  */
+import { request } from './request';
 
 /** A UI element picked with the panel's selector mode. */
 export interface IterationElement {
@@ -18,8 +19,30 @@ export interface IterationElement {
   selector: string;
 }
 
+/** A durable reference to a selector or one of its options, not a DOM path. */
+export interface VariantReference {
+  axisId: string;
+  label: string;
+  optionId?: string;
+  optionLabel?: string;
+  value?: string;
+}
+
+export interface VariantRemoval {
+  axisId: string;
+  action: 'remove-option' | 'remove-axis' | 'keep-default';
+  optionId?: string;
+}
+
+export interface NoteContext {
+  /** Pending instruction: deleting its note cancels it before the agent acts. */
+  variantAction?: VariantRemoval;
+  elements?: IterationElement[];
+  variant?: VariantReference | null;
+}
+
 /** A note written in the panel, read and answered by the coding agent. */
-export interface IterationNote {
+export interface IterationNote extends NoteContext {
   id: string;
   /** The route the note was written on, e.g. "/projects". */
   route: string;
@@ -45,6 +68,8 @@ export interface NodeLike {
   parentElement?: NodeLike | null;
   children?: readonly NodeLike[];
   textContent?: string | null;
+  /** One-based child position, when the adapter can provide it cheaply. */
+  indexInParent?: number;
 }
 
 /**
@@ -62,15 +87,17 @@ export function describeIterationElement(
   let depth = 0;
   while (node && node.tagName !== "BODY" && depth < maxDepth) {
     if (node.id) {
-      parts.unshift(`#${node.id}`);
+      // Escape every code point: valid for leading digits, punctuation and
+      // framework-generated ids without depending on the host's CSS global.
+      const id = Array.from(node.id, (c) => `\\${c.codePointAt(0)?.toString(16)} `).join('');
+      parts.unshift(`#${/^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(node.id) ? node.id : id}`);
       break;
     }
     let part = node.tagName.toLowerCase();
     const parent: NodeLike | null | undefined = node.parentElement;
-    const siblings = parent ? Array.from(parent.children ?? []) : [];
-    if (parent && siblings.length > 0) {
-      const index = siblings.indexOf(node);
-      if (index >= 0) part += `:nth-child(${index + 1})`;
+    if (parent) {
+      const index = node.indexInParent ?? Array.from(parent.children ?? []).indexOf(node) + 1;
+      if (index > 0) part += `:nth-child(${index})`;
     }
     parts.unshift(part);
     node = parent;
@@ -83,10 +110,7 @@ export function describeIterationElement(
   };
 }
 
-/** Adapt a real DOM `Element` to the descriptor's duck-typed surface.
- *  `parentElement` back-links are cached BEFORE a node's children are built so
- *  the parent→child→parent climb terminates. Only the parent chain of the
- *  picked element and each ancestor's immediate siblings is materialized. */
+/** Lazy DOM views: describing one element never walks unrelated subtrees. */
 export function elementAsNode(el: Element): NodeLike {
   const cache = new WeakMap<Element, NodeLike>();
   const view = (n: Element | null | undefined): NodeLike | null => {
@@ -96,15 +120,16 @@ export function elementAsNode(el: Element): NodeLike {
     const created: NodeLike = {
       tagName: n.tagName,
       id: n.id || null,
-      textContent: n.textContent,
-      parentElement: null,
-      children: [],
+      get textContent() { return n.textContent; },
+      get parentElement() { return view(n.parentElement); },
+      get children() { return Array.from(n.children, (child) => view(child) as NodeLike); },
+      get indexInParent() {
+        let index = 1;
+        for (let sibling = n.previousElementSibling; sibling; sibling = sibling.previousElementSibling) index++;
+        return index;
+      },
     };
     cache.set(n, created);
-    created.parentElement = view(n.parentElement);
-    created.children = Array.from(n.children ?? []).map(view).filter(
-      (c): c is NodeLike => c !== null,
-    );
     return created;
   };
   const root = view(el);
@@ -130,6 +155,7 @@ export interface RouteGateOptions {
 const DEFAULT_HIDDEN = ["/login", "/logout", "/register", "/error", "/_error"];
 
 function matchRoutePattern(route: string, pattern: string): boolean {
+  if (pattern.endsWith('*')) return route.startsWith(pattern.slice(0, -1));
   if (pattern.endsWith("/")) return route.startsWith(pattern);
   return route === pattern || route.startsWith(`${pattern}/`);
 }
@@ -169,35 +195,25 @@ export interface IterationStoreConfig {
 /** Where the last `saveNote` landed; `null` before the first one. */
 export type SaveLocation = "server" | "local";
 
-/**
- * The browser's own fetch when the Vite plugin captured it before any app
- * code ran (`window.__isoIterateFetch`), else whatever `fetch` is now. An
- * app that stubs `window.fetch` — a preview app answering its own backend, a
- * mock layer — would otherwise answer the panel's requests too.
- */
-const request: typeof fetch = (input, init) => {
-  const native = (
-    globalThis as { __isoIterateFetch?: typeof fetch }
-  ).__isoIterateFetch;
-  return (native ?? globalThis.fetch)(input, init);
-};
-
 export function createIterationStore(cfg: IterationStoreConfig = {}) {
   const endpoint = cfg.endpoint ?? null;
   const key = cfg.key ?? "iso-iterate-feedback";
   let lastSave: SaveLocation | null = null;
+  let migration: Promise<void> | null = null;
 
   function localAll(): IterationNote[] {
+    let raw: string | null;
+    try { raw = window.localStorage.getItem(key); } catch { return []; }
     try {
-      const items = JSON.parse(
-        window.localStorage.getItem(key) ?? "[]",
-      ) as IterationNote[];
+      const items = JSON.parse(raw ?? '[]') as IterationNote[];
+      if (!Array.isArray(items) || !items.every((note) => note && typeof note.id === 'string' &&
+        typeof note.route === 'string' && typeof note.feedback === 'string' && typeof note.createdAt === 'string')) throw new Error('Invalid notes');
       return items.map((i) => ({ ...i, done: i.done ?? false })).map((i) => ({
         ...i,
         element: i.element ?? null,
       }));
-    } catch {
-      return [];
+    } catch (cause) {
+      throw new Error('Could not read local feedback. Browser storage has been left untouched.', { cause });
     }
   }
 
@@ -205,25 +221,60 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     window.localStorage.setItem(key, JSON.stringify(items));
   }
 
-  async function migrateLocalBacklog(): Promise<void> {
+  function acknowledge(item: IterationNote): void {
+    const current = localAll();
+    const snapshot = JSON.stringify(item);
+    const remaining = current.filter((note) => note.id !== item.id || JSON.stringify(note) !== snapshot);
+    if (remaining.length !== current.length) localWrite(remaining);
+  }
+
+  async function flushLocalBacklog(): Promise<void> {
     if (!endpoint) return;
     const backlog = localAll();
     if (backlog.length === 0) return;
     for (const item of backlog) {
-      const res = await request(endpoint, {
+      const saved = await request(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          id: item.id,
+          createdAt: item.createdAt,
           route: item.route,
           feedback: item.feedback,
           element: item.element ?? null,
+          ...(item.elements !== undefined ? { elements: item.elements } : {}),
+          ...(item.variant !== undefined ? { variant: item.variant } : {}),
+          ...(item.variantAction !== undefined ? { variantAction: item.variantAction } : {}),
           ...(item.payload !== undefined ? { payload: item.payload } : {}),
           ...(item.viewport ? { viewport: item.viewport } : {}),
         }),
-      });
-      if (!res.ok) return; // keep backlog, retry next time
+      }, async (res) => res.ok ? await res.json() as { id?: unknown } : null);
+      if (!saved || typeof saved.id !== 'string' || !saved.id) return; // Keep unacknowledged notes.
+      // A save may have happened while the request was in flight. Remove
+      // only the exact snapshot acknowledged by the server, never the queue.
+      acknowledge(item);
     }
-    window.localStorage.removeItem(key);
+  }
+
+  function migrateLocalBacklog(): Promise<void> {
+    migration ??= flushLocalBacklog().finally(() => { migration = null; });
+    return migration;
+  }
+
+  async function readRemote(url: string): Promise<IterationNote[]> {
+    await migrateLocalBacklog().catch(() => {});
+    const local = localAll();
+    try {
+      const remote = await request(url, undefined, async (res) => {
+        if (!res.ok) throw new Error(`Loading iteration notes failed (${res.status})`);
+        return await res.json() as IterationNote[];
+      });
+      const pendingIds = new Set(local.map((note) => note.id));
+      return [...remote.filter((note) => !pendingIds.has(note.id)), ...local];
+    } catch (error) {
+      if (local.length) return local;
+      throw error;
+    }
   }
 
   /** Notes for one route, or every note on every route when `route` is omitted. */
@@ -233,12 +284,10 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
         .filter((i) => route === undefined || i.route === route)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     }
-    await migrateLocalBacklog().catch(() => {});
-    const res = await request(
+    return (await readRemote(
       route === undefined ? `${endpoint}?all=1` : `${endpoint}?route=${encodeURIComponent(route)}`,
-    );
-    if (!res.ok) throw new Error(`Loading iteration notes failed (${res.status})`);
-    return (await res.json()) as IterationNote[];
+    )).filter((note) => route === undefined || note.route === route)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   /** Every still-open note across all routes, newest first. */
@@ -248,10 +297,8 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
         .filter((i) => !i.done)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     }
-    await migrateLocalBacklog().catch(() => {});
-    const res = await request(endpoint);
-    if (!res.ok) throw new Error(`Loading iteration notes failed (${res.status})`);
-    return (await res.json()) as IterationNote[];
+    return (await readRemote(endpoint)).filter((note) => !note.done)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   function saveLocal(
@@ -261,16 +308,31 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     id: string | null,
     payload?: unknown,
     viewport?: { w: number; h: number },
+    context?: NoteContext,
   ): string {
     const all = localAll();
     let savedId: string;
-    const existing = id ? all.find((f) => f.id === id) : undefined;
+    const defaultsRequest = feedback.startsWith('[set-defaults]');
+    const existing = id ? all.find((f) => f.id === id && f.route === route) : defaultsRequest ? all.filter(n => !n.done && n.route === route && n.feedback.startsWith('[set-defaults]')).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] : undefined;
     if (existing) {
+      if (defaultsRequest && !id) {
+        delete existing.elements;
+        delete existing.variant;
+        delete existing.variantAction;
+        delete existing.payload;
+      }
       existing.feedback = feedback;
       existing.element = element;
+      if (payload !== undefined) existing.payload = payload;
+      if (defaultsRequest) {
+        existing.createdAt = new Date().toISOString();
+        if (viewport) existing.viewport = viewport;
+      }
+      if (context) Object.assign(existing, context);
+      if (existing.elements) existing.element = existing.elements[0] ?? null;
       savedId = existing.id;
     } else {
-      savedId = crypto.randomUUID();
+      savedId = id ?? crypto.randomUUID();
       all.push({
         id: savedId,
         route,
@@ -280,9 +342,11 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
         createdAt: new Date().toISOString(),
         ...(viewport ? { viewport } : {}),
         ...(payload !== undefined ? { payload } : {}),
+        ...context,
+        ...(context?.elements ? { element: context.elements[0] ?? null } : {}),
       });
     }
-    localWrite(all);
+    localWrite(defaultsRequest ? all.filter(n => n.id === savedId || n.done || n.route !== route || !n.feedback.startsWith('[set-defaults]')) : all);
     return savedId;
   }
 
@@ -295,35 +359,57 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     payload?: unknown,
     /** Window size at write time; attached on create only. */
     viewport?: { w: number; h: number },
+    context?: NoteContext,
   ): Promise<string> {
     if (!endpoint) {
+      const savedId = saveLocal(route, feedback, element, id, payload, viewport, context);
       lastSave = "local";
-      return saveLocal(route, feedback, element, id, payload, viewport);
+      return savedId;
     }
+    // Stable across a lost response and its retry: the server treats this as
+    // an upsert, so reconnecting cannot create a second copy of the note.
+    const savedId = id ?? (feedback.startsWith('[set-defaults]') ? null : crypto.randomUUID());
+    const pendingBefore = localAll().find((note) => note.id === savedId);
+    const saveOffline = () => {
+      const localId = saveLocal(route, feedback, element, savedId, payload, viewport, context);
+      lastSave = 'local';
+      return localId;
+    };
+    let res: Response | undefined;
+    let result: { id?: unknown; error?: unknown } | null;
     try {
-      const res = await request(endpoint, {
+      result = await request(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id,
+          id: savedId,
           route,
           feedback,
           element,
+          ...context,
           ...(payload !== undefined ? { payload } : {}),
           ...(viewport ? { viewport } : {}),
         }),
+      }, async (response) => {
+        res = response;
+        if (!response.ok && response.status >= 500) throw new Error(`Saving iteration note failed (${response.status})`);
+        return await response.json().catch((error) => {
+          if (response.ok) throw error;
+          return null;
+        }) as { id?: unknown; error?: unknown } | null;
       });
-      if (!res.ok) throw new Error(`Saving iteration note failed (${res.status})`);
-      lastSave = "server";
-      return ((await res.json()) as { id: string }).id;
     } catch {
-      // Dev server blipped: never lose the note — stash in localStorage. The
-      // next `listNotes` flushes the backlog once the endpoint is reachable.
-      // `lastSave` tells the panel, so the reviewer knows the note has not
-      // reached the file yet rather than finding out from the agent.
-      lastSave = "local";
-      return saveLocal(route, feedback, element, id, payload, viewport);
+      if (res && !res.ok && res.status < 500) throw new Error(`Saving iteration note failed (${res.status})`);
+      return saveOffline();
     }
+    // Validation errors require a correction, not a permanently stuck queue.
+    if (!res?.ok) {
+      throw new Error(`Saving iteration note failed (${res?.status})${typeof result?.error === 'string' ? `: ${result.error}` : ''}`);
+    }
+    if (!result || typeof result.id !== 'string' || !result.id) return saveOffline();
+    if (pendingBefore) acknowledge(pendingBefore);
+    lastSave = 'server';
+    return result.id;
   }
 
   async function deleteNote(id: string): Promise<void> {
@@ -335,6 +421,8 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
       method: "DELETE",
     });
     if (!res.ok) throw new Error(`Deleting iteration note failed (${res.status})`);
+    const local = localAll();
+    if (local.some((note) => note.id === id)) localWrite(local.filter((note) => note.id !== id));
   }
 
   return {

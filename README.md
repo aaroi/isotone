@@ -1,286 +1,98 @@
-<p align="center">
-  <img src="iso-iterate.png" width="160" alt="iso-iterate icon" />
-</p>
-
 # iso-iterate
 
-Click the thing you want changed instead of describing it.
+Point at what you want changed. Let your coding agent take it from there.
 
-iso-iterate is a dev-only feedback loop between a person reviewing a running
-web app and the coding agent building it. A small panel sits bottom right of
-the dev build. You write a note, press the crosshair, and click the element
-it is about. The note lands in a JSON file in the repo with the route, a CSS
-selector and your window size. The agent reads the file with one command,
-does the work, and marks the note done, so the queue drains as it works.
+Pin elements in your running app, leave feedback, and compare design variants.
+Notes stay in your project with the route, viewport, and element references your
+agent needs. No account, database, or hosted service.
 
-The same panel has a Variants tab. When a note asks for an alternative, the
-agent makes a variant instead of editing the real file, and you switch
-between the versions in place while looking at the page.
+![The same feedback and variants panel in light and dark mode](docs/assets/preview.png)
 
-Works with any agent that can run a CLI. Notes never render in a production
-build. There is no database and no hosted service, only files in the repo.
+## Start
 
-## Quick start
+Run in the project you want to review:
 
-`npx iso-iterate init` looks at the repo and prints which block below fits.
-
-### Vite
-
-```bash
+```sh
 npm install -D iso-iterate
+npx iso-iterate init --yes
 ```
+
+The second command detects your setup, prints the integration, and adds a short
+workflow to `AGENTS.md`. It does not edit your app. Your coding agent can apply
+the printed instructions.
+
+For **Vite**, add the plugin alongside your existing plugins:
 
 ```ts
-// vite.config.ts
 import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
 import { iteration } from 'iso-iterate/vite';
 
-export default defineConfig({ plugins: [react(), iteration()] });
+export default defineConfig({
+  plugins: [/* your framework plugin */, iteration()],
+});
 ```
 
-Start `vite dev` as usual. The dev server serves the notes and variants
-endpoints, injects the panel into every page the visibility rule allows, and
-does nothing in `vite build`. The panel is React, so `react` and `react-dom`
-must be installed; a Vite app in another framework uses the script tag
-below. Keep the React plugin (or your framework's) in the list: it is what
-makes a variant switch swap the component in place instead of reloading.
+Works with any Vite framework. The panel brings its own React runtime and is
+only injected by the development server.
 
-### Any dev server: one script tag
-
-```bash
-npx iso-iterate serve
-```
-
-Run it inside the repo under review, then add one line to the dev page:
+For **any other dev server**, run `npx iso-iterate serve` and add this to your
+development HTML:
 
 ```html
 <script src="http://127.0.0.1:4123/iso-iterate.js" defer></script>
 ```
 
-React ships inside the script, so the host needs no bundler and no React.
-`http://127.0.0.1:4123` shows the tag with a copy button and a bookmarklet
-for pages you cannot edit. The server binds loopback and accepts requests
-only from loopback origins. `--port`, `--host` and `--file` change the
-defaults. `examples/plain-html/index.html` is a page wired this way. This
-path carries notes; variants need the Vite plugin or your own source.
+[Integration guide](docs/integrations.md) covers route handlers, React embeds,
+configuration, and production guards. Node.js 20 or later is required.
 
-### A framework's own dev API
+## The loop
 
-For a server that hands you a `Request`, serve the endpoint from a route
-handler and mount the panel from a dev-only client module:
+1. Open Feedback with **⌘/Ctrl + Shift + .** Write a note, pin elements, and send.
+2. Your agent reads `npx iso-iterate --json`, makes the change, and runs
+   `npx iso-iterate --done <id>`.
+3. Review the result. For alternatives, the agent creates a
+   [variant](docs/variants.md) you can switch to in the same page.
 
-```ts
-// app/api/iteration/notes/route.ts
-import { serveNotesRequest } from 'iso-iterate/server';
+Click a saved note to edit it. **Enter** sends; **Shift + Enter** adds a newline.
+While selecting elements, click to pin or Tab to a page control and press Space.
+Enter or Escape finishes selection. The selected element text stays attached to
+the note; closing the panel preserves your draft.
 
-const handle = async (req: Request) => {
-  const { status, headers, body } = await serveNotesRequest('.iteration-feedback.json', req);
-  return Response.json(body, { status, headers });
-};
-export { handle as GET, handle as POST, handle as DELETE };
-```
+## Themes
+
+The panel follows the rendered page by default. Set `theme` on the Vite plugin,
+`mountIteration`, or `IterationPanel`:
 
 ```ts
-// client, dev only
-import { mountIteration } from 'iso-iterate/react';
-
-if (process.env.NODE_ENV === 'development') {
-  mountIteration({ endpoint: '/api/iteration/notes' });
-}
+iteration({ theme: 'auto' }); // page background; the default
+iteration({ theme: 'system' }); // operating system preference
+iteration({ theme: 'light' }); // explicit light, or 'dark'
 ```
 
-A `(req, res)` server calls `notesResponse` from the same module and
-serializes `body` itself. `iso-iterate/server` imports neither React nor
-Vite.
+Standalone: `npx iso-iterate serve --theme dark`.
+Automatic detection samples background colours; use an explicit theme for
+image-led or unusual layered backgrounds. The demo has separate page and panel
+theme controls so you can try each combination.
 
-## Using the panel
+## Updates
 
-- Type, press **Enter**. The field clears and keeps focus.
-- The crosshair pins an element: hover highlights, click attaches.
-- Click a note to edit it. Delete appears on hover.
-- Unsent text survives closing the panel.
-- The list holds every note from every page, newest first, with the page
-  named on each row. Done notes leave it as the agent marks them.
+The dev server checks public npm in the background, at most once a day while its
+cache is retained. A quiet notice offers an exact upgrade command; you or your
+agent choose when to run it. Checks fail quietly offline and never send project
+content. Use `checkForUpdates: false` to opt out. [Update details](docs/updates.md).
 
-The panel renders in a shadow root, so its styles and the page's never mix.
-It matches the page's light or dark background on its own, and hides itself
-on auth and error routes by default (see Options).
+## Develop
 
-## Variants
-
-A variant is an alternative of one specific element, chosen from the
-panel's Variants tab. Two host shapes:
-
-**A Vite host with no variant system** gets overlay variants, on by default.
-A variant is a directory under `.iso-iterate/variants/<id>/` holding copies
-of source files at their repo-relative paths plus a `variant.json`
-manifest. While the variant is active, the plugin serves the copy in place
-of the real file. Variants that override the same files, or share a
-`--group`, are alternatives of one decision and appear as one selector with
-Default and each option; unrelated variants get their own selectors and can
-be active at the same time. A selector shows only on the variant's route;
-a route ending in `/*` covers every page under it, and a variant made
-without a route shows everywhere.
-
-**A host with its own variant system** hands the panel a `VariantsSource`:
-
-```ts
-import { createVariantsSource, mountIteration } from 'iso-iterate/react';
-
-const source = createVariantsSource({ axes, onChange: applySelections });
-mountIteration({ variants: source, defaultTab: 'variants' });
-```
-
-The panel renders select, range and colour axes, thumbnail grids,
-conditional axes, sections and Revert; the app keeps its own state and URL
-sync. `npx iso-iterate init --approach host` prints a complete example.
-
-**The loop.** Pin an element and write the ask. The agent starts a variant
-from the note and edits the copy. You switch between Default and the
-alternatives in the panel; the switch applies in place. **Save as
-defaults** files your picks as a note, and the agent lands the named
-variants over the real files with `variant promote`. Nothing else changes:
-other variants stay until you ask for one to be dropped.
-
-Variant files are committed by default, since they are the change under
-review; `variants: { ignored: true }` keeps them local. The active pointer,
-`.iso-iterate/active.json`, is local and never committed. `ISO_VARIANT=<id>`
-(a comma-separated list) bakes variants into a `vite build` for a preview.
-
-### Knobs
-
-Some decisions are a number, not an alternative file: how far a fade
-reaches, how dense a dot field is. Declare those in
-`.iso-iterate/knobs.json`, a JSON array of range or colour axes with an
-optional `route` (a pattern like a variant's, or a list of them):
-
-```json
-[
-  {
-    "kind": "range",
-    "id": "fade-from",
-    "label": "Fade starts",
-    "min": 0,
-    "max": 100,
-    "step": 1,
-    "defaultValue": 0,
-    "unit": "%",
-    "route": ["/computers/*", "/databases/*"]
-  }
-]
-```
-
-The panel renders each knob as a slider on its routes. A value reaches the
-page as a custom property on `<html>`, `--knob-<id>`, with the unit
-appended, so the source reads it with the committed default as the
-fallback:
-
-```css
-mask-image: radial-gradient(ellipse, black var(--knob-fade-from, 0%), transparent 100%);
-```
-
-Knob values live in the reviewer's browser, not on the server. "Save as
-defaults" files the moved knobs in the same `[set-defaults]` note as the
-variant picks, as `Knobs: Fade starts 40% (fade-from)` with a `knobs`
-payload of `fade-from:40`; the agent writes the number into the source and
-into the knob file's `defaultValue`.
-
-## What live switching needs from the host
-
-A switch is delivered as a Vite hot update, so it swaps in place exactly
-where an edit to that file would.
-
-- **React Fast Refresh**, through `@vitejs/plugin-react` or the framework
-  plugin that wraps it. Without it every switch reloads the page.
-- **Component-only exports.** A file that also exports data or a hook
-  cannot be swapped alone; the update climbs to its importer, and an entry
-  with no accept handler reloads. Accept the import in the entry and
-  re-render from the new module, or move the extra exports out.
-- **Tailwind v4** scans only the sources it is pointed at. Add
-  `@source "../.iso-iterate/variants/**/*.{ts,tsx}";` (relative to the CSS
-  file) or classes new to a variant render unstyled.
-- **A sibling dev server** that aliases into another package sets
-  `variants: { root: '../that-package' }` so both serve the same variants.
-- **Routes** come from `window.location.pathname`. An app on a memory
-  router sees `/` everywhere; leave `--route` off there.
-- **Linters** should ignore `.iso-iterate` (Biome: `"!.iso-iterate"` in
-  `files.includes`; ESLint: `{ ignores: ['.iso-iterate/**'] }`).
-
-## The agent side
-
-```bash
-npx iso-iterate                # open notes, all routes
-npx iso-iterate /projects      # one route
-npx iso-iterate --done <id>    # mark addressed (an id prefix is enough)
-npx iso-iterate --all          # include done notes
-npx iso-iterate variant list   # every variant, its group, active ones marked
-npx iso-iterate variant new <id> --note <prefix>   # start one from a note
-npx iso-iterate variant add <id> <file...>         # copy files into it
-npx iso-iterate variant use <id>                   # switch the dev server
-npx iso-iterate variant promote <id>               # land the winner
-npx iso-iterate --help         # everything, also `variant --help`
-```
-
-A note prints with its route, element, viewport and any host context:
-
-```
-## /projects
-- [a85a7b93] (2026-08-29 14:49 · 900×620)
-  ↳ <button> "Join the waitlist" — #primary-cta
-  Default label should be Get started, with cursor-pointer.
-```
-
-AGENTS.md in this repo is a drop-in brief for the agent, and
-`npx iso-iterate init --approach <name> --yes` appends a shorter version to
-the host repo's own AGENTS.md.
-
-## Options
-
-```ts
-iteration({
-  file: '.iteration-feedback.json', // where notes persist; kept out of git via .git/info/exclude
-  rule: { hidden: ['/login'] },     // route visibility: hidden, visible (allowlist), alwaysHidden
-  key: 'my-app',                    // localStorage namespace per app
-  variants: {                       // overlay variants; omit for these defaults, false to turn off
-    root: '.',                      // the package the file paths are relative to
-    dir: '.iso-iterate/variants',   // where variants live, relative to root
-    ignored: false,                 // true keeps the directory out of git
-  },
-})
-```
-
-`rule.hidden` defaults to `/login`, `/logout`, `/register` and `/error`;
-`alwaysHidden` to `/api`, `/auth` and `/login`. To review a login page:
-`iteration({ rule: { hidden: [], alwaysHidden: ['/api', '/auth'] } })`.
-
-`mountIteration` takes `endpoint`, `variants` (a source, or `'overlay'`),
-`defaultTab`, `key`, `rule`, `getRoute` for a sub-app whose route is not
-the pathname, and `getPayload` for host context on each new note.
-`<IterationPanel/>` is the same panel for rendering inside your own tree.
-
-## FAQ
-
-**Does anything ship to production?** No. The plugin serves and injects
-only under `vite dev`; the panel is not in the bundle. A host that passes
-its own `VariantsSource` to `mountIteration` renders the Variants tab
-wherever that call runs, which is the one opt-in exception.
-
-**Do teammates install anything?** With the plugin, `npm install` is all;
-variants travel with the branch and each machine has its own notes file.
-On the `serve` path each machine runs `npx iso-iterate serve`.
-
-**Two dev servers?** Each writes notes next to its own root. Two servers
-over the same variants root, which `variants.root` sets up, switch together.
-
-**No panel in `curl` output?** The plugin injects on navigation requests
-only; send `Accept: text/html`.
-
-## Development
-
-```bash
+```sh
 pnpm install
-pnpm check   # typecheck, lint, build, test
+pnpm dev          # demo with temporary, fictional notes
+pnpm check        # types, lint, build, tests
+pnpm check:package # install and exercise the packed npm artifact
 ```
+
+- [Design language](docs/design.md): materials, states, spacing, themes, and motion.
+- [Architecture and contributing](docs/development.md): boundaries and checks.
+- [Release checks](docs/releasing.md): packaging, privacy, and publication.
+- [Changelog](CHANGELOG.md)
 
 MIT.

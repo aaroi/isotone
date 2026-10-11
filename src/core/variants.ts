@@ -19,6 +19,7 @@
  */
 
 import type { IterationElement } from './index';
+import { request } from './request';
 
 /* ── Axes ─────────────────────────────────────────────────────────────── */
 
@@ -93,6 +94,12 @@ export type VariantAxis = SelectVariantAxis | RangeVariantAxis | ColorVariantAxi
 /** Axis id → selected value. Ranges stringify their number. */
 export type VariantSelections = Record<string, string>;
 
+export interface VariantAction {
+  axisId: string;
+  action: 'remove-option' | 'remove-axis' | 'keep-default';
+  optionId?: string;
+}
+
 /* ── Pure helpers ─────────────────────────────────────────────────────── */
 
 /** The primary value of an axis, as the selection string. */
@@ -106,7 +113,7 @@ export function axisDefault(axis: VariantAxis): string {
 export function isValidSelection(axis: VariantAxis, value: string): boolean {
   if (axis.kind === 'range') {
     const n = Number(value);
-    return Number.isFinite(n) && n >= axis.min && n <= axis.max;
+    return value.trim() !== '' && Number.isFinite(n) && n >= axis.min && n <= axis.max;
   }
   if (axis.kind === 'color') return /^#[0-9a-fA-F]{6}$/.test(value);
   return axis.options.some((o) => o.id === value);
@@ -119,16 +126,17 @@ export function defaultSelections(axes: VariantAxis[]): VariantSelections {
 /** `"headline:b,haze-speed:0.7"` → validated selections. Unknown axes and
  *  illegal values are dropped rather than failing the whole string. */
 export function parseVariantParam(axes: VariantAxis[], raw: string): VariantSelections {
-  const out: VariantSelections = {};
+  const out = new Map<string, string>();
+  const byId = new Map(axes.map((axis) => [axis.id, axis]));
   for (const pair of raw.split(',')) {
     const at = pair.indexOf(':');
     if (at < 0) continue;
     const axisId = pair.slice(0, at);
     const value = pair.slice(at + 1);
-    const axis = axes.find((a) => a.id === axisId);
-    if (axis && isValidSelection(axis, value)) out[axisId] = value;
+    const axis = byId.get(axisId);
+    if (axis && isValidSelection(axis, value)) out.set(axisId, value);
   }
-  return out;
+  return Object.fromEntries(out);
 }
 
 /** Non-default selections only, `""` when everything is at its default. */
@@ -149,25 +157,46 @@ export function isDirty(axes: VariantAxis[], selections: VariantSelections): boo
 
 /**
  * Whether an axis shows, given every axis and the current selections.
- * `showWhen` is recursive: a hidden parent hides its children. Depth-capped
- * so a cycle in a hand-written meta cannot hang the panel.
+ * A hidden parent hides its children. Cycles are hidden, and long chains
+ * are evaluated iteratively rather than consuming the call stack.
  */
 export function isAxisVisible(
   axis: VariantAxis,
   axes: VariantAxis[],
   selections: VariantSelections,
-  depth = 0,
+  _depth = 0,
 ): boolean {
-  if (!axis.showWhen || depth > 8) return true;
-  const parent = axes.find((a) => a.id === axis.showWhen?.axis);
-  const value = selections[axis.showWhen.axis] ?? (parent ? axisDefault(parent) : undefined);
-  if (axis.showWhen.equals !== undefined && value !== axis.showWhen.equals) return false;
-  if (axis.showWhen.not !== undefined && value === axis.showWhen.not) return false;
-  return parent ? isAxisVisible(parent, axes, selections, depth + 1) : true;
+  return visibilityById(axes.includes(axis) ? axes : [...axes, axis], selections).get(axis.id) ?? false;
 }
 
 export function visibleAxes(axes: VariantAxis[], selections: VariantSelections): VariantAxis[] {
-  return axes.filter((a) => isAxisVisible(a, axes, selections));
+  const visibility = visibilityById(axes, selections);
+  return axes.filter((axis) => visibility.get(axis.id));
+}
+
+function visibilityById(axes: VariantAxis[], selections: VariantSelections): Map<string, boolean> {
+  const byId = new Map(axes.map((axis) => [axis.id, axis]));
+  const visible = new Map<string, boolean>();
+  for (const axis of axes) {
+    const trail = new Set<string>();
+    let current: VariantAxis | undefined = axis;
+    let result = true;
+    while (current) {
+      const known = visible.get(current.id);
+      if (known !== undefined) { result = known; break; }
+      if (trail.has(current.id)) { result = false; break; }
+      trail.add(current.id);
+      const condition: VariantAxisCondition | undefined = current.showWhen;
+      if (!condition) break;
+      const parent = byId.get(condition.axis);
+      const value = selections[condition.axis] ?? (parent ? axisDefault(parent) : undefined);
+      if ((condition.equals !== undefined && value !== condition.equals) ||
+        (condition.not !== undefined && value === condition.not)) { result = false; break; }
+      current = parent;
+    }
+    for (const id of trail) visible.set(id, result);
+  }
+  return visible;
 }
 
 /** How the panel prints a range value: its unit when declared, a percentage
@@ -196,6 +225,8 @@ export interface VariantsSource {
   reset(): void;
   /** Notify on any change to axes or selections. Returns an unsubscribe. */
   subscribe(listener: () => void): () => void;
+  /** A recoverable transport error; notify subscribers when it changes. */
+  getError?: () => string | null;
   /**
    * When present, the panel shows "Save as defaults" and calls this with the
    * current selections. A host that promotes by editing source (one that
@@ -206,6 +237,8 @@ export interface VariantsSource {
   saveDefaults?: (selections: VariantSelections) => Promise<void> | void;
   /** Panel heading; defaults to "Variants". */
   title?: string;
+  /** Optional durable host mutation. Reject to leave the UI unchanged. */
+  manage?: (action: VariantAction) => Promise<void> | void;
 }
 
 /**
@@ -220,6 +253,8 @@ export function createVariantsSource(init: {
   onChange?: (selections: VariantSelections) => void;
   saveDefaults?: VariantsSource['saveDefaults'];
   title?: string;
+  /** Persist edited definitions in a host's own storage, before notifying. */
+  onManage?: (axes: VariantAxis[], selections: VariantSelections, action: VariantAction) => Promise<void> | void;
 }): VariantsSource & {
   /** Replace the axes (route change); selections not valid for the new set
    *  are dropped. */
@@ -228,7 +263,11 @@ export function createVariantsSource(init: {
   setSelections(selections: VariantSelections): void;
 } {
   let axes = init.axes;
-  let selections: VariantSelections = { ...defaultSelections(axes), ...(init.selections ?? {}) };
+  let selections = defaultSelections(axes);
+  for (const axis of axes) {
+    const value = init.selections?.[axis.id];
+    if (value !== undefined && isValidSelection(axis, value)) selections[axis.id] = value;
+  }
   const listeners = new Set<() => void>();
   const emit = () => {
     for (const l of listeners) l();
@@ -242,6 +281,51 @@ export function createVariantsSource(init: {
     saveDefaults: init.saveDefaults,
     getAxes: () => axes,
     getSelections: () => selections,
+    async manage(action) {
+      const axis = axes.find((a) => a.id === action.axisId);
+      if (!axis) throw new Error('This selector is no longer available.');
+      let next = [...axes];
+      const picks = { ...selections };
+      if (action.action === 'remove-option') {
+        if (axis.kind === 'range') throw new Error('This selector has no removable options.');
+        if (axis.kind === 'color') {
+          const swatch = axis.swatches.find(s => s.id === action.optionId);
+          if (!swatch || swatch.value.toLowerCase() === axis.defaultColor.toLowerCase()) throw new Error('Keep the default colour, or remove the whole selector.');
+          const swatches = axis.swatches.filter(s => s.id !== action.optionId);
+          if (picks[axis.id]?.toLowerCase() === swatch.value.toLowerCase()) picks[axis.id] = axis.defaultColor;
+          next = next.map(a => a.id === axis.id ? { ...axis, swatches } : a);
+        } else {
+          if (action.optionId === axis.defaultOption) throw new Error('Keep the default option, or remove the whole selector.');
+          if (!axis.options.some((o) => o.id === action.optionId)) throw new Error('This option is no longer available.');
+          const options = axis.options.filter((o) => o.id !== action.optionId);
+          if (picks[axis.id] === action.optionId) picks[axis.id] = axis.defaultOption;
+          next = next.map((a) => a.id === axis.id ? { ...axis, options } : a);
+          if (options.length === 1) next = next.filter((a) => a.id !== axis.id);
+        }
+      } else {
+        next = next.filter((a) => a.id !== axis.id);
+        if (action.action === 'keep-default') picks[axis.id] = axisDefault(axis);
+        else delete picks[axis.id];
+      }
+      // A dependent control cannot outlive the decision that reveals it.
+      const kept = new Set(next.map((a) => a.id));
+      const removed = new Set(axes.filter((a) => !kept.has(a.id)).map((a) => a.id));
+      const children = new Map<string, string[]>();
+      for (const a of next) {
+        if (!a.showWhen) continue;
+        const dependents = children.get(a.showWhen.axis) ?? [];
+        dependents.push(a.id);
+        children.set(a.showWhen.axis, dependents);
+      }
+      // Set iteration includes newly added descendants and terminates on cycles.
+      for (const id of removed) for (const child of children.get(id) ?? []) removed.add(child);
+      next = next.filter((a) => !removed.has(a.id));
+      for (const id of removed) if (id !== axis.id) delete picks[id];
+      await init.onManage?.(next, picks, action);
+      axes = next;
+      selections = picks;
+      changed();
+    },
     setSelection(axisId, value) {
       const axis = axes.find((a) => a.id === axisId);
       if (!axis || !isValidSelection(axis, value)) return;
@@ -474,13 +558,14 @@ export function overlayGroups<T extends OverlayVariant>(variants: T[]): OverlayG
   // Emit in listing order of each group's first member, so a new variant
   // appends a selector instead of reshuffling the ones the reviewer knows.
   const groups: OverlayGroup<T>[] = [];
-  const seen = new Set<string>();
+  const index = new Map(loose.map((variant, i) => [variant, i]));
+  const seen = new Set<T[]>();
   for (const v of variants) {
-    const members = v.group ? explicit.get(v.group) : inferred.get(find(loose.indexOf(v)));
+    const members = v.group ? explicit.get(v.group) : inferred.get(find(index.get(v) ?? 0));
     if (!members) continue;
+    if (seen.has(members)) continue;
+    seen.add(members);
     const id = v.group ?? members.map((m) => m.id).sort().join('+');
-    if (seen.has(id)) continue;
-    seen.add(id);
     groups.push({ id, label: groupLabel(id, members), members });
   }
   return groups;
@@ -491,7 +576,7 @@ function groupLabel(id: string, members: OverlayVariant[]): string {
   if (named?.groupLabel) return named.groupLabel;
   const [first, ...rest] = members;
   const shared = Object.keys(first?.files ?? {}).find((file) =>
-    rest.every((m) => file in m.files),
+    rest.every((m) => Object.hasOwn(m.files, file)),
   );
   if (shared) return shared.slice(shared.lastIndexOf('/') + 1);
   if (members.length === 1 && first) return first.label || first.id;
@@ -554,15 +639,6 @@ function overlayHint(v: OverlayVariantStatus): string {
 }
 
 /**
- * The browser's own fetch when the Vite plugin captured it before any app
- * code ran, else whatever `fetch` is now (see `core/index.ts`).
- */
-const request: typeof fetch = (input, init) => {
-  const native = (globalThis as { __isoIterateFetch?: typeof fetch }).__isoIterateFetch;
-  return (native ?? globalThis.fetch)(input, init);
-};
-
-/**
  * A `VariantsSource` over the overlay endpoint. One select axis per group on
  * the route; choosing an option replaces that group's active member and
  * posts the whole active set, and the server answers by hot-swapping the
@@ -584,6 +660,11 @@ export function createOverlayVariantsSource(cfg: {
   readonly knobs: { axes: KnobAxis[]; values: VariantSelections };
 } {
   let list: OverlayVariantsList | null = null;
+  let error: string | null = null;
+  let intended: string[] | null = null;
+  let activation: Promise<void> | null = null;
+  let revision = 0;
+  let refreshRevision = 0;
   const listeners = new Set<() => void>();
   const emit = () => {
     for (const l of listeners) l();
@@ -594,12 +675,11 @@ export function createOverlayVariantsSource(cfg: {
 
   // Knob values are review-time state, kept in the browser rather than on
   // the server: a slider is a look, not a file swap.
-  const storage =
-    cfg.storage === undefined
-      ? typeof localStorage === 'undefined'
-        ? null
-        : localStorage
-      : cfg.storage;
+  const storage = (() => {
+    if (cfg.storage !== undefined) return cfg.storage;
+    try { return typeof localStorage === 'undefined' ? null : localStorage; }
+    catch { return null; }
+  })();
   const knobRoot =
     cfg.knobRoot === undefined
       ? typeof document === 'undefined'
@@ -610,7 +690,8 @@ export function createOverlayVariantsSource(cfg: {
     try {
       const raw = storage?.getItem(KNOBS_STORAGE_KEY);
       const parsed = raw ? (JSON.parse(raw) as unknown) : null;
-      return parsed && typeof parsed === 'object' ? (parsed as VariantSelections) : {};
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? Object.fromEntries(Object.entries(parsed).filter((entry) => typeof entry[1] === 'string')) : {};
     } catch {
       return {};
     }
@@ -626,18 +707,45 @@ export function createOverlayVariantsSource(cfg: {
   const applyKnobs = () => {
     if (knobRoot) applyKnobValues(list?.knobs ?? [], knobValues, knobRoot);
   };
-  async function activate(active: string[]) {
-    const res = await request(`${cfg.endpoint}/active`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ active }),
-    });
-    if (!res.ok) throw new Error(`Activating variants failed (${res.status})`);
-    if (list) list = { ...list, active };
+  async function drainActivations(): Promise<void> {
+    while (intended !== null) {
+      const active = intended;
+      const sentRevision = revision;
+      try {
+        const res = await request(`${cfg.endpoint}/active`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active }),
+        });
+        if (!res.ok) throw new Error(`Activating variants failed (${res.status}). Try again.`);
+        if (list) list = { ...list, active };
+        error = null;
+      } catch (cause) {
+        error = cause instanceof Error ? cause.message : 'Could not activate this variant. Try again.';
+      }
+      // Newer picks include the full intended set, including other groups.
+      // Completing or failing an older request must not discard that intent.
+      if (sentRevision === revision) intended = null;
+      emit();
+    }
+  }
+  function activate(active: string[]): void {
+    intended = active;
+    revision++;
+    error = null;
     emit();
+    scheduleActivation();
+  }
+  function scheduleActivation(): void {
+    if (activation) return;
+    activation = Promise.resolve().then(drainActivations).finally(() => {
+      activation = null;
+      if (intended !== null) scheduleActivation();
+    });
   }
   return {
     title: 'Variants',
+    getError: () => error,
     get list() {
       return list;
     },
@@ -645,15 +753,56 @@ export function createOverlayVariantsSource(cfg: {
       return { axes: knobAxes(), values: { ...knobValues } };
     },
     async refresh() {
-      const res = await request(cfg.endpoint);
-      if (!res.ok) throw new Error(`Loading variants failed (${res.status})`);
-      list = (await res.json()) as OverlayVariantsList;
+      const refreshId = ++refreshRevision;
+      const startedRevision = revision;
+      const wasActivating = activation !== null;
+      const next = await request(cfg.endpoint, undefined, async (res) => {
+        if (!res.ok) throw new Error(`Loading variants failed (${res.status})`);
+        return await res.json() as OverlayVariantsList;
+      });
+      if (refreshId !== refreshRevision) return;
+      // An older GET must not roll back a successful POST that finished while
+      // the listing was loading. Definitions can still refresh independently.
+      const previousKnobs = list?.knobs ?? [];
+      list = list && (wasActivating || activation !== null || startedRevision !== revision)
+        ? { ...next, active: list.active } : next;
+      if (knobRoot) applyKnobValues(previousKnobs, {}, knobRoot);
+      const valid = new Map((list.knobs ?? []).map((knob) => [knob.id, knob]));
+      knobValues = Object.fromEntries(Object.entries(knobValues).filter(([id, value]) => {
+        const knob = valid.get(id);
+        return knob && isValidSelection(knob, value);
+      }));
       applyKnobs();
       emit();
     },
     getAxes: axes,
+    async manage(action) {
+      const next = await request(`${cfg.endpoint}/manage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...action, route: cfg.getRoute() }),
+      }, async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({})) as { error?: string };
+          throw new Error(body.error ?? 'Could not update this selector.');
+        }
+        return await res.json() as OverlayVariantsList;
+      });
+      const previousKnobs = list?.knobs ?? [];
+      list = next;
+      const previous = previousKnobs.find(k => k.id === action.axisId);
+      if (action.action === 'remove-option' && previous?.kind === 'color') {
+        const removed = previous.swatches.find(s => s.id === action.optionId);
+        if (removed && knobValues[previous.id]?.toLowerCase() === removed.value.toLowerCase()) delete knobValues[previous.id];
+      }
+      if (knobRoot) applyKnobValues(previousKnobs, {}, knobRoot);
+      const remaining = new Set(list.knobs?.map((k) => k.id));
+      knobValues = Object.fromEntries(Object.entries(knobValues).filter(([id]) => remaining.has(id)));
+      persistKnobs();
+      applyKnobs();
+      emit();
+    },
     getSelections() {
-      const active = new Set(list?.active ?? []);
+      const active = new Set(intended ?? list?.active ?? []);
       const picks = Object.fromEntries(
         selects().map((axis) => [
           axis.id,
@@ -679,15 +828,15 @@ export function createOverlayVariantsSource(cfg: {
       // The group's members leave the set and the pick joins it; the other
       // groups' picks ride along untouched.
       const members = new Set(axis.options.map((o) => o.id));
-      const next = (list?.active ?? []).filter((id) => !members.has(id));
+      const next = (intended ?? list?.active ?? []).filter((id) => !members.has(id));
       if (value !== OVERLAY_DEFAULT_OPTION) next.push(value);
-      void activate(next).catch(() => {});
+      activate(next);
     },
     reset() {
       knobValues = {};
       persistKnobs();
       applyKnobs();
-      void activate([]).catch(() => {});
+      activate([]);
     },
     subscribe(listener) {
       listeners.add(listener);

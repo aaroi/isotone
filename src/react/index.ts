@@ -1,7 +1,8 @@
 export { IterationPanel } from './IterationPanel';
 export { mountIteration } from './IterationMount';
 export { VariantsView } from './VariantsView';
-export type { IterationPanelProps } from './IterationPanel';
+export type { IterationPanelProps, IterationShortcut } from './IterationPanel';
+export type { IterationTheme } from './theme';
 export type { MountIterationOptions } from './IterationMount';
 export { PANEL_CSS, ensurePanelStyles } from './styles';
 export { describeIterationElement, elementAsNode, isRouteVisible } from '../core/index';
@@ -40,6 +41,7 @@ export type {
   RangeVariantAxis,
   SelectVariantAxis,
   VariantAxis,
+  VariantAction,
   VariantAxisCondition,
   VariantOption,
   VariantSelections,
@@ -48,6 +50,9 @@ export type {
 export type {
   IterationElement,
   IterationNote,
+  NoteContext,
+  VariantRemoval,
+  VariantReference,
   IterationStoreConfig,
   NodeLike,
   RouteGateOptions,

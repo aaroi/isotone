@@ -1,5 +1,39 @@
 # Changelog
 
+## Unreleased
+
+- Add quiet automatic npm update checks, explicit `check-update` instructions,
+  package-manager-aware upgrade commands, and configurable opt-out.
+- Add `panel: false` for manual Vite mounts while retaining local endpoints.
+- Instrument is the single design, with shared light/dark materials, raised
+  selection states, compact feedback tags, consistent controls and scrolling fades.
+  Feedback and Variants open independently above one horizontal pill.
+- Add `theme: 'auto' | 'light' | 'dark' | 'system'`. Automatic detection follows
+  live host background changes without remounting or losing state.
+- Add multi-element feedback, editable notes, durable drafts, selector references,
+  contextual selector actions, and cancellable removal requests.
+- Add a configurable keyboard shortcut, keyboard pinning of focusable page controls,
+  reduced motion, interruptible panel movement and bounded list animation.
+- Simplify setup with detected integration instructions, `init --yes`, and structured
+  `--json` output. The Vite plugin now brings its own React runtime for every framework.
+- Make CLI/server exports importable without React or Vite. Bundle the standalone
+  panel with the production React runtime; keep all automatic injection dev-only.
+- Preserve offline notes across retries, lost responses and concurrent edits. Use
+  atomic, serialized file updates and refuse to overwrite corrupt data.
+- Validate variant manifests and paths, reject missing promotion sources, and show
+  activation failures instead of silently losing rapid selections.
+- Bound request bodies, check request origins, and keep the standalone server on loopback.
+- Reduce DOM descriptor work, selector graph traversal and variant polling costs.
+- Add a fictional demo, design documentation and package-consumer release checks.
+- Finalize Clean Highlight, inline feedback references, smaller composer controls,
+  consistent option weights, scrolling insets and brief icon/overflow tooltips.
+- Fix nested-root hover expansion, composer sizing after context changes, and
+  transient launcher state on hidden routes.
+- Keep request deadlines active while reading response bodies and validate save
+  acknowledgements before clearing offline feedback.
+- Serialize variant edits across agent processes to preserve concurrent additions.
+- Make `init --help` read-only even when combined with setup flags.
+
 ## 0.3.4
 
 - The Vite plugin's mount loader goes in the document `<head>` instead of

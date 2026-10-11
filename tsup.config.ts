@@ -18,6 +18,8 @@ export default defineConfig([
     // The host provides these; keeping them external avoids a second React/Vite
     // install whose types clash with the consumer's own.
     external: ['react', 'react-dom', 'react/jsx-runtime', 'vite'],
+    // Ship only the icons we use; CLI/standalone users need no React peers.
+    noExternal: ['lucide-react'],
   },
   {
     // The standalone bundle is the opposite trade: React goes INSIDE, because
@@ -33,6 +35,8 @@ export default defineConfig([
     clean: false,
     minify: true,
     external: [],
-    define: { 'process.env.NODE_ENV': '"development"' },
+    // The panel is a dev tool, but its private React runtime needs no dev build.
+    // This does not affect the host application's React or environment.
+    define: { 'process.env.NODE_ENV': '"production"' },
   },
 ]);

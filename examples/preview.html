@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>iso-iterate · product preview</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f5f5f6; color: #202126; font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+    /* Capture at 1200 × 790. Each iframe contains the live product, with a
+       host-only vignette supplied by demo.css's data-capture treatment. */
+    main { max-width: 1200px; margin: auto; padding: 32px 32px 28px; }
+    header { display: flex; justify-content: space-between; align-items: end; gap: 32px; margin-bottom: 24px; }
+    h1 { font-size: 27px; font-weight: 600; letter-spacing: -.045em; margin: 0 0 4px; }
+    p { margin: 0; color: #777983; font-size: 13px; }
+    header > p { max-width: 275px; text-align: right; font-size: 12px; }
+    .views { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+    figure { margin: 0; min-width: 0; }
+    .window { border: 1px solid #dcdcE2; border-radius: 15px; overflow: hidden; background: #fff; box-shadow: 0 3px 0 #e6e6e9; }
+    .dark .window { border-color: #26272e; box-shadow: 0 3px 0 #dcdce0; background: #0d0e11; }
+    .window-bar { height: 32px; border-bottom: 1px solid #e7e7eb; display: flex; align-items: center; padding: 0 12px; gap: 5px; }
+    .dark .window-bar { border-color: #282a31; }
+    .window-bar i { width: 5px; height: 5px; border-radius: 50%; background: #cfcfd6; }
+    .dark .window-bar i { background: #41434d; }
+    .window-bar span { font-size: 9px; color: #8c8d98; margin: auto; padding-right: 22px; }
+    iframe { display: block; width: 100%; height: 560px; border: 0; }
+    figcaption { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; font-size: 11px; color: #777983; }
+    figcaption strong { color: #4d4e57; font-weight: 500; }
+  </style>
+</head>
+<body>
+  <main>
+    <header><div><h1>iso-iterate</h1><p>Point to it. Say what should change.</p></div><p>Feedback and design variants,<br>right inside the app you're building.</p></header>
+    <div class="views">
+      <figure class="dark"><div class="window"><div class="window-bar"><i></i><i></i><i></i><span>Workspace / Overview</span></div><iframe title="Dark mode product preview" src="/?capture=dark"></iframe></div><figcaption><strong>Dark</strong><span>Real UI. Useful context.</span></figcaption></figure>
+      <figure><div class="window"><div class="window-bar"><i></i><i></i><i></i><span>Workspace / Overview</span></div><iframe title="Light mode product preview" src="/?capture=light"></iframe></div><figcaption><strong>Light</strong><span>Same tools. Adapts to your page.</span></figcaption></figure>
+    </div>
+  </main>
+</body>
+</html>

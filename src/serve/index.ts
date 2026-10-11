@@ -19,17 +19,27 @@
  * all (paste the bookmarklet the index page prints).
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import type { RouteGateOptions } from '../core/index';
+import type { IterationTheme } from '../react/theme';
+import { checkOrigin, HttpError, isLoopback, readNodeJson, sendFailure } from '../server/http';
 import { ensureFileIgnored, notesResponse, NOTES_ENDPOINT } from '../store';
+
+import { readBundle } from '../standalone/bundle';
+import { startUpdateCheck, UPDATE_ENDPOINT } from '../update';
+export { readBundle } from '../standalone/bundle';
 
 export const DEFAULT_PORT = 4123;
 const BUNDLE_PATH = '/iso-iterate.js';
 
 export interface ServeIterationOptions {
+  /** Background npm notice, at most once a day. false disables the check. */
+  checkForUpdates?: boolean;
+  /** Project directory for the suggested update command. Defaults to the notes directory. */
+  projectRoot?: string;
+  /** Defaults to auto (page background); system follows the OS preference. */
+  theme?: IterationTheme;
   /** Where notes persist. Git-ignored automatically via `.git/info/exclude`. */
   file: string;
   /** Defaults to 4123. */
@@ -80,29 +90,14 @@ function cors(req: IncomingMessage, res: ServerResponse): void {
   }
 }
 
-/** The IIFE bundle, next to this module in `dist/`. */
-export function readBundle(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  for (const candidate of [
-    // built: dist/serve.js sits beside the bundle
-    resolve(here, 'iso-iterate.global.js'),
-    resolve(here, '..', 'dist', 'iso-iterate.global.js'),
-    // from source (tests): src/serve/ -> the repo's dist/
-    resolve(here, '..', '..', 'dist', 'iso-iterate.global.js'),
-  ]) {
-    if (existsSync(candidate)) return readFileSync(candidate, 'utf8');
-  }
-  throw new Error(
-    'iso-iterate: the browser bundle is missing from dist/. Run `pnpm build`.',
-  );
-}
-
 /** The bundle plus the mount call, with the config the server itself knows. */
 function bundleWithMount(origin: string, opts: ServeIterationOptions): string {
   const config = JSON.stringify({
     endpoint: `${origin}${NOTES_ENDPOINT}`,
+    updateEndpoint: `${origin}${UPDATE_ENDPOINT}`,
     key: opts.key ?? '',
     rule: opts.rule ?? {},
+    theme: opts.theme,
   });
   return `${readBundle()}\n;window.__isoIterate&&window.__isoIterate.mount(${config});\n`;
 }
@@ -206,7 +201,9 @@ export function serveIteration(
   const file = resolve(opts.file);
   const port = opts.port ?? DEFAULT_PORT;
   const host = opts.host ?? '127.0.0.1';
+  if (!isLoopback(host)) throw new Error('iso-iterate serve binds only to localhost, 127.0.0.1 or ::1.');
   ensureFileIgnored(file);
+  const updates = startUpdateCheck(opts.projectRoot ?? dirname(file), opts.checkForUpdates !== false);
 
   // The port we were ASKED for is not necessarily the one we got: 0 means "any
   // free port". The panel's endpoint has to be the bound one or the bundle
@@ -217,11 +214,23 @@ export function serveIteration(
     cors(req, res);
     const path = new URL(req.url ?? '/', 'http://localhost').pathname;
     const method = req.method ?? 'GET';
-    const origin = `http://${host === '0.0.0.0' ? '127.0.0.1' : host}:${boundPort}`;
+    const origin = `http://${host.includes(':') && !host.startsWith('[') ? `[${host}]` : host}:${boundPort}`;
+    try {
+      if (!isLoopback(new URL(`http://${req.headers.host ?? ''}`).hostname)) throw new HttpError(403, 'host not allowed');
+      checkOrigin(req.headers.origin, req.headers.host ?? '', true);
+    } catch (error) { sendFailure(res, error); return; }
 
     if (method === 'OPTIONS') {
       res.statusCode = 204;
       res.end();
+      return;
+    }
+
+    if (path === UPDATE_ENDPOINT) {
+      res.setHeader('content-type', 'application/json; charset=utf-8');
+      res.setHeader('cache-control', 'no-store');
+      res.statusCode = method === 'GET' ? 200 : 405;
+      res.end(JSON.stringify(method === 'GET' ? updates.getSnapshot() : { error: 'method not allowed' }));
       return;
     }
 
@@ -249,22 +258,12 @@ export function serveIteration(
         res.end(JSON.stringify({ error: 'method not allowed' }));
         return;
       }
-      const chunks: Buffer[] = [];
-      req.on('data', (c: Buffer) => chunks.push(c));
-      req.on('end', () => {
-        let parsed: unknown;
-        if (method === 'POST') {
-          try {
-            parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-          } catch {
-            parsed = undefined;
-          }
-        }
-        const out = notesResponse(file, { method, url: req.url, body: parsed });
+      (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined)).then((body) => {
+        const out = notesResponse(file, { method, url: req.url, body });
         res.statusCode = out.status;
-        for (const [k, v] of Object.entries(out.headers)) res.setHeader(k, v);
+        for (const [key, value] of Object.entries(out.headers)) res.setHeader(key, value);
         res.end(JSON.stringify(out.body));
-      });
+      }).catch((error) => sendFailure(res, error));
       return;
     }
 
@@ -280,12 +279,13 @@ export function serveIteration(
     res.end('not found');
   });
 
+  server.once('close', updates.dispose);
   return new Promise((ok, fail) => {
-    server.once('error', fail);
+    server.once('error', (error) => { updates.dispose(); fail(error); });
     server.listen(port, host, () => {
       const actual = server.address();
       boundPort = typeof actual === 'object' && actual ? actual.port : port;
-      const url = `http://${host}:${boundPort}`;
+      const url = `http://${host.includes(':') && !host.startsWith('[') ? `[${host}]` : host}:${boundPort}`;
       ok({
         port: boundPort,
         url,

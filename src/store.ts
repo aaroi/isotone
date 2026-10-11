@@ -8,9 +8,10 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-import type { IterationElement } from './core/index';
+import type { IterationElement, NoteContext, VariantReference, VariantRemoval } from './core/index';
+import { withFileLock, writeJson } from './file-store';
 
-export interface StoredNote {
+export interface StoredNote extends NoteContext {
   id: string;
   route: string;
   feedback: string;
@@ -32,7 +33,7 @@ export interface StoredNote {
 }
 
 /** Serialized-size ceiling for a note's opaque `payload`, in bytes. Generous
- *  next to real usage (the largest observed host blob is ~3.4 KB) and small
+ *  next to normal review context and small
  *  enough that a runaway host is rejected rather than bloating the file. */
 export const PAYLOAD_MAX = 65_536;
 
@@ -42,17 +43,25 @@ export function readNotes(file: string): StoredNote[] {
     const raw = readFileSync(file, 'utf8').trim();
     if (!raw) return [];
     const data = JSON.parse(raw);
-    return Array.isArray(data) ? (data as StoredNote[]) : [];
-  } catch {
-    return [];
+    if (!Array.isArray(data) || !data.every((note) => note && typeof note === 'object' &&
+      typeof note.id === 'string' && typeof note.route === 'string' &&
+      typeof note.feedback === 'string' && typeof note.createdAt === 'string')) {
+      throw new Error('expected an array of notes');
+    }
+    return data as StoredNote[];
+  } catch (cause) {
+    throw new Error(`Could not read notes from ${file}; the file has been left untouched.`, { cause });
   }
 }
 
 export function writeNotes(file: string, notes: StoredNote[]): void {
   // A `file` option can point into a directory that does not exist yet
   // (`notes/here.json`); the first note creates it.
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, `${JSON.stringify(notes, null, 2)}\n`);
+  writeJson(file, notes);
+}
+
+export function updateNotes(file: string, update: (notes: StoredNote[]) => StoredNote[]): void {
+  withFileLock(file, () => writeNotes(file, update(readNotes(file))));
 }
 
 /**
@@ -184,7 +193,9 @@ function toItem(n: StoredNote) {
   // seeing a null one appear in its notes.
   if (n.viewport !== undefined) item.viewport = n.viewport;
   if (n.payload !== undefined) item.payload = n.payload;
-  return item;
+  return { ...item, ...(n.elements !== undefined ? { elements: n.elements } : {}),
+    ...(n.variant !== undefined ? { variant: n.variant } : {}),
+    ...(n.variantAction !== undefined ? { variantAction: n.variantAction } : {}) };
 }
 
 /** The transport-agnostic result of a notes request — any runtime (Vite
@@ -210,13 +221,20 @@ export interface NotesRequest {
  * under Vite middleware, Next route handler, Bun.serve, or Vercel.
  */
 export function notesResponse(file: string, req: NotesRequest): NotesResponse {
+  if (req.method === 'POST' || req.method === 'DELETE') {
+    return withFileLock(file, () => handleNotesRequest(file, req));
+  }
+  return handleNotesRequest(file, req);
+}
+
+function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
   const method = req.method ?? '';
   const query = Object.fromEntries(
     new URL(req.url ?? '/', 'http://localhost').searchParams,
   );
   const json = (status: number, body: unknown): NotesResponse => ({
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8' },
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
     body,
   });
 
@@ -254,22 +272,36 @@ export function notesResponse(file: string, req: NotesRequest): NotesResponse {
       element?: unknown;
       payload?: unknown;
       viewport?: unknown;
+      elements?: unknown;
+      variant?: unknown;
+      variantAction?: unknown;
+      createdAt?: unknown;
     };
     const { id, route, feedback, element, payload, viewport } = body;
+    if (id !== undefined && id !== null && (typeof id !== 'string' || !id || id.length > 200)) {
+      return json(400, { error: 'id must be a non-empty string of at most 200 characters' });
+    }
     if (typeof route !== 'string' || route === '') {
       return json(400, { error: 'route is required' });
     }
-    const cleanFeedback =
-      typeof feedback === 'string' ? feedback.trim().slice(0, 4000) : '';
+    const cleanFeedback = typeof feedback === 'string' ? feedback.trim() : '';
     if (cleanFeedback === '') {
       return json(400, { error: 'feedback is required' });
     }
+    if (cleanFeedback.length > 4000) return json(400, { error: 'feedback must be at most 4000 characters' });
     if (payload !== undefined && !withinPayloadCap(payload)) {
       return json(400, {
         error: `payload exceeds ${PAYLOAD_MAX} bytes or is not serializable`,
       });
     }
     const cleanViewport = viewportOf(viewport);
+    if (body.elements !== undefined && (!Array.isArray(body.elements) || body.elements.length > 50)) {
+      return json(400, { error: 'elements must be an array of at most 50 elements' });
+    }
+    const elements = body.elements === undefined ? undefined : (body.elements as unknown[]).map(elementOf).filter((el): el is IterationElement => el !== null);
+    const variant = body.variant === undefined ? undefined : variantOf(body.variant);
+    const variantAction = removalOf(body.variantAction);
+    if (body.variantAction !== undefined && !variantAction) return json(400, { error: 'Invalid variant action' });
     let cleanElement: IterationElement | null = null;
     if (element && typeof element === 'object' && !Array.isArray(element)) {
       cleanElement = {
@@ -282,19 +314,45 @@ export function notesResponse(file: string, req: NotesRequest): NotesResponse {
       };
     }
     const notes = readNotes(file);
-    if (typeof id === 'string' && id !== '') {
-      const existing = notes.find((n) => n.id === id && n.route === route);
+    const defaultsRequest = cleanFeedback.startsWith('[set-defaults]');
+    const previousDefaults = defaultsRequest && !notes.some((note) => note.id === id)
+      ? notes.filter(n => !n.done && n.route === route && n.feedback.startsWith('[set-defaults]')).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+      : undefined;
+    const updateId = previousDefaults?.id ?? id;
+    if (typeof updateId === 'string' && updateId !== '') {
+      const existing = notes.find((n) => n.id === updateId && n.route === route);
       if (existing) {
+        if (previousDefaults) {
+          delete existing.elements;
+          delete existing.variant;
+          delete existing.variantAction;
+          delete existing.payload;
+        }
         existing.feedback = cleanFeedback;
         existing.element = cleanElement;
+        if (elements !== undefined) {
+          existing.elements = elements;
+          existing.element = elements[0] ?? null;
+        } else if (existing.elements) existing.element = existing.elements[0] ?? null;
+        if (variant !== undefined) existing.variant = variant;
+        if (variantAction) existing.variantAction = variantAction;
         // An omitted payload leaves the stored one alone, so a host that only
         // sends it on the first save does not lose it on the next autosave.
         if (payload !== undefined) existing.payload = payload;
-        writeNotes(file, notes);
+        if (defaultsRequest && !existing.done) {
+          existing.createdAt = new Date().toISOString();
+          if (cleanViewport) existing.viewport = cleanViewport;
+          writeNotes(file, notes.filter(n => n.id === existing.id || n.done || n.route !== route || !n.feedback.startsWith('[set-defaults]')));
+        } else writeNotes(file, notes);
         return json(200, { id: existing.id });
       }
     }
-    const newId = randomUUID();
+    if (typeof id === 'string' && notes.some((note) => note.id === id)) {
+      return json(409, { error: 'This note belongs to a different route' });
+    }
+    const newId = typeof id === 'string' ? id : randomUUID();
+    const createdAt = typeof body.createdAt === 'string' && Number.isFinite(Date.parse(body.createdAt))
+      ? new Date(body.createdAt).toISOString() : new Date().toISOString();
     notes.push({
       id: newId,
       route,
@@ -302,9 +360,12 @@ export function notesResponse(file: string, req: NotesRequest): NotesResponse {
       element: cleanElement,
       done: false,
       doneAt: null,
-      createdAt: new Date().toISOString(),
+      createdAt,
       ...(cleanViewport ? { viewport: cleanViewport } : {}),
       ...(payload !== undefined ? { payload } : {}),
+      ...(elements !== undefined ? { elements, element: elements[0] ?? null } : {}),
+      ...(variant !== undefined ? { variant } : {}),
+      ...(variantAction ? { variantAction } : {}),
     });
     writeNotes(file, notes);
     return json(201, { id: newId });
@@ -315,6 +376,23 @@ export function notesResponse(file: string, req: NotesRequest): NotesResponse {
 
 function cap(v: string, max: number): string {
   return v.slice(0, max);
+}
+
+function elementOf(value: unknown): IterationElement | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const v = value as Partial<IterationElement>;
+  if (typeof v.selector !== 'string' || !v.selector) return null;
+  return { tag: cap(String(v.tag ?? ''), 30), text: cap(String(v.text ?? ''), 120), selector: cap(v.selector, 300) };
+}
+
+function variantOf(value: unknown): VariantReference | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const v = value as Partial<VariantReference>;
+  if (typeof v.axisId !== 'string' || typeof v.label !== 'string') return null;
+  return { axisId: cap(v.axisId, 200), label: cap(v.label, 200),
+    ...(typeof v.optionId === 'string' ? { optionId: cap(v.optionId, 200) } : {}),
+    ...(typeof v.optionLabel === 'string' ? { optionLabel: cap(v.optionLabel, 200) } : {}),
+    ...(typeof v.value === 'string' ? { value: cap(v.value, 200) } : {}) };
 }
 
 /** A sane `{ w, h }` from an untrusted viewport value, else null. */
@@ -330,7 +408,7 @@ function viewportOf(v: unknown): { w: number; h: number } | null {
 /** Whether an opaque payload is serializable and inside {@link PAYLOAD_MAX}. */
 function withinPayloadCap(payload: unknown): boolean {
   try {
-    return JSON.stringify(payload).length <= PAYLOAD_MAX;
+    return Buffer.byteLength(JSON.stringify(payload), 'utf8') <= PAYLOAD_MAX;
   } catch {
     return false; // circular or otherwise unserializable
   }
@@ -338,3 +416,11 @@ function withinPayloadCap(payload: unknown): boolean {
 
 /** The endpoint path the client calls. */
 export const NOTES_ENDPOINT = '/api/iteration/notes';
+
+function removalOf(value: unknown): VariantRemoval | undefined {
+  if (!value || typeof value !== 'object') return;
+  const v = value as Partial<VariantRemoval>;
+  if (typeof v.axisId !== 'string' || !v.axisId || v.axisId.length > 200 || !['remove-option', 'remove-axis', 'keep-default'].includes(v.action ?? '')) return;
+  if (v.action === 'remove-option' && (typeof v.optionId !== 'string' || !v.optionId || v.optionId.length > 200)) return;
+  return { axisId: v.axisId, action: v.action as VariantRemoval['action'], ...(typeof v.optionId === 'string' ? { optionId: v.optionId.slice(0, 200) } : {}) };
+}

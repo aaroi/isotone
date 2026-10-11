@@ -53,6 +53,39 @@ function del(file: string, id: string | null) {
 }
 
 describe('notesResponse', () => {
+  it('preserves corrupt files instead of treating them as an empty store', () => {
+    const file = tempFile();
+    for (const contents of ['[{"id":"unfinished"', '{"wrong":"shape"}', '[null]']) {
+      writeFileSync(file, contents);
+      expect(() => post(file, { route: '/', feedback: 'New note' })).toThrow(/left untouched/);
+      expect(() => del(file, 'some-id')).toThrow(/left untouched/);
+      expect(readFileSync(file, 'utf8')).toBe(contents);
+    }
+  });
+
+  it('uses stable client ids for retryable upserts and rejects route collisions', () => {
+    const file = tempFile();
+    const body = { id: 'client-generated-id', route: '/', feedback: 'Retry me' };
+    expect(post(file, body).status).toBe(201);
+    expect(post(file, body).status).toBe(200);
+    expect(readNotes(file)).toHaveLength(1);
+    expect(post(file, { ...body, route: '/another' }).status).toBe(409);
+    expect(readNotes(file)[0].route).toBe('/');
+  });
+
+  it('reconciles a queued defaults snapshot with the pending server snapshot', () => {
+    const file = tempFile();
+    post(file, { id: 'server-defaults', route: '/', feedback: '[set-defaults] Old' });
+    post(file, { id: 'offline-defaults', route: '/', feedback: '[set-defaults] New' });
+    expect(readNotes(file)).toMatchObject([{ id: 'server-defaults', feedback: '[set-defaults] New' }]);
+    expect(readNotes(file)).toHaveLength(1);
+  });
+
+  it('measures opaque payload limits in UTF-8 bytes, not string length', () => {
+    const file = tempFile();
+    expect(post(file, { route: '/', feedback: 'Too many bytes', payload: '😀'.repeat(17_000) }).status).toBe(400);
+    expect(post(file, { route: '/', feedback: 'Within limit', payload: '😀'.repeat(10_000) }).status).toBe(201);
+  });
   it('starts empty, saves, lists by route, deletes', () => {
     const file = tempFile();
 
@@ -82,6 +115,24 @@ describe('notesResponse', () => {
     expect(second.status).toBe(200);
     expect(readNotes(file)).toHaveLength(1);
     expect(readNotes(file)[0].feedback).toBe('v2');
+  });
+
+  it('keeps only the latest pending defaults per route, preserving history and ordinary notes', () => {
+    const file = tempFile();
+    const first = post(file, { route: '/a', feedback: '[set-defaults] old', payload: { variants: 'old' } });
+    const id = (first.body as { id: string }).id;
+    const initial = readNotes(file)[0];
+    writeNotes(file, [initial, { ...initial, id: 'legacy-duplicate' }, { ...initial, id: 'history', done: true }]);
+    post(file, { route: '/b', feedback: '[set-defaults] another route' });
+    post(file, { route: '/a', feedback: 'Ordinary feedback' });
+    const saved = post(file, { route: '/a', feedback: '[set-defaults] new', payload: { variants: 'new' }, viewport: { w: 800, h: 600 } });
+    expect(saved.status).toBe(200);
+    const pending = readNotes(file).filter(n => !n.done && n.route === '/a' && n.feedback.startsWith('[set-defaults]'));
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({ feedback: '[set-defaults] new', payload: { variants: 'new' }, viewport: { w: 800, h: 600 } });
+    expect(readNotes(file)).toHaveLength(4);
+    expect(readNotes(file).find(n => n.id === 'history')?.feedback).toBe('[set-defaults] old');
+    expect(pending[0].id).toBe(id);
   });
 
   it('only lists open notes when no route is given', () => {
@@ -207,5 +258,36 @@ describe('ensureFileIgnored', () => {
     expect(excludePattern('/repo', '/repo/x.json')).toBe('/x.json');
     expect(excludePattern('/repo', '/elsewhere/x.json')).toBeNull();
     expect(excludePattern('/repo', '/repo')).toBeNull();
+  });
+});
+
+describe('feedback references', () => {
+  it('round-trips and validates pending variant removals independently of host payload', () => {
+    const file = tempFile();
+    const variantAction = { axisId: 'layout', action: 'remove-option', optionId: 'stack' };
+    const created = post(file, { route: '/', feedback: '[remove-option] Stack', variantAction, payload: { host: true } });
+    const id = (created.body as { id: string }).id;
+    expect(get(file, '/api/iteration/notes').body).toMatchObject([{ variantAction, payload: { host: true } }]);
+    post(file, { id, route: '/', feedback: 'Keep the same request' });
+    expect(readNotes(file)[0]).toMatchObject({ variantAction });
+    expect(post(file, { route: '/', feedback: 'Invalid', variantAction: { axisId: 'layout', action: 'remove-option' } }).status).toBe(400);
+    del(file, id);
+    expect(readNotes(file)).toEqual([]);
+  });
+
+  it('round-trips multiple pins and an option reference, and preserves them on legacy edits', () => {
+    const file = tempFile();
+    const elements = [{ tag: 'button', text: 'One', selector: '#one' }, { tag: 'h1', text: 'Two', selector: '#two' }];
+    const variant = { axisId: 'spacing', label: 'Spacing', optionId: 'compact', optionLabel: 'Compact', value: 'compact' };
+    const created = post(file, { route: '/', feedback: 'Align', elements, variant, payload: { host: true } });
+    const id = (created.body as { id: string }).id;
+    expect(readNotes(file)[0]).toMatchObject({ elements, variant, element: elements[0] });
+    post(file, { id, route: '/', feedback: 'Align please' });
+    expect(readNotes(file)[0]).toMatchObject({ elements, variant, element: elements[0], payload: { host: true } });
+    post(file, { id, route: '/', feedback: 'No pins now', elements: [], variant: null });
+    expect(readNotes(file)[0]).toMatchObject({ elements: [], variant: null, element: null });
+  });
+  it('limits the number of pinned elements at the server boundary', () => {
+    expect(post(tempFile(), { route: '/', feedback: 'Too many', elements: Array(51).fill({ tag: 'p', text: '', selector: 'p' }) }).status).toBe(400);
   });
 });

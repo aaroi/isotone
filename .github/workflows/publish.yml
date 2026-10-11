@@ -1,39 +1,75 @@
-# Every push to main runs the full gate. If package.json carries a version
-# npm has not seen, the same run publishes it — so a release is "bump the
-# version, push". Publishing authenticates via npm trusted publishing (OIDC):
-# no token lives in this repo, and it satisfies npm's 2FA requirement.
-name: check & publish
+# Keep this filename: npm's trusted publisher is bound to publish.yml.
+name: Publish release
 
 on:
-  push:
-    branches: [main]
+  release:
+    types: [published]
 
 permissions:
   contents: read
-  id-token: write # the OIDC token npm trusted publishing exchanges
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
 
 jobs:
-  check-and-publish:
+  check:
+    if: github.event.release.prerelease == false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - name: Check release tag matches package version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          node --input-type=module - <<'JS'
+          import { readFileSync } from 'node:fs';
+          import { strict as assert } from 'node:assert';
+          const { version } = JSON.parse(readFileSync('package.json', 'utf8'));
+          assert.equal(process.env.RELEASE_TAG, `v${version}`, 'Release tag must be v<package.json version>');
+          JS
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 10.33.0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: 'https://registry.npmjs.org'
-      # trusted publishing needs npm >= 11.5.1
-      - run: npm install -g npm@latest
+          registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
-      - name: publish when the version is new
+      - run: pnpm check:package
+      - run: mkdir release && npm pack --ignore-scripts --pack-destination release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: release/*.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: release
+      - name: Check npm supports trusted publishing
         run: |
-          LOCAL="$(node -p "require('./package.json').version")"
-          PUBLISHED="$(npm view iso-iterate version 2>/dev/null || echo none)"
-          if [ "$LOCAL" = "$PUBLISHED" ]; then
-            echo "iso-iterate@$LOCAL is already on npm — nothing to publish"
-          else
-            npm publish
-          fi
+          node --input-type=module - <<'JS'
+          import { execFileSync } from 'node:child_process';
+          const [major, minor, patch] = execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim().split('.').map(Number);
+          if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) {
+            throw new Error('npm 11.5.1 or newer is required for trusted publishing');
+          }
+          JS
+      # Publish the tested archive without running project code in this OIDC job.
+      - run: npm publish ./release/*.tgz --ignore-scripts --provenance --access public

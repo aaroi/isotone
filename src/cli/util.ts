@@ -42,6 +42,30 @@ export function has(args: string[], name: string): boolean {
   return args.indexOf(name) >= 0;
 }
 
+/** Validate a command before it reads or writes files. Returns its positionals. */
+export function parseArgs(
+  args: string[],
+  values: readonly string[],
+  booleans: readonly string[] = [],
+): string[] {
+  const positionals: string[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (!arg.startsWith('-')) {
+      positionals.push(arg);
+      continue;
+    }
+    if (!values.includes(arg) && !booleans.includes(arg)) throw new Error(`Unknown option "${arg}".`);
+    if (seen.has(arg)) throw new Error(`Option "${arg}" was given more than once.`);
+    seen.add(arg);
+    if (values.includes(arg) && (!args[++i] || args[i].startsWith('--'))) {
+      throw new Error(`Option "${arg}" requires a value.`);
+    }
+  }
+  return positionals;
+}
+
 /** Pulls a `--flag value` pair out of an argv slice, wherever it sits, so a
  *  subcommand's own positional parsing never has to skip over it by index. */
 export function extractFlag(

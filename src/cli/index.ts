@@ -1,15 +1,14 @@
 #!/usr/bin/env node
-/**
- * iso-iterate — CLI entry point. All the command handling lives in `./run`
- * (`runCli`), which takes plain argv/cwd/stdout/stderr so it is testable
- * without a subprocess; this file only wires that up to the real process.
- */
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { runCli } from './run';
 
+export { runCli } from './run';
+export type { CliIO } from './run';
+
+// Importing iso-iterate/cli must not execute a command or terminate the host.
+let isMain = false;
 try {
-  const code = await runCli(process.argv.slice(2));
-  process.exit(code);
-} catch (err) {
-  process.stderr.write(`${(err as Error).message}\n`);
-  process.exit(1);
-}
+  isMain = !!process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+} catch { /* Imported by a runtime without an on-disk entry point. */ }
+if (isMain) process.exitCode = await runCli(process.argv.slice(2));

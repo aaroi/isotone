@@ -3,7 +3,7 @@
   "version": "0.3.4",
   "type": "module",
   "license": "MIT",
-  "description": "A feedback loop between a person reviewing a running web app and the coding agent building it. A dev-only panel bottom right of the page takes notes, pins them to real elements with a click, and writes them to a JSON file in the repo with route, selector and window size; a CLI lets the agent read them and mark them done. The same panel switches variants: alternative copies of a source file that the Vite plugin serves in place of the real one, or a host's own variant state. Vite plugin, framework-free route handler, or one script tag for any dev server.",
+  "description": "Local feedback and design variants for your running web app. Pin elements, leave notes, and give your coding agent the context to make the change.",
   "engines": {
     "node": ">=20"
   },
@@ -35,6 +35,8 @@
   },
   "files": [
     "dist",
+    "docs",
+    "AGENTS.md",
     "CHANGELOG.md"
   ],
   "bin": {
@@ -48,7 +50,9 @@
     "test:watch": "vitest",
     "build": "tsup",
     "check": "pnpm typecheck && pnpm lint && pnpm build && pnpm test",
-    "prepublishOnly": "pnpm check"
+    "prepublishOnly": "pnpm check",
+    "dev": "vite --config examples/vite.config.ts",
+    "check:package": "node scripts/check-package.mjs"
   },
   "peerDependencies": {
     "react": "^18 || ^19",
@@ -66,7 +70,8 @@
     "tsup": "^8",
     "typescript": "^5",
     "vite": "^7",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "lucide-react": "^1.55.0"
   },
   "keywords": [
     "feedback",
@@ -77,7 +82,6 @@
     "annotations",
     "design-review",
     "variants",
-    "claude",
     "iteration"
   ],
   "sideEffects": false,
@@ -86,5 +90,16 @@
     "url": "git+https://github.com/aaroi/iso-iterate.git"
   },
   "homepage": "https://github.com/aaroi/iso-iterate#readme",
-  "bugs": "https://github.com/aaroi/iso-iterate/issues"
+  "bugs": "https://github.com/aaroi/iso-iterate/issues",
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    }
+  }
 }

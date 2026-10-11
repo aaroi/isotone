@@ -1,3 +1,4 @@
+import { checkOrigin, httpFailure, readWebJson } from './http';
 /**
  * iso-iterate — server.
  *
@@ -12,6 +13,7 @@ export {
   notesResponse,
   readNotes,
   writeNotes,
+  updateNotes,
   NOTES_ENDPOINT,
   PAYLOAD_MAX,
 } from '../store';
@@ -45,20 +47,18 @@ export async function serveNotesRequest(
   file: string,
   request: Request,
 ): Promise<{ status: number; headers: Record<string, string>; body: unknown }> {
-  let body: unknown;
-  if (request.method === 'POST') {
-    try {
-      body = await request.json();
-    } catch {
-      body = undefined;
-    }
+  try {
+    const url = new URL(request.url);
+    checkOrigin(request.headers.get('origin'), url.host);
+    const body = request.method === 'POST' ? await readWebJson(request) : undefined;
+    return notesResponse(file, {
+      method: request.method,
+      url: `${url.pathname}?${url.searchParams.toString()}`,
+      body,
+    });
+  } catch (error) {
+    return httpFailure(error);
   }
-  const url = new URL(request.url);
-  return notesResponse(file, {
-    method: request.method,
-    url: `${url.pathname}?${url.searchParams.toString()}`,
-    body,
-  });
 }
 
 /**
@@ -71,21 +71,19 @@ export async function serveVariantsRequest(
   opts: VariantsStoreOptions,
   request: Request,
 ): Promise<{ status: number; headers: Record<string, string>; body: unknown }> {
-  let body: unknown;
-  if (request.method === 'POST') {
-    try {
-      body = await request.json();
-    } catch {
-      body = undefined;
-    }
+  try {
+    const url = new URL(request.url);
+    checkOrigin(request.headers.get('origin'), url.host);
+    const body = request.method === 'POST' ? await readWebJson(request) : undefined;
+    const mounted = url.pathname.startsWith(VARIANTS_ENDPOINT)
+      ? url.pathname.slice(VARIANTS_ENDPOINT.length)
+      : url.pathname;
+    return variantsResponse(opts, {
+      method: request.method,
+      url: `${mounted || '/'}?${url.searchParams.toString()}`,
+      body,
+    });
+  } catch (error) {
+    return httpFailure(error);
   }
-  const url = new URL(request.url);
-  const mounted = url.pathname.startsWith(VARIANTS_ENDPOINT)
-    ? url.pathname.slice(VARIANTS_ENDPOINT.length)
-    : url.pathname;
-  return variantsResponse(opts, {
-    method: request.method,
-    url: `${mounted || '/'}?${url.searchParams.toString()}`,
-    body,
-  });
 }

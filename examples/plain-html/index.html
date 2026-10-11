@@ -18,9 +18,17 @@
 -->
 <style>
   :root {
+    color-scheme: dark;
+    --success: #6ee7a8; --success-line: #1c4436;
     --bg: #08090c; --panel: #101218; --line: #1e2129;
     --fg: #e8eaef; --muted: #8b91a1; --accent: #5b8cff;
     --font-sans: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
+  :root[data-theme='light'] {
+    color-scheme: light;
+    --bg: #fff; --panel: #fff; --line: #e4e4e7;
+    --fg: #18181b; --muted: #60606b;
+    --success: #137544; --success-line: #9cdbb8;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg);
@@ -49,7 +57,7 @@
        letter-spacing: .06em; }
   .pill { display: inline-block; font-size: .72rem; padding: .16rem .5rem; border-radius: 99px;
           border: 1px solid var(--line); color: var(--muted); }
-  .pill.ok { color: #6ee7a8; border-color: #1c4436; }
+  .pill.ok { color: var(--success); border-color: var(--success-line); }
   h2 { font-size: 1.1rem; letter-spacing: -.01em; margin: 3rem 0 1rem; }
   .hint { color: var(--muted); font-size: .85rem; border-left: 2px solid var(--accent);
           padding-left: .9rem; margin: 3rem 0 0; }

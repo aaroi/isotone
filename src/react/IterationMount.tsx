@@ -8,10 +8,17 @@ import {
   type VariantsSource,
   VARIANTS_ENDPOINT,
 } from '../core/variants';
-import { IterationPanel } from './IterationPanel';
+import { IterationPanel, type IterationShortcut } from './IterationPanel';
 import { ensurePanelStyles } from './styles';
+import type { IterationTheme } from './theme';
 
 export interface MountIterationOptions {
+  /** Auto follows the page at the dock. System follows the OS preference. */
+  theme?: IterationTheme;
+  /** Local adapter endpoint for automatic update notices. */
+  updateEndpoint?: string;
+  /** Defaults to Cmd/Ctrl+Shift+Period. false disables keyboard access. */
+  shortcut?: IterationShortcut | false;
   /** The notes endpoint the dev plugin serves (or a framework preset). Omit
    *  it and the panel has no Notes tab: a production host that only wants
    *  variants passes a source and nothing else. */
@@ -146,6 +153,9 @@ export function mountIteration(opts: MountIterationOptions): () => void {
         getPayload={opts.getPayload}
         variants={variants}
         defaultTab={opts.defaultTab}
+        shortcut={opts.shortcut}
+        updateEndpoint={opts.updateEndpoint}
+        theme={opts.theme}
       />,
     );
   }

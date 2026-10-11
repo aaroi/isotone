@@ -32,6 +32,7 @@ import { createServer, type ViteDevServer } from 'vite';
 import { iteration, withNativeFetch, type IterationViteOptions } from '../src/vite/index';
 import { NOTES_ENDPOINT } from '../src/store';
 import { VARIANTS_ENDPOINT } from '../src/core/variants';
+import { UPDATE_ENDPOINT } from '../src/update';
 import {
   ACTIVE_FILE,
   addVariantFile,
@@ -70,7 +71,7 @@ beforeAll(async () => {
       },
     },
     plugins: [
-      iteration({ file: notesFile }),
+      iteration({ file: notesFile, theme: 'system' }),
       {
         // A stand-in for a framework's SSR handler: the document arrives as
         // Uint8Array chunks through res.write/res.end, with the ETag and
@@ -119,14 +120,15 @@ describe('the Vite adapter, served', () => {
     ).text();
     // The host's own markup survives...
     expect(html).toContain('<div id="app"></div>');
-    // ...and the mount rides in, carrying real transformed code (an empty
-    // script would mean transformRequest silently failed).
+    // ...and the injected loader carries the mount options.
     expect(html).toContain('data-iso-iterate-inject');
     const script = html.slice(
       html.indexOf('data-iso-iterate-inject'),
       html.indexOf('</head>'),
     );
-    expect(script).toContain('mountIteration');
+    expect(script).toContain('__isoIterate.mount');
+    expect(script).toContain('"theme":"system"');
+    expect(script).toContain(UPDATE_ENDPOINT);
     expect(script.length).toBeGreaterThan(200);
     // Variants are on by default, so the mount asks for the overlay source.
     expect(script).toContain('overlay');
@@ -171,34 +173,28 @@ describe('the Vite adapter, served', () => {
     expect(plain.status).toBe(415);
   });
 
-  it('asks Vite for the mount code on every navigation instead of memoizing it', async () => {
-    // The transformed mount code imports the optimized dep with a
-    // `?v=<browserHash>` that changes when the optimizer re-runs. A copy
-    // memoized at the first request outlives that hash and every later page
-    // fetches a URL Vite answers with 504 Outdated Optimize Dep. Vite's own
-    // module-graph cache is the memo, and it is what the optimizer
-    // invalidates, so each navigation has to go through transformRequest.
-    const original = server.transformRequest.bind(server);
-    let generation = 0;
-    server.transformRequest = (async (url: string, opts?: unknown) => {
-      const result = await original(url, opts as undefined);
-      if (!result) return result;
-      generation += 1;
-      return { ...result, code: `${result.code}\n/* gen ${generation} */` };
-    }) as typeof server.transformRequest;
-    try {
-      const first = await (
-        await fetch(`${origin}/`, { headers: { accept: 'text/html' } })
-      ).text();
-      const second = await (
-        await fetch(`${origin}/`, { headers: { accept: 'text/html' } })
-      ).text();
-      expect(first).toContain('/* gen 1 */');
-      expect(second).toContain('/* gen 2 */');
-      expect(second).not.toContain('/* gen 1 */');
-    } finally {
-      server.transformRequest = original;
+  it('loads an isolated browser bundle without the host framework or optimizer', async () => {
+    const html = await (await fetch(`${origin}/`, { headers: { accept: 'text/html' } })).text();
+    expect(html).toContain('/@iso-iterate/panel.js');
+    expect(html).not.toContain('iso-iterate/react');
+    const bundle = await fetch(`${origin}/@iso-iterate/panel.js`);
+    expect(bundle.status).toBe(200);
+    expect(bundle.headers.get('content-type')).toContain('javascript');
+    const js = await bundle.text();
+    expect(js.length).toBeGreaterThan(100_000);
+    expect(/^\s*import\s/m.test(js)).toBe(false);
+    expect(server.config.optimizeDeps.include).not.toContain('iso-iterate/react');
+  });
+
+  it('rejects foreign-origin writes and oversized bodies before changing notes', async () => {
+    const before = await (await fetch(`${origin}${NOTES_ENDPOINT}`)).json();
+    for (const endpoint of [NOTES_ENDPOINT, VARIANTS_ENDPOINT]) {
+      const blocked = await fetch(`${origin}${endpoint}`, { method: 'POST', headers: { origin: 'https://outside.example', 'content-type': 'application/json' }, body: '{}' });
+      expect(blocked.status).toBe(403);
+      const oversized = await fetch(`${origin}${endpoint}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ feedback: 'x'.repeat(1024 * 1024) }) });
+      expect(oversized.status).toBe(413);
     }
+    expect(await (await fetch(`${origin}${NOTES_ENDPOINT}`)).json()).toEqual(before);
   });
 
   it('injects into a document streamed as byte chunks, once, at the right length', async () => {
@@ -244,12 +240,6 @@ describe('the Vite adapter, served', () => {
     expect(html).toContain('window.__isoIterateFetch=window.fetch.bind(window)');
   });
 
-  it('pre-bundles its own panel with the host deps', () => {
-    // Otherwise the first navigation discovers it, the optimizer re-runs and
-    // the page reloads once more before the panel mounts.
-    expect(server.config.optimizeDeps.include).toContain('iso-iterate/react');
-  });
-
   it('resolves a relative notes file against the Vite root, not the cwd', async () => {
     const other = mkdtempSync(resolve(import.meta.dirname, '..', '.tmp-vite-root-'));
     writeFileSync(join(other, 'index.html'), '<html><body></body></html>');
@@ -275,6 +265,36 @@ describe('the Vite adapter, served', () => {
     } finally {
       (relativeServer.httpServer as import('node:http').Server | null)?.closeAllConnections?.();
       await relativeServer.close();
+      rmSync(other, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps local endpoints without injecting a panel when mounted manually', async () => {
+    const other = mkdtempSync(resolve(import.meta.dirname, '..', '.tmp-vite-manual-'));
+    writeFileSync(join(other, 'index.html'), '<html><head></head><body>Manual mount</body></html>');
+    const manual = await createServer({
+      root: other, configFile: false, logLevel: 'silent',
+      server: { port: 0, host: '127.0.0.1', watch: null },
+      optimizeDeps: { noDiscovery: true, include: [] },
+      plugins: [iteration({ panel: false, checkForUpdates: false })],
+    });
+    try {
+      await manual.listen();
+      const address = manual.httpServer?.address();
+      const url = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
+      const html = await (await fetch(url, { headers: { accept: 'text/html' } })).text();
+      expect(html).not.toContain('data-iso-iterate');
+      expect(html).not.toContain('/@iso-iterate/panel.js');
+      expect(await (await fetch(`${url}${NOTES_ENDPOINT}`)).json()).toEqual([]);
+      expect(await (await fetch(`${url}${VARIANTS_ENDPOINT}`)).json()).toEqual({ variants: [], active: [], knobs: [] });
+      const update = await fetch(`${url}${UPDATE_ENDPOINT}`);
+      expect(update.headers.get('cache-control')).toBe('no-store');
+      expect(await update.json()).toMatchObject({ status: 'disabled', upgrade: null });
+      expect((await fetch(`${url}${UPDATE_ENDPOINT}`, { method: 'POST' })).status).toBe(405);
+      expect((await fetch(`${url}${UPDATE_ENDPOINT}`, { headers: { origin: 'https://outside.example' } })).status).toBe(403);
+    } finally {
+      (manual.httpServer as import('node:http').Server | null)?.closeAllConnections?.();
+      await manual.close();
       rmSync(other, { recursive: true, force: true });
     }
   });
@@ -760,6 +780,24 @@ describe('overlay variants in handleHotUpdate()', () => {
     const hooks = plugin(root, 'serve');
     const server = fakeServer(root);
     expect(hooks.handleHotUpdate({ file: override, server })).toEqual([]);
+    expect(hooks.handleHotUpdate({ file: source, server })).toBeUndefined();
+  });
+});
+
+describe('removing an active alternative', () => {
+  it('restores the real module even after the removed manifest is gone', async () => {
+    const { root, source } = tempProject();
+    const hooks = plugin(root, 'serve');
+    const server = fakeServer(root);
+    server.moduleGraph.getModulesByFile.mockImplementation((file: string) => file === source ? new Set([{ id: file }]) : undefined);
+    hooks.configureServer(server);
+    await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b', 't'] });
+    server.watcher.emit.mockClear();
+    const removed = await request(server, VARIANTS_ENDPOINT, 'POST', '/manage', { axisId: 'b', action: 'remove-option', optionId: 'b', route: '/' });
+    expect(removed.status).toBe(200);
+    expect(readActive({ root })).toEqual(['t']);
+    expect(server.watcher.emit).toHaveBeenCalledWith('change', source);
+    expect(hooks.load(source)).toBeNull();
     expect(hooks.handleHotUpdate({ file: source, server })).toBeUndefined();
   });
 });

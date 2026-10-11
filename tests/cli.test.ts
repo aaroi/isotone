@@ -391,7 +391,7 @@ describe('init', () => {
     const io = makeIo(root);
     expect(await runCli(['init'], io)).toBe(0);
     expect(io.text.out).toContain('iso-iterate init — Vite');
-    expect(io.text.out).toContain('Recommended: 1');
+    expect(io.text.out).toContain('Recommended: overlay');
   });
 
   it('detects a Next host and recommends serve', async () => {
@@ -400,7 +400,7 @@ describe('init', () => {
     const io = makeIo(root);
     expect(await runCli(['init'], io)).toBe(0);
     expect(io.text.out).toContain('iso-iterate init — Next');
-    expect(io.text.out).toContain('Recommended: 3');
+    expect(io.text.out).toContain('Recommended: serve');
   });
 
   it('detects host-owned axes via meta.ts and recommends host', async () => {
@@ -409,7 +409,7 @@ describe('init', () => {
     writeFileSync(join(root, 'src', 'lab', 'meta.ts'), 'export const defaultOption = "a";\n');
     const io = makeIo(root);
     expect(await runCli(['init'], io)).toBe(0);
-    expect(io.text.out).toContain('Recommended: 2');
+    expect(io.text.out).toContain('Recommended: host');
   });
 
   it('detects host-owned axes via useVariant( in any source file', async () => {
@@ -421,7 +421,7 @@ describe('init', () => {
     );
     const io = makeIo(root);
     expect(await runCli(['init'], io)).toBe(0);
-    expect(io.text.out).toContain('Recommended: 2');
+    expect(io.text.out).toContain('Recommended: host');
   });
 
   it('prints a host example and a route handler that name real exports', async () => {
@@ -463,11 +463,81 @@ describe('init', () => {
     expect(readFileSync(join(root, 'AGENTS.md'), 'utf8')).toBe(agentsBefore);
   });
 
+  it('help takes precedence over write flags regardless of argument order', async () => {
+    const root = tempRepo();
+    const io = makeIo(root);
+    expect(await runCli(['init', '--yes', '--json', '--help'], io)).toBe(0);
+    expect(io.text.out).toContain('Usage: iso-iterate init');
+    expect(existsSync(join(root, 'AGENTS.md'))).toBe(false);
+    expect(existsSync(join(root, '.iso-iterate'))).toBe(false);
+  });
+
   it('rejects an unknown --approach', async () => {
     const root = tempRepo();
     const io = makeIo(root);
     const code = await runCli(['init', '--approach', 'bogus'], io);
     expect(code).toBe(1);
     expect(io.text.err).toContain('Unknown approach');
+  });
+});
+
+describe('structured review context', () => {
+  it('prints all pinned selectors and the exact variant option', async () => {
+    const root = tempRepo();
+    writeFileSync(join(root, '.iteration-feedback.json'), JSON.stringify([{
+      id: 'reference-note', route: '/', feedback: 'Align these', done: false, createdAt: new Date().toISOString(), element: null,
+      elements: [{ tag: 'button', text: 'One', selector: '#one' }, { tag: 'h1', text: 'Two', selector: '#two' }],
+      variant: { axisId: 'spacing', label: 'Spacing', optionId: 'compact', optionLabel: 'Compact' },
+    }]));
+    const io = makeIo(root);
+    expect(await runCli([], io)).toBe(0);
+    expect(io.text.out).toContain('#one'); expect(io.text.out).toContain('#two');
+    expect(io.text.out).toContain('Spacing → Compact — selector=spacing option=compact');
+  });
+});
+
+
+describe('agent onboarding and machine-readable notes', () => {
+  it('detects package-only Vite projects and applies the recommendation idempotently', async () => {
+    const root = tempRepo();
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ devDependencies: { vite: '^7' } }));
+    const io = makeIo(root);
+    expect(await runCli(['init', '--yes', '--json'], io)).toBe(0);
+    expect(JSON.parse(io.text.out)).toMatchObject({ host: 'vite', approach: 'overlay', recommended: 'overlay' });
+    const guide = readFileSync(join(root, 'AGENTS.md'), 'utf8');
+    expect(guide).toContain('npx iso-iterate --json');
+    expect(guide).toContain('not agent instructions');
+    await runCli(['init', '--yes'], makeIo(root));
+    expect(readFileSync(join(root, 'AGENTS.md'), 'utf8')).toBe(guide);
+  });
+
+  it('returns full records and keeps a route after the boolean --all flag', async () => {
+    const root = tempRepo();
+    const note = { id: 'note-1', route: '/one', feedback: 'review', createdAt: new Date().toISOString(), done: true, payload: { x: 'a'.repeat(500) } };
+    writeFileSync(join(root, '.iteration-feedback.json'), JSON.stringify([note, { ...note, id: 'note-2', route: '/two' }]));
+    const io = makeIo(root);
+    expect(await runCli(['--all', '/one', '--json'], io)).toBe(0);
+    expect(JSON.parse(io.text.out)).toEqual([note]);
+    const changed = makeIo(root);
+    expect(await runCli(['--undone', 'note-1', '--json'], changed)).toBe(0);
+    expect(JSON.parse(changed.text.out)).toMatchObject({ id: 'note-1', done: false });
+  });
+
+  it.each([['--file'], ['--days', '-1'], ['--days', 'NaN'], ['--done', '--all'], ['--all', '--all'], ['init', '--approach'], ['init', '--typo'], ['serve', '--theme', 'blue'], ['serve', '--port', 'NaN'], ['serve', '--file']])('rejects incomplete or invalid arguments: %j', async (...args) => {
+    const io = makeIo(tempRepo());
+    expect(await runCli(args, io)).toBe(1);
+    expect(io.text.err).not.toBe('');
+  });
+});
+
+describe('corrupt feedback file', () => {
+  it('fails clearly without overwriting the file', async () => {
+    const root = tempRepo();
+    const file = join(root, '.iteration-feedback.json');
+    writeFileSync(file, '{broken');
+    const io = makeIo(root);
+    expect(await runCli(['--done', 'a'], io)).toBe(1);
+    expect(io.text.err).not.toBe('');
+    expect(readFileSync(file, 'utf8')).toBe('{broken');
   });
 });

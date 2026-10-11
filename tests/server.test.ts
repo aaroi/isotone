@@ -220,3 +220,27 @@ describe('the viewport', () => {
     expect(readNotes(file).every((n) => !('viewport' in n))).toBe(true);
   });
 });
+
+describe('Request adapter boundaries', () => {
+  it('rejects foreign origins and oversized streamed JSON without creating notes', async () => {
+    const file = tempFile();
+    const foreign = await serveNotesRequest(file, new Request('http://localhost:3000/api/notes', {
+      method: 'POST', headers: { origin: 'https://outside.example' }, body: '{"route":"/","feedback":"unwanted"}',
+    }));
+    expect(foreign.status).toBe(403);
+    const oversized = await serveNotesRequest(file, new Request('http://localhost:3000/api/notes', {
+      method: 'POST', body: JSON.stringify({ feedback: 'x'.repeat(1024 * 1024) }),
+    }));
+    expect(oversized.status).toBe(413);
+    expect(readNotes(file)).toEqual([]);
+  });
+
+  it('returns a JSON failure when the store cannot be read', async () => {
+    const { writeFileSync } = await import('node:fs');
+    const file = tempFile();
+    writeFileSync(file, '{broken');
+    const result = await serveNotesRequest(file, new Request('http://localhost:3000/api/notes'));
+    expect(result.status).toBe(500);
+    expect(result.headers['content-type']).toContain('application/json');
+  });
+});
