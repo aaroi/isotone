@@ -56,6 +56,7 @@ describe('isRouteVisible', () => {
   it('honors an explicit allow-list (visible) over the default', () => {
     const rule = { visible: ['/projects', '/sandboxes*'] };
     expect(isRouteVisible('/projects/xyz', rule)).toBe(true);
+    expect(isRouteVisible('/sandboxes/one', rule)).toBe(true);
     expect(isRouteVisible('/overview', rule)).toBe(false);
   });
 

@@ -18,14 +18,16 @@ export default defineConfig([
     // The host provides these; keeping them external avoids a second React/Vite
     // install whose types clash with the consumer's own.
     external: ['react', 'react-dom', 'react/jsx-runtime', 'vite'],
+    // Ship only the icons we use; CLI/standalone users need no React peers.
+    noExternal: ['lucide-react'],
   },
   {
     // The standalone bundle is the opposite trade: React goes INSIDE, because
     // the page it drops into may have none, may have another version, or may
-    // not be a bundled app at all. `iso-iterate serve` serves this file.
+    // not be a bundled app at all. `isotone serve` serves this file.
     // tsup suffixes an iife build with `.global`, so this emits
-    // dist/iso-iterate.global.js.
-    entry: { 'iso-iterate': 'src/standalone/index.ts' },
+    // dist/isotone.global.js.
+    entry: { 'isotone': 'src/standalone/index.ts' },
     format: ['iife'],
     target: 'es2020',
     dts: false,
@@ -33,6 +35,8 @@ export default defineConfig([
     clean: false,
     minify: true,
     external: [],
-    define: { 'process.env.NODE_ENV': '"development"' },
+    // The panel is a dev tool, but its private React runtime needs no dev build.
+    // This does not affect the host application's React or environment.
+    define: { 'process.env.NODE_ENV': '"production"' },
   },
 ]);

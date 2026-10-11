@@ -2,25 +2,33 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Northwind Analytics — iso-iterate example</title>
+<title>Northwind Analytics — Isotone example</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <!--
   A page with no build step, no bundler and no React of its own.
   The one line at the bottom of <body> is the entire integration; it is the
-  tag `npx iso-iterate serve` prints (and shows at http://127.0.0.1:4123).
+  tag `npx isotone serve` prints (and shows at http://127.0.0.1:4123).
 
-    npx iso-iterate serve                                   # from the repo root
+    npx isotone serve                                   # from the repo root
     python3 -m http.server 8799 --directory examples/plain-html
     open http://localhost:8799
 
   Notes land in .iteration-feedback.json next to where `serve` runs; read
-  them with `npx iso-iterate` from the same directory.
+  them with `npx isotone` from the same directory.
 -->
 <style>
   :root {
+    color-scheme: dark;
+    --success: #6ee7a8; --success-line: #1c4436;
     --bg: #08090c; --panel: #101218; --line: #1e2129;
     --fg: #e8eaef; --muted: #8b91a1; --accent: #5b8cff;
     --font-sans: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
+  :root[data-theme='light'] {
+    color-scheme: light;
+    --bg: #fff; --panel: #fff; --line: #e4e4e7;
+    --fg: #18181b; --muted: #60606b;
+    --success: #137544; --success-line: #9cdbb8;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg);
@@ -49,7 +57,7 @@
        letter-spacing: .06em; }
   .pill { display: inline-block; font-size: .72rem; padding: .16rem .5rem; border-radius: 99px;
           border: 1px solid var(--line); color: var(--muted); }
-  .pill.ok { color: #6ee7a8; border-color: #1c4436; }
+  .pill.ok { color: var(--success); border-color: var(--success-line); }
   h2 { font-size: 1.1rem; letter-spacing: -.01em; margin: 3rem 0 1rem; }
   .hint { color: var(--muted); font-size: .85rem; border-left: 2px solid var(--accent);
           padding-left: .9rem; margin: 3rem 0 0; }
@@ -92,11 +100,11 @@
 
   <p class="hint">Open the panel at the bottom right and type a note, Enter
      sends. For a note about one element, press the crosshair, hover anything
-     on this page and click to pin it. Then run <code>npx iso-iterate</code>
+     on this page and click to pin it. Then run <code>npx isotone</code>
      where <code>serve</code> is running to read what you wrote.</p>
 </div>
 
 <!-- The entire integration. Dev only. -->
-<script src="http://127.0.0.1:4123/iso-iterate.js" defer></script>
+<script src="http://127.0.0.1:4123/isotone.js" defer></script>
 </body>
 </html>

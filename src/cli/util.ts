@@ -1,5 +1,5 @@
 /**
- * iso-iterate — CLI helpers shared by the notes, variant and init command
+ * isotone — CLI helpers shared by the notes, variant and init command
  * groups. Kept free of `store`/`variants-store` imports so any group can
  * pull this in without dragging the others' dependencies along.
  */
@@ -40,6 +40,30 @@ export function valueFor(args: string[], flag: string): string | undefined {
 
 export function has(args: string[], name: string): boolean {
   return args.indexOf(name) >= 0;
+}
+
+/** Validate a command before it reads or writes files. Returns its positionals. */
+export function parseArgs(
+  args: string[],
+  values: readonly string[],
+  booleans: readonly string[] = [],
+): string[] {
+  const positionals: string[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (!arg.startsWith('-')) {
+      positionals.push(arg);
+      continue;
+    }
+    if (!values.includes(arg) && !booleans.includes(arg)) throw new Error(`Unknown option "${arg}".`);
+    if (seen.has(arg)) throw new Error(`Option "${arg}" was given more than once.`);
+    seen.add(arg);
+    if (values.includes(arg) && (!args[++i] || args[i].startsWith('--'))) {
+      throw new Error(`Option "${arg}" requires a value.`);
+    }
+  }
+  return positionals;
 }
 
 /** Pulls a `--flag value` pair out of an argv slice, wherever it sits, so a

@@ -6,6 +6,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -46,7 +47,7 @@ afterEach(() => {
  *  write into; `git merge-file` needs none, but the fixture is the same
  *  either way. */
 function tempRepo(): { root: string; opts: VariantsStoreOptions } {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'iso-iterate-variants-')));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-variants-')));
   dirs.push(root);
   execFileSync('git', ['init', '-q', root]);
   execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: root });
@@ -319,7 +320,7 @@ describe('promote / drop', () => {
 
   it('refuses an id that is not a directory name, before anything is removed', () => {
     // `variant drop ..` resolved to the variants dir's parent, which is
-    // `.iso-iterate/`, and one more level up is the project root.
+    // `.isotone/`, and one more level up is the project root.
     const { opts } = tempRepo();
     createVariant(opts, { id: 'keep' });
     expect(() => dropVariant(opts, '..')).toThrow(/Invalid variant id/);
@@ -352,8 +353,8 @@ describe('active file', () => {
   it('still reads the one-id shape older versions wrote', () => {
     const { root, opts } = tempRepo();
     createVariant(opts, { id: 'v1' });
-    const file = join(root, '.iso-iterate', 'active.json');
-    mkdirSync(join(root, '.iso-iterate'), { recursive: true });
+    const file = join(root, '.isotone', 'active.json');
+    mkdirSync(join(root, '.isotone'), { recursive: true });
     writeFileSync(file, JSON.stringify({ active: 'v1' }));
     expect(readActive(opts)).toEqual(['v1']);
     writeFileSync(file, JSON.stringify({ active: null }));
@@ -478,6 +479,51 @@ describe('variantsResponse', () => {
 });
 
 describe('path escape rejected', () => {
+  it('treats ordinary prototype-property filenames as real files', () => {
+    const { root, opts } = tempRepo();
+    createVariant(opts, { id: 'filenames' });
+    for (const file of ['constructor', '__proto__']) {
+      writeFileSync(join(root, file), file);
+      addVariantFile(opts, 'filenames', file);
+      expect(readFileSync(join(variantDir(opts, 'filenames'), file), 'utf8')).toBe(file);
+      expect(Object.hasOwn(readVariant(opts, 'filenames')?.files ?? {}, file)).toBe(true);
+    }
+  });
+  it('rejects source and override symlinks outside their owning tree', () => {
+    const { root, opts } = tempRepo();
+    const outside = mkdtempSync(join(tmpdir(), 'iso-outside-'));
+    dirs.push(outside);
+    writeFileSync(join(outside, 'secret.txt'), 'Do not touch');
+    createVariant(opts, { id: 'safe' });
+    symlinkSync(outside, join(root, 'linked'), 'dir');
+    expect(() => addVariantFile(opts, 'safe', 'linked/secret.txt')).toThrow(/escapes/);
+    addVariantFile(opts, 'safe', 'src/Button.tsx');
+    const copy = join(variantDir(opts, 'safe'), 'src/Button.tsx');
+    rmSync(copy);
+    symlinkSync(join(outside, 'secret.txt'), copy);
+    expect(readVariant(opts, 'safe')).toBeNull();
+    expect(resolveOverride(opts, ['safe'], join(root, 'src/Button.tsx'))).toBeNull();
+    expect(() => promoteVariant(opts, 'safe', { force: true })).toThrow();
+    expect(readFileSync(join(outside, 'secret.txt'), 'utf8')).toBe('Do not touch');
+  });
+
+  it('rejects mismatched ids, invalid file entries and repository metadata', () => {
+    const { opts } = tempRepo();
+    const manifest = createVariant(opts, { id: 'safe' });
+    const file = join(variantDir(opts, 'safe'), 'variant.json');
+    for (const bad of [
+      { ...manifest, id: '../outside' },
+      { ...manifest, files: { 'src/a.ts': null } },
+      { ...manifest, files: { 'src/a.ts': { base: '--help' } } },
+      { ...manifest, files: { '.git/config': { base: null } } },
+      { ...manifest, files: { 'variant.json': { base: null } } },
+      { ...manifest, files: { './a.ts': { base: null } } },
+    ]) {
+      writeFileSync(file, JSON.stringify(bad));
+      expect(readVariant(opts, 'safe')).toBeNull();
+      expect(listVariants(opts)).toEqual([]);
+    }
+  });
   it('refuses to add a file outside the project root', () => {
     const { opts } = tempRepo();
     createVariant(opts, { id: 'v1' });
@@ -530,6 +576,16 @@ describe('path escape rejected', () => {
 });
 
 describe('promoteVariant guards', () => {
+  it('never deletes a variant when an override is missing, even when forced', () => {
+    const { root, opts } = tempRepo();
+    createVariant(opts, { id: 'incomplete' });
+    addVariantFile(opts, 'incomplete', 'src/Button.tsx');
+    const original = readFileSync(join(root, 'src/Button.tsx'), 'utf8');
+    rmSync(join(variantDir(opts, 'incomplete'), 'src/Button.tsx'));
+    expect(() => promoteVariant(opts, 'incomplete', { force: true })).toThrow(/missing overrides/);
+    expect(readVariant(opts, 'incomplete')).not.toBeNull();
+    expect(readFileSync(join(root, 'src/Button.tsx'), 'utf8')).toBe(original);
+  });
   it('refuses a stale variant and a conflicted override unless forced', () => {
     const { root, opts } = tempRepo();
     createVariant(opts, { id: 'g' });
@@ -573,11 +629,11 @@ describe('knobs file', () => {
     try {
       const opts = { root };
       expect(readKnobs(opts)).toEqual([]);
-      mkdirSync(join(root, '.iso-iterate'), { recursive: true });
-      writeFileSync(join(root, '.iso-iterate/knobs.json'), 'nope');
+      mkdirSync(join(root, '.isotone'), { recursive: true });
+      writeFileSync(join(root, '.isotone/knobs.json'), 'nope');
       expect(readKnobs(opts)).toEqual([]);
       writeFileSync(
-        join(root, '.iso-iterate/knobs.json'),
+        join(root, '.isotone/knobs.json'),
         JSON.stringify([
           { kind: 'range', id: 'fade', label: 'Fade', min: 0, max: 1, step: 0.1, defaultValue: 0 },
           { kind: 'range', id: 'Bad Id', label: 'x', min: 0, max: 1, step: 0.1, defaultValue: 0 },
@@ -590,5 +646,15 @@ describe('knobs file', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe('selector requests', () => {
+  it('does not mutate variants through the old management endpoint', () => {
+    const { opts } = tempRepo();
+    createVariant(opts, { id: 'one', group: 'button' });
+    const response = variantsResponse(opts, { method: 'POST', url: '/manage', body: { axisId: 'button', action: 'remove-axis' } });
+    expect(response.status).toBe(405);
+    expect(listVariants(opts).map(v => v.id)).toEqual(['one']);
   });
 });

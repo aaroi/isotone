@@ -1,30 +1,7 @@
 /**
- * iso-iterate — Vite plugin.
- *
- * The one integration point a framework app needs. Registers the notes
- * endpoint (a dev middleware writing to a local gitignored file) and injects
- * the panel's self-mount into the served HTML, so the consumer never edits app
- * source. Dev-only: in `build` the plugin is inert.
- *
- * Injection is framework-agnostic: React Router and many SPA dev servers do
- * not run Vite's `transformIndexHtml`, so we instead wrap the HTML response
- * body in a `configureServer` middleware and splice the mount loader into the
- * document's `<head>`. Works across Vite, RR7, and Next dev.
- *
- * The loader lives in `<head>` rather than before `</body>` for React 19:
- * a whole-document React Router app hydrates the entire body (and React
- * reports "Encountered a script tag while rendering React component", then
- * discards the server tree, whenever a stray `<script>` or anything else it
- * did not render sits in `document.body` on mismatch — a browser extension
- * that has already stuck a node in is exactly that). A `<script>` in `<head>`
- * is never part of the body React owns and hydrates, so it is invisible to
- * hydration no matter what the extension does, and it runs before the app's
- * async client entry mounts. The panel is still mounted at runtime: the loader
- * waits for `load`, then imports the panel and appends the host, exactly as
- * `mountIteration` does when a host calls it. Nothing the app renders carries
- * a script tag anymore. The only thing that can still drop the host is a
- * full-body re-render after a failed hydration — the MutationObserver in
- * `mountIteration` re-appends the host against that.
+ * Development-only notes, source variants and a self-contained panel for Vite.
+ * Inject through the HTML response so SSR frameworks work too. The loader lives
+ * in <head> and mounts after load, leaving the host's hydration and HMR alone.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
@@ -36,6 +13,11 @@ import { type HmrContext, normalizePath, type Plugin, type ResolvedConfig } from
 
 import { ensureDirIgnored, ensureFileIgnored, notesResponse, NOTES_ENDPOINT } from '../store';
 import type { RouteGateOptions } from '../core/index';
+import type { IterationShortcut } from '../react/IterationPanel';
+import type { IterationTheme } from '../react/theme';
+import { readBundle } from '../standalone/bundle';
+import { startUpdateCheck, UPDATE_ENDPOINT } from '../update';
+import { checkOrigin, readNodeJson, sendFailure } from '../server/http';
 import { VARIANTS_ENDPOINT } from '../core/variants';
 import {
   ACTIVE_FILE,
@@ -50,6 +32,14 @@ import {
 } from '../variants-store';
 
 export interface IterationViteOptions {
+  /** Inject the bundled panel. false keeps endpoints and variants for a manual mount. */
+  panel?: boolean;
+  /** Background npm notice, at most once a day. false disables the check. */
+  checkForUpdates?: boolean;
+  /** Defaults to auto (page background); system follows the OS preference. */
+  theme?: IterationTheme;
+  /** Defaults to Cmd/Ctrl+Shift+Period; customize or disable with false. */
+  shortcut?: IterationShortcut | false;
   /** Where notes persist. Relative paths resolve against Vite's `root` (the
    *  directory of the app, whatever the shell's cwd), so a monorepo package
    *  started from the workspace root still writes next to its own config.
@@ -61,7 +51,7 @@ export interface IterationViteOptions {
   /** localStorage namespace override. */
   key?: string;
   /**
-   * Overlay variants: alternative source files under `.iso-iterate/variants/
+   * Overlay variants: alternative source files under `.isotone/variants/
    * <id>/<repo-relative path>` that `load` swaps in for the real ones while
    * the variant is active. On by default; `false` turns the whole feature
    * off (no endpoint, no watcher, no tab in the panel).
@@ -76,7 +66,7 @@ export interface IterationViteOptions {
          *  or absolute. */
         root?: string;
         /** Where the variants live, relative to `root`. Default
-         *  `.iso-iterate/variants`. */
+         *  `.isotone/variants`. */
         dir?: string;
         /** Keep the variants dir out of git via `.git/info/exclude`. Off by
          *  default: the files are the reviewable artefact and commit with
@@ -88,7 +78,7 @@ export interface IterationViteOptions {
 /**
  * What `iteration()` hands back.
  *
- * Only `name` is public, and that is deliberate. iso-iterate is consumed as a
+ * Only `name` is public, and that is deliberate. isotone is consumed as a
  * linked (`file:` / workspace) dependency, so TypeScript resolves the `vite`
  * import from *this* package's `node_modules`, not the consumer's. Two vite
  * type instances are nominally incompatible — rollup's plugin container
@@ -113,8 +103,7 @@ export interface IterationPlugin {
 
 const DEFAULT_FILE = '.iteration-feedback.json';
 const INJECTED = new WeakSet<ServerResponse>();
-const VIRTUAL_ID = 'virtual:iso-iterate-mount';
-const RESOLVED_VIRTUAL_ID = `\0${VIRTUAL_ID}`;
+const BUNDLE_PATH = '/@isotone/panel.js';
 const MANIFEST = 'variant.json';
 
 /**
@@ -171,8 +160,8 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
   const swapping = new Set<string>();
 
   const currentActive = (): string[] => {
-    // A build takes its set from the environment: `ISO_VARIANT=a,b`.
-    if (isBuild) return parseVariantList(process.env.ISO_VARIANT);
+    // A build takes its set from the environment: `ISOTONE_VARIANT=a,b`.
+    if (isBuild) return parseVariantList(process.env.ISOTONE_VARIANT);
     if (activeIds === undefined) activeIds = readActive(vopts);
     return activeIds;
   };
@@ -206,13 +195,6 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
   const plugin = {
     name: 'iso:iteration',
     enforce: 'pre',
-    config() {
-      // Pre-bundle the panel with the host's other deps. Discovered on the
-      // first navigation instead, the optimizer re-runs, every already-served
-      // dep URL answers 504 Outdated Optimize Dep, and the page reloads once
-      // more before anything works.
-      return { optimizeDeps: { include: ['iso-iterate/react'] } };
-    },
     configResolved(config: ResolvedConfig) {
       isDev = config.command === 'serve';
       isBuild = config.command === 'build';
@@ -228,16 +210,7 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
       vDir = variantsDir(vopts);
       activeFile = join(vopts.root, ACTIVE_FILE);
     },
-    resolveId(id) {
-      if (id === VIRTUAL_ID || id === RESOLVED_VIRTUAL_ID) {
-        return RESOLVED_VIRTUAL_ID;
-      }
-      return null;
-    },
     load(id) {
-      if (id === RESOLVED_VIRTUAL_ID) {
-        return mountModuleSource(options.rule ?? {}, options.key ?? '', variantsOptions !== null);
-      }
       if (!variantsOptions || SPECIAL_QUERY.test(id)) return null;
       // `?v=<hash>`, `?t=<timestamp>`, `?import`: vite's own request
       // decorations, never part of the path on disk.
@@ -282,27 +255,43 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
       server.httpServer?.once('listening', () => {
         const shown = relative(server.config.root, file) || file;
         server.config.logger.info(
-          `  iso-iterate  notes → ${shown}  (${NOTES_ENDPOINT})`,
+          `  isotone  notes → ${shown}  (${NOTES_ENDPOINT})`,
         );
         if (variantsOptions && existsSync(vDir)) {
           const shownDir = relative(server.config.root, vDir) || vDir;
           const n = listVariants(vopts).length;
           server.config.logger.info(
-            `  iso-iterate  variants → ${shownDir}  (${n} variant${n === 1 ? '' : 's'})`,
+            `  isotone  variants → ${shownDir}  (${n} variant${n === 1 ? '' : 's'})`,
           );
         }
       });
 
+      const guardOrigin = (req: IncomingMessage, res: ServerResponse): boolean => {
+        try { checkOrigin(req.headers.origin, req.headers.host ?? ''); return true; }
+        catch (error) { sendFailure(res, error); return false; }
+      };
+
+      const updates = startUpdateCheck(server.config.root, options.checkForUpdates !== false);
+      server.httpServer?.once('close', updates.dispose);
+      server.middlewares.use(UPDATE_ENDPOINT, (req, res) => {
+        if (!guardOrigin(req, res)) return;
+        res.setHeader('content-type', 'application/json; charset=utf-8');
+        res.setHeader('cache-control', 'no-store');
+        res.statusCode = req.method === 'GET' ? 200 : 405;
+        res.end(JSON.stringify(req.method === 'GET' ? updates.getSnapshot() : { error: 'method not allowed' }));
+      });
+
       // Notes endpoint → local file.
       server.middlewares.use(NOTES_ENDPOINT, (req, res, next) => {
+        if (!guardOrigin(req, res)) return;
         const method = req.method ?? '';
         if (method !== 'GET' && method !== 'POST' && method !== 'DELETE') {
           next();
           return;
         }
-        readJsonBody(req, method === 'POST').then((body) => {
+        (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined)).then((body) => {
           answer(res, () => notesResponse(file, { method, url: req.url, body }));
-        });
+        }).catch((error) => sendFailure(res, error));
       });
 
       if (variantsOptions) {
@@ -326,16 +315,16 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
          * hot-swapped and falls back to a reload for that one, exactly as
          * it would for a hand edit.
          */
-        const activate = (next: string[]) => {
+        const activate = (next: string[], removedFiles: string[] = []) => {
           const prev = currentActive();
           const changed = [
             ...prev.filter((id) => !next.includes(id)),
             ...next.filter((id) => !prev.includes(id)),
           ];
-          if (changed.length === 0) return;
+          if (changed.length === 0 && removedFiles.length === 0) return;
           activeIds = next;
           overrides.clear();
-          const sources = new Set<string>();
+          const sources = new Set<string>(removedFiles.map((file) => join(vopts.root, file)));
           for (const id of changed) {
             const manifest = readVariant(vopts, id);
             for (const key of Object.keys(manifest?.files ?? {})) {
@@ -361,6 +350,7 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
         }
 
         server.middlewares.use(VARIANTS_ENDPOINT, (req, res, next) => {
+          if (!guardOrigin(req, res)) return;
           const method = req.method ?? '';
           if (method !== 'GET' && method !== 'POST') {
             next();
@@ -377,16 +367,17 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
             res.end(JSON.stringify({ error: 'content-type must be application/json' }));
             return;
           }
-          readJsonBody(req, method === 'POST').then((body) => {
+          (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined)).then((body) => {
             // connect strips the mount from `req.url`, which is the shape
             // variantsResponse routes on ("/", "/active?...").
             const result = answer(res, () =>
               variantsResponse(vopts, { method, url: req.url, body }),
             );
             if (result?.status === 200 && method === 'POST') {
-              activate((result.body as { active: string[] }).active);
+              const updated = result.body as { active: string[]; changedFiles?: string[] };
+              activate(updated.active, updated.changedFiles);
             }
-          });
+          }).catch((error) => sendFailure(res, error));
         });
 
         // The CLI's `variant use` writes the active file with no request to
@@ -406,22 +397,16 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
         });
       }
 
-      // Pre-transform the mount module so its (bare) imports are rewritten to
-      // browser-fetchable Vite URLs; inject that transformed code into HTML.
-      //
-      // Asked per navigation, not memoized here: the rewritten import carries
-      // the dep optimizer's `?v=<browserHash>`, and when the optimizer re-runs
-      // (adding this plugin discovers `iso-iterate/react` on the first request)
-      // that hash changes and every optimized URL minted before it answers
-      // `504 Outdated Optimize Dep`. Vite invalidates its module graph and
-      // full-reloads the page on that path, so re-asking is what picks the new
-      // hash up. Between re-runs Vite serves its cached transform, so this is
-      // a map lookup, not a re-transform.
-      const getMountCode = () =>
-        server
-          .transformRequest(VIRTUAL_ID)
-          .then((m) => m?.code ?? '')
-          .catch(() => '');
+      if (options.panel === false) return;
+
+      // A self-contained bundle keeps the panel out of the host's dependency
+      // graph and works in React, Vue, Svelte and plain Vite apps alike.
+      server.middlewares.use(BUNDLE_PATH, (_req, res) => {
+        res.setHeader('content-type', 'text/javascript; charset=utf-8');
+        res.setHeader('cache-control', 'no-store');
+        res.end(readBundle());
+      });
+      const mountCode = mountModuleSource(options.rule ?? {}, options.key ?? '', variantsOptions !== null, options.shortcut, options.theme);
 
       server.middlewares.use((req, res, next) => {
         // Only navigations: buffering every response to look for </body>
@@ -436,10 +421,8 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
         // gets 304 and never sees the panel. Ask for the full document.
         delete req.headers['if-none-match'];
         delete req.headers['if-modified-since'];
-        getMountCode().then((code) => {
-          if (code) injectHtmlResponse(res, code);
-          next();
-        });
+        injectHtmlResponse(res, mountCode);
+        next();
       });
     },
   } satisfies Plugin;
@@ -447,7 +430,7 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
   return plugin;
 }
 
-/** `ISO_VARIANT=a, b` → `['a', 'b']`; unset or blank → `[]`. */
+/** `ISOTONE_VARIANT=a, b` → `['a', 'b']`; unset or blank → `[]`. */
 function parseVariantList(raw: string | undefined): string[] {
   return (raw ?? '')
     .split(',')
@@ -460,27 +443,6 @@ function parseVariantList(raw: string | undefined): string[] {
 function isJsonRequest(req: IncomingMessage): boolean {
   const type = req.headers['content-type'];
   return typeof type === 'string' && type.toLowerCase().includes('application/json');
-}
-
-/** Buffer a request body and parse it as JSON when asked; a malformed body
- *  becomes `undefined` so the store answers 400 instead of the server
- *  throwing. */
-function readJsonBody(req: IncomingMessage, parse: boolean): Promise<unknown> {
-  return new Promise((done) => {
-    const chunks: Buffer[] = [];
-    req.on('data', (c: Buffer) => chunks.push(c));
-    req.on('end', () => {
-      if (!parse) {
-        done(undefined);
-        return;
-      }
-      try {
-        done(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-      } catch {
-        done(undefined);
-      }
-    });
-  });
 }
 
 /**
@@ -501,46 +463,23 @@ function answer(
     res.end(JSON.stringify(body));
     return { status, body };
   } catch (cause) {
-    res.statusCode = 500;
-    res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify({ error: String(cause) }));
+    sendFailure(res, cause);
     return null;
   }
 }
 
-/** Source for the virtual mount module. */
-/**
- * Source for the virtual mount module.
- *
- * The panel is imported only once the page has fired `load`, never
- * statically. The host's own entry loads `react-dom` through the same
- * optimized dep URL this module would, and `react-dom` registers with the
- * Fast Refresh hook at evaluation time. React Router's entry is an async
- * module script; when this smaller graph evaluated first, `react-dom` ran
- * before the refresh runtime had installed its hook, the renderer never
- * registered, and every hot update on the page, a hand edit or a variant
- * switch, re-evaluated modules without React re-rendering anything. After
- * `load` every host script has run, so the host decides the order and the
- * panel merely appears a moment later.
- *
- * `mountIteration` appends its host to `document.body` itself, so this loader
- * does no DOM work. The mount is still deferred past the host's own render
- * (see IterationMount); keeping the host append out of the injected HTML is
- * what leaves a `<script>` out of what React hydrates.
- */
-function mountModuleSource(rule: RouteGateOptions, key: string, variants: boolean): string {
+/** Load after the host has mounted, without importing its React or HMR runtime. */
+function mountModuleSource(rule: RouteGateOptions, key: string, variants: boolean, shortcut?: IterationShortcut | false, theme?: IterationTheme): string {
+  const config = JSON.stringify({ endpoint: NOTES_ENDPOINT, updateEndpoint: UPDATE_ENDPOINT, key, shortcut, theme, rule, ...(variants ? { variants: 'overlay' } : {}) }).replace(/</g, '\\u003c');
   return `
-    const start = () => import('iso-iterate/react').then(({ mountIteration }) => {
-      const prev = window.__isoIteration?.off;
-      if (typeof prev === 'function') prev();
-      window.__isoIteration = {
-        off: mountIteration({
-          endpoint: ${JSON.stringify(NOTES_ENDPOINT)},
-          key: ${JSON.stringify(key)},
-          rule: ${JSON.stringify(rule)},${variants ? "\n          variants: 'overlay'," : ''}
-        }),
-      };
-    });
+    const start = () => {
+      const mount = () => window.__isotone.mount(${config});
+      if (window.__isotone) return mount();
+      const script = document.createElement('script');
+      script.src = ${JSON.stringify(BUNDLE_PATH)};
+      script.onload = mount;
+      document.head.appendChild(script);
+    };
     if (document.readyState === 'complete') start();
     else window.addEventListener('load', start, { once: true });
   `;
@@ -616,7 +555,7 @@ function injectHtmlResponse(res: ServerResponse, code: string): void {
     buffering = false;
     const body = Buffer.concat(chunks).toString('utf8');
     if (body.includes('<html') && (body.includes('<head') || body.includes('</body>'))) {
-      const script = `<script type="module" data-iso-iterate-inject>${code}</script>`;
+      const script = `<script type="module" data-isotone-inject>${code}</script>`;
       if (!res.headersSent) originalSetHeader('Cache-Control', 'no-store');
       return originalEnd(withNativeFetch(injectIntoHead(body, script)), cb);
     }
@@ -663,9 +602,9 @@ function injectIntoHead(html: string, script: string): string {
  * there is no head) so it runs before any app module.
  */
 export function withNativeFetch(html: string): string {
-  if (html.includes('__isoIterateFetch')) return html;
+  if (html.includes('__isotoneFetch')) return html;
   const capture =
-    '<script data-iso-iterate-native>window.__isoIterateFetch=window.fetch.bind(window)</script>';
+    '<script data-isotone-native>window.__isotoneFetch=window.fetch.bind(window)</script>';
   const head = html.match(/<head[^>]*>/i);
   if (head?.index !== undefined) {
     const at = head.index + head[0].length;

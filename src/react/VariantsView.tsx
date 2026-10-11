@@ -1,278 +1,446 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
-
+import { showOverflowTitle } from './tooltips';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { VariantReference } from '../core/index';
 import {
   axisDefault,
-  type ColorVariantAxis,
   formatRangeValue,
   isDirty,
-  type RangeVariantAxis,
-  type SelectVariantAxis,
+  type VariantAction,
+  type VariantAxis,
   type VariantSelections,
   type VariantsSource,
   visibleAxes,
 } from '../core/variants';
+import { Icon } from './icons';
+import { useLayoutMotion } from './useLayoutMotion';
 
-/** Static: `input[type=color]` sits invisibly on top and does the picking. */
-const PICKER_GRADIENT =
-  'conic-gradient(from 0deg, #ef4444, #eab308, #22c55e, #3b82f6, #a855f7, #ef4444)';
-
-/**
- * Some sources (the overlay adapter) learn their axes from the network and
- * expose `refresh()` for it. The contract does not name it, so feature-detect
- * rather than widen `VariantsSource` for one adapter.
- */
 export function refreshSource(source: VariantsSource): void {
   const candidate = (source as { refresh?: unknown }).refresh;
-  if (typeof candidate !== 'function') return;
-  // The panel shows whatever the source already has; a failed refresh means
-  // stale axes, not a broken panel, so the rejection is swallowed here.
-  void Promise.resolve((candidate as () => unknown).call(source)).catch(() => {});
+  if (typeof candidate === 'function')
+    void Promise.resolve(candidate.call(source)).catch(() => {});
 }
 
-/** Re-render on every source notification. */
 export function useVariantsSource(source: VariantsSource | undefined) {
-  const [, setTick] = useState(0);
-  useEffect(() => source?.subscribe(() => setTick((t) => t + 1)), [source]);
+  const [revision, setRevision] = useState(0);
+  useEffect(() => source?.subscribe(() => setRevision(n => n + 1)), [source]);
+  return revision;
 }
 
-/**
- * Every variant control the source declares, in order, grouped by section
- * and scoped by `showWhen`; Revert while anything is off its default; Save
- * as defaults when the source can persist them.
- *
- * The view owns no state beyond the save button's: the source is the model
- * and every change goes back through it, so a host that syncs selections to
- * the URL or to a dev server sees exactly what the panel shows.
- */
+const NO_PENDING_ACTIONS: VariantAction[] = [];
+
 export function VariantsView({
   source,
   showTitle = true,
+  active = true,
+  onFeedback,
+  onClose,
+  onSaved,
+  onManage,
+  pendingActions = NO_PENDING_ACTIONS,
 }: {
   source: VariantsSource;
-  /**
-   * Standalone, the view names itself in a header row above the controls.
-   * Under the panel's tab bar the tab already says Variants, so the panel
-   * passes `false`: the row then holds only Revert, right-aligned, and is
-   * left out altogether while nothing is dirty.
-   */
   showTitle?: boolean;
+  active?: boolean;
+  onFeedback?: (reference: VariantReference) => void;
+  onClose?: () => void;
+  onSaved?: () => void;
+  onManage?: (action: VariantAction, reference: VariantReference) => Promise<void>;
+  pendingActions?: VariantAction[];
 }) {
-  useVariantsSource(source);
-  // On mount, so the overlay source lists variants each time the panel opens.
-  useEffect(() => refreshSource(source), [source]);
+  const revision = useVariantsSource(source);
+  useEffect(() => {
+    if (active) refreshSource(source);
+  }, [active, source]);
+  // The source notifies through its revision; typing in the composer does not
+  // need another selector graph walk or another layout measurement.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: revision represents external source updates.
+  const { selections, shown, sourceError } = useMemo(() => {
+    const selections = source.getSelections();
+    return {
+      selections,
+      shown: visibleAxes(source.getAxes(), selections),
+      sourceError: source.getError?.(),
+    };
+  }, [source, revision]);
+  const [menuId, setMenuId] = useState<string | null>(null);
+  const menu = shown.find(axis => axis.id === menuId) ?? null;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const menuRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useLayoutMotion(bodyRef, shown, active);
+  const trigger = useRef<HTMLButtonElement | null>(null);
+  const value = (axis: VariantAxis) => selections[axis.id] ?? axisDefault(axis);
+  const menuOptions =
+    menu?.kind === 'color'
+      ? menu.swatches.map((s) => ({
+          ...s,
+          isDefault: s.value.toLowerCase() === menu.defaultColor.toLowerCase(),
+        }))
+      : menu && menu.kind !== 'range'
+        ? menu.options.map((o) => ({
+            ...o,
+            isDefault: o.id === menu.defaultOption,
+          }))
+        : [];
+  const closeMenu = () => {
+    setMenuOpen(false);
+    setError('');
+    requestAnimationFrame(() => {
+      if (trigger.current?.isConnected) trigger.current.focus();
+      else
+        bodyRef.current?.parentElement
+          ?.querySelector<HTMLButtonElement>('button')
+          ?.focus();
+    });
+  };
 
-  const axes = source.getAxes();
-  const selections = source.getSelections();
-  const shown = visibleAxes(axes, selections);
-  const dirty = isDirty(axes, selections);
-  const current = (axis: (typeof axes)[number]) => selections[axis.id] ?? axisDefault(axis);
+  useEffect(() => {
+    if (!menu) setMenuOpen(false);
+  }, [menu]);
 
-  return (
-    <div className="iso-iter-vars">
-      {(showTitle || dirty) && (
-        <div className={showTitle ? 'iso-iter-vars-head' : 'iso-iter-vars-head iso-iter-vars-head-bare'}>
-          {showTitle && <span className="iso-iter-vars-title">{source.title ?? 'Variants'}</span>}
-          {dirty && (
-            <button
-              type="button"
-              data-iso-iterate
-              className="iso-iter-revert"
-              title="Revert every control to its default"
-              onClick={() => source.reset()}
-            >
-              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <title>Revert</title>
-                <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-                <path d="M3 3v5h5" />
-              </svg>
-              Revert
-            </button>
-          )}
-        </div>
-      )}
+  useEffect(() => {
+    if (menuOpen)
+      menuRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+  }, [menuOpen]);
 
-      <div className="iso-iter-vars-body">
-        {shown.map((axis, i) => (
-          <Fragment key={axis.id}>
-            {i > 0 && shown[i - 1].section !== axis.section && (
-              <div className="iso-iter-hairline" />
-            )}
-            {axis.kind === 'range' ? (
-              <RangeAxis axis={axis} value={current(axis)} onChange={source.setSelection} />
-            ) : axis.kind === 'color' ? (
-              <ColorAxis axis={axis} value={current(axis)} onChange={source.setSelection} />
-            ) : (
-              <SelectAxis axis={axis} value={current(axis)} onChange={source.setSelection} />
-            )}
-          </Fragment>
-        ))}
-
-        {source.saveDefaults && <SaveDefaults source={source} />}
-      </div>
-    </div>
-  );
-}
-
-interface AxisProps<A> {
-  axis: A;
-  value: string;
-  onChange: (axisId: string, value: string) => void;
-}
-
-function RangeAxis({ axis, value, onChange }: AxisProps<RangeVariantAxis>) {
-  return (
-    <div className="iso-iter-axis">
-      <div className="iso-iter-axis-head">
-        <h3 className="iso-iter-axis-label">{axis.label}</h3>
-        <span className="iso-iter-axis-value">{formatRangeValue(axis, value)}</span>
-      </div>
-      <input
-        type="range"
-        className="iso-iter-range"
-        aria-label={axis.label}
-        min={axis.min}
-        max={axis.max}
-        step={axis.step}
-        value={Number(value)}
-        onChange={(e) => onChange(axis.id, e.target.value)}
-      />
-    </div>
-  );
-}
-
-function ColorAxis({ axis, value, onChange }: AxisProps<ColorVariantAxis>) {
-  const current = value.toLowerCase();
-  return (
-    <div className="iso-iter-axis">
-      <div className="iso-iter-axis-head">
-        <h3 className="iso-iter-axis-label">{axis.label}</h3>
-        <span className="iso-iter-axis-value iso-iter-axis-hex">{value}</span>
-      </div>
-      <div className="iso-iter-swatches">
-        {axis.swatches.map((sw) => (
-          <button
-            key={sw.id}
-            type="button"
-            data-iso-iterate
-            title={sw.label}
-            aria-label={sw.label}
-            aria-pressed={current === sw.value.toLowerCase()}
-            className={
-              current === sw.value.toLowerCase()
-                ? 'iso-iter-swatch iso-iter-swatch-on'
-                : 'iso-iter-swatch'
-            }
-            style={{ backgroundColor: sw.value }}
-            onClick={() => onChange(axis.id, sw.value)}
-          />
-        ))}
-        <label
-          className="iso-iter-picker"
-          title="Custom colour"
-          style={{ background: PICKER_GRADIENT }}
-        >
-          <input
-            type="color"
-            aria-label={`${axis.label}: custom colour`}
-            value={value}
-            onChange={(e) => onChange(axis.id, e.target.value)}
-          />
-        </label>
-      </div>
-    </div>
-  );
-}
-
-function SelectAxis({ axis, value, onChange }: AxisProps<SelectVariantAxis>) {
-  const asGrid = axis.options.length > 0 && axis.options.every((o) => o.image);
-  return (
-    <div className="iso-iter-axis">
-      <h3 className="iso-iter-axis-label">{axis.label}</h3>
-      {asGrid ? (
-        <div className="iso-iter-grid">
-          {axis.options.map((o) => (
-            <button
-              key={o.id}
-              type="button"
-              data-iso-iterate
-              aria-pressed={value === o.id}
-              title={o.hint ?? o.label}
-              className={value === o.id ? 'iso-iter-thumb iso-iter-thumb-on' : 'iso-iter-thumb'}
-              onClick={() => onChange(axis.id, o.id)}
-            >
-              <img src={o.image} alt="" />
-              <span>{o.label}</span>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className="iso-iter-segs">
-          {axis.options.map((o) => (
-            <button
-              key={o.id}
-              type="button"
-              data-iso-iterate
-              aria-pressed={value === o.id}
-              title={o.hint ?? o.label}
-              className={value === o.id ? 'iso-iter-seg iso-iter-seg-on' : 'iso-iter-seg'}
-              onClick={() => onChange(axis.id, o.id)}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-type SaveState = 'idle' | 'saving' | 'saved' | 'error';
-
-const SAVE_COPY: Record<SaveState, string> = {
-  idle: '',
-  saving: 'Saving…',
-  saved: 'Saved for the agent',
-  error: "Couldn't save",
-};
-
-function SaveDefaults({ source }: { source: VariantsSource }) {
-  const [state, setState] = useState<SaveState>('idle');
-  const reset = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(reset.current), []);
-
-  async function save() {
-    if (state === 'saving') return;
-    setState('saving');
-    const selections: VariantSelections = { ...source.getSelections() };
+  function feedback(axis: VariantAxis, optionId?: string) {
+    const option =
+      axis.kind === 'range'
+        ? undefined
+        : (axis.kind === 'color' ? axis.swatches : axis.options).find(
+            (o) => o.id === optionId,
+          );
+    closeMenu();
+    onFeedback?.({
+      axisId: axis.id,
+      label: axis.label,
+      value: value(axis),
+      ...(option ? { optionId: option.id, optionLabel: option.label } : {}),
+    });
+  }
+  const requested = (action: VariantAction) => pendingActions.some(pending =>
+    pending.axisId === action.axisId && pending.action === action.action && pending.optionId === action.optionId);
+  async function manage(action: VariantAction) {
+    if (!menu || busy || !onManage || requested(action)) return;
+    setBusy(true);
+    setError('');
     try {
-      await source.saveDefaults?.(selections);
-      setState('saved');
-    } catch {
-      setState('error');
+      const option = menuOptions.find(o => o.id === action.optionId);
+      await onManage(action, {
+        axisId: menu.id, label: menu.label, value: value(menu),
+        ...(option ? { optionId: option.id, optionLabel: option.label } : {}),
+      });
+
+      closeMenu();
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : 'Could not update this selector.',
+      );
+    } finally {
+      setBusy(false);
     }
-    // Both outcomes clear after a beat so the row reads as a button again.
-    clearTimeout(reset.current);
-    reset.current = setTimeout(() => setState('idle'), 2000);
   }
 
   return (
-    <div className="iso-iter-save-row">
+    <div className="isotone-vars">
+      <div className="isotone-panel-head">
+        {showTitle && <h2>{source.title ?? 'Variants'}</h2>}
+        <div className="isotone-head-actions">
+          {source.saveDefaults && isDirty(shown, selections) && (
+            <SaveDefaults source={source} onSaved={onSaved} />
+          )}
+          {onClose && (
+            <button
+              type="button"
+              className="isotone-icon"
+              aria-label="Close variants"
+              title="Close variants"
+              onClick={onClose}
+            >
+              <Icon name="close" />
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="isotone-vars-body" ref={node => { bodyRef.current = node; node?.toggleAttribute('inert', menuOpen); }}>
+        {sourceError && <p className="isotone-danger" role="alert">{sourceError}</p>}
+        {shown.length === 0 && (
+          <p className="isotone-empty">No variant selectors on this page.</p>
+        )}
+        {shown.map((axis) => {
+          const thumbnails = axis.kind !== 'range' && axis.kind !== 'color' && axis.options.length > 0 && axis.options.every(option => option.image);
+          return (
+          <div
+            className="isotone-axis"
+            key={axis.id}
+            data-motion-key={axis.id}
+          >
+            <div className="isotone-axis-head">
+              <button
+                type="button"
+                className="isotone-axis-label"
+                aria-label={`${axis.label} actions`}
+                aria-haspopup="dialog"
+                aria-expanded={menuOpen && menu?.id === axis.id}
+                onClick={(e) => {
+                  trigger.current = e.currentTarget;
+                  setMenuId(axis.id);
+                  setError('');
+                  setMenuOpen(true);
+                }}
+              >
+                <span onPointerOver={showOverflowTitle}>{axis.label}</span>
+                <Icon name="chevron" size={12} />
+              </button>
+              {(axis.kind === 'range' || axis.kind === 'color') && (
+                <span className="isotone-axis-value">
+                  {axis.kind === 'range'
+                    ? formatRangeValue(axis, value(axis))
+                    : value(axis).toUpperCase()}
+                </span>
+              )}
+            </div>
+            {axis.kind === 'range' ? (
+              <input
+                type="range"
+                className="isotone-range"
+                aria-label={axis.label}
+                aria-valuetext={formatRangeValue(axis, value(axis))}
+                min={axis.min}
+                max={axis.max}
+                step={axis.step}
+                value={Number(value(axis))}
+                onChange={(e) => source.setSelection(axis.id, e.target.value)}
+              />
+            ) : axis.kind === 'color' ? (
+              <fieldset className="isotone-swatches" aria-label={axis.label}>
+                {axis.swatches.map((sw) => (
+                  <button
+                    key={sw.id}
+                    type="button"
+                    title={sw.label}
+                    aria-label={sw.label}
+                    aria-pressed={
+                      value(axis).toLowerCase() === sw.value.toLowerCase()
+                    }
+                    className="isotone-swatch"
+                    style={{ backgroundColor: sw.value }}
+                    onClick={() => source.setSelection(axis.id, sw.value)}
+                  />
+                ))}
+                <label className="isotone-picker" title="Custom colour">
+                  <input
+                    type="color"
+                    aria-label={`${axis.label}: custom colour`}
+                    value={value(axis)}
+                    onChange={(e) =>
+                      source.setSelection(axis.id, e.target.value)
+                    }
+                  />
+                </label>
+              </fieldset>
+            ) : (
+              <fieldset
+                aria-label={axis.label}
+                className={
+                  thumbnails
+                    ? 'isotone-grid'
+                    : 'isotone-segs'
+                }
+              >
+                {axis.options.map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    aria-label={o.label}
+                    aria-pressed={value(axis) === o.id}
+                    className={`${thumbnails ? 'isotone-thumb' : 'isotone-seg'}${value(axis) === o.id ? ' isotone-seg-on' : ''}`}
+                    onClick={() => source.setSelection(axis.id, o.id)}
+                  >
+                    {thumbnails && (
+                      <img src={o.image} alt="" />
+                    )}
+                    <span onPointerOver={showOverflowTitle}>{o.label}</span>
+                  </button>
+                ))}
+              </fieldset>
+            )}
+
+          </div>
+          );
+        })}
+      </div>
+      {menu && (
+        <div
+          className="isotone-axis-menu"
+          ref={node => { menuRef.current = node; node?.toggleAttribute('inert', !menuOpen); }}
+          role="dialog"
+          aria-label={`${menu.label} actions`}
+          aria-hidden={!menuOpen}
+          data-open={menuOpen}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              e.stopPropagation();
+              closeMenu();
+            }
+          }}
+        >
+          <div className="isotone-menu-title">
+            <strong>{menu.label}</strong>
+            <button
+              type="button"
+              className="isotone-icon"
+              aria-label="Close selector actions"
+              title="Close selector actions"
+              onClick={closeMenu}
+            >
+              <Icon name="close" />
+            </button>
+          </div>
+          <div className="isotone-menu-scroll">
+            {onFeedback && (
+              <button
+                type="button"
+                className="isotone-menu-action"
+                onClick={() => feedback(menu)}
+              >
+                <Icon name="message" />
+                Feedback on this selector
+              </button>
+            )}
+            {menu.kind !== 'range' && (
+              <div className="isotone-menu-options">
+                {menuOptions.map((option) => (
+                  <div className="isotone-option-row" key={option.id}>
+                    <span>
+                      {option.label}
+                      {option.isDefault && <small>Default</small>}
+                    </span>
+                    {onFeedback && (
+                      <button
+                        type="button"
+                        className="isotone-icon"
+                        aria-label={`Feedback on ${option.label}`}
+                        title="Give feedback"
+                        onClick={() => feedback(menu, option.id)}
+                      >
+                        <Icon name="message" />
+                      </button>
+                    )}
+                    {onManage && (
+                      <button
+                        type="button"
+                        className="isotone-icon"
+                        aria-label={`Remove ${option.label}`}
+                        disabled={option.isDefault || busy || requested({ axisId: menu.id, action: 'remove-option', optionId: option.id })}
+                        title={
+                          option.isDefault
+                            ? 'Default option'
+                            : 'Request option removal'
+                        }
+                        onClick={() =>
+                          void manage({
+                            axisId: menu.id,
+                            action: 'remove-option',
+                            optionId: option.id,
+                          })
+                        }
+                      >
+                        <Icon name="trash" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              className="isotone-menu-action"
+              onClick={() => {
+                source.setSelection(menu.id, axisDefault(menu));
+                closeMenu();
+              }}
+            >
+              <Icon name="reset" />
+              Reset to default
+            </button>
+            {onManage && (
+              <>
+                <button
+                  type="button"
+                  className="isotone-menu-action"
+                  disabled={busy || requested({ axisId: menu.id, action: 'keep-default' })}
+                  onClick={() =>
+                    void manage({ axisId: menu.id, action: 'keep-default' })
+                  }
+                >
+                  <Icon name="check" />
+                  {requested({ axisId: menu.id, action: 'keep-default' }) ? 'Default-only request saved' : 'Keep default only'}
+                </button>
+                <button
+                  type="button"
+                  className="isotone-menu-action isotone-danger"
+                  disabled={busy || requested({ axisId: menu.id, action: 'remove-axis' })}
+                  onClick={() =>
+                    void manage({ axisId: menu.id, action: 'remove-axis' })
+                  }
+                >
+                  <Icon name="trash" />
+                  {requested({ axisId: menu.id, action: 'remove-axis' }) ? 'Removal request saved' : 'Remove selector & options'}
+                </button>
+              </>
+            )}
+          </div>
+          {error && (
+            <div className="isotone-menu-footer">
+              <p className="isotone-danger" role="alert">{error}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SaveDefaults({
+  source,
+  onSaved,
+}: {
+  source: VariantsSource;
+  onSaved?: () => void;
+}) {
+  const [state, setState] = useState('');
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  async function save() {
+    if (state === 'Saving…') return;
+    setState('Saving…');
+    const selections: VariantSelections = { ...source.getSelections() };
+    try {
+      await source.saveDefaults?.(selections);
+      setState('Saved for the agent');
+      onSaved?.();
+    } catch {
+      setState('Could not save. Try again.');
+    }
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setState(''), 2500);
+  }
+  return (
+    <div className="isotone-save-row">
       <button
         type="button"
-        data-iso-iterate
-        className="iso-iter-save"
-        disabled={state === 'saving'}
+        className="isotone-save"
+        disabled={state === 'Saving…'}
         onClick={() => void save()}
       >
         Save as defaults
       </button>
-      <span
-        className={
-          state === 'error' ? 'iso-iter-save-state iso-iter-save-state-error' : 'iso-iter-save-state'
-        }
-        role="status"
-      >
-        {SAVE_COPY[state]}
+      <span className="isotone-save-state" role="status">
+        {state}
       </span>
     </div>
   );

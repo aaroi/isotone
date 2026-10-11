@@ -8,10 +8,17 @@ import {
   type VariantsSource,
   VARIANTS_ENDPOINT,
 } from '../core/variants';
-import { IterationPanel } from './IterationPanel';
+import { IterationPanel, type IterationShortcut } from './IterationPanel';
 import { ensurePanelStyles } from './styles';
+import type { IterationTheme } from './theme';
 
 export interface MountIterationOptions {
+  /** Auto follows the page at the dock. System follows the OS preference. */
+  theme?: IterationTheme;
+  /** Local adapter endpoint for automatic update notices. */
+  updateEndpoint?: string;
+  /** Defaults to Cmd/Ctrl+Shift+Period. false disables keyboard access. */
+  shortcut?: IterationShortcut | false;
   /** The notes endpoint the dev plugin serves (or a framework preset). Omit
    *  it and the panel has no Notes tab: a production host that only wants
    *  variants passes a source and nothing else. */
@@ -79,7 +86,7 @@ function withDocumentUntouched<T>(create: () => T): T {
  * deliberate — the panel reads `--font-sans` and `--foreground` from the host
  * so it matches the surrounding theme.
  *
- * The host element carries `data-iso-iterate`, and that is load-bearing:
+ * The host element carries `data-isotone`, and that is load-bearing:
  * `document.elementFromPoint` retargets to the host for anything inside a
  * shadow root, so the element picker's self-exclusion matches on it.
  *
@@ -112,7 +119,7 @@ export function mountIteration(opts: MountIterationOptions): () => void {
   }
 
   const host = document.createElement('div');
-  host.setAttribute('data-iso-iterate', 'root');
+  host.setAttribute('data-isotone', 'root');
   const attachHost = () => {
     if (!host.isConnected) document.body.appendChild(host);
     return host;
@@ -146,6 +153,9 @@ export function mountIteration(opts: MountIterationOptions): () => void {
         getPayload={opts.getPayload}
         variants={variants}
         defaultTab={opts.defaultTab}
+        shortcut={opts.shortcut}
+        updateEndpoint={opts.updateEndpoint}
+        theme={opts.theme}
       />,
     );
   }
