@@ -1,5 +1,8 @@
 # Instrument design
 
+Maintainer reference for changing Isotone’s own panel. Projects using Isotone
+should follow the integration and variants guides instead.
+
 Instrument is the single design for Isotone: a horizontal pill with feedback
 and variant panels above it. Light and dark mode share components, geometry,
 typography, interaction states and motion. Only their paint tokens differ.

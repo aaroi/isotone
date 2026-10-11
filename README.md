@@ -84,18 +84,9 @@ cache is retained. A quiet notice offers an exact upgrade command; you or your
 agent choose when to run it. Checks fail quietly offline and never send project
 content. Use `checkForUpdates: false` to opt out. [Update details](docs/updates.md).
 
-## Develop
+## For maintainers
 
-```sh
-pnpm install
-pnpm dev          # demo with temporary, fictional notes
-pnpm check        # types, lint, build, tests
-pnpm check:package # install and exercise the packed npm artifact
-```
-
-- [Design language](docs/design.md): materials, states, spacing, themes, and motion.
-- [Architecture and contributing](docs/development.md): boundaries and checks.
-- [Release checks](docs/releasing.md): packaging, privacy, and publication.
-- [Changelog](CHANGELOG.md)
+[Development and contributing](https://github.com/aaroi/isotone/blob/main/docs/development.md)
+covers the source, design language, checks, and releases.
 
 MIT.

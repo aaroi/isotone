@@ -35,7 +35,12 @@
   },
   "files": [
     "dist",
-    "docs",
+    "docs/assets/preview.jpg",
+    "docs/integrations.md",
+    "docs/migration.md",
+    "docs/updates.md",
+    "docs/variants.md",
+    "docs/third-party-notices.md",
     "AGENTS.md",
     "CHANGELOG.md"
   ],

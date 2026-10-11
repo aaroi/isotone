@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Put host-project setup and feedback handling first in the agent guide, and
+  move Isotone source and design rules into maintainer documentation.
+- Keep maintainer-only guides in the public repository rather than the npm
+  archive, while retaining consumer guides and the README screenshot.
+
 ## 0.4.2
 
 - Clarify that existing projects must move the whole local data directory,
