@@ -1,5 +1,22 @@
 # Development
 
+This guide is for changing Isotone itself. Agents using Isotone in another
+project should follow that project’s generated `AGENTS.md` section and the
+[integration guide](integrations.md).
+
+Read [the design language](design.md) before changing panel UI. Instrument is
+the accepted design; keep geometry and interaction rules shared across themes.
+Selection is raised, and Clean Highlight is the pill’s active state. Keep
+experimental alternatives separate until the reviewer chooses one.
+
+Run `pnpm check` for types, lint, build, and tests. For package or adapter
+changes, also run `pnpm check:package`. Inspect both themes, keyboard use,
+reduced motion, scrolling, and long content when changing UI.
+
+Do not publish, push, or expose a development server merely because an
+implementation task is underway. Follow [the release guide](releasing.md)
+when a release is requested.
+
 The runtime is TypeScript throughout. The expensive work is DOM traversal, disk
 access, and redundant updates; avoiding that work matters more here than adding
 a second language or runtime.
