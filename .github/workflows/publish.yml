@@ -136,11 +136,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.check.outputs.version }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
         run: |
-          for attempt in 1 2 3 4 5; do
-            npm view "isotone@$VERSION" version >/dev/null && break
-            if [ "$attempt" = 5 ]; then exit 1; fi
-            sleep 10
-          done
+          if [ "$PUBLISH_RESULT" = 'skipped' ]; then
+            npm view "isotone@$VERSION" version >/dev/null
+          fi
           gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && exit 0
           gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Isotone $VERSION" --generate-notes
