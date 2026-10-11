@@ -1,8 +1,16 @@
 # Releasing
 
-A push runs CI; it does not publish. Publishing a stable GitHub Release starts
-`.github/workflows/publish.yml`. Its tag must be exactly `v` followed by the
-version in `package.json`. Prereleases are skipped.
+Every change merged into `main` is published to npm. The `publish.yml`
+workflow prepares a version, checks the resulting main commit, publishes its
+tested archive through npm's trusted publisher, then creates the matching
+GitHub Release. No npm login or manual GitHub Release is needed.
+
+If a merged change already raises `package.json` above the published version,
+the workflow uses that version (for example, `1.0.0`). Otherwise it increments
+the published patch version and commits the version and changelog to `main`.
+The bot commit dispatches the same workflow at the new commit so npm provenance
+points to the exact source used for the archive. A failed build or publication
+stops the release; fix the issue and rerun `Publish main` on `main`.
 
 ## Before making the repository public
 
@@ -17,20 +25,22 @@ attribution and the intended repository/package links are deliberate; do not
 remove them as part of privacy cleanup. If history needs cleanup, agree on that
 separately before changing it or opening the repository.
 
-## Prepare a release
+## Before merging
 
-1. Update the package version and changelog. Preserve the lockfile's resolved
-   versions unless the release intentionally changes dependencies.
+1. Record notable changes under `Unreleased` in the changelog. Set an explicit
+   package version in the PR only for a major or minor release; routine changes
+   receive an automatic patch version. Preserve the lockfile's resolved versions
+   unless the release intentionally changes dependencies.
 2. Run `pnpm install --frozen-lockfile`, `pnpm check`, and `pnpm check:package`.
    Inspect both themes in the demo and confirm a production Vite build contains
    no panel. Manual integrations must also guard their endpoints in production.
 3. Inspect `npm pack --dry-run --json`. Expect the built entries, declarations,
    source maps, documentation and licenses. Check that the README preview image
    exists and uses fictional content.
-4. After approval to release, commit the reviewed changes and publish a GitHub
-   Release at `v<version>`. Do not reuse a version already published to npm.
+4. Merge the reviewed PR. Monitor `Publish main` until the npm version and
+   GitHub Release appear. A green PR check alone does not prove publication.
 
-The release check job rebuilds and tests the tagged checkout, then creates an
+The release check job builds and tests the prepared main commit, then creates an
 archive. A separate job downloads that archive and publishes it with provenance.
 Only that job has OIDC permission; it does not install dependencies or run project
 scripts. CI also checks the packed runtime on Node 20 and full development checks
