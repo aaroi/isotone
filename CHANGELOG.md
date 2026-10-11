@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
 - Rename the package and CLI to Isotone (`isotone`), with a previewable migration
   command for existing projects and automatic recovery of browser drafts and
