@@ -105,7 +105,7 @@ describe('offline recovery', () => {
     expect(store.hasUnsyncedNotes).toBe(true);
     expect((await createIterationStore().listNotes()).map(note => note.id)).toEqual(['rejected', 'old-long']);
     await store.saveNote('/', 'New successful note', null, null);
-    expect(store.lastSave).toBe('local');
+    expect(store.lastSave).toBe('server');
   });
 
   it('keeps new notes and newer edits made while a backlog request is in flight', async () => {

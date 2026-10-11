@@ -783,31 +783,6 @@ export function createOverlayVariantsSource(cfg: {
       emit();
     },
     getAxes: axes,
-    async manage(action) {
-      const next = await request(`${cfg.endpoint}/manage`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...action, route: cfg.getRoute() }),
-      }, async (res) => {
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({})) as { error?: string };
-          throw new Error(body.error ?? 'Could not update this selector.');
-        }
-        return await res.json() as OverlayVariantsList;
-      });
-      const previousKnobs = list?.knobs ?? [];
-      list = next;
-      const previous = previousKnobs.find(k => k.id === action.axisId);
-      if (action.action === 'remove-option' && previous?.kind === 'color') {
-        const removed = previous.swatches.find(s => s.id === action.optionId);
-        if (removed && knobValues[previous.id]?.toLowerCase() === removed.value.toLowerCase()) delete knobValues[previous.id];
-      }
-      if (knobRoot) applyKnobValues(previousKnobs, {}, knobRoot);
-      const remaining = new Set(list.knobs?.map((k) => k.id));
-      knobValues = Object.fromEntries(Object.entries(knobValues).filter(([id]) => remaining.has(id)));
-      persistKnobs();
-      applyKnobs();
-      emit();
-    },
     getSelections() {
       const active = new Set(intended ?? list?.active ?? []);
       const picks = Object.fromEntries(

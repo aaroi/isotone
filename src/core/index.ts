@@ -434,7 +434,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     }
     if (!result || typeof result.id !== 'string' || !result.id) return saveOffline();
     if (pendingBefore) acknowledge(pendingBefore);
-    lastSave = localAll().length ? 'local' : 'server';
+    lastSave = 'server';
     return result.id;
   }
 
