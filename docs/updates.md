@@ -1,9 +1,12 @@
 # Updates
 
 The project controls its installed version. Publishing a new release does not
-replace files in someone else's checkout. iso-iterate checks for a newer release
+replace files in someone else's checkout. Isotone checks for a newer release
 in the background and offers the exact command to review and run. It never
 installs packages, executes that command, or changes a manifest or lockfile.
+
+Moving from the previous package name is a separate [migration](migration.md).
+An update check does not replace a dependency with a differently named package.
 
 The Vite plugin and standalone server check the public npm `latest` tag at most
 once per day while their per-user temporary cache is retained. Checks take at
@@ -17,12 +20,12 @@ source files, installed-version telemetry or credentials.
 Check explicitly from the project directory:
 
 ```sh
-npx iso-iterate check-update
-npx iso-iterate check-update --json
+npx isotone check-update
+npx isotone check-update --json
 ```
 
 This compares the **running CLI version** with npm's `latest` tag. Use the
-project's local CLI; `npx iso-iterate@latest` runs a different version and does
+project's local CLI; `npx isotone@latest` runs a different version and does
 not update the dependency declared by the project. Explicit checks bypass the
 daily cache. Exit status is zero when the check succeeds, including when an
 update is available; failure to check returns one. JSON reports the status,
@@ -32,9 +35,9 @@ The suggested command pins the specific version you just checked, rather than a
 `latest` tag that could move before installation. For example:
 
 ```sh
-npm install -D --save-exact iso-iterate@0.4.0
-pnpm add -D --exact iso-iterate@0.4.0
-yarn add -D --exact iso-iterate@0.4.0
+npm install -D --save-exact isotone@0.4.0
+pnpm add -D --exact isotone@0.4.0
+yarn add -D --exact isotone@0.4.0
 ```
 
 These examples illustrate the syntax; use the version reported by your check.
@@ -68,11 +71,11 @@ iteration({ checkForUpdates: false });
 Standalone:
 
 ```sh
-npx iso-iterate serve --no-update-check
+npx isotone serve --no-update-check
 ```
 
 `serveIteration` also accepts `checkForUpdates: false`. Set
-`ISO_ITERATE_UPDATE_CHECK=0` to disable automatic checks for either adapter.
+`ISOTONE_UPDATE_CHECK=0` to disable automatic checks for either adapter.
 The explicit `check-update` command remains available. Manually mounted panels
 only show update information when given an `updateEndpoint` supplied by a local
 server; they do not contact npm from the browser.

@@ -47,7 +47,7 @@ afterEach(() => {
  *  write into; `git merge-file` needs none, but the fixture is the same
  *  either way. */
 function tempRepo(): { root: string; opts: VariantsStoreOptions } {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'iso-iterate-variants-')));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-variants-')));
   dirs.push(root);
   execFileSync('git', ['init', '-q', root]);
   execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: root });
@@ -320,7 +320,7 @@ describe('promote / drop', () => {
 
   it('refuses an id that is not a directory name, before anything is removed', () => {
     // `variant drop ..` resolved to the variants dir's parent, which is
-    // `.iso-iterate/`, and one more level up is the project root.
+    // `.isotone/`, and one more level up is the project root.
     const { opts } = tempRepo();
     createVariant(opts, { id: 'keep' });
     expect(() => dropVariant(opts, '..')).toThrow(/Invalid variant id/);
@@ -353,8 +353,8 @@ describe('active file', () => {
   it('still reads the one-id shape older versions wrote', () => {
     const { root, opts } = tempRepo();
     createVariant(opts, { id: 'v1' });
-    const file = join(root, '.iso-iterate', 'active.json');
-    mkdirSync(join(root, '.iso-iterate'), { recursive: true });
+    const file = join(root, '.isotone', 'active.json');
+    mkdirSync(join(root, '.isotone'), { recursive: true });
     writeFileSync(file, JSON.stringify({ active: 'v1' }));
     expect(readActive(opts)).toEqual(['v1']);
     writeFileSync(file, JSON.stringify({ active: null }));
@@ -629,11 +629,11 @@ describe('knobs file', () => {
     try {
       const opts = { root };
       expect(readKnobs(opts)).toEqual([]);
-      mkdirSync(join(root, '.iso-iterate'), { recursive: true });
-      writeFileSync(join(root, '.iso-iterate/knobs.json'), 'nope');
+      mkdirSync(join(root, '.isotone'), { recursive: true });
+      writeFileSync(join(root, '.isotone/knobs.json'), 'nope');
       expect(readKnobs(opts)).toEqual([]);
       writeFileSync(
-        join(root, '.iso-iterate/knobs.json'),
+        join(root, '.isotone/knobs.json'),
         JSON.stringify([
           { kind: 'range', id: 'fade', label: 'Fade', min: 0, max: 1, step: 0.1, defaultValue: 0 },
           { kind: 'range', id: 'Bad Id', label: 'x', min: 0, max: 1, step: 0.1, defaultValue: 0 },
@@ -661,7 +661,7 @@ describe('selector management', () => {
     expect(readActive(opts)).toEqual(['other']);
     expect(listVariants(opts).map(v => v.id).sort()).toEqual(['other', 'two']);
     expect(readFileSync(join(root, 'src/Button.tsx'), 'utf8')).toContain('line one');
-    expect(existsSync(join(root, '.iso-iterate/removed'))).toBe(true);
+    expect(existsSync(join(root, '.isotone/removed'))).toBe(true);
     expect(response.body).toMatchObject({ changedFiles: ['src/Button.tsx'] });
     expect(variantsResponse(opts, { method: 'POST', url: '/manage', body: { axisId: 'button', action: 'remove-option', optionId: 'default' } }).status).toBe(400);
   });
@@ -688,8 +688,8 @@ describe('scoped selector removal', () => {
   });
   it('removes a colour preset without removing the colour selector or its default', () => {
     const { root, opts } = tempRepo();
-    mkdirSync(join(root, '.iso-iterate'), { recursive: true });
-    writeFileSync(join(root, '.iso-iterate/knobs.json'), JSON.stringify([{ kind: 'color', id: 'accent', label: 'Accent', defaultColor: '#112233', swatches: [{ id: 'default', label: 'Default', value: '#112233' }, { id: 'other', label: 'Other', value: '#445566' }] }]));
+    mkdirSync(join(root, '.isotone'), { recursive: true });
+    writeFileSync(join(root, '.isotone/knobs.json'), JSON.stringify([{ kind: 'color', id: 'accent', label: 'Accent', defaultColor: '#112233', swatches: [{ id: 'default', label: 'Default', value: '#112233' }, { id: 'other', label: 'Other', value: '#445566' }] }]));
     const result = variantsResponse(opts, { method: 'POST', url: '/manage', body: { axisId: 'accent', action: 'remove-option', optionId: 'other' } });
     expect(result.status).toBe(200);
     expect(readKnobs(opts)[0]).toMatchObject({ id: 'accent', swatches: [{ id: 'default', label: 'Default', value: '#112233' }] });

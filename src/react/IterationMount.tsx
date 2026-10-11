@@ -86,7 +86,7 @@ function withDocumentUntouched<T>(create: () => T): T {
  * deliberate — the panel reads `--font-sans` and `--foreground` from the host
  * so it matches the surrounding theme.
  *
- * The host element carries `data-iso-iterate`, and that is load-bearing:
+ * The host element carries `data-isotone`, and that is load-bearing:
  * `document.elementFromPoint` retargets to the host for anything inside a
  * shadow root, so the element picker's self-exclusion matches on it.
  *
@@ -119,7 +119,7 @@ export function mountIteration(opts: MountIterationOptions): () => void {
   }
 
   const host = document.createElement('div');
-  host.setAttribute('data-iso-iterate', 'root');
+  host.setAttribute('data-isotone', 'root');
   const attachHost = () => {
     if (!host.isConnected) document.body.appendChild(host);
     return host;

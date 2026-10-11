@@ -121,7 +121,7 @@ function byText(text: string, selector = 'button'): HTMLElement | undefined {
 }
 
 function labels(): string[] {
-  return Array.from(container.querySelectorAll('.iso-iter-axis-label')).map(
+  return Array.from(container.querySelectorAll('.isotone-axis-label')).map(
     (el) => el.textContent ?? '',
   );
 }
@@ -146,7 +146,7 @@ describe('VariantsView', () => {
     await click(byText('Headline actions'));
     await act(async () => { await source.manage?.({ action: 'remove-axis', axisId: 'headline' }); });
     expect(container.querySelector('[role=dialog]')).toBeNull();
-    expect(container.querySelector('.iso-iter-vars-body')?.hasAttribute('inert')).toBe(false);
+    expect(container.querySelector('.isotone-vars-body')?.hasAttribute('inert')).toBe(false);
   });
 
   it('renders a large selector set without truncating the available choices', async () => {
@@ -156,8 +156,8 @@ describe('VariantsView', () => {
     }));
     const source = createVariantsSource({ axes });
     await render(createElement(VariantsView, { source }));
-    expect(container.querySelectorAll('.iso-iter-axis')).toHaveLength(500);
-    const last = container.querySelectorAll<HTMLButtonElement>('.iso-iter-seg')[999];
+    expect(container.querySelectorAll('.isotone-axis')).toHaveLength(500);
+    const last = container.querySelectorAll<HTMLButtonElement>('.isotone-seg')[999];
     await click(last);
     expect(source.getSelections()['axis-499']).toBe('b');
     expect(last.getAttribute('aria-pressed')).toBe('true');
@@ -168,9 +168,9 @@ describe('VariantsView', () => {
     await render(createElement(VariantsView, { source }));
 
     expect(labels()).toEqual(['Headline', 'Haze']);
-    expect(container.querySelector('.iso-iter-hairline')).toBeNull();
-    expect(container.querySelector('.iso-iter-range')).not.toBeNull();
-    expect(container.querySelector('.iso-iter-axis-value')?.textContent).toBe('30%');
+    expect(container.querySelector('.isotone-hairline')).toBeNull();
+    expect(container.querySelector('.isotone-range')).not.toBeNull();
+    expect(container.querySelector('.isotone-axis-value')?.textContent).toBe('30%');
     expect(byText('Revert')).toBeUndefined();
     expect(byText('Bold')?.getAttribute('title')).toBeNull();
   });
@@ -183,7 +183,7 @@ describe('VariantsView', () => {
     await click(byText('Bold'));
     expect(source.getSelections().headline).toBe('b');
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ headline: 'b' }));
-    expect(byText('Bold')?.classList.contains('iso-iter-seg-on')).toBe(true);
+    expect(byText('Bold')?.classList.contains('isotone-seg-on')).toBe(true);
     expect(labels()).toEqual(['Headline', 'Haze', 'Tagline']);
 
     await click(byText('Headline actions'));
@@ -197,7 +197,7 @@ describe('VariantsView', () => {
     const source = createVariantsSource({ axes: AXES });
     await render(createElement(VariantsView, { source }));
 
-    const range = container.querySelector<HTMLInputElement>('.iso-iter-range');
+    const range = container.querySelector<HTMLInputElement>('.isotone-range');
     if (!range) throw new Error('no range');
     // Through the prototype setter: React's value tracker wraps the instance
     // property, and a plain assignment would leave it thinking nothing changed.
@@ -207,7 +207,7 @@ describe('VariantsView', () => {
       range.dispatchEvent(new Event('input', { bubbles: true }));
     });
     expect(source.getSelections().haze).toBe('0.7');
-    expect(container.querySelector('.iso-iter-axis-value')?.textContent).toBe('70%');
+    expect(container.querySelector('.isotone-axis-value')?.textContent).toBe('70%');
   });
 
   it('Save as defaults hands the selections to the source and reports back', async () => {
@@ -219,7 +219,7 @@ describe('VariantsView', () => {
     await click(byText('Save as defaults'));
     expect(saveDefaults).toHaveBeenCalledTimes(1);
     expect(saveDefaults).toHaveBeenCalledWith({ headline: 'b', haze: '0.3', tagline: 'x' });
-    expect(container.querySelector('.iso-iter-save-state')?.textContent).toBe(
+    expect(container.querySelector('.isotone-save-state')?.textContent).toBe(
       'Saved for the agent',
     );
   });
@@ -246,7 +246,7 @@ describe('VariantsView', () => {
     await render(createElement(VariantsView, { source }));
     await click(byText('Bold'));
     await click(byText('Save as defaults'));
-    expect(container.querySelector('.iso-iter-save-state')?.textContent).toBe('Could not save. Try again.');
+    expect(container.querySelector('.isotone-save-state')?.textContent).toBe('Could not save. Try again.');
   });
 
   it('omits the save row when the source cannot save', async () => {
@@ -277,9 +277,9 @@ describe('VariantsView', () => {
       ],
     });
     await render(createElement(VariantsView, { source }));
-    expect(container.querySelectorAll('.iso-iter-grid .iso-iter-thumb')).toHaveLength(2);
-    expect(container.querySelector('.iso-iter-thumb[aria-pressed=true]')?.textContent).toBe('Left');
-    expect(container.querySelector('.iso-iter-segs')).toBeNull();
+    expect(container.querySelectorAll('.isotone-grid .isotone-thumb')).toHaveLength(2);
+    expect(container.querySelector('.isotone-thumb[aria-pressed=true]')?.textContent).toBe('Left');
+    expect(container.querySelector('.isotone-segs')).toBeNull();
   });
 
   it('renders colour swatches and the custom picker', async () => {
@@ -298,19 +298,19 @@ describe('VariantsView', () => {
       ],
     });
     await render(createElement(VariantsView, { source }));
-    expect(container.querySelectorAll('.iso-iter-swatch')).toHaveLength(2);
-    expect(container.querySelector('.iso-iter-swatch[aria-pressed=true]')?.getAttribute('aria-label')).toBe('Red');
-    expect(container.querySelector('.iso-iter-picker input[type=color]')).not.toBeNull();
-    expect(container.querySelector('.iso-iter-axis-value')?.textContent).toBe('#EA382E');
+    expect(container.querySelectorAll('.isotone-swatch')).toHaveLength(2);
+    expect(container.querySelector('.isotone-swatch[aria-pressed=true]')?.getAttribute('aria-label')).toBe('Red');
+    expect(container.querySelector('.isotone-picker input[type=color]')).not.toBeNull();
+    expect(container.querySelector('.isotone-axis-value')?.textContent).toBe('#EA382E');
 
     await click(byText('Blue'));
     expect(source.getSelections().accent).toBe('#3b82f6');
-    expect(container.querySelector('.iso-iter-swatch[aria-pressed=true]')?.getAttribute('aria-label')).toBe('Blue');
+    expect(container.querySelector('.isotone-swatch[aria-pressed=true]')?.getAttribute('aria-label')).toBe('Blue');
   });
 });
 
 describe('IterationPanel with variants', () => {
-  const fab = () => container.querySelector<HTMLButtonElement>('.iso-iter-fab');
+  const fab = () => container.querySelector<HTMLButtonElement>('.isotone-fab');
   const tabs = () => container.querySelectorAll('[role=tab]');
 
   it('without an endpoint it is variants only: no tabs, no composer', async () => {
@@ -319,8 +319,8 @@ describe('IterationPanel with variants', () => {
     await click(fab());
 
     expect(tabs()).toHaveLength(0);
-    expect(container.querySelector('.iso-iter-vars')).not.toBeNull();
-    expect(container.querySelector('.iso-iter-textarea')).toBeNull();
+    expect(container.querySelector('.isotone-vars')).not.toBeNull();
+    expect(container.querySelector('.isotone-textarea')).toBeNull();
     expect(container.querySelector('[role=dialog]')?.getAttribute('aria-label')).toBe(
       'Iteration variants',
     );
@@ -331,7 +331,7 @@ describe('IterationPanel with variants', () => {
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/api/iteration/notes' }, variants: source }));
     await click(fab());
     await click(byText('Variants'));
-    expect(container.querySelectorAll('.iso-iter-panel[data-open=true]')).toHaveLength(2);
+    expect(container.querySelectorAll('.isotone-panel[data-open=true]')).toHaveLength(2);
     expect(tabs()).toHaveLength(0);
     const textarea = container.querySelector('textarea');
     if (!textarea) throw new Error('missing composer');
@@ -340,7 +340,7 @@ describe('IterationPanel with variants', () => {
     await click(byText('Bold'));
     expect(textarea.value).toBe('Try another direction');
     await click(byText('Close variants'));
-    expect(container.querySelector('.iso-iter-notes-panel')?.getAttribute('data-open')).toBe('true');
+    expect(container.querySelector('.isotone-notes-panel')?.getAttribute('data-open')).toBe('true');
     expect(textarea.value).toBe('Try another direction');
   });
 
@@ -378,7 +378,7 @@ describe('IterationPanel with variants', () => {
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
     await act(async () => { setter?.call(field, feedback); field.dispatchEvent(new Event('input', { bubbles: true })); });
     expect(field.style.height).toBe('54px');
-    await click(container.querySelector('.iso-iter-note-hit'));
+    await click(container.querySelector('.isotone-note-hit'));
     expect(field.value).toBe(feedback);
     expect(field.style.height).toBe('52px');
   });
@@ -391,9 +391,9 @@ describe('IterationPanel with variants', () => {
     await render(createElement(IterationPanel, { route: '/', variants: createVariantsSource({ axes: AXES }), store: { endpoint: '/notes' } }));
     await click(fab());
     await click(byText('Variants'));
-    const labels = Array.from(container.querySelectorAll<HTMLElement>('.iso-iter-axis-label > span, .iso-iter-seg > span, .iso-iter-meta .iso-iter-chip > span'));
+    const labels = Array.from(container.querySelectorAll<HTMLElement>('.isotone-axis-label > span, .isotone-seg > span, .isotone-meta .isotone-chip > span'));
     expect(labels.length).toBeGreaterThan(3);
-    expect(container.querySelector('.iso-iter-meta .iso-iter-chip > span')).not.toBeNull();
+    expect(container.querySelector('.isotone-meta .isotone-chip > span')).not.toBeNull();
     for (const label of labels) {
       expect(getComputedStyle(label).pointerEvents).not.toBe('none');
       let availableWidth = 60;
@@ -420,8 +420,8 @@ describe('IterationPanel with variants', () => {
     );
     await click(fab());
     expect(tabs()).toHaveLength(0);
-    expect(container.querySelector('.iso-iter-textarea')).not.toBeNull();
-    expect(container.querySelector('.iso-iter-variants-panel')?.getAttribute('data-open')).toBe('false');
+    expect(container.querySelector('.isotone-textarea')).not.toBeNull();
+    expect(container.querySelector('.isotone-variants-panel')?.getAttribute('data-open')).toBe('false');
   });
 
   it('with neither notes nor axes it renders nothing', async () => {
@@ -448,7 +448,7 @@ describe('IterationPanel with variants', () => {
 
     await click(fab());
     expect(refresh).toHaveBeenCalledTimes(2);
-    expect(container.querySelectorAll('.iso-iter-rail-button')).toHaveLength(2);
+    expect(container.querySelectorAll('.isotone-rail-button')).toHaveLength(2);
 
     await click(fab());
     await click(fab());
@@ -500,15 +500,15 @@ describe('panel refinements for variants-only hosts', () => {
         defaultTab: 'variants',
       }),
     );
-    await click(container.querySelector('.iso-iter-fab'));
-    expect(container.querySelector('.iso-iter-vars')).not.toBeNull();
-    expect(container.querySelector('.iso-iter-notes-panel')?.hasAttribute('inert')).toBe(true);
+    await click(container.querySelector('.isotone-fab'));
+    expect(container.querySelector('.isotone-vars')).not.toBeNull();
+    expect(container.querySelector('.isotone-notes-panel')?.hasAttribute('inert')).toBe(true);
   });
 
   it('labels a variants-only launcher as Variants, with an icon', async () => {
     const source = createVariantsSource({ axes: AXES });
     await render(createElement(IterationPanel, { route: '/', store: {}, variants: source }));
-    const button = container.querySelector('.iso-iter-fab');
+    const button = container.querySelector('.isotone-fab');
     expect(button?.getAttribute('aria-label')).toBe('Variants');
     expect(button?.querySelector('svg')).not.toBeNull();
   });
@@ -519,24 +519,24 @@ describe('mountIteration variants options', () => {
 
   it('mounts nothing without an endpoint or a source', () => {
     const off = mountIteration({});
-    expect(document.querySelector('[data-iso-iterate="root"]')).toBeNull();
+    expect(document.querySelector('[data-isotone="root"]')).toBeNull();
     off();
     vi.runAllTimers();
   });
 
   it('mounts nothing for a variants-only source with no axes and no refresh', () => {
     const off = mountIteration({ variants: createVariantsSource({ axes: [] }) });
-    expect(document.querySelector('[data-iso-iterate="root"]')).toBeNull();
+    expect(document.querySelector('[data-isotone="root"]')).toBeNull();
     off();
     vi.runAllTimers();
   });
 
   it('mounts with only a variants source', () => {
     const off = mountIteration({ variants: createVariantsSource({ axes: AXES }) });
-    expect(document.querySelector('[data-iso-iterate="root"]')).not.toBeNull();
+    expect(document.querySelector('[data-isotone="root"]')).not.toBeNull();
     off();
     vi.runAllTimers();
-    expect(document.querySelector('[data-iso-iterate="root"]')).toBeNull();
+    expect(document.querySelector('[data-isotone="root"]')).toBeNull();
   });
 
   it("'overlay' lists from the variants endpoint on open", async () => {
@@ -571,24 +571,24 @@ describe('mountIteration variants options', () => {
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
     });
-    const shadow = document.querySelector('[data-iso-iterate="root"]')?.shadowRoot;
+    const shadow = document.querySelector('[data-isotone="root"]')?.shadowRoot;
     if (!shadow) throw new Error('no shadow root');
     await act(async () => {
-      shadow.querySelector('.iso-iter-fab')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      shadow.querySelector('.isotone-fab')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     // Let the listing resolve and the panel re-render with the new axis.
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
     });
     expect(fetchMock.mock.calls.map((c) => String(c[0]))).toContain('/api/iteration/variants');
-    expect(shadow.querySelectorAll('.iso-iter-rail-button')).toHaveLength(2);
+    expect(shadow.querySelectorAll('.isotone-rail-button')).toHaveLength(2);
 
     // An untouched overlay has nothing to promote; the save action stays hidden.
     await act(async () => {
-      shadow.querySelector('.iso-iter-rail-button[aria-label=Variants]')
+      shadow.querySelector('.isotone-rail-button[aria-label=Variants]')
         ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(shadow.querySelector('.iso-iter-save')).toBeNull();
+    expect(shadow.querySelector('.isotone-save')).toBeNull();
 
     off();
     await act(async () => {
@@ -672,7 +672,7 @@ describe('mountIteration variants options', () => {
         await new Promise((r) => setTimeout(r, 0));
       });
     await tick();
-    const shadow = document.querySelector('[data-iso-iterate="root"]')?.shadowRoot;
+    const shadow = document.querySelector('[data-isotone="root"]')?.shadowRoot;
     if (!shadow) throw new Error('no shadow root');
     const clickIn = (el: Element | null | undefined) =>
       act(async () => {
@@ -682,13 +682,13 @@ describe('mountIteration variants options', () => {
     const button = (text: string) =>
       Array.from(shadow.querySelectorAll('button')).find((b) => b.textContent?.trim() === text);
 
-    await clickIn(shadow.querySelector('.iso-iter-fab'));
+    await clickIn(shadow.querySelector('.isotone-fab'));
     await tick();
-    await clickIn(shadow.querySelector('.iso-iter-rail-button[aria-label=Variants]'));
+    await clickIn(shadow.querySelector('.isotone-rail-button[aria-label=Variants]'));
     const axisLabels = () =>
-      Array.from(shadow.querySelectorAll('.iso-iter-axis-label')).map((el) => el.textContent);
+      Array.from(shadow.querySelectorAll('.isotone-axis-label')).map((el) => el.textContent);
     expect(axisLabels()).toEqual(['table.tsx', 'Settings']);
-    expect(button('Dense rows')?.classList.contains('iso-iter-seg-on')).toBe(true);
+    expect(button('Dense rows')?.classList.contains('isotone-seg-on')).toBe(true);
     expect(button('Hero')).toBeUndefined();
 
     // Picking in one selector keeps the other's pick and posts both.
@@ -699,8 +699,8 @@ describe('mountIteration variants options', () => {
         .map((c) => JSON.parse(String(c[1]?.body)));
     expect(posts().at(-1)).toEqual({ active: ['table-dense', 'settings-tabs'] });
     await tick();
-    expect(button('Tabs')?.classList.contains('iso-iter-seg-on')).toBe(true);
-    expect(button('Dense rows')?.classList.contains('iso-iter-seg-on')).toBe(true);
+    expect(button('Tabs')?.classList.contains('isotone-seg-on')).toBe(true);
+    expect(button('Dense rows')?.classList.contains('isotone-seg-on')).toBe(true);
 
     // A sibling replaces only its own group's member.
     await clickIn(button('Striped'));
@@ -735,10 +735,10 @@ describe('review dock interactions', () => {
   it.each(['mouse', 'pen'])('expands on %s hover, stays open across the pill and collapses on exit', async pointerType => {
     vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, variants: createVariantsSource({ axes: AXES }) }));
-    const dock = container.querySelector('.iso-iter-root');
-    const launcher = container.querySelector('.iso-iter-fab');
-    const track = container.querySelector('.iso-iter-rail-track');
-    const feedback = container.querySelector('.iso-iter-rail-button[aria-label="Feedback"]');
+    const dock = container.querySelector('.isotone-root');
+    const launcher = container.querySelector('.isotone-fab');
+    const track = container.querySelector('.isotone-rail-track');
+    const feedback = container.querySelector('.isotone-rail-button[aria-label="Feedback"]');
     async function pointer(type: string, target: Element | null, relatedTarget: EventTarget | null, device = pointerType) {
       const event = new MouseEvent(type, { bubbles: true, relatedTarget });
       Object.defineProperty(event, 'pointerType', { value: device });
@@ -766,8 +766,8 @@ describe('review dock interactions', () => {
 
   it('replaces the launcher with two tools and collapses after both surfaces close', async () => {
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, variants: createVariantsSource({ axes: AXES }), defaultTab: 'variants' }));
-    const rail = container.querySelector('.iso-iter-rail');
-    const launcher = container.querySelector('.iso-iter-fab');
+    const rail = container.querySelector('.isotone-rail');
+    const launcher = container.querySelector('.isotone-fab');
     expect(rail?.getAttribute('data-expanded')).toBe('false');
     await click(launcher); await click(byText('Feedback'));
     expect(launcher?.getAttribute('aria-hidden')).toBe('true');
@@ -794,13 +794,13 @@ describe('review dock interactions', () => {
     const manage = vi.spyOn(source, 'manage');
     const props = { route: '/', store: { endpoint: '/notes' }, variants: source, defaultTab: 'variants' as const };
     await render(createElement(IterationPanel, props));
-    await click(container.querySelector('.iso-iter-fab'));
+    await click(container.querySelector('.isotone-fab'));
     await click(byText('Headline actions')); await click(byText('Remove Bold'));
     expect(saved[0].variantAction).toEqual({ axisId: 'headline', action: 'remove-option', optionId: 'b' });
     expect(manage).not.toHaveBeenCalled();
     expect(labels()).toEqual(['Headline', 'Haze', 'Tagline']);
     expect(byText('Cancel removal')).toBeDefined();
-    await click(container.querySelector('.iso-iter-note-hit'));
+    await click(container.querySelector('.isotone-note-hit'));
     expect(container.querySelector('textarea')?.value).toContain('Remove “Bold”');
     await typeFeedback('Remove this option after checking the alternative layout.');
     await click(byText('Save edit'));
@@ -813,7 +813,7 @@ describe('review dock interactions', () => {
     // Persisted requests never hide or mutate the source controls, even on remount.
     await act(async () => root?.unmount()); root = null;
     await render(createElement(IterationPanel, props));
-    await click(container.querySelector('.iso-iter-fab'));
+    await click(container.querySelector('.isotone-fab'));
     expect(labels()).toEqual(['Headline', 'Haze', 'Tagline']);
     await click(byText('Feedback'));
     await click(byText('Cancel removal'));
@@ -831,12 +831,12 @@ describe('review dock interactions', () => {
   it.each(['dark', 'light'] as const)('focuses the full %s composer without hijacking its controls', async (theme) => {
     document.body.style.backgroundColor = theme === 'dark' ? 'black' : 'white';
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
-    await click(container.querySelector('.iso-iter-fab'));
+    await click(container.querySelector('.isotone-fab'));
     await act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); });
     const field = container.querySelector('textarea');
-    expect(container.querySelector('.iso-iter-root')?.getAttribute('data-theme')).toBe(theme);
+    expect(container.querySelector('.isotone-root')?.getAttribute('data-theme')).toBe(theme);
     if (!field) throw new Error('no composer');
-    for (const selector of ['.iso-iter-input', '.iso-iter-toolbar']) {
+    for (const selector of ['.isotone-input', '.isotone-toolbar']) {
       await act(async () => field.blur());
       await click(container.querySelector(selector));
       expect(document.activeElement).toBe(field);
@@ -858,54 +858,54 @@ describe('review dock interactions', () => {
     const source = createVariantsSource({ axes: AXES, saveDefaults: async () => {} });
     const props = { route: '/', store: { endpoint: '/notes' }, variants: source };
     await render(createElement(IterationPanel, props));
-    await click(container.querySelector('.iso-iter-fab'));
+    await click(container.querySelector('.isotone-fab'));
     await click(byText('Variants'));
     await click(byText('Bold'));
     await typeFeedback('Keep this draft while changing the theme');
     const input = container.querySelector('textarea');
-    const variants = container.querySelector('.iso-iter-variants-panel');
-    const rail = container.querySelector('.iso-iter-rail-track');
+    const variants = container.querySelector('.isotone-variants-panel');
+    const rail = container.querySelector('.isotone-rail-track');
     for (const theme of ['light', 'dark'] as const) {
       await act(async () => {
         document.body.style.backgroundColor = theme === 'dark' ? 'black' : 'white';
         root?.render(createElement(IterationPanel, props));
         await new Promise(resolve => requestAnimationFrame(resolve));
       });
-      expect(container.querySelector('.iso-iter-root')?.getAttribute('data-theme')).toBe(theme);
-      expect(container.querySelectorAll('.iso-iter-panel[data-open=true]')).toHaveLength(2);
+      expect(container.querySelector('.isotone-root')?.getAttribute('data-theme')).toBe(theme);
+      expect(container.querySelectorAll('.isotone-panel[data-open=true]')).toHaveLength(2);
       expect(container.querySelector('textarea')).toBe(input);
       expect(input?.value).toBe('Keep this draft while changing the theme');
-      expect(container.querySelector('.iso-iter-variants-panel')).toBe(variants);
-      expect(container.querySelector('.iso-iter-rail-track')).toBe(rail);
+      expect(container.querySelector('.isotone-variants-panel')).toBe(variants);
+      expect(container.querySelector('.isotone-rail-track')).toBe(rail);
       expect(source.getSelections().headline).toBe('b');
       expect(byText('Save as defaults')).toBeDefined();
       await click(byText('Headline actions'));
-      expect(container.querySelector('.iso-iter-axis-menu')?.getAttribute('data-open')).toBe('true');
+      expect(container.querySelector('.isotone-axis-menu')?.getAttribute('data-open')).toBe('true');
       expect(byText('Remove Plain')?.hasAttribute('disabled')).toBe(true);
       // Escape dismisses only the action sheet, preserving both surfaces and draft.
-      await act(async () => container.querySelector('.iso-iter-axis-menu button')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
-      expect(container.querySelector('.iso-iter-axis-menu')?.getAttribute('data-open')).not.toBe('true');
-      expect(container.querySelectorAll('.iso-iter-panel[data-open=true]')).toHaveLength(2);
+      await act(async () => container.querySelector('.isotone-axis-menu button')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+      expect(container.querySelector('.isotone-axis-menu')?.getAttribute('data-open')).not.toBe('true');
+      expect(container.querySelectorAll('.isotone-panel[data-open=true]')).toHaveLength(2);
     }
   });
   it('captures the shortcut inside an input, preserves variants, and disables keyboard motion', async () => {
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, variants: createVariantsSource({ axes: AXES }), defaultTab: 'variants' }));
-    await click(container.querySelector('.iso-iter-fab'));
+    await click(container.querySelector('.isotone-fab'));
     const input = document.createElement('input'); document.body.append(input); input.focus();
     await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { code: 'Period', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true })); await new Promise(r => requestAnimationFrame(r)); });
-    expect(container.querySelectorAll('.iso-iter-panel[data-open=true]')).toHaveLength(2);
+    expect(container.querySelectorAll('.isotone-panel[data-open=true]')).toHaveLength(2);
     expect(document.activeElement).toBe(container.querySelector('textarea'));
-    expect(container.querySelector('.iso-iter-root')?.getAttribute('data-instant')).toBe('true');
+    expect(container.querySelector('.isotone-root')?.getAttribute('data-instant')).toBe('true');
     input.remove();
   });
   it('attaches an option reference and keeps variants visible while writing', async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: 'saved' }) }));
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, variants: createVariantsSource({ axes: AXES }), defaultTab: 'variants' }));
-    await click(container.querySelector('.iso-iter-fab'));
+    await click(container.querySelector('.isotone-fab'));
     await click(byText('Headline actions'));
     await click(byText('Feedback on Bold'));
-    expect(container.querySelectorAll('.iso-iter-panel[data-open=true]')).toHaveLength(2);
-    expect(container.querySelector('.iso-iter-chip')?.textContent).toContain('Headline / Bold');
+    expect(container.querySelectorAll('.isotone-panel[data-open=true]')).toHaveLength(2);
+    expect(container.querySelector('.isotone-chip')?.textContent).toContain('Headline / Bold');
     await typeFeedback('A little less heavy');
     vi.stubGlobal('fetch', fetchMock);
     await click(byText('Send note'));
@@ -914,7 +914,7 @@ describe('review dock interactions', () => {
   });
   it('pins several elements in one session, toggles a duplicate off, and saves every target', async () => {
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
-    await click(container.querySelector('.iso-iter-fab'));
+    await click(container.querySelector('.isotone-fab'));
     const a = document.createElement('button'); a.id = 'one'; a.textContent = 'One';
     const b = document.createElement('button'); b.id = 'two'; b.textContent = 'Two';
     document.body.append(a, b);
@@ -922,8 +922,8 @@ describe('review dock interactions', () => {
     Object.defineProperty(document, 'elementFromPoint', { value: hit, configurable: true });
     await click(byText('Select elements'));
     await click(a); hit.mockReturnValue(b); await click(b);
-    expect(container.querySelectorAll('.iso-iter-chip')).toHaveLength(2);
-    await click(b); expect(container.querySelectorAll('.iso-iter-chip')).toHaveLength(1);
+    expect(container.querySelectorAll('.isotone-chip')).toHaveLength(2);
+    await click(b); expect(container.querySelectorAll('.isotone-chip')).toHaveLength(1);
     await click(b);
     await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
     await typeFeedback('Align these two');
@@ -958,7 +958,7 @@ describe('review dock interactions', () => {
     const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => ({ ok: true, json: async () => init?.method === 'POST' ? { id: 'old' } : [{ id: 'old', route: '/other', feedback: 'Old note', element: null, done: false, createdAt: new Date().toISOString(), payload: { old: true } }] }));
     vi.stubGlobal('fetch', fetchMock);
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, getPayload: () => ({ new: true }) }));
-    await click(container.querySelector('.iso-iter-fab')); await click(container.querySelector('.iso-iter-note-hit'));
+    await click(container.querySelector('.isotone-fab')); await click(container.querySelector('.isotone-note-hit'));
     await typeFeedback('Updated note'); await click(byText('Save edit'));
     const call = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST');
     const body = JSON.parse(String(call?.[1]?.body));
@@ -969,7 +969,7 @@ describe('review dock interactions', () => {
 
 it('pins a focused host control with Space without activating it', async () => {
   await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
-  await click(container.querySelector('.iso-iter-fab'));
+  await click(container.querySelector('.isotone-fab'));
   await click(byText('Select elements'));
   const target = document.createElement('button');
   target.id = 'keyboard-target'; target.textContent = 'Project actions';
@@ -978,9 +978,9 @@ it('pins a focused host control with Space without activating it', async () => {
   const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
   await act(async () => { target.dispatchEvent(event); });
   expect(event.defaultPrevented).toBe(true);
-  expect(container.querySelector('.iso-iter-chip')?.textContent).toContain('Project actions');
+  expect(container.querySelector('.isotone-chip')?.textContent).toContain('Project actions');
   await act(async () => { target.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', repeat: true, bubbles: true })); });
-  expect(container.querySelectorAll('.iso-iter-chip')).toHaveLength(1);
+  expect(container.querySelectorAll('.isotone-chip')).toHaveLength(1);
   await act(async () => { target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
   await act(async () => { await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); });
   expect(container.querySelector('textarea')).toBe(document.activeElement);
@@ -990,7 +990,7 @@ it('pins a focused host control with Space without activating it', async () => {
 
 it('fades the composer top only after its text has scrolled', async () => {
   await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
-  await click(container.querySelector('.iso-iter-fab'));
+  await click(container.querySelector('.isotone-fab'));
   const field = container.querySelector('textarea');
   if (!field) throw new Error('Missing composer');
   expect(field.dataset.scrolled).toBe('false');

@@ -1,6 +1,6 @@
 # Instrument design
 
-Instrument is the single design for iso-iterate: a horizontal pill with feedback
+Instrument is the single design for Isotone: a horizontal pill with feedback
 and variant panels above it. Light and dark mode share components, geometry,
 typography, interaction states and motion. Only their paint tokens differ.
 

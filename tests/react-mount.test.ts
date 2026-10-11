@@ -76,7 +76,7 @@ describe('mountIteration next to a document-level host root', () => {
       await vi.advanceTimersByTimeAsync(0);
     });
 
-    const host = document.querySelector('[data-iso-iterate="root"]');
+    const host = document.querySelector('[data-isotone="root"]');
     expect(host).not.toBeNull();
     expect(host?.shadowRoot).not.toBeNull();
 
@@ -89,7 +89,7 @@ describe('mountIteration next to a document-level host root', () => {
     // The observer re-appends the SAME host; nothing was re-mounted, so the
     // shadow root survives instead of a duplicate host appearing.
     expect(document.body.contains(host)).toBe(true);
-    expect(document.querySelectorAll('[data-iso-iterate="root"]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-isotone="root"]')).toHaveLength(1);
     expect(host?.shadowRoot).not.toBeNull();
 
     dispose(off);

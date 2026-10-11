@@ -1,6 +1,6 @@
 /**
  * The standalone server, running for real. This is the plug-and-play path — a
- * host with no build integration gets the panel from `/iso-iterate.js` and
+ * host with no build integration gets the panel from `/isotone.js` and
  * posts notes cross-origin — so the parts worth pinning are the bundle
  * actually carrying its mount call and the CORS rule that keeps a random
  * public page from writing into someone's repo.
@@ -44,7 +44,7 @@ describe('the browser bundle', () => {
     expect(js.length).toBeGreaterThan(100_000);
     expect(/^\s*import\s/m.test(js), 'no bare imports').toBe(false);
     // The config comes from the server that owns the file, not the bundle.
-    expect(js.includes('window.__isoIterate'), 'exposes the global').toBe(true);
+    expect(js.includes('window.__isotone'), 'exposes the global').toBe(true);
     expect(
       js.includes(`${served.url}${NOTES_ENDPOINT}`),
       'bakes in the BOUND endpoint',

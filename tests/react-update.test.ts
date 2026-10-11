@@ -7,7 +7,7 @@ import { UpdateNotice } from '../src/react/UpdateNotice';
 
 const available: UpdateInfo = {
   status: 'available', currentVersion: '0.3.4', latestVersion: '0.4.0',
-  upgrade: { manager: 'pnpm', command: 'pnpm add -D iso-iterate@0.4.0', cwd: '/workspace/design app' },
+  upgrade: { manager: 'pnpm', command: 'pnpm add -D isotone@0.4.0', cwd: '/workspace/design app' },
 };
 let host: HTMLDivElement;
 let root: Root;
@@ -110,12 +110,12 @@ describe('upgrade instructions', () => {
   it('shows exact versions, directory and command from the local adapter', async () => {
     await render();
     expect(host.querySelector('[role="dialog"]')).toBeNull();
-    await click('.iso-iter-update-trigger');
+    await click('.isotone-update-trigger');
     const dialog = host.querySelector('[role="dialog"]');
     const command = host.querySelector<HTMLInputElement>('[aria-label="Upgrade command"]');
     expect(dialog?.textContent).toContain('0.3.4 → 0.4.0');
-    expect(host.querySelector('.iso-iter-update-path')?.textContent).toBe('/workspace/design app');
-    expect(command?.value).toBe('pnpm add -D iso-iterate@0.4.0');
+    expect(host.querySelector('.isotone-update-path')?.textContent).toBe('/workspace/design app');
+    expect(command?.value).toBe('pnpm add -D isotone@0.4.0');
     expect(command?.readOnly).toBe(true);
     expect(document.activeElement).toBe(command);
     expect(command?.selectionStart).toBe(0);
@@ -127,21 +127,21 @@ describe('upgrade instructions', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText } });
     await render();
-    await click('.iso-iter-update-trigger');
-    await click('.iso-iter-update-actions button');
-    expect(writeText).toHaveBeenCalledExactlyOnceWith('pnpm add -D iso-iterate@0.4.0');
+    await click('.isotone-update-trigger');
+    await click('.isotone-update-actions button');
+    expect(writeText).toHaveBeenCalledExactlyOnceWith('pnpm add -D isotone@0.4.0');
     expect(host.querySelector('[role="status"]')?.textContent).toBe('Ready to paste in your terminal');
-    expect(host.querySelector('.iso-iter-update-actions button')?.textContent).toBe('Copied');
+    expect(host.querySelector('.isotone-update-actions button')?.textContent).toBe('Copied');
     await click('[aria-label="Close update instructions"]');
-    await click('.iso-iter-update-trigger');
-    expect(host.querySelector('.iso-iter-update-actions button')?.textContent).toBe('Copy command');
+    await click('.isotone-update-trigger');
+    expect(host.querySelector('.isotone-update-actions button')?.textContent).toBe('Copy command');
   });
 
   it('selects the command for manual copying when clipboard permission is denied', async () => {
     vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('Denied')) } });
     await render();
-    await click('.iso-iter-update-trigger');
-    await click('.iso-iter-update-actions button');
+    await click('.isotone-update-trigger');
+    await click('.isotone-update-actions button');
     const command = host.querySelector<HTMLInputElement>('[aria-label="Upgrade command"]');
     expect(document.activeElement).toBe(command);
     expect(command?.selectionStart).toBe(0);
@@ -152,19 +152,19 @@ describe('upgrade instructions', () => {
   it('closes on Escape and returns focus without propagating to the host app', async () => {
     const hostKey = vi.fn();
     await act(async () => root.render(h('div', { onKeyDown: hostKey }, h(UpdateNotice, { endpoint: '/local-update', active: true }))));
-    await click('.iso-iter-update-trigger');
+    await click('.isotone-update-trigger');
     const command = host.querySelector<HTMLInputElement>('[aria-label="Upgrade command"]');
     await act(async () => command?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
     expect(host.querySelector('[role="dialog"]')).toBeNull();
-    expect(document.activeElement).toBe(host.querySelector('.iso-iter-update-trigger'));
+    expect(document.activeElement).toBe(host.querySelector('.isotone-update-trigger'));
     expect(hostKey).not.toHaveBeenCalled();
   });
 
   it('shows a useful explanation when the package manager could not be identified', async () => {
-    vi.mocked(fetch).mockResolvedValue(Response.json({ ...available, upgrade: null, message: 'Open the app directory and run iso-iterate check-update.' }));
+    vi.mocked(fetch).mockResolvedValue(Response.json({ ...available, upgrade: null, message: 'Open the app directory and run isotone check-update.' }));
     await render();
-    await click('.iso-iter-update-trigger');
-    expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Open the app directory and run iso-iterate check-update.');
+    await click('.isotone-update-trigger');
+    expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Open the app directory and run isotone check-update.');
     expect(host.querySelector('[aria-label="Upgrade command"]')).toBeNull();
   });
 });

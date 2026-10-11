@@ -19,7 +19,7 @@ function themeViolations(css: string): string[] {
         const selector = String(rule.selectorText);
         if (/data-appearance/.test(selector)) violations.push('retired appearance override');
         if (!/data-(appearance|theme)/.test(selector)) continue;
-        if (!/^\.iso-iter-root\[data-theme=['"][\w-]+['"]\]$/.test(selector)) {
+        if (!/^\.isotone-root\[data-theme=['"][\w-]+['"]\]$/.test(selector)) {
           violations.push('separate component or state rule');
         }
         const declaration = (rule as CSSStyleRule).style;
@@ -41,10 +41,10 @@ describe('theme boundary', () => {
 
   it('catches direct, token-based and responsive layout drift and separate control states', () => {
     expect(themeViolations(`
-      .iso-iter-root[data-appearance='retired'] { padding: 8px; --iso-rail-gap: 12px; }
-      @media (max-width: 600px) { .iso-iter-root[data-theme='light'] { width: 90px; --iso-swatch-radius: 50%; } }
-      .iso-iter-root[data-appearance='retired'] button:hover { background: red; }
-      .iso-iter-root[data-theme='light'] .iso-iter-seg[aria-pressed='true'] { box-shadow: none; }
+      .isotone-root[data-appearance='retired'] { padding: 8px; --iso-rail-gap: 12px; }
+      @media (max-width: 600px) { .isotone-root[data-theme='light'] { width: 90px; --iso-swatch-radius: 50%; } }
+      .isotone-root[data-appearance='retired'] button:hover { background: red; }
+      .isotone-root[data-theme='light'] .isotone-seg[aria-pressed='true'] { box-shadow: none; }
     `)).toEqual(expect.arrayContaining(['padding', '--iso-rail-gap', '--iso-swatch-radius', 'width', 'background', 'box-shadow', 'separate component or state rule', 'retired appearance override']));
   });
 

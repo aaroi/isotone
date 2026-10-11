@@ -6,7 +6,7 @@ import { runCli } from './run';
 export { runCli } from './run';
 export type { CliIO } from './run';
 
-// Importing iso-iterate/cli must not execute a command or terminate the host.
+// Importing isotone/cli must not execute a command or terminate the host.
 let isMain = false;
 try {
   isMain = !!process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);

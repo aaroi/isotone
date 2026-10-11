@@ -51,7 +51,7 @@ export interface IterationViteOptions {
   /** localStorage namespace override. */
   key?: string;
   /**
-   * Overlay variants: alternative source files under `.iso-iterate/variants/
+   * Overlay variants: alternative source files under `.isotone/variants/
    * <id>/<repo-relative path>` that `load` swaps in for the real ones while
    * the variant is active. On by default; `false` turns the whole feature
    * off (no endpoint, no watcher, no tab in the panel).
@@ -66,7 +66,7 @@ export interface IterationViteOptions {
          *  or absolute. */
         root?: string;
         /** Where the variants live, relative to `root`. Default
-         *  `.iso-iterate/variants`. */
+         *  `.isotone/variants`. */
         dir?: string;
         /** Keep the variants dir out of git via `.git/info/exclude`. Off by
          *  default: the files are the reviewable artefact and commit with
@@ -78,7 +78,7 @@ export interface IterationViteOptions {
 /**
  * What `iteration()` hands back.
  *
- * Only `name` is public, and that is deliberate. iso-iterate is consumed as a
+ * Only `name` is public, and that is deliberate. isotone is consumed as a
  * linked (`file:` / workspace) dependency, so TypeScript resolves the `vite`
  * import from *this* package's `node_modules`, not the consumer's. Two vite
  * type instances are nominally incompatible — rollup's plugin container
@@ -103,7 +103,7 @@ export interface IterationPlugin {
 
 const DEFAULT_FILE = '.iteration-feedback.json';
 const INJECTED = new WeakSet<ServerResponse>();
-const BUNDLE_PATH = '/@iso-iterate/panel.js';
+const BUNDLE_PATH = '/@isotone/panel.js';
 const MANIFEST = 'variant.json';
 
 /**
@@ -160,8 +160,8 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
   const swapping = new Set<string>();
 
   const currentActive = (): string[] => {
-    // A build takes its set from the environment: `ISO_VARIANT=a,b`.
-    if (isBuild) return parseVariantList(process.env.ISO_VARIANT);
+    // A build takes its set from the environment: `ISOTONE_VARIANT=a,b`.
+    if (isBuild) return parseVariantList(process.env.ISOTONE_VARIANT);
     if (activeIds === undefined) activeIds = readActive(vopts);
     return activeIds;
   };
@@ -255,13 +255,13 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
       server.httpServer?.once('listening', () => {
         const shown = relative(server.config.root, file) || file;
         server.config.logger.info(
-          `  iso-iterate  notes → ${shown}  (${NOTES_ENDPOINT})`,
+          `  isotone  notes → ${shown}  (${NOTES_ENDPOINT})`,
         );
         if (variantsOptions && existsSync(vDir)) {
           const shownDir = relative(server.config.root, vDir) || vDir;
           const n = listVariants(vopts).length;
           server.config.logger.info(
-            `  iso-iterate  variants → ${shownDir}  (${n} variant${n === 1 ? '' : 's'})`,
+            `  isotone  variants → ${shownDir}  (${n} variant${n === 1 ? '' : 's'})`,
           );
         }
       });
@@ -430,7 +430,7 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
   return plugin;
 }
 
-/** `ISO_VARIANT=a, b` → `['a', 'b']`; unset or blank → `[]`. */
+/** `ISOTONE_VARIANT=a, b` → `['a', 'b']`; unset or blank → `[]`. */
 function parseVariantList(raw: string | undefined): string[] {
   return (raw ?? '')
     .split(',')
@@ -473,8 +473,8 @@ function mountModuleSource(rule: RouteGateOptions, key: string, variants: boolea
   const config = JSON.stringify({ endpoint: NOTES_ENDPOINT, updateEndpoint: UPDATE_ENDPOINT, key, shortcut, theme, rule, ...(variants ? { variants: 'overlay' } : {}) }).replace(/</g, '\\u003c');
   return `
     const start = () => {
-      const mount = () => window.__isoIterate.mount(${config});
-      if (window.__isoIterate) return mount();
+      const mount = () => window.__isotone.mount(${config});
+      if (window.__isotone) return mount();
       const script = document.createElement('script');
       script.src = ${JSON.stringify(BUNDLE_PATH)};
       script.onload = mount;
@@ -555,7 +555,7 @@ function injectHtmlResponse(res: ServerResponse, code: string): void {
     buffering = false;
     const body = Buffer.concat(chunks).toString('utf8');
     if (body.includes('<html') && (body.includes('<head') || body.includes('</body>'))) {
-      const script = `<script type="module" data-iso-iterate-inject>${code}</script>`;
+      const script = `<script type="module" data-isotone-inject>${code}</script>`;
       if (!res.headersSent) originalSetHeader('Cache-Control', 'no-store');
       return originalEnd(withNativeFetch(injectIntoHead(body, script)), cb);
     }
@@ -602,9 +602,9 @@ function injectIntoHead(html: string, script: string): string {
  * there is no head) so it runs before any app module.
  */
 export function withNativeFetch(html: string): string {
-  if (html.includes('__isoIterateFetch')) return html;
+  if (html.includes('__isotoneFetch')) return html;
   const capture =
-    '<script data-iso-iterate-native>window.__isoIterateFetch=window.fetch.bind(window)</script>';
+    '<script data-isotone-native>window.__isotoneFetch=window.fetch.bind(window)</script>';
   const head = html.match(/<head[^>]*>/i);
   if (head?.index !== undefined) {
     const at = head.index + head[0].length;

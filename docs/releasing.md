@@ -55,3 +55,33 @@ succeed. See [npm's provenance requirements](https://docs.npmjs.com/generating-p
 
 After publishing, verify the new version, README image, exports and provenance
 on npm, then try the documented quick start in a clean project.
+
+## First release under the Isotone name
+
+Renaming the GitHub repository does not rename an npm package or change existing
+installs. npm requires publishing under the new name. Keep `iso-iterate`
+available so its existing lockfiles remain installable; deprecate it only after
+the new package and migration have been verified. See npm's
+[rename guidance](https://docs.npmjs.com/unpublishing-packages-from-the-registry/)
+and [deprecation guidance](https://docs.npmjs.com/deprecating-and-undeprecating-packages-or-package-versions/).
+
+Before tagging the first release, confirm that the publishing account can use
+`isotone`. A registry 404 or an unpublished-package record does not establish
+ownership or permission to publish. A successful local build establishes neither.
+If npm does not offer settings for the new package yet, establish it using an
+authenticated, maintainer-approved first publication before relying on its
+trusted publisher. Do not create a release tag on the assumption that the old
+package's publisher configuration applies to the new name.
+
+Configure the new package's publisher for `aaroi/isotone` and `publish.yml`, and
+verify its repository metadata. Then test both a clean install and the
+[migration](migration.md) in a copy of an existing project. Only after those pass,
+an authorized maintainer can set the old package's deprecation message:
+
+```sh
+npm deprecate iso-iterate "Renamed to isotone. Migration: https://github.com/aaroi/isotone/blob/main/docs/migration.md"
+```
+
+Deprecation displays guidance during installation; it does not migrate files,
+change dependencies, or remove existing installations. Do not unpublish the old
+package as part of the rename.

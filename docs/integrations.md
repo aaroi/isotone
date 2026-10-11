@@ -3,8 +3,8 @@
 Run setup from the app's directory, including in a monorepo:
 
 ```sh
-npm install -D iso-iterate
-npx iso-iterate init --yes
+npm install -D isotone
+npx isotone init --yes
 ```
 
 `init` detects the project, prints the integration to add, and adds a short guide
@@ -18,7 +18,7 @@ overrides the recommendation.
 Add `iteration()` to the existing plugins array. Keep the framework plugins:
 
 ```ts
-import { iteration } from 'iso-iterate/vite';
+import { iteration } from 'isotone/vite';
 
 // Inside the existing defineConfig(...):
 plugins: [/* existing plugins */, iteration()]
@@ -52,13 +52,13 @@ iteration({
 Run this inside the project in a second terminal:
 
 ```sh
-npx iso-iterate serve
+npx isotone serve
 ```
 
 Add this script to the development HTML only:
 
 ```html
-<script src="http://127.0.0.1:4123/iso-iterate.js" defer></script>
+<script src="http://127.0.0.1:4123/isotone.js" defer></script>
 ```
 
 Open the printed setup URL for a copyable tag or a bookmarklet. The bundle has no
@@ -73,14 +73,14 @@ an HTTP script; use the same-origin route integration below in that case.
 ## Framework route and client mount
 
 Use this when the framework should own the endpoint. Install `react` and
-`react-dom` if the app does not already have them; direct `iso-iterate/react`
+`react-dom` if the app does not already have them; direct `isotone/react`
 imports use the host's React runtime.
 
 For a Next App Router project:
 
 ```ts
 // app/api/iteration/notes/route.ts
-import { serveNotesRequest } from 'iso-iterate/server';
+import { serveNotesRequest } from 'isotone/server';
 
 const handle = async (request: Request) => {
   if (process.env.NODE_ENV !== 'development') {
@@ -109,7 +109,7 @@ export function ReviewTools() {
     if (process.env.NODE_ENV !== 'development') return;
     let dispose: (() => void) | undefined;
     let cancelled = false;
-    import('iso-iterate/react').then(({ mountIteration }) => {
+    import('isotone/react').then(({ mountIteration }) => {
       if (!cancelled) dispose = mountIteration({ endpoint: '/api/iteration/notes' });
     });
     return () => { cancelled = true; dispose?.(); };
@@ -143,10 +143,10 @@ After installation, the generated `AGENTS.md` section explains the loop. Agents
 can read full records without parsing terminal formatting:
 
 ```sh
-npx iso-iterate --json
-npx iso-iterate /settings --json
-npx iso-iterate --done <id-prefix>
-npx iso-iterate --all --days 30 --json
+npx isotone --json
+npx isotone /settings --json
+npx isotone --done <id-prefix>
+npx isotone --all --days 30 --json
 ```
 
 JSON output preserves pinned elements, viewport, route, variant references and
@@ -157,9 +157,9 @@ them from Git; manual endpoints should follow the ignore step above. The default
 ## Confirm the integration
 
 1. Open the app in development and submit a note on an element.
-2. Run `npx iso-iterate --json` in the app directory. Confirm the note's route,
+2. Run `npx isotone --json` in the app directory. Confirm the note's route,
    viewport and selector.
-3. Run `npx iso-iterate --done <id-prefix>` and check that it leaves the panel.
+3. Run `npx isotone --done <id-prefix>` and check that it leaves the panel.
 4. Build and serve the production app. The panel and dev endpoint should be absent.
 
 If the panel is visible but the CLI has no notes, compare the dev server's printed

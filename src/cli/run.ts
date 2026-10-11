@@ -1,24 +1,24 @@
 /**
- * iso-iterate — CLI command handling, factored out of the executable entry
+ * isotone — CLI command handling, factored out of the executable entry
  * point (`./index.ts`) so tests can call `runCli` directly against an
  * in-memory sink instead of spawning a subprocess for every case, and so
- * `dist/cli.js` and a plain `import('iso-iterate/cli')` both work off the
+ * `dist/cli.js` and a plain `import('isotone/cli')` both work off the
  * same function.
  *
- *   npx iso-iterate                # open notes, all routes
- *   npx iso-iterate /projects      # one route
- *   npx iso-iterate --days 30      # widen the window
- *   npx iso-iterate --all          # include done items
- *   npx iso-iterate --done <id>    # mark addressed (id prefix ok)
- *   npx iso-iterate --undone <id>  # reopen
- *   npx iso-iterate --file <path>  # point at a non-default notes file
+ *   npx isotone                # open notes, all routes
+ *   npx isotone /projects      # one route
+ *   npx isotone --days 30      # widen the window
+ *   npx isotone --all          # include done items
+ *   npx isotone --done <id>    # mark addressed (id prefix ok)
+ *   npx isotone --undone <id>  # reopen
+ *   npx isotone --file <path>  # point at a non-default notes file
  *
- *   npx iso-iterate serve          # stand up the endpoint + panel for any host
- *   npx iso-iterate serve --port 4123
+ *   npx isotone serve          # stand up the endpoint + panel for any host
+ *   npx isotone serve --port 4123
  *
- *   npx iso-iterate variant ...    # see ./variant.ts
- *   npx iso-iterate init ...       # see ./init.ts
- *   npx iso-iterate --help         # the command surface, also `variant --help`
+ *   npx isotone variant ...    # see ./variant.ts
+ *   npx isotone init ...       # see ./init.ts
+ *   npx isotone --help         # the command surface, also `variant --help`
  */
 import { resolve } from 'node:path';
 
@@ -27,12 +27,14 @@ import { runInit } from './init';
 import { type CliIO, errOut, findNoteByPrefix, has, makeIo, out, parseArgs, valueFor } from './util';
 import { runVariant } from './variant';
 import { runCheckUpdate } from './update';
+import { runMigrate } from './migrate';
 
 export type { CliIO } from './util';
 
 export async function runCli(argv: string[], ioInput: Partial<CliIO> = {}): Promise<number> {
   const io = makeIo(ioInput);
   try {
+    if (argv[0] === 'migrate') return runMigrate(argv.slice(1), io);
     if (argv[0] === 'check-update') return await runCheckUpdate(argv.slice(1), io);
     if (argv[0] === 'serve') return await runServe(argv.slice(1), io);
     if (argv[0] === 'variant') return await runVariant(argv.slice(1), io);
@@ -53,29 +55,30 @@ export function isHelp(arg: string | undefined): boolean {
 }
 
 function printHelp(io: CliIO): void {
-  out(io, 'iso-iterate — notes and variants between a reviewer’s browser and a coding agent');
+  out(io, 'isotone — notes and variants between a reviewer’s browser and a coding agent');
   out(io);
   out(io, 'Notes (the file is .iteration-feedback.json in the current directory)');
-  out(io, '  iso-iterate                    open notes, all routes');
-  out(io, '  iso-iterate <route>            one route');
-  out(io, '  iso-iterate --done <id>        mark addressed (an id prefix is enough)');
-  out(io, '  iso-iterate --undone <id>      reopen');
-  out(io, '  iso-iterate --all              include done notes');
-  out(io, '  iso-iterate --days <n>         widen the window (default 14)');
-  out(io, '  iso-iterate --file <path>      another notes file');
-  out(io, '  iso-iterate --json             full note records as JSON for agents and scripts');
+  out(io, '  isotone                    open notes, all routes');
+  out(io, '  isotone <route>            one route');
+  out(io, '  isotone --done <id>        mark addressed (an id prefix is enough)');
+  out(io, '  isotone --undone <id>      reopen');
+  out(io, '  isotone --all              include done notes');
+  out(io, '  isotone --days <n>         widen the window (default 14)');
+  out(io, '  isotone --file <path>      another notes file');
+  out(io, '  isotone --json             full note records as JSON for agents and scripts');
   out(io);
   out(io, 'Endpoint and panel for a host without the Vite plugin');
-  out(io, '  iso-iterate serve [--port 4123] [--file <path>] [--theme auto|light|dark|system]');
+  out(io, '  isotone serve [--port 4123] [--file <path>] [--theme auto|light|dark|system]');
   out(io);
   out(io, 'Overlay variants');
-  out(io, '  iso-iterate variant --help');
+  out(io, '  isotone variant --help');
   out(io);
   out(io, 'Updates (read-only)');
-  out(io, '  iso-iterate check-update [--json] [--manager npm|pnpm|yarn]');
+  out(io, '  isotone check-update [--json] [--manager npm|pnpm|yarn]');
   out(io);
   out(io, 'Setting a repo up');
-  out(io, '  iso-iterate init [--approach overlay|host|serve] [--yes] [--json]');
+  out(io, '  isotone init [--approach overlay|host|serve] [--yes] [--json]');
+  out(io, '  isotone migrate [--write] [--json] [--manager npm|pnpm|yarn|bun]');
 }
 
 /**
@@ -86,7 +89,7 @@ function printHelp(io: CliIO): void {
 async function runServe(args: string[], io: CliIO): Promise<number> {
   const { serveIteration, DEFAULT_PORT } = await import('../serve/index');
   if (isHelp(args[0])) {
-    out(io, 'Usage: iso-iterate serve [--port 4123] [--host 127.0.0.1] [--file <path>] [--theme auto|light|dark|system]');
+    out(io, 'Usage: isotone serve [--port 4123] [--host 127.0.0.1] [--file <path>] [--theme auto|light|dark|system]');
     out(io, 'Run it inside the repo under review, then add the printed <script> tag to the dev page.');
     out(io, '--no-update-check disables the daily background npm update check.');
     return 0;
@@ -116,13 +119,13 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
     if ((err as NodeJS.ErrnoException).code === 'EADDRINUSE') {
       errOut(
         io,
-        `Port ${port} is already in use, by another \`iso-iterate serve\` or a dev server. Pass --port <n> to use a different one.`,
+        `Port ${port} is already in use, by another \`isotone serve\` or a dev server. Pass --port <n> to use a different one.`,
       );
       return 1;
     }
     throw err;
   }
-  out(io, `iso-iterate serving on ${served.url}`);
+  out(io, `isotone serving on ${served.url}`);
   out(io, `  notes  ${file}`);
   out(io, `  panel  <script src="${served.bundleUrl}" defer></script>`);
   out(io, `  setup  ${served.url}  (script tag + bookmarklet)`);
@@ -166,7 +169,7 @@ function runNotes(argv: string[], io: CliIO): number {
   if (flipIdx >= 0) {
     const prefix = argv[flipIdx + 1];
     if (!prefix) {
-      errOut(io, 'Give the feedback id (prefix ok): iso-iterate --done <id>');
+      errOut(io, 'Give the feedback id (prefix ok): isotone --done <id>');
       return 1;
     }
     let match!: StoredNote;

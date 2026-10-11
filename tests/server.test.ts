@@ -10,7 +10,7 @@ import { PAYLOAD_MAX, serveNotesRequest } from '../src/server/index';
 
 const dirs: string[] = [];
 function tempFile() {
-  const dir = mkdtempSync(join(tmpdir(), 'iso-iterate-'));
+  const dir = mkdtempSync(join(tmpdir(), 'isotone-'));
   dirs.push(dir);
   return join(dir, 'notes.json');
 }

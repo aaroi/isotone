@@ -58,7 +58,7 @@ function element(parent: ParentNode, selector: string): HTMLElement {
   return found;
 }
 
-function dock() { return element(shadow, '.iso-iter-root'); }
+function dock() { return element(shadow, '.isotone-root'); }
 
 function pointer(target: Element, type: string, relatedTarget: Element | null, pointerType = 'mouse', buttons = 0) {
   const boundary = type === 'pointerenter' || type === 'pointerleave';
@@ -69,7 +69,7 @@ function pointer(target: Element, type: string, relatedTarget: Element | null, p
 
 it.each(['mouse', 'pen'])('expands on native %s entry from another React tree across a shadow boundary', async pointerType => {
   const root = dock();
-  const launcher = element(root, '.iso-iter-fab');
+  const launcher = element(root, '.isotone-fab');
   const outerLeave = vi.fn();
   hostContent.addEventListener('pointerout', outerLeave);
   await act(async () => {
@@ -83,8 +83,8 @@ it.each(['mouse', 'pen'])('expands on native %s entry from another React tree ac
   expect(root.dataset.expanded).toBe('true');
   expect(root.dataset.open).toBe('false');
   expect(launcher.getAttribute('aria-hidden')).toBe('true');
-  const track = element(root, '.iso-iter-rail-track');
-  const feedback = element(root, '.iso-iter-rail-button[aria-label="Feedback"]');
+  const track = element(root, '.isotone-rail-track');
+  const feedback = element(root, '.isotone-rail-button[aria-label="Feedback"]');
   await act(async () => {
     pointer(launcher, 'pointerout', track, pointerType);
     pointer(track, 'pointerover', launcher, pointerType);
@@ -100,7 +100,7 @@ it.each([['touch', 0], ['mouse', 1], ['pen', 1]] as const)('ignores %s entry wit
   const root = dock();
   await act(async () => { pointer(root, 'pointerenter', hostContent, pointerType, buttons); });
   expect(root.dataset.expanded).toBe('false');
-  await act(async () => { element(root, '.iso-iter-fab').click(); });
+  await act(async () => { element(root, '.isotone-fab').click(); });
   expect(root.dataset.open).toBe('true');
 });
 
@@ -110,7 +110,7 @@ it('removes native boundary listeners on hidden routes and reattaches on return'
   await act(async () => { pointer(previous, 'pointerenter', hostContent); });
   expect(previous.dataset.expanded).toBe('true');
   await render('/login');
-  expect(shadow.querySelector('.iso-iter-root')).toBeNull();
+  expect(shadow.querySelector('.isotone-root')).toBeNull();
   expect(remove).toHaveBeenCalledWith('pointerenter', expect.any(Function));
   expect(remove).toHaveBeenCalledWith('pointerleave', expect.any(Function));
   // Detached nodes must not change the state of a later visible dock.

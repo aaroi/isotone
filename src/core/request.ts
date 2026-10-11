@@ -5,7 +5,7 @@ export function request<T>(input: RequestInput, init: RequestInit | undefined, c
 
 /** The deadline includes body consumption, not just receipt of the headers. */
 export async function request<T>(input: RequestInput, init?: RequestInit, consume?: (response: Response) => Promise<T>): Promise<Response | T> {
-  const native = (globalThis as { __isoIterateFetch?: typeof fetch }).__isoIterateFetch;
+  const native = (globalThis as { __isotoneFetch?: typeof fetch }).__isotoneFetch;
   const controller = new AbortController();
   const signal = init?.signal ?? (typeof Request !== 'undefined' && input instanceof Request ? input.signal : undefined);
   const abort = () => controller.abort(signal?.reason);

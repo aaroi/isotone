@@ -65,7 +65,7 @@ function Dock({ open = true, count = 3, noise = '', visible = true, instant = fa
   const ref = useRef<HTMLDivElement>(null);
   useDockMotion(ref, visible);
   return h('div', { ref, 'data-instant': instant },
-    mounted && h('section', { className: 'iso-iter-panel', 'data-open': open, id: 'panel' },
+    mounted && h('section', { className: 'isotone-panel', 'data-open': open, id: 'panel' },
       h('span', null, noise),
       ...Array.from({ length: count }, (_, i) => h('button', { type: 'button', key: i, id: `item-${i}`, 'data-motion-key': i }, String(i))),
     ),
@@ -120,22 +120,22 @@ describe('dock motion', () => {
   it('cleans exit snapshots on rapid reopening, animation completion and unmount', async () => {
     await act(async () => root.render(h(Dock, {})));
     await act(async () => root.render(h(Dock, { open: false })));
-    let ghost = host.querySelector<HTMLElement>('.iso-iter-exit');
+    let ghost = host.querySelector<HTMLElement>('.isotone-exit');
     expect(ghost?.getAttribute('aria-hidden')).toBe('true');
     expect(ghost?.inert).toBe(true);
     expect(ghost?.querySelectorAll('[id]')).toHaveLength(0);
     expect(ghost?.id).toBe('');
     await act(async () => root.render(h(Dock, {})));
-    expect(host.querySelector('.iso-iter-exit')).toBeNull();
+    expect(host.querySelector('.isotone-exit')).toBeNull();
     await act(async () => root.render(h(Dock, { open: false })));
-    ghost = host.querySelector<HTMLElement>('.iso-iter-exit');
+    ghost = host.querySelector<HTMLElement>('.isotone-exit');
     expect(ghost).not.toBeNull();
     await act(async () => animations.at(-1)?.onfinish?.());
-    expect(host.querySelector('.iso-iter-exit')).toBeNull();
+    expect(host.querySelector('.isotone-exit')).toBeNull();
     await act(async () => root.render(h(Dock, {})));
     await act(async () => root.render(h(Dock, { open: false })));
     await act(async () => root.render(h(Dock, { visible: false, open: false })));
-    expect(host.querySelector('.iso-iter-exit')).toBeNull();
+    expect(host.querySelector('.isotone-exit')).toBeNull();
     expect(disconnect).toHaveBeenCalled();
   });
 
@@ -155,9 +155,9 @@ describe('dock motion', () => {
     await act(async () => root.render(h(Dock, { instant: true })));
     expect(animate).not.toHaveBeenCalled();
     await act(async () => root.render(h(Dock, { instant: false, open: false })));
-    expect(host.querySelector('.iso-iter-exit')).not.toBeNull();
+    expect(host.querySelector('.isotone-exit')).not.toBeNull();
     await act(async () => { media.matches = true; media.dispatchEvent(new Event('change')); });
-    expect(host.querySelector('.iso-iter-exit')).toBeNull();
+    expect(host.querySelector('.isotone-exit')).toBeNull();
     const calls = animate.mock.calls.length;
     await act(async () => root.render(h(Dock, {})));
     expect(animate).toHaveBeenCalledTimes(calls);

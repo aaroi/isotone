@@ -1,5 +1,5 @@
 /**
- * iso-iterate — `variant` CLI subcommands, over the node store in
+ * isotone — `variant` CLI subcommands, over the node store in
  * `variants-store.ts`. Every subcommand is synchronous: the store does no
  * I/O beyond the filesystem and `git`, so there is nothing here to await.
  */
@@ -73,7 +73,7 @@ export function runVariant(args: string[], io: CliIO): number {
       default:
         errOut(
           io,
-          `Unknown "variant" subcommand "${sub}". Run \`iso-iterate variant --help\` for the list.`,
+          `Unknown "variant" subcommand "${sub}". Run \`isotone variant --help\` for the list.`,
         );
         return 1;
     }
@@ -87,7 +87,7 @@ export function runVariant(args: string[], io: CliIO): number {
 }
 
 function printVariantHelp(io: CliIO): void {
-  out(io, 'iso-iterate variant — overlay variants under .iso-iterate/variants/<id>/');
+  out(io, 'isotone variant — overlay variants under .isotone/variants/<id>/');
   out(io);
   out(io, '  variant list [<route>] [--all-routes]    every variant; * marks the active ones');
   out(io, '  variant new <id> [--note <prefix>] [--route <path>] [--label <text>]');
@@ -107,7 +107,7 @@ function printVariantHelp(io: CliIO): void {
   out(io, '  variant promote <id> [--force]           copy the variant over the real files and delete it');
   out(io, '  variant drop <id>                        delete a variant');
   out(io);
-  out(io, 'Options: --dir <path> (default .iso-iterate/variants), --file <path> (notes file for --note)');
+  out(io, 'Options: --dir <path> (default .isotone/variants), --file <path> (notes file for --note)');
   out(io);
   out(io, 'Variants that override the same file are alternatives of one selector without a');
   out(io, '--group; use one when the alternatives touch different files.');
@@ -159,7 +159,7 @@ function cmdNew(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
   const { value: groupLabel, rest: r7 } = extractFlag(r6, '--group-label');
   const id = r7[0];
   if (!id) {
-    errOut(io, 'Give a variant id: iso-iterate variant new <id>');
+    errOut(io, 'Give a variant id: isotone variant new <id>');
     return 1;
   }
 
@@ -199,7 +199,7 @@ function cmdNew(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
 function cmdAdd(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
   const [id, ...files] = rest;
   if (!id || files.length === 0) {
-    errOut(io, 'Usage: iso-iterate variant add <id> <file...>');
+    errOut(io, 'Usage: isotone variant add <id> <file...>');
     return 1;
   }
   for (const file of files) addVariantFile(opts, id, file);
@@ -210,7 +210,7 @@ function cmdAdd(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
 function cmdRm(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
   const [id, file] = rest;
   if (!id || !file) {
-    errOut(io, 'Usage: iso-iterate variant rm <id> <file>');
+    errOut(io, 'Usage: isotone variant rm <id> <file>');
     return 1;
   }
   removeVariantFile(opts, id, file);
@@ -221,7 +221,7 @@ function cmdRm(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
 function cmdUse(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
   const [id, groupId] = rest;
   if (!id) {
-    errOut(io, 'Usage: iso-iterate variant use <id> | variant use default [<groupId>]');
+    errOut(io, 'Usage: isotone variant use <id> | variant use default [<groupId>]');
     return 1;
   }
   const active = readActive(opts);
@@ -261,7 +261,7 @@ function cmdUse(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
 function cmdOff(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
   const id = rest[0];
   if (!id) {
-    errOut(io, 'Usage: iso-iterate variant off <id>');
+    errOut(io, 'Usage: isotone variant off <id>');
     return 1;
   }
   if (!readVariant(opts, id)) {
@@ -285,7 +285,7 @@ function cmdGroup(rest: string[], io: CliIO, opts: VariantsStoreOptions): number
   const { value: label, rest: r1 } = extractFlag(rest, '--label');
   const [id, groupId] = r1;
   if (!id || !groupId) {
-    errOut(io, 'Usage: iso-iterate variant group <id> <groupId> [--label <text>]');
+    errOut(io, 'Usage: isotone variant group <id> <groupId> [--label <text>]');
     return 1;
   }
   setVariantGroup(opts, id, groupId, label);
@@ -296,7 +296,7 @@ function cmdGroup(rest: string[], io: CliIO, opts: VariantsStoreOptions): number
 function cmdSync(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
   const id = rest[0];
   if (!id) {
-    errOut(io, 'Usage: iso-iterate variant sync <id>');
+    errOut(io, 'Usage: isotone variant sync <id>');
     return 1;
   }
   const { merged, conflicts, unchanged } = syncVariant(opts, id);
@@ -312,7 +312,7 @@ function cmdPromote(rest: string[], io: CliIO, opts: VariantsStoreOptions): numb
   const { present: force, rest: r1 } = extractBoolFlag(rest, '--force');
   const id = r1[0];
   if (!id) {
-    errOut(io, 'Usage: iso-iterate variant promote <id> [--force]');
+    errOut(io, 'Usage: isotone variant promote <id> [--force]');
     return 1;
   }
   const { files } = promoteVariant(opts, id, { force });
@@ -323,7 +323,7 @@ function cmdPromote(rest: string[], io: CliIO, opts: VariantsStoreOptions): numb
 function cmdDrop(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
   const id = rest[0];
   if (!id) {
-    errOut(io, 'Usage: iso-iterate variant drop <id>');
+    errOut(io, 'Usage: isotone variant drop <id>');
     return 1;
   }
   if (!existsSync(variantDir(opts, id))) {
@@ -338,7 +338,7 @@ function cmdDrop(rest: string[], io: CliIO, opts: VariantsStoreOptions): number 
 function cmdPath(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
   const [id, file] = rest;
   if (!id || !file) {
-    errOut(io, 'Usage: iso-iterate variant path <id> <file>');
+    errOut(io, 'Usage: isotone variant path <id> <file>');
     return 1;
   }
   if (!readVariant(opts, id)) {

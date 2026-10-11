@@ -33,7 +33,7 @@ function parseColor(value: string): Color | null {
 function isPanel(node: Node | null): boolean {
   if (!node) return false;
   const element = node instanceof Element ? node : node.parentElement;
-  if (element?.closest('[data-iso-iterate]')) return true;
+  if (element?.closest('[data-isotone]')) return true;
   const root = node.getRootNode();
   return root instanceof ShadowRoot && isPanel(root.host);
 }

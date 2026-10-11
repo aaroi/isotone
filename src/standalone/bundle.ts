@@ -7,14 +7,14 @@ export function readBundle(): string {
   const here = dirname(fileURLToPath(import.meta.url));
   for (const candidate of [
     // built: dist/serve.js sits beside the bundle
-    resolve(here, 'iso-iterate.global.js'),
-    resolve(here, '..', 'dist', 'iso-iterate.global.js'),
+    resolve(here, 'isotone.global.js'),
+    resolve(here, '..', 'dist', 'isotone.global.js'),
     // from source (tests): src/serve/ -> the repo's dist/
-    resolve(here, '..', '..', 'dist', 'iso-iterate.global.js'),
+    resolve(here, '..', '..', 'dist', 'isotone.global.js'),
   ]) {
     if (existsSync(candidate)) return readFileSync(candidate, 'utf8');
   }
   throw new Error(
-    'iso-iterate: the browser bundle is missing from dist/. Run `pnpm build`.',
+    'isotone: the browser bundle is missing from dist/. Run `pnpm build`.',
   );
 }

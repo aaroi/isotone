@@ -1,13 +1,13 @@
 /**
- * iso-iterate — the standalone dev server.
+ * isotone — the standalone dev server.
  *
  * The plug-and-play path. Run it in the repo you are reviewing and it owns the
  * notes file, serves the endpoint, and hands out the panel as a single script
  * so the host app needs no build integration at all:
  *
- *   npx iso-iterate serve
+ *   npx isotone serve
  *   # then, in dev only, one line in the host's HTML:
- *   <script src="http://127.0.0.1:4123/iso-iterate.js" defer></script>
+ *   <script src="http://127.0.0.1:4123/isotone.js" defer></script>
  *
  * Running it inside the repo is what keeps a note unambiguous: the process that
  * owns the file is the checkout the agent is working in, so a route and a
@@ -31,7 +31,7 @@ import { startUpdateCheck, UPDATE_ENDPOINT } from '../update';
 export { readBundle } from '../standalone/bundle';
 
 export const DEFAULT_PORT = 4123;
-const BUNDLE_PATH = '/iso-iterate.js';
+const BUNDLE_PATH = '/isotone.js';
 
 export interface ServeIterationOptions {
   /** Background npm notice, at most once a day. false disables the check. */
@@ -99,7 +99,7 @@ function bundleWithMount(origin: string, opts: ServeIterationOptions): string {
     rule: opts.rule ?? {},
     theme: opts.theme,
   });
-  return `${readBundle()}\n;window.__isoIterate&&window.__isoIterate.mount(${config});\n`;
+  return `${readBundle()}\n;window.__isotone&&window.__isotone.mount(${config});\n`;
 }
 
 function bookmarklet(origin: string): string {
@@ -123,7 +123,7 @@ function indexPage(origin: string, file: string): string {
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>iso-iterate</title>
+<title>Isotone</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   * { box-sizing: border-box; margin: 0; }
@@ -171,7 +171,7 @@ function indexPage(origin: string, file: string): string {
 </head>
 <body>
 <div class="wrap">
-  <header><span class="dot"></span><h1>iso-iterate</h1></header>
+  <header><span class="dot"></span><h1>Isotone</h1></header>
   <p class="sub">Serving the feedback loop on <code>${escapeHtml(origin)}</code>.</p>
 
   <h2>Script tag for your dev page</h2>
@@ -201,7 +201,7 @@ export function serveIteration(
   const file = resolve(opts.file);
   const port = opts.port ?? DEFAULT_PORT;
   const host = opts.host ?? '127.0.0.1';
-  if (!isLoopback(host)) throw new Error('iso-iterate serve binds only to localhost, 127.0.0.1 or ::1.');
+  if (!isLoopback(host)) throw new Error('isotone serve binds only to localhost, 127.0.0.1 or ::1.');
   ensureFileIgnored(file);
   const updates = startUpdateCheck(opts.projectRoot ?? dirname(file), opts.checkForUpdates !== false);
 

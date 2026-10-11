@@ -10,7 +10,7 @@ export const UPDATE_ENDPOINT = '/api/iteration/update';
 const REGISTRY_URL = `https://registry.npmjs.org/${packageName}/latest`;
 const CHECK_TIMEOUT = 5_000;
 const CACHE_TTL = 24 * 60 * 60 * 1000;
-const CACHE_FILE = join(tmpdir(), `iso-iterate-update-${process.getuid?.() ?? 'user'}-v1.json`);
+const CACHE_FILE = join(tmpdir(), `isotone-update-${process.getuid?.() ?? 'user'}-v1.json`);
 
 type Manager = 'npm' | 'pnpm' | 'yarn';
 export type { UpdateInfo } from './core/update';
@@ -187,7 +187,7 @@ async function saveCache(file: string, latestVersion: string | null): Promise<vo
 export function startUpdateCheck(cwd: string, enabled = true, options: { cacheFile?: string; fetcher?: typeof fetch; env?: NodeJS.ProcessEnv } = {}): { getSnapshot(): UpdateInfo; ready: Promise<void>; dispose(): void } {
   const controller = new AbortController();
   const env = options.env ?? process.env;
-  const off = !enabled || env.ISO_ITERATE_UPDATE_CHECK === '0' || (!!env.CI && env.CI !== 'false' && env.CI !== '0') || env.NODE_ENV === 'test' || !!env.VITEST;
+  const off = !enabled || env.ISOTONE_UPDATE_CHECK === '0' || (!!env.CI && env.CI !== 'false' && env.CI !== '0') || env.NODE_ENV === 'test' || !!env.VITEST;
   let info: UpdateInfo = { currentVersion, latestVersion: null, status: off ? 'disabled' : 'checking', upgrade: null };
   const ready = off ? Promise.resolve() : (async () => {
     const file = options.cacheFile ?? CACHE_FILE;

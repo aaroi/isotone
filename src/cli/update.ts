@@ -3,7 +3,7 @@ import { type CliIO, out, parseArgs, valueFor } from './util';
 
 export async function runCheckUpdate(args: string[], io: CliIO): Promise<number> {
   if (args.some((arg) => arg === '--help' || arg === '-h')) {
-    out(io, 'Usage: iso-iterate check-update [--json] [--manager npm|pnpm|yarn]');
+    out(io, 'Usage: isotone check-update [--json] [--manager npm|pnpm|yarn]');
     out(io, 'Checks the public npm latest tag. Does not install, execute commands or modify project files.');
     return 0;
   }
@@ -13,7 +13,7 @@ export async function runCheckUpdate(args: string[], io: CliIO): Promise<number>
   const result = await checkUpdate(io.cwd, manager);
   if (args.includes('--json')) out(io, JSON.stringify(result, null, 2));
   else {
-    out(io, `Running iso-iterate ${result.currentVersion}${result.latestVersion ? ` · npm latest ${result.latestVersion}` : ''}`);
+    out(io, `Running isotone ${result.currentVersion}${result.latestVersion ? ` · npm latest ${result.latestVersion}` : ''}`);
     if (result.status === 'available') {
       out(io, 'Update available. Review the release, then run:');
       if (result.upgrade) {

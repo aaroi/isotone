@@ -73,7 +73,7 @@ even when a label is visually truncated.
 
 `src/react/feedback-layout.ts` holds the accepted inline-reference layout.
 `src/react/pill-active.ts` holds the accepted Clean Highlight recipe. Future
-review alternatives belong under `.iso-iterate/variants/`.
+review alternatives belong under `.isotone/variants/`.
 Edit the copied recipe when developing an alternative; keep shared geometry,
 theme tokens and unrelated controls in the main stylesheet.
 

@@ -1,5 +1,5 @@
 /**
- * iso-iterate — variants: the framework-free model.
+ * isotone — variants: the framework-free model.
  *
  * A variant axis is one tunable decision about a page: a discrete choice
  * (select), a continuous value (range) or a colour. The panel renders axes;
@@ -10,7 +10,7 @@
  *   state. The panel is then a view; the host still owns `?v=` sync,
  *   defaults and promotion.
  * - A host with no variant system gets the overlay adapter: alternative
- *   source files under `.iso-iterate/variants/<id>/…` that the Vite plugin
+ *   source files under `.isotone/variants/<id>/…` that the Vite plugin
  *   swaps in for the real ones while a variant is active. The browser sees
  *   one select axis per group of alternatives, on the route they belong to
  *   ({@link overlayGroups}, {@link createOverlayVariantsSource}).
@@ -20,6 +20,7 @@
 
 import type { IterationElement } from './index';
 import { request } from './request';
+import { readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from './browser-storage';
 
 /* ── Axes ─────────────────────────────────────────────────────────────── */
 
@@ -369,7 +370,7 @@ export function createVariantsSource(init: {
 /**
  * One overlay variant: a directory of alternative source files that the dev
  * server swaps in for the real ones while the variant is active. Stored as
- * `variant.json` in `.iso-iterate/variants/<id>/`, with the files mirrored
+ * `variant.json` in `.isotone/variants/<id>/`, with the files mirrored
  * under it at their repo-relative paths.
  */
 export interface OverlayVariant {
@@ -416,7 +417,7 @@ export interface OverlayVariantStatus extends OverlayVariant {
 }
 
 /**
- * A knob: a range or colour axis the host declares in `.iso-iterate/knobs.json`
+ * A knob: a range or colour axis the host declares in `.isotone/knobs.json`
  * next to its overlay variants. The panel renders it as a slider (or a colour
  * pick) on the routes it names, and the value reaches the page as a CSS
  * custom property on `<html>`, `--knob-<id>`, with the axis unit appended
@@ -487,7 +488,7 @@ export function knobDelta(
 export const VARIANTS_ENDPOINT = '/api/iteration/variants';
 
 /** Where the browser keeps knob values between reloads. */
-export const KNOBS_STORAGE_KEY = 'iso-iterate:knobs';
+export const KNOBS_STORAGE_KEY = 'isotone:knobs';
 
 /** The option id that means "no variant, the real files". */
 export const OVERLAY_DEFAULT_OPTION = 'default';
@@ -687,19 +688,25 @@ export function createOverlayVariantsSource(cfg: {
         : document.documentElement
       : cfg.knobRoot;
   let knobValues: VariantSelections = (() => {
+    const parse = (raw: string | null): VariantSelections => {
+      try {
+        const parsed = raw ? (JSON.parse(raw) as unknown) : null;
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+          ? Object.fromEntries(Object.entries(parsed).filter((entry) => typeof entry[1] === 'string')) : {};
+      } catch { return {}; }
+    };
     try {
-      const raw = storage?.getItem(KNOBS_STORAGE_KEY);
-      const parsed = raw ? (JSON.parse(raw) as unknown) : null;
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-        ? Object.fromEntries(Object.entries(parsed).filter((entry) => typeof entry[1] === 'string')) : {};
+      return storage ? parse(readBrowserStorage(storage, KNOBS_STORAGE_KEY, (current, previous) =>
+        JSON.stringify({ ...parse(previous), ...parse(current) }))) : {};
     } catch {
       return {};
     }
   })();
   const persistKnobs = () => {
     try {
-      if (Object.keys(knobValues).length === 0) storage?.removeItem(KNOBS_STORAGE_KEY);
-      else storage?.setItem(KNOBS_STORAGE_KEY, JSON.stringify(knobValues));
+      if (!storage) return;
+      if (Object.keys(knobValues).length === 0) removeBrowserStorage(storage, KNOBS_STORAGE_KEY);
+      else writeBrowserStorage(storage, KNOBS_STORAGE_KEY, JSON.stringify(knobValues));
     } catch {
       // Storage full or blocked: the values still apply for this page view.
     }

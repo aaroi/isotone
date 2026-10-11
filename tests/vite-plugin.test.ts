@@ -8,7 +8,7 @@
  * short of a running server exercises them.
  *
  * The fixture root sits inside the repo so `react` resolves by walking up,
- * and `iso-iterate/react` is aliased to the source the way a consumer's
+ * and `isotone/react` is aliased to the source the way a consumer's
  * installed copy would resolve it.
  */
 import { execFileSync } from 'node:child_process';
@@ -67,7 +67,7 @@ beforeAll(async () => {
     optimizeDeps: { noDiscovery: true, include: [] },
     resolve: {
       alias: {
-        'iso-iterate/react': resolve(import.meta.dirname, '..', 'src/react/index.ts'),
+        'isotone/react': resolve(import.meta.dirname, '..', 'src/react/index.ts'),
       },
     },
     plugins: [
@@ -121,12 +121,12 @@ describe('the Vite adapter, served', () => {
     // The host's own markup survives...
     expect(html).toContain('<div id="app"></div>');
     // ...and the injected loader carries the mount options.
-    expect(html).toContain('data-iso-iterate-inject');
+    expect(html).toContain('data-isotone-inject');
     const script = html.slice(
-      html.indexOf('data-iso-iterate-inject'),
+      html.indexOf('data-isotone-inject'),
       html.indexOf('</head>'),
     );
-    expect(script).toContain('__isoIterate.mount');
+    expect(script).toContain('__isotone.mount');
     expect(script).toContain('"theme":"system"');
     expect(script).toContain(UPDATE_ENDPOINT);
     expect(script.length).toBeGreaterThan(200);
@@ -138,12 +138,12 @@ describe('the Vite adapter, served', () => {
     const html = await (
       await fetch(`${origin}/`, { headers: { accept: 'text/html' } })
     ).text();
-    expect(html).toContain('data-iso-iterate-inject');
+    expect(html).toContain('data-isotone-inject');
     // The loader script sits inside <head> (right after the opening tag,
     // sharing it with the native-fetch capture it must run after, and ahead
     // of the host's own head content)...
     const head = html.slice(html.indexOf('<head>') + '<head>'.length, html.indexOf('</head>'));
-    expect(head).toMatch(/(^|>)[ \t]*<script type="module" data-iso-iterate-inject>/);
+    expect(head).toMatch(/(^|>)[ \t]*<script type="module" data-isotone-inject>/);
     // ...and nothing between <body> and </body> carries a script tag. A
     // whole-document React Router app hydrates the body; a stray script there
     // makes React 19 warn "Encountered a script tag while rendering React
@@ -175,15 +175,15 @@ describe('the Vite adapter, served', () => {
 
   it('loads an isolated browser bundle without the host framework or optimizer', async () => {
     const html = await (await fetch(`${origin}/`, { headers: { accept: 'text/html' } })).text();
-    expect(html).toContain('/@iso-iterate/panel.js');
-    expect(html).not.toContain('iso-iterate/react');
-    const bundle = await fetch(`${origin}/@iso-iterate/panel.js`);
+    expect(html).toContain('/@isotone/panel.js');
+    expect(html).not.toContain('isotone/react');
+    const bundle = await fetch(`${origin}/@isotone/panel.js`);
     expect(bundle.status).toBe(200);
     expect(bundle.headers.get('content-type')).toContain('javascript');
     const js = await bundle.text();
     expect(js.length).toBeGreaterThan(100_000);
     expect(/^\s*import\s/m.test(js)).toBe(false);
-    expect(server.config.optimizeDeps.include).not.toContain('iso-iterate/react');
+    expect(server.config.optimizeDeps.include).not.toContain('isotone/react');
   });
 
   it('rejects foreign-origin writes and oversized bodies before changing notes', async () => {
@@ -205,10 +205,10 @@ describe('the Vite adapter, served', () => {
     const res = await fetch(`${origin}/ssr`, { headers: { accept: 'text/html' } });
     const html = await res.text();
     expect(html.match(/<html/g)).toHaveLength(1);
-    expect(html.match(/data-iso-iterate-inject/g)).toHaveLength(1);
+    expect(html.match(/data-isotone-inject/g)).toHaveLength(1);
     expect(html).toContain('<main id="ssr">streamed</main>');
     // The loader goes in <head>, so it precedes the streamed body content.
-    expect(html.indexOf('data-iso-iterate-inject')).toBeLessThan(html.indexOf('<body'));
+    expect(html.indexOf('data-isotone-inject')).toBeLessThan(html.indexOf('<body'));
     // The SSR fixture's own body keeps exactly one <script> (none of iso's).
     expect(html.slice(html.indexOf('<body'), html.indexOf('</body>')).match(/<script/g)).toBeNull();
     // The upstream length described the un-injected document.
@@ -226,18 +226,18 @@ describe('the Vite adapter, served', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('etag')).toBeNull();
     expect(res.headers.get('cache-control')).toBe('no-store');
-    expect(await res.text()).toContain('data-iso-iterate-inject');
+    expect(await res.text()).toContain('data-isotone-inject');
   });
 
   it('keeps the browser\'s own fetch for the store, ahead of any app stub', async () => {
     const html = await (
       await fetch(`${origin}/`, { headers: { accept: 'text/html' } })
     ).text();
-    const capture = html.indexOf('data-iso-iterate-native');
+    const capture = html.indexOf('data-isotone-native');
     expect(capture).toBeGreaterThan(-1);
     // Before anything the app loads: directly inside <head>.
-    expect(html.slice(html.indexOf('<head>') + '<head>'.length).startsWith('<script data-iso-iterate-native')).toBe(true);
-    expect(html).toContain('window.__isoIterateFetch=window.fetch.bind(window)');
+    expect(html.slice(html.indexOf('<head>') + '<head>'.length).startsWith('<script data-isotone-native')).toBe(true);
+    expect(html).toContain('window.__isotoneFetch=window.fetch.bind(window)');
   });
 
   it('resolves a relative notes file against the Vite root, not the cwd', async () => {
@@ -283,8 +283,8 @@ describe('the Vite adapter, served', () => {
       const address = manual.httpServer?.address();
       const url = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
       const html = await (await fetch(url, { headers: { accept: 'text/html' } })).text();
-      expect(html).not.toContain('data-iso-iterate');
-      expect(html).not.toContain('/@iso-iterate/panel.js');
+      expect(html).not.toContain('data-isotone');
+      expect(html).not.toContain('/@isotone/panel.js');
       expect(await (await fetch(`${url}${NOTES_ENDPOINT}`)).json()).toEqual([]);
       expect(await (await fetch(`${url}${VARIANTS_ENDPOINT}`)).json()).toEqual({ variants: [], active: [], knobs: [] });
       const update = await fetch(`${url}${UPDATE_ENDPOINT}`);
@@ -301,7 +301,7 @@ describe('the Vite adapter, served', () => {
 
   it('leaves non-HTML requests alone', async () => {
     const res = await fetch(`${origin}/`, { headers: { accept: '*/*' } });
-    expect((await res.text())).not.toContain('data-iso-iterate-inject');
+    expect((await res.text())).not.toContain('data-isotone-inject');
   });
 
   it('serves the notes endpoint against the configured file', async () => {
@@ -344,10 +344,10 @@ describe('the Vite adapter, served', () => {
 describe('withNativeFetch', () => {
   it('lands right after <head>, and after <body> when there is no head', () => {
     expect(withNativeFetch('<html><head lang="en"><title>x</title></head><body></body></html>')).toMatch(
-      /<head lang="en"><script data-iso-iterate-native>/,
+      /<head lang="en"><script data-isotone-native>/,
     );
     expect(withNativeFetch('<html><body class="a"><p>x</p></body></html>')).toMatch(
-      /<body class="a"><script data-iso-iterate-native>/,
+      /<body class="a"><script data-isotone-native>/,
     );
   });
 
@@ -404,13 +404,13 @@ const repos: string[] = [];
 afterEach(() => {
   for (const d of repos) rmSync(d, { recursive: true, force: true });
   repos.length = 0;
-  delete process.env.ISO_VARIANT;
+  delete process.env.ISOTONE_VARIANT;
 });
 
 /** A project that is its own git repo, so the exclude helpers write into
  *  its `.git/info/exclude` and not into this checkout's. */
 function tempProject(): { root: string; source: string; override: string; table: string } {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'iso-iterate-vite-variants-')));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-vite-variants-')));
   repos.push(root);
   execFileSync('git', ['init', '-q', root]);
   execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: root });
@@ -525,15 +525,15 @@ describe('overlay variants in load()', () => {
     expect(hooks.load(dep)).toBeNull();
   });
 
-  it('honours ISO_VARIANT in a build and ignores the active file there', () => {
+  it('honours ISOTONE_VARIANT in a build and ignores the active file there', () => {
     const { root, source } = tempProject();
     writeActive({ root }, ['b']);
     const build = plugin(root, 'build');
     // The dev pointer means nothing to a build: production never selects.
     expect(build.load(source)).toBeNull();
-    process.env.ISO_VARIANT = 'b';
+    process.env.ISOTONE_VARIANT = 'b';
     expect(build.load(source)?.code).toContain('variant b');
-    process.env.ISO_VARIANT = 'missing';
+    process.env.ISOTONE_VARIANT = 'missing';
     expect(build.load(source)).toBeNull();
   });
 
@@ -555,7 +555,7 @@ describe('overlay variants in load()', () => {
     writeActive({ root }, ['b']);
     // A sibling dev server whose Vite root is elsewhere points at the
     // project the manifests describe.
-    const sibling = realpathSync(mkdtempSync(join(tmpdir(), 'iso-iterate-sibling-')));
+    const sibling = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-sibling-')));
     repos.push(sibling);
     const hooks = plugin(sibling, 'serve', { variants: { root } });
     expect(hooks.load(source)?.code).toContain('variant b');
@@ -567,7 +567,7 @@ describe('overlay variants in load()', () => {
     // Vite keeps `config.root` as configured and realpaths every module id,
     // so a variants root taken from the config verbatim would never contain
     // `source` and no override would ever apply.
-    const linkParent = realpathSync(mkdtempSync(join(tmpdir(), 'iso-iterate-link-')));
+    const linkParent = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-link-')));
     repos.push(linkParent);
     const link = join(linkParent, 'app');
     symlinkSync(root, link);
@@ -725,7 +725,7 @@ describe('overlay variants in the dev server', () => {
     hooks.configureServer(server);
     const activeFile = join(root, ACTIVE_FILE);
     expect(server.watcher.add).toHaveBeenCalledWith(dirname(activeFile));
-    expect(server.watcher.add).toHaveBeenCalledWith(join(root, '.iso-iterate', 'variants'));
+    expect(server.watcher.add).toHaveBeenCalledWith(join(root, '.isotone', 'variants'));
     const onAll = server.watcher.on.mock.calls.find((c) => c[0] === 'all')?.[1] as (
       event: string,
       file: string,
@@ -750,7 +750,7 @@ describe('overlay variants in the dev server', () => {
     hooks.configureServer(server);
     for (const cb of listeners) cb();
     const lines = server.config.logger.info.mock.calls.map((c) => String(c[0]));
-    expect(lines.some((l) => l.includes('variants → .iso-iterate/variants  (2 variants)'))).toBe(true);
+    expect(lines.some((l) => l.includes('variants → .isotone/variants  (2 variants)'))).toBe(true);
   });
 });
 

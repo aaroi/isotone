@@ -10,9 +10,9 @@ import { checkOrigin, readNodeJson, sendFailure } from '../src/server/http';
 /** Real notes transport, isolated from every project's review data. */
 function demoNotes(): Plugin {
   return {
-    name: 'iso-iterate-demo-notes',
+    name: 'isotone-demo-notes',
     configureServer(server) {
-      const directory = mkdtempSync(join(tmpdir(), 'iso-iterate-demo-'));
+      const directory = mkdtempSync(join(tmpdir(), 'isotone-demo-'));
       const files = new Map<string, string>();
       for (const session of ['interactive', 'light', 'dark', 'stress']) {
         const file = join(directory, `${session}.json`);
@@ -59,7 +59,7 @@ function demoNotes(): Plugin {
           res.writeHead(200, { 'content-type': 'application/json' });
           res.end(JSON.stringify({
             currentVersion: '0.3.4', latestVersion: '0.4.0', status: 'available',
-            upgrade: { manager: 'pnpm', command: 'pnpm add -D --exact iso-iterate@0.4.0', cwd: '/workspace/example-app' },
+            upgrade: { manager: 'pnpm', command: 'pnpm add -D --exact isotone@0.4.0', cwd: '/workspace/example-app' },
           }));
           return;
         }
@@ -82,7 +82,7 @@ export default defineConfig({
   plugins: [demoNotes(), iteration({
       panel: false,
       variants: { root: '..' },
-      file: join(tmpdir(), 'iso-iterate-demo-adapter.json'),
+      file: join(tmpdir(), 'isotone-demo-adapter.json'),
     })],
   server: { host: '127.0.0.1', port: 4173, strictPort: true },
 });

@@ -3,7 +3,7 @@ import type { IterationNote } from '../core/index';
 
 /** Pinned references and saved defaults use the same compact tag. */
 function SummaryTag({ label }: { label: string }) {
-  return <span className="iso-iter-chip"><span onPointerOver={showOverflowTitle}>{label}</span></span>;
+  return <span className="isotone-chip"><span onPointerOver={showOverflowTitle}>{label}</span></span>;
 }
 
 /** Keep machine-directed requests readable without changing the agent's original text. */
@@ -19,7 +19,7 @@ export function NoteSummary({ note }: { note: IterationNote }) {
     ];
     return <>
       <p>{note.feedback}</p>
-      {references.length > 0 && <span className="iso-iter-meta">
+      {references.length > 0 && <span className="isotone-meta">
         {references.map(reference => <SummaryTag key={reference.key} label={reference.label} />)}
       </span>}
     </>;
@@ -39,9 +39,9 @@ export function NoteSummary({ note }: { note: IterationNote }) {
     }
   }
   return <>
-    <span className="iso-iter-request-heading"><span className="iso-iter-request-kind">Defaults</span><code>{note.route}</code></span>
-    <span className="iso-iter-meta">
-      {tags.length ? <>{tags.slice(0, 3).map(tag => <SummaryTag key={`${tag.name}-${tag.value}`} label={`${tag.name} ${tag.value}`} />)}{tags.length > 3 && <span className="iso-iter-request-more">+{tags.length - 3}</span>}</> : <code className="iso-iter-request-fallback">{note.feedback.replace(/^\[set-defaults\]\s*/, '')}</code>}
+    <span className="isotone-request-heading"><span className="isotone-request-kind">Defaults</span><code>{note.route}</code></span>
+    <span className="isotone-meta">
+      {tags.length ? <>{tags.slice(0, 3).map(tag => <SummaryTag key={`${tag.name}-${tag.value}`} label={`${tag.name} ${tag.value}`} />)}{tags.length > 3 && <span className="isotone-request-more">+{tags.length - 3}</span>}</> : <code className="isotone-request-fallback">{note.feedback.replace(/^\[set-defaults\]\s*/, '')}</code>}
     </span>
   </>;
 }

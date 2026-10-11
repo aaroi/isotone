@@ -70,7 +70,7 @@ function Panel({ theme }: { theme: IterationTheme }) {
     const shadow = host.current.attachShadow({ mode: 'open' });
     if (screenshot) {
       const style = document.createElement('style');
-      style.textContent = '.iso-iter-root { transform: scale(1.1); transform-origin: bottom right; right: 22px; bottom: 22px; } .iso-iter-textarea { caret-color: transparent; }';
+      style.textContent = '.isotone-root { transform: scale(1.1); transform-origin: bottom right; right: 22px; bottom: 22px; } .isotone-textarea { caret-color: transparent; }';
       shadow.append(style);
     }
     const target = document.createElement('div');
@@ -84,7 +84,7 @@ function Panel({ theme }: { theme: IterationTheme }) {
   }, []);
   useEffect(() => {
     panel.current?.render(<IterationPanel route="/" theme={theme} updateEndpoint={screenshot ? undefined : params.has('update-preview') ? '/demo-update' : '/api/iteration/update'}
-      store={{ endpoint, key: `iso-iterate-public-demo-${session}` }}
+      store={{ endpoint, key: `isotone-public-demo-${session}` }}
       variants={source} defaultTab="variants" shortcut={screenshot ? false : undefined} />);
   }, [theme]);
   useEffect(() => {
@@ -93,7 +93,7 @@ function Panel({ theme }: { theme: IterationTheme }) {
     let frame = 0;
     const open = () => {
       const shadow = host.current?.shadowRoot;
-      const launcher = shadow?.querySelector<HTMLButtonElement>('.iso-iter-fab');
+      const launcher = shadow?.querySelector<HTMLButtonElement>('.isotone-fab');
       if (!launcher) { frame = requestAnimationFrame(open); return; }
       // The existing keyboard path makes both CSS and measured motion immediate.
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', code: 'ShiftLeft' }));
@@ -113,7 +113,7 @@ function Panel({ theme }: { theme: IterationTheme }) {
     frame = requestAnimationFrame(open);
     return () => cancelAnimationFrame(frame);
   }, []);
-  return <div ref={host} data-iso-iterate="demo" />;
+  return <div ref={host} data-isotone="demo" />;
 }
 
 function Demo() {
@@ -133,7 +133,7 @@ function Demo() {
   }, [pageTheme, panelTheme]);
   return <>
     {!screenshot && <header className="demo-controls">
-      <a href="/" className="brand">iso-iterate <span>{stress ? 'stress test · 500 selectors / 500 notes' : 'live demo'}</span></a>
+      <a href="/" className="brand">Isotone <span>{stress ? 'stress test · 500 selectors / 500 notes' : 'live demo'}</span></a>
       <div className="theme-controls">
         <fieldset><legend>Page</legend>{(['light', 'dark'] as const).map(theme =>
           <button key={theme} type="button" aria-pressed={pageTheme === theme} onClick={() => setPageTheme(theme)}>{theme}</button>)}</fieldset>

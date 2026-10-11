@@ -25,7 +25,7 @@ import {
 const dirs: string[] = [];
 
 function tempFile() {
-  const dir = mkdtempSync(join(tmpdir(), 'iso-iterate-'));
+  const dir = mkdtempSync(join(tmpdir(), 'isotone-'));
   dirs.push(dir);
   return join(dir, 'notes.json');
 }
@@ -166,7 +166,7 @@ describe('ensureFileIgnored', () => {
     // A dev server started in app/console of a checkout whose root is two
     // levels up: the shape that produced an absolute path in the exclude
     // file, which git reads as root-relative and so never matched.
-    const repo = realpathSync(mkdtempSync(join(tmpdir(), 'iso-iterate-repo-')));
+    const repo = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-repo-')));
     dirs.push(repo);
     execFileSync('git', ['init', '-q', repo]);
     const consoleDir = join(repo, 'app', 'console');
@@ -201,7 +201,7 @@ describe('ensureFileIgnored', () => {
     // In a worktree `.git` is a file pointing at the shared repository, so
     // `<toplevel>/.git/info/exclude` is not a path at all; git keeps the
     // exclude file in the common dir and `--git-path` is how it says where.
-    const repo = realpathSync(mkdtempSync(join(tmpdir(), 'iso-iterate-wt-repo-')));
+    const repo = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-wt-repo-')));
     dirs.push(repo);
     execFileSync('git', ['init', '-q', repo]);
     execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repo });
@@ -209,7 +209,7 @@ describe('ensureFileIgnored', () => {
     writeFileSync(join(repo, 'README'), 'x\n');
     execFileSync('git', ['add', '.'], { cwd: repo });
     execFileSync('git', ['commit', '-q', '-m', 'init'], { cwd: repo });
-    const parent = realpathSync(mkdtempSync(join(tmpdir(), 'iso-iterate-wt-')));
+    const parent = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-wt-')));
     dirs.push(parent);
     const worktree = join(parent, 'checkout');
     execFileSync('git', ['worktree', 'add', '-q', '-b', 'wt', worktree], {

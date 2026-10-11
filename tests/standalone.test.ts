@@ -4,7 +4,7 @@ import { readBundle } from '../src/standalone/bundle';
 import type { MountIterationOptions } from '../src/react/IterationMount';
 
 type PanelGlobal = { mount(options: MountIterationOptions): void; unmount(): void; mounted: boolean };
-const panel = () => (window as unknown as { __isoIterate: PanelGlobal }).__isoIterate;
+const panel = () => (window as unknown as { __isotone: PanelGlobal }).__isotone;
 function inject(bundle: string) {
   // biome-ignore lint/security/noGlobalEval: Execute our own built IIFE to test the script-tag entry point.
   window.eval(bundle);
@@ -28,10 +28,10 @@ it('replaces the old standalone instance when the script is injected twice', () 
   expect(panel()).not.toBe(first);
   // Let the old deferred unmount complete before checking the new host.
   vi.runAllTimers();
-  expect(document.querySelectorAll('[data-iso-iterate="root"]')).toHaveLength(0);
+  expect(document.querySelectorAll('[data-isotone="root"]')).toHaveLength(0);
   panel().mount({ endpoint: '/api/iteration/notes' });
-  expect(document.querySelectorAll('[data-iso-iterate="root"]')).toHaveLength(1);
+  expect(document.querySelectorAll('[data-isotone="root"]')).toHaveLength(1);
   panel().unmount();
   vi.runAllTimers();
-  expect(document.querySelectorAll('[data-iso-iterate="root"]')).toHaveLength(0);
+  expect(document.querySelectorAll('[data-isotone="root"]')).toHaveLength(0);
 });

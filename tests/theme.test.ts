@@ -55,7 +55,7 @@ it('uses the painted surface at the dock before the body background', () => {
 
 it('ignores the overlay and its open shadow content', () => {
   const overlay = document.createElement('div');
-  overlay.dataset.isoIterate = '';
+  overlay.dataset.isotone = '';
   overlay.style.backgroundColor = 'white';
   const shadow = overlay.attachShadow({ mode: 'open' });
   const button = document.createElement('button');
@@ -144,7 +144,7 @@ it('follows page mutations but emits only changes, ignoring its own UI', async (
   await frame();
   expect(sample).toHaveBeenLastCalledWith('dark');
   const overlay = document.createElement('div');
-  overlay.dataset.isoIterate = '';
+  overlay.dataset.isotone = '';
   document.body.append(overlay);
   await frame();
   const requestFrame = vi.spyOn(window, 'requestAnimationFrame');

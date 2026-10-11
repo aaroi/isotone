@@ -24,7 +24,7 @@ afterEach(() => {
 
 /** A real git repo, since `variant add`/`sync` hash blobs through `git`. */
 function tempRepo(): string {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'iso-iterate-cli-')));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-cli-')));
   dirs.push(root);
   execFileSync('git', ['init', '-q', root]);
   execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: root });
@@ -75,8 +75,8 @@ describe('--help', () => {
     for (const argv of [['--help'], ['-h'], ['help']]) {
       const io = makeIo(root);
       expect(await runCli(argv, io)).toBe(0);
-      expect(io.text.out).toContain('iso-iterate serve');
-      expect(io.text.out).toContain('iso-iterate init');
+      expect(io.text.out).toContain('isotone serve');
+      expect(io.text.out).toContain('isotone init');
     }
     const variant = makeIo(root);
     expect(await runCli(['variant', '--help'], variant)).toBe(0);
@@ -117,7 +117,7 @@ describe('variant', () => {
     io = makeIo(root);
     expect(await runCli(['variant', 'add', 'bold-cta', 'src/Hero.tsx'], io)).toBe(0);
     expect(io.text.out).toContain('added 1 file(s) to "bold-cta"');
-    expect(existsSync(join(root, '.iso-iterate/variants/bold-cta/src/Hero.tsx'))).toBe(true);
+    expect(existsSync(join(root, '.isotone/variants/bold-cta/src/Hero.tsx'))).toBe(true);
 
     io = makeIo(root);
     expect(await runCli(['variant', 'list'], io)).toBe(0);
@@ -138,12 +138,12 @@ describe('variant', () => {
 
     io = makeIo(root);
     expect(await runCli(['variant', 'path', 'bold-cta', 'src/Hero.tsx'], io)).toBe(0);
-    expect(io.text.out.trim()).toBe(join(root, '.iso-iterate/variants/bold-cta/src/Hero.tsx'));
+    expect(io.text.out.trim()).toBe(join(root, '.isotone/variants/bold-cta/src/Hero.tsx'));
 
     io = makeIo(root);
     expect(await runCli(['variant', 'promote', 'bold-cta'], io)).toBe(0);
     expect(io.text.out).toContain('promoted "bold-cta"');
-    expect(existsSync(join(root, '.iso-iterate/variants/bold-cta'))).toBe(false);
+    expect(existsSync(join(root, '.isotone/variants/bold-cta'))).toBe(false);
   });
 
   it('adds and removes a tracked file', async () => {
@@ -182,7 +182,7 @@ describe('variant', () => {
     const io = makeIo(root);
     expect(await runCli(['variant', 'drop', 'drop-me'], io)).toBe(0);
     expect(io.text.out).toContain('dropped "drop-me"');
-    expect(existsSync(join(root, '.iso-iterate/variants/drop-me'))).toBe(false);
+    expect(existsSync(join(root, '.isotone/variants/drop-me'))).toBe(false);
 
     const again = makeIo(root);
     expect(await runCli(['variant', 'drop', 'drop-me'], again)).toBe(1);
@@ -197,7 +197,7 @@ describe('variant', () => {
     expect(await runCli(['variant', 'use', 'default'], io)).toBe(0);
     expect(io.text.out).toContain('active: default');
     expect(
-      JSON.parse(readFileSync(join(root, '.iso-iterate/active.json'), 'utf8')).active,
+      JSON.parse(readFileSync(join(root, '.isotone/active.json'), 'utf8')).active,
     ).toEqual([]);
   });
 
@@ -218,7 +218,7 @@ describe('variant', () => {
       makeIo(root),
     );
     const active = () =>
-      JSON.parse(readFileSync(join(root, '.iso-iterate/active.json'), 'utf8')).active;
+      JSON.parse(readFileSync(join(root, '.isotone/active.json'), 'utf8')).active;
 
     expect(await runCli(['variant', 'use', 'table-dense'], makeIo(root))).toBe(0);
     let io = makeIo(root);
@@ -270,7 +270,7 @@ describe('variant', () => {
     io = makeIo(root);
     expect(await runCli(['variant', 'group', 'b', 'layout', '--label', 'Layout'], io)).toBe(0);
     const manifest = (id: string) =>
-      JSON.parse(readFileSync(join(root, `.iso-iterate/variants/${id}/variant.json`), 'utf8'));
+      JSON.parse(readFileSync(join(root, `.isotone/variants/${id}/variant.json`), 'utf8'));
     expect(manifest('a').group).toBe('layout');
     expect(manifest('a').groupLabel).toBeUndefined();
     expect(manifest('b')).toMatchObject({ group: 'layout', groupLabel: 'Layout' });
@@ -295,13 +295,13 @@ describe('variant', () => {
     ).toBe(0);
     expect(io.text.out).toContain('created "tabs" in group settings');
     const manifest = JSON.parse(
-      readFileSync(join(root, '.iso-iterate/variants/tabs/variant.json'), 'utf8'),
+      readFileSync(join(root, '.isotone/variants/tabs/variant.json'), 'utf8'),
     );
     expect(manifest).toMatchObject({ group: 'settings', groupLabel: 'Settings layout' });
     const bad = makeIo(root);
     expect(await runCli(['variant', 'new', 'x', '--group', 'Not Ok'], bad)).toBe(1);
     expect(bad.text.err).toContain('Invalid group id');
-    expect(existsSync(join(root, '.iso-iterate/variants/x'))).toBe(false);
+    expect(existsSync(join(root, '.isotone/variants/x'))).toBe(false);
   });
 
   it('--dir overrides the variants directory', async () => {
@@ -309,7 +309,7 @@ describe('variant', () => {
     const io = makeIo(root);
     expect(await runCli(['variant', '--dir', 'custom-variants', 'new', 'v1'], io)).toBe(0);
     expect(existsSync(join(root, 'custom-variants/v1/variant.json'))).toBe(true);
-    expect(existsSync(join(root, '.iso-iterate/variants/v1'))).toBe(false);
+    expect(existsSync(join(root, '.isotone/variants/v1'))).toBe(false);
   });
 
   it('new --note copies route and element from the matching note', async () => {
@@ -390,7 +390,7 @@ describe('init', () => {
     writeFileSync(join(root, 'vite.config.ts'), 'export default {};\n');
     const io = makeIo(root);
     expect(await runCli(['init'], io)).toBe(0);
-    expect(io.text.out).toContain('iso-iterate init — Vite');
+    expect(io.text.out).toContain('isotone init — Vite');
     expect(io.text.out).toContain('Recommended: overlay');
   });
 
@@ -399,7 +399,7 @@ describe('init', () => {
     writeFileSync(join(root, 'next.config.ts'), 'export default {};\n');
     const io = makeIo(root);
     expect(await runCli(['init'], io)).toBe(0);
-    expect(io.text.out).toContain('iso-iterate init — Next');
+    expect(io.text.out).toContain('isotone init — Next');
     expect(io.text.out).toContain('Recommended: serve');
   });
 
@@ -428,14 +428,14 @@ describe('init', () => {
     const root = tempRepo();
     const host = makeIo(root);
     expect(await runCli(['init', '--approach', 'host'], host)).toBe(0);
-    expect(host.text.out).toContain("import { createVariantsSource, mountIteration } from 'iso-iterate/react';");
+    expect(host.text.out).toContain("import { createVariantsSource, mountIteration } from 'isotone/react';");
     expect(host.text.out).toContain('mountIteration({ variants: source });');
     expect(host.text.out).not.toContain('myAxes');
 
     writeFileSync(join(root, 'next.config.ts'), 'export default {};\n');
     const serve = makeIo(root);
     expect(await runCli(['init', '--approach', 'serve'], serve)).toBe(0);
-    expect(serve.text.out).toContain("import { serveNotesRequest } from 'iso-iterate/server';");
+    expect(serve.text.out).toContain("import { serveNotesRequest } from 'isotone/server';");
     expect(serve.text.out).toContain('a Next route handler');
   });
 
@@ -454,8 +454,8 @@ describe('init', () => {
     expect(await runCli(['init', '--approach', 'overlay', '--yes'], io)).toBe(0);
 
     expect(readFileSync(join(root, 'vite.config.ts'), 'utf8')).toBe(before);
-    expect(readFileSync(join(root, 'AGENTS.md'), 'utf8')).toContain('## iso-iterate');
-    expect(existsSync(join(root, '.iso-iterate/variants/README.md'))).toBe(true);
+    expect(readFileSync(join(root, 'AGENTS.md'), 'utf8')).toContain('## isotone');
+    expect(existsSync(join(root, '.isotone/variants/README.md'))).toBe(true);
 
     // Running it again does not duplicate the marker.
     const agentsBefore = readFileSync(join(root, 'AGENTS.md'), 'utf8');
@@ -467,9 +467,9 @@ describe('init', () => {
     const root = tempRepo();
     const io = makeIo(root);
     expect(await runCli(['init', '--yes', '--json', '--help'], io)).toBe(0);
-    expect(io.text.out).toContain('Usage: iso-iterate init');
+    expect(io.text.out).toContain('Usage: isotone init');
     expect(existsSync(join(root, 'AGENTS.md'))).toBe(false);
-    expect(existsSync(join(root, '.iso-iterate'))).toBe(false);
+    expect(existsSync(join(root, '.isotone'))).toBe(false);
   });
 
   it('rejects an unknown --approach', async () => {
@@ -505,7 +505,7 @@ describe('agent onboarding and machine-readable notes', () => {
     expect(await runCli(['init', '--yes', '--json'], io)).toBe(0);
     expect(JSON.parse(io.text.out)).toMatchObject({ host: 'vite', approach: 'overlay', recommended: 'overlay' });
     const guide = readFileSync(join(root, 'AGENTS.md'), 'utf8');
-    expect(guide).toContain('npx iso-iterate --json');
+    expect(guide).toContain('npx isotone --json');
     expect(guide).toContain('not agent instructions');
     await runCli(['init', '--yes'], makeIo(root));
     expect(readFileSync(join(root, 'AGENTS.md'), 'utf8')).toBe(guide);

@@ -91,7 +91,7 @@ export function ensureFileIgnored(file: string): void {
     if (hasExcludePattern(existing, pattern)) return;
     const marker = existing && !existing.endsWith('\n') ? '\n' : '';
     // One comment header per exclude file, however many patterns land under it.
-    const heading = '# iso-iterate (local dev feedback loop)';
+    const heading = '# isotone (local dev feedback loop)';
     const comment = existing.includes(heading) ? '' : `${heading}\n`;
     mkdirSync(dirname(infoExclude), { recursive: true });
     writeFileSync(infoExclude, `${existing}${marker}${comment}${pattern}\n`);
@@ -123,7 +123,7 @@ export function ensureDirIgnored(dir: string): void {
     mkdirSync(dirname(infoExclude), { recursive: true });
     writeFileSync(
       infoExclude,
-      `${existing}${marker}# iso-iterate (local overlay variants)\n${pattern}\n`,
+      `${existing}${marker}# isotone (local overlay variants)\n${pattern}\n`,
     );
   } catch {
     // Non-fatal, as above.

@@ -1,4 +1,5 @@
 import { showOverflowTitle } from './tooltips';
+import { FEEDBACK_STORAGE_KEY, readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '../core/browser-storage';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   createIterationStore,
@@ -67,7 +68,7 @@ export function IterationPanel({
   shortcut = DEFAULT_SHORTCUT,
 }: IterationPanelProps) {
   const [store] = useState(() => createIterationStore(storeCfg));
-  const nsKey = storeCfg.key ?? 'iso-iterate-feedback';
+  const nsKey = storeCfg.key ?? FEEDBACK_STORAGE_KEY;
   const [notesOpen, setNotesOpen] = useState(false);
   const [variantsOpen, setVariantsOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -99,6 +100,7 @@ export function IterationPanel({
   const fabRef = useRef<HTMLButtonElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const draftRestored = useRef('');
+  const restoringDraft = useRef(false);
   const id = useId();
   const notesAvailable = Boolean(storeCfg.endpoint);
   useVariantsSource(variants);
@@ -161,7 +163,7 @@ export function IterationPanel({
   useEffect(() => {
     if (!railOpen || !instant) return;
     const active = (rootRef.current?.getRootNode() as Document | ShadowRoot)?.activeElement;
-    if (active === fabRef.current) rootRef.current?.querySelector<HTMLButtonElement>('.iso-iter-rail-button')?.focus();
+    if (active === fabRef.current) rootRef.current?.querySelector<HTMLButtonElement>('.isotone-rail-button')?.focus();
   }, [railOpen, instant]);
   const draftKey = `${nsKey}::draft::${route}`;
   const visibleNotes = useMemo(() => notes
@@ -356,12 +358,13 @@ export function IterationPanel({
   useEffect(() => {
     if (draftRestored.current === draftKey) return;
     draftRestored.current = draftKey;
+    restoringDraft.current = true;
     setEditing(null);
     setText('');
     setTargets([]);
     setVariantTarget(null);
     try {
-      const raw = localStorage.getItem(draftKey);
+      const raw = readBrowserStorage(localStorage, draftKey);
       if (!raw) return;
       try {
         const draft = JSON.parse(raw);
@@ -376,12 +379,14 @@ export function IterationPanel({
     } catch {}
   }, [draftKey]);
   useEffect(() => {
+    // Restoration commits after this effect pass; never save the previous route's draft over it.
+    if (restoringDraft.current) { restoringDraft.current = false; return; }
     if (editing || draftRestored.current !== draftKey) return;
     try {
       if (!text && targets.length === 0 && !variantTarget)
-        localStorage.removeItem(draftKey);
+        removeBrowserStorage(localStorage, draftKey);
       else
-        localStorage.setItem(
+        writeBrowserStorage(localStorage,
           draftKey,
           JSON.stringify({ text, elements: targets, variant: variantTarget }),
         );
@@ -465,7 +470,7 @@ export function IterationPanel({
       const el = e.detail === 0 && e.type === 'click'
         ? e.composedPath().find((node): node is Element => node instanceof Element)
         : document.elementFromPoint(e.clientX, e.clientY);
-      return el && !el.closest('[data-iso-iterate]') ? el : null;
+      return el && !el.closest('[data-isotone]') ? el : null;
     };
     const onMove = (e: MouseEvent) => {
       cancelAnimationFrame(frame);
@@ -494,7 +499,7 @@ export function IterationPanel({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === ' ') {
         const el = e.composedPath().find((node): node is Element => node instanceof Element);
-        if (!el || el === document.body || el.closest('[data-iso-iterate], input, textarea, select, [contenteditable]')) return;
+        if (!el || el === document.body || el.closest('[data-isotone], input, textarea, select, [contenteditable]')) return;
         e.preventDefault();
         e.stopImmediatePropagation();
         if (!e.repeat) toggleTarget(el);
@@ -570,7 +575,7 @@ export function IterationPanel({
           id={`${id}-variants`}
           role="dialog"
           aria-label="Iteration variants"
-          className="iso-iter-panel iso-iter-variants-panel"
+          className="isotone-panel isotone-variants-panel"
           data-open={variantsOpen}
           aria-hidden={!variantsOpen}
           ref={node => { node?.toggleAttribute('inert', !variantsOpen); }}
@@ -591,21 +596,21 @@ export function IterationPanel({
           id={`${id}-notes`}
           role="dialog"
           aria-label="Iteration feedback"
-          className="iso-iter-panel iso-iter-notes-panel"
+          className="isotone-panel isotone-notes-panel"
           data-open={notesOpen}
           aria-hidden={!notesOpen}
           ref={node => { node?.toggleAttribute('inert', !notesOpen); }}
         >
-          <div className="iso-iter-panel-head">
+          <div className="isotone-panel-head">
             <h2>
               Feedback{' '}
-              <span className="iso-iter-count">
+              <span className="isotone-count">
                 {visibleNotes.length || ''}
               </span>
             </h2>
             <button
               type="button"
-              className="iso-iter-icon"
+              className="isotone-icon"
               aria-label="Close feedback"
                 title="Close feedback"
               onClick={() => {
@@ -617,16 +622,16 @@ export function IterationPanel({
               <Icon name="close" />
             </button>
           </div>
-          <ul ref={listRef} className="iso-iter-list">
+          <ul ref={listRef} className="isotone-list">
             {visibleNotes.map((note) => (
               <li
                 key={note.id}
                 data-motion-key={note.id}
-                className={`iso-iter-note${editing?.id === note.id ? ' iso-iter-note-editing' : ''}`}
+                className={`isotone-note${editing?.id === note.id ? ' isotone-note-editing' : ''}`}
               >
                 <button
                   type="button"
-                  className="iso-iter-note-hit"
+                  className="isotone-note-hit"
                   aria-current={editing?.id === note.id ? true : undefined}
                   onClick={() => beginEdit(note)}
                 >
@@ -634,7 +639,7 @@ export function IterationPanel({
                 </button>
                 <button
                   type="button"
-                  className="iso-iter-x iso-iter-icon"
+                  className="isotone-x isotone-icon"
                   aria-label={note.variantAction ? 'Cancel removal' : 'Delete note'}
                   title={note.variantAction ? 'Cancel removal' : 'Delete note'}
                   onClick={() => void removeNote(note)}
@@ -644,10 +649,10 @@ export function IterationPanel({
               </li>
             ))}
           </ul>
-          <div className="iso-iter-compose">
+          <div className="isotone-compose">
             {/* biome-ignore lint/a11y/useKeyWithClickEvents: This extends the native textarea's pointer area; keyboard users focus the textarea directly. */}
             <fieldset
-              className="iso-iter-input"
+              className="isotone-input"
               aria-label="Feedback composer"
               onClick={(event) => {
                 if (event.defaultPrevented || event.button !== 0) return;
@@ -656,9 +661,9 @@ export function IterationPanel({
                 textareaRef.current?.focus({ preventScroll: true });
               }}
             >
-            <div className="iso-iter-context" aria-live="polite">
+            <div className="isotone-context" aria-live="polite">
               {editing && (
-                <span className="iso-iter-chip">
+                <span className="isotone-chip">
                   Editing note
                   <button
                     type="button"
@@ -671,7 +676,7 @@ export function IterationPanel({
                 </span>
               )}
               {variantTarget && (
-                <span className="iso-iter-chip">
+                <span className="isotone-chip">
                   <Icon name="sliders" size={12} />
                   <span onPointerOver={showOverflowTitle}>
                     {variantTarget.label}
@@ -692,7 +697,7 @@ export function IterationPanel({
               {targets.map((target, index) => (
                 <span
                   key={target.selector}
-                  className="iso-iter-chip"
+                  className="isotone-chip"
                 >
                   <span onPointerOver={showOverflowTitle}>{target.text || target.tag}</span>
                   <button
@@ -710,7 +715,7 @@ export function IterationPanel({
                 </span>
               ))}
               {(notice || unsynced) && (
-                <p role="status" className="iso-iter-notice">
+                <p role="status" className="isotone-notice">
                   {notice ||
                     'Saved in this browser. It will sync when the dev server returns.'}
                 </p>
@@ -741,15 +746,15 @@ export function IterationPanel({
                   : 'What would you change?'
               }
               rows={1}
-              className="iso-iter-textarea"
+              className="isotone-textarea"
             />
-            <div className="iso-iter-toolbar">
+            <div className="isotone-toolbar">
               <button
                 type="button"
                 title="Select elements"
                 aria-label="Select elements"
                 aria-pressed={picking}
-                className="iso-iter-pick iso-iter-icon"
+                className="isotone-pick isotone-icon"
                 onClick={() => {
                   cancelAnimationFrame(focusFrame.current);
                   setPicking((v) => !v);
@@ -757,12 +762,12 @@ export function IterationPanel({
               >
                 <Icon name="pin" size={14} />
               </button>
-              {picking && <span className="iso-iter-key-hint">Click or Space to pin · Enter to finish</span>}
+              {picking && <span className="isotone-key-hint">Click or Space to pin · Enter to finish</span>}
               <button
                 type="button"
                 aria-label={editing ? 'Save edit' : 'Send note'}
                 disabled={!text.trim()}
-                className="iso-iter-send"
+                className="isotone-send"
                 title={editing ? 'Save edit (Enter)' : 'Send note (Enter)'}
                 onClick={() => void send()}
               >
@@ -777,18 +782,18 @@ export function IterationPanel({
   return (
     <div
       ref={rootRef}
-      data-iso-iterate
+      data-isotone
       data-theme={theme}
       data-expanded={railOpen}
       data-tools={Number(Boolean(variants)) + Number(notesAvailable)}
       data-instant={instant}
       data-notes-open={notesOpen}
       data-open={open}
-      className="iso-iter-root"
+      className="isotone-root"
     >
-      <div className="iso-iter-rail-track" aria-hidden="true" />
+      <div className="isotone-rail-track" aria-hidden="true" />
       {picking && (
-        <div className="iso-iter-hint" data-iso-iterate>
+        <div className="isotone-hint" data-isotone>
           <span>{targets.length} selected · click to add or remove</span>
           <button
             type="button"
@@ -818,8 +823,8 @@ export function IterationPanel({
         ].map((rect, i) => (
           <div
             key={rect.selector}
-            data-iso-iterate
-            className={`iso-iter-hover${i < rects.length ? ' iso-iter-selected' : ''}`}
+            data-isotone
+            className={`isotone-hover${i < rects.length ? ' isotone-selected' : ''}`}
             style={{
               top: rect.top,
               left: rect.left,
@@ -830,17 +835,17 @@ export function IterationPanel({
         ))}
       <UpdateNotice endpoint={updateEndpoint} active={open} />
       <fieldset
-        aria-label="Iteration tools"
+        aria-label="Isotone tools"
         onKeyDown={event => {
-          if (!(event.target as HTMLElement).classList.contains('iso-iter-rail-button')) return;
+          if (!(event.target as HTMLElement).classList.contains('isotone-rail-button')) return;
           if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
           event.preventDefault();
-          const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('.iso-iter-rail-button'));
+          const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('.isotone-rail-button'));
           const at = buttons.indexOf(event.target as HTMLButtonElement);
           const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (at + (['ArrowUp', 'ArrowLeft'].includes(event.key) ? -1 : 1) + buttons.length) % buttons.length;
           buttons[next]?.focus();
         }}
-        className="iso-iter-rail"
+        className="isotone-rail"
         data-expanded={railOpen}
         data-tools={Number(Boolean(variants)) + Number(notesAvailable)}
         onFocus={() => setFocused(true)}
@@ -849,14 +854,14 @@ export function IterationPanel({
         }}
       >
         <div
-          className="iso-iter-rail-tools"
+          className="isotone-rail-tools"
           aria-hidden={!railOpen}
           ref={node => { node?.toggleAttribute('inert', !railOpen); }}
         >
           {variants && (
             <button
               type="button"
-              className="iso-iter-rail-button"
+              className="isotone-rail-button"
               aria-label="Variants"
               title="Variants"
               aria-controls={`${id}-variants`}
@@ -866,7 +871,7 @@ export function IterationPanel({
                 setExpanded(false);
               }}
             >
-              <Icon name="sliders" /><span className="iso-iter-tool-label">Variants</span>
+              <Icon name="sliders" /><span className="isotone-tool-label">Variants</span>
             </button>
           )}
           {variantsPanel}
@@ -874,7 +879,7 @@ export function IterationPanel({
           {notesAvailable && (
             <button
               type="button"
-              className="iso-iter-rail-button"
+              className="isotone-rail-button"
               aria-label="Feedback"
               title="Feedback"
               aria-controls={`${id}-notes`}
@@ -885,18 +890,18 @@ export function IterationPanel({
                 if (!notesOpen) focusComposer();
               }}
             >
-              <Icon name="message" /><span className="iso-iter-tool-label">Feedback <span className="iso-iter-count">{visibleNotes.length || ""}</span></span>
+              <Icon name="message" /><span className="isotone-tool-label">Feedback <span className="isotone-count">{visibleNotes.length || ""}</span></span>
             </button>
           )}
         </div>
         <button
           type="button"
           ref={fabRef}
-          className="iso-iter-fab"
+          className="isotone-fab"
           aria-hidden={railOpen}
           tabIndex={railOpen ? -1 : 0}
-          aria-label={notesAvailable ? 'Iteration' : 'Variants'}
-          title={`Iteration${shortcutLabel ? ` · ${shortcutLabel}` : ''}`}
+          aria-label={notesAvailable ? 'Isotone' : 'Variants'}
+          title={`Isotone${shortcutLabel ? ` · ${shortcutLabel}` : ''}`}
           aria-expanded={railOpen}
           onClick={() => {
             if (open) closeAll();
@@ -906,7 +911,7 @@ export function IterationPanel({
         >
           <Icon name="iterate" />
           {visibleNotes.length > 0 && (
-            <span className="iso-iter-badge">{visibleNotes.length}</span>
+            <span className="isotone-badge">{visibleNotes.length}</span>
           )}
         </button>
       </fieldset>

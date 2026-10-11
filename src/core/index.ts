@@ -1,5 +1,5 @@
 /**
- * iso-iterate — core.
+ * isotone — core.
  *
  * The framework-agnostic half of the internal feedback loop. Holds the note
  * model, the element descriptor, the dev-store client (file-backed via a Vite
@@ -8,6 +8,7 @@
  * `node` env.
  */
 import { request } from './request';
+import { FEEDBACK_STORAGE_KEY, readBrowserStorage, writeBrowserStorage } from './browser-storage';
 
 /** A UI element picked with the panel's selector mode. */
 export interface IterationElement {
@@ -197,13 +198,11 @@ export type SaveLocation = "server" | "local";
 
 export function createIterationStore(cfg: IterationStoreConfig = {}) {
   const endpoint = cfg.endpoint ?? null;
-  const key = cfg.key ?? "iso-iterate-feedback";
+  const key = cfg.key ?? FEEDBACK_STORAGE_KEY;
   let lastSave: SaveLocation | null = null;
   let migration: Promise<void> | null = null;
 
-  function localAll(): IterationNote[] {
-    let raw: string | null;
-    try { raw = window.localStorage.getItem(key); } catch { return []; }
+  function parseLocal(raw: string | null): IterationNote[] {
     try {
       const items = JSON.parse(raw ?? '[]') as IterationNote[];
       if (!Array.isArray(items) || !items.every((note) => note && typeof note.id === 'string' &&
@@ -217,8 +216,17 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     }
   }
 
+  function localAll(): IterationNote[] {
+    let storage: Storage;
+    try { storage = window.localStorage; } catch { return []; }
+    return parseLocal(readBrowserStorage(storage, key, (current, previous) => {
+      const merged = new Map([...parseLocal(previous), ...parseLocal(current)].map(note => [note.id, note]));
+      return JSON.stringify([...merged.values()]);
+    }));
+  }
+
   function localWrite(items: IterationNote[]) {
-    window.localStorage.setItem(key, JSON.stringify(items));
+    writeBrowserStorage(window.localStorage, key, JSON.stringify(items));
   }
 
   function acknowledge(item: IterationNote): void {

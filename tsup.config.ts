@@ -24,10 +24,10 @@ export default defineConfig([
   {
     // The standalone bundle is the opposite trade: React goes INSIDE, because
     // the page it drops into may have none, may have another version, or may
-    // not be a bundled app at all. `iso-iterate serve` serves this file.
+    // not be a bundled app at all. `isotone serve` serves this file.
     // tsup suffixes an iife build with `.global`, so this emits
-    // dist/iso-iterate.global.js.
-    entry: { 'iso-iterate': 'src/standalone/index.ts' },
+    // dist/isotone.global.js.
+    entry: { 'isotone': 'src/standalone/index.ts' },
     format: ['iife'],
     target: 'es2020',
     dts: false,

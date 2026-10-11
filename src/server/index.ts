@@ -1,6 +1,6 @@
 import { checkOrigin, httpFailure, readWebJson } from './http';
 /**
- * iso-iterate — server.
+ * isotone — server.
  *
  * The transport-agnostic side of the loop: the file store and a pure request
  * handler that any dev runtime (Vite middleware, Next route handler, Bun.serve,

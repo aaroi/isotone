@@ -89,6 +89,6 @@ function tokens(values: Record<string, string>): string {
   return Object.entries(values).map(([name, value]) => `--iso-${name}: ${value};`).join('\n');
 }
 export const APPEARANCE_CSS = `
-.iso-iter-root { ${tokens(PALETTES.dark)} ${tokens(INSTRUMENT_MATERIAL)} }
-.iso-iter-root[data-theme='light'] { ${tokens(PALETTES.light)} color-scheme: light; }
+.isotone-root { ${tokens(PALETTES.dark)} ${tokens(INSTRUMENT_MATERIAL)} }
+.isotone-root[data-theme='light'] { ${tokens(PALETTES.light)} color-scheme: light; }
 `;

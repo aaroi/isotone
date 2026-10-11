@@ -4,7 +4,7 @@ A variant is an alternative of one specific element, chosen from the
 panel's Variants tab. Two host shapes:
 
 **A Vite host with no variant system** gets overlay variants, on by default.
-A variant is a directory under `.iso-iterate/variants/<id>/` holding copies
+A variant is a directory under `.isotone/variants/<id>/` holding copies
 of source files at their repo-relative paths plus a `variant.json`
 manifest. While the variant is active, the plugin serves the copy in place
 of the real file. Variants that override the same files, or share a
@@ -17,7 +17,7 @@ without a route shows everywhere.
 **A host with its own variant system** hands the panel a `VariantsSource`:
 
 ```ts
-import { createVariantsSource, mountIteration } from 'iso-iterate/react';
+import { createVariantsSource, mountIteration } from 'isotone/react';
 
 const source = createVariantsSource({ axes, onChange: applySelections });
 mountIteration({ variants: source, defaultTab: 'variants' });
@@ -25,7 +25,7 @@ mountIteration({ variants: source, defaultTab: 'variants' });
 
 The panel renders select, range and colour axes, thumbnail grids,
 conditional axes and per-selector actions; the app keeps its own state and URL
-sync. `npx iso-iterate init --approach host` prints a complete example.
+sync. `npx isotone init --approach host` prints a complete example.
 
 ## Choosing a selector
 
@@ -102,14 +102,14 @@ other variants stay until you ask for one to be dropped.
 
 Variant files are committed by default, since they are the change under
 review; `variants: { ignored: true }` keeps them local. The active pointer,
-`.iso-iterate/active.json`, is local and never committed. `ISO_VARIANT=<id>`
+`.isotone/active.json`, is local and never committed. `ISOTONE_VARIANT=<id>`
 (a comma-separated list) bakes variants into a `vite build` for a preview.
 
 ### Knobs
 
 Some decisions are a number, not an alternative file: how far a fade
 reaches, how dense a dot field is. Declare those in
-`.iso-iterate/knobs.json`, a JSON array of range or colour axes with an
+`.isotone/knobs.json`, a JSON array of range or colour axes with an
 optional `route` (a pattern like a variant's, or a list of them):
 
 ```json
@@ -157,11 +157,11 @@ where an edit to that file would.
   with no accept handler reloads. Accept the import in the entry and
   re-render from the new module, or move the extra exports out.
 - **Tailwind v4** scans only the sources it is pointed at. Add
-  `@source "../.iso-iterate/variants/**/*.{ts,tsx}";` (relative to the CSS
+  `@source "../.isotone/variants/**/*.{ts,tsx}";` (relative to the CSS
   file) or classes new to a variant render unstyled.
 - **A sibling dev server** that aliases into another package sets
   `variants: { root: '../that-package' }` so both serve the same variants.
 - **Routes** come from `window.location.pathname`. An app on a memory
   router sees `/` everywhere; leave `--route` off there.
-- **Linters** should ignore `.iso-iterate` (Biome: `"!.iso-iterate"` in
-  `files.includes`; ESLint: `{ ignores: ['.iso-iterate/**'] }`).
+- **Linters** should ignore `.isotone` (Biome: `"!.isotone"` in
+  `files.includes`; ESLint: `{ ignores: ['.isotone/**'] }`).

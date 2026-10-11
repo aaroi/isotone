@@ -144,17 +144,17 @@ export function VariantsView({
   }
 
   return (
-    <div className="iso-iter-vars">
-      <div className="iso-iter-panel-head">
+    <div className="isotone-vars">
+      <div className="isotone-panel-head">
         {showTitle && <h2>{source.title ?? 'Variants'}</h2>}
-        <div className="iso-iter-head-actions">
+        <div className="isotone-head-actions">
           {source.saveDefaults && isDirty(shown, selections) && (
             <SaveDefaults source={source} onSaved={onSaved} />
           )}
           {onClose && (
             <button
               type="button"
-              className="iso-iter-icon"
+              className="isotone-icon"
               aria-label="Close variants"
               title="Close variants"
               onClick={onClose}
@@ -164,23 +164,23 @@ export function VariantsView({
           )}
         </div>
       </div>
-      <div className="iso-iter-vars-body" ref={node => { bodyRef.current = node; node?.toggleAttribute('inert', menuOpen); }}>
-        {sourceError && <p className="iso-iter-danger" role="alert">{sourceError}</p>}
+      <div className="isotone-vars-body" ref={node => { bodyRef.current = node; node?.toggleAttribute('inert', menuOpen); }}>
+        {sourceError && <p className="isotone-danger" role="alert">{sourceError}</p>}
         {shown.length === 0 && (
-          <p className="iso-iter-empty">No variant selectors on this page.</p>
+          <p className="isotone-empty">No variant selectors on this page.</p>
         )}
         {shown.map((axis) => {
           const thumbnails = axis.kind !== 'range' && axis.kind !== 'color' && axis.options.length > 0 && axis.options.every(option => option.image);
           return (
           <div
-            className="iso-iter-axis"
+            className="isotone-axis"
             key={axis.id}
             data-motion-key={axis.id}
           >
-            <div className="iso-iter-axis-head">
+            <div className="isotone-axis-head">
               <button
                 type="button"
-                className="iso-iter-axis-label"
+                className="isotone-axis-label"
                 aria-label={`${axis.label} actions`}
                 aria-haspopup="dialog"
                 aria-expanded={menuOpen && menu?.id === axis.id}
@@ -195,7 +195,7 @@ export function VariantsView({
                 <Icon name="chevron" size={12} />
               </button>
               {(axis.kind === 'range' || axis.kind === 'color') && (
-                <span className="iso-iter-axis-value">
+                <span className="isotone-axis-value">
                   {axis.kind === 'range'
                     ? formatRangeValue(axis, value(axis))
                     : value(axis).toUpperCase()}
@@ -205,7 +205,7 @@ export function VariantsView({
             {axis.kind === 'range' ? (
               <input
                 type="range"
-                className="iso-iter-range"
+                className="isotone-range"
                 aria-label={axis.label}
                 aria-valuetext={formatRangeValue(axis, value(axis))}
                 min={axis.min}
@@ -215,7 +215,7 @@ export function VariantsView({
                 onChange={(e) => source.setSelection(axis.id, e.target.value)}
               />
             ) : axis.kind === 'color' ? (
-              <fieldset className="iso-iter-swatches" aria-label={axis.label}>
+              <fieldset className="isotone-swatches" aria-label={axis.label}>
                 {axis.swatches.map((sw) => (
                   <button
                     key={sw.id}
@@ -225,12 +225,12 @@ export function VariantsView({
                     aria-pressed={
                       value(axis).toLowerCase() === sw.value.toLowerCase()
                     }
-                    className="iso-iter-swatch"
+                    className="isotone-swatch"
                     style={{ backgroundColor: sw.value }}
                     onClick={() => source.setSelection(axis.id, sw.value)}
                   />
                 ))}
-                <label className="iso-iter-picker" title="Custom colour">
+                <label className="isotone-picker" title="Custom colour">
                   <input
                     type="color"
                     aria-label={`${axis.label}: custom colour`}
@@ -246,8 +246,8 @@ export function VariantsView({
                 aria-label={axis.label}
                 className={
                   thumbnails
-                    ? 'iso-iter-grid'
-                    : 'iso-iter-segs'
+                    ? 'isotone-grid'
+                    : 'isotone-segs'
                 }
               >
                 {axis.options.map((o) => (
@@ -256,7 +256,7 @@ export function VariantsView({
                     type="button"
                     aria-label={o.label}
                     aria-pressed={value(axis) === o.id}
-                    className={`${thumbnails ? 'iso-iter-thumb' : 'iso-iter-seg'}${value(axis) === o.id ? ' iso-iter-seg-on' : ''}`}
+                    className={`${thumbnails ? 'isotone-thumb' : 'isotone-seg'}${value(axis) === o.id ? ' isotone-seg-on' : ''}`}
                     onClick={() => source.setSelection(axis.id, o.id)}
                   >
                     {thumbnails && (
@@ -274,7 +274,7 @@ export function VariantsView({
       </div>
       {menu && (
         <div
-          className="iso-iter-axis-menu"
+          className="isotone-axis-menu"
           ref={node => { menuRef.current = node; node?.toggleAttribute('inert', !menuOpen); }}
           role="dialog"
           aria-label={`${menu.label} actions`}
@@ -288,11 +288,11 @@ export function VariantsView({
             }
           }}
         >
-          <div className="iso-iter-menu-title">
+          <div className="isotone-menu-title">
             <strong>{menu.label}</strong>
             <button
               type="button"
-              className="iso-iter-icon"
+              className="isotone-icon"
               aria-label="Close selector actions"
               title="Close selector actions"
               onClick={closeMenu}
@@ -300,11 +300,11 @@ export function VariantsView({
               <Icon name="close" />
             </button>
           </div>
-          <div className="iso-iter-menu-scroll">
+          <div className="isotone-menu-scroll">
             {onFeedback && (
               <button
                 type="button"
-                className="iso-iter-menu-action"
+                className="isotone-menu-action"
                 onClick={() => feedback(menu)}
               >
                 <Icon name="message" />
@@ -312,9 +312,9 @@ export function VariantsView({
               </button>
             )}
             {menu.kind !== 'range' && (
-              <div className="iso-iter-menu-options">
+              <div className="isotone-menu-options">
                 {menuOptions.map((option) => (
-                  <div className="iso-iter-option-row" key={option.id}>
+                  <div className="isotone-option-row" key={option.id}>
                     <span>
                       {option.label}
                       {option.isDefault && <small>Default</small>}
@@ -322,7 +322,7 @@ export function VariantsView({
                     {onFeedback && (
                       <button
                         type="button"
-                        className="iso-iter-icon"
+                        className="isotone-icon"
                         aria-label={`Feedback on ${option.label}`}
                         title="Give feedback"
                         onClick={() => feedback(menu, option.id)}
@@ -333,7 +333,7 @@ export function VariantsView({
                     {onManage && (
                       <button
                         type="button"
-                        className="iso-iter-icon"
+                        className="isotone-icon"
                         aria-label={`Remove ${option.label}`}
                         disabled={option.isDefault || busy || requested({ axisId: menu.id, action: 'remove-option', optionId: option.id })}
                         title={
@@ -358,7 +358,7 @@ export function VariantsView({
             )}
             <button
               type="button"
-              className="iso-iter-menu-action"
+              className="isotone-menu-action"
               onClick={() => {
                 source.setSelection(menu.id, axisDefault(menu));
                 closeMenu();
@@ -371,7 +371,7 @@ export function VariantsView({
               <>
                 <button
                   type="button"
-                  className="iso-iter-menu-action"
+                  className="isotone-menu-action"
                   disabled={busy || requested({ axisId: menu.id, action: 'keep-default' })}
                   onClick={() =>
                     void manage({ axisId: menu.id, action: 'keep-default' })
@@ -382,7 +382,7 @@ export function VariantsView({
                 </button>
                 <button
                   type="button"
-                  className="iso-iter-menu-action iso-iter-danger"
+                  className="isotone-menu-action isotone-danger"
                   disabled={busy || requested({ axisId: menu.id, action: 'remove-axis' })}
                   onClick={() =>
                     void manage({ axisId: menu.id, action: 'remove-axis' })
@@ -395,8 +395,8 @@ export function VariantsView({
             )}
           </div>
           {error && (
-            <div className="iso-iter-menu-footer">
-              <p className="iso-iter-danger" role="alert">{error}</p>
+            <div className="isotone-menu-footer">
+              <p className="isotone-danger" role="alert">{error}</p>
             </div>
           )}
         </div>
@@ -430,16 +430,16 @@ function SaveDefaults({
     timer.current = setTimeout(() => setState(''), 2500);
   }
   return (
-    <div className="iso-iter-save-row">
+    <div className="isotone-save-row">
       <button
         type="button"
-        className="iso-iter-save"
+        className="isotone-save"
         disabled={state === 'Saving…'}
         onClick={() => void save()}
       >
         Save as defaults
       </button>
-      <span className="iso-iter-save-state" role="status">
+      <span className="isotone-save-state" role="status">
         {state}
       </span>
     </div>

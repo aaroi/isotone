@@ -1,6 +1,6 @@
 {
-  "name": "iso-iterate",
-  "version": "0.3.4",
+  "name": "isotone",
+  "version": "0.4.0",
   "type": "module",
   "license": "MIT",
   "description": "Local feedback and design variants for your running web app. Pin elements, leave notes, and give your coding agent the context to make the change.",
@@ -40,7 +40,7 @@
     "CHANGELOG.md"
   ],
   "bin": {
-    "iso-iterate": "./dist/cli.js"
+    "isotone": "./dist/cli.js"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -87,10 +87,10 @@
   "sideEffects": false,
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/aaroi/iso-iterate.git"
+    "url": "git+https://github.com/aaroi/isotone.git"
   },
-  "homepage": "https://github.com/aaroi/iso-iterate#readme",
-  "bugs": "https://github.com/aaroi/iso-iterate/issues",
+  "homepage": "https://github.com/aaroi/isotone#readme",
+  "bugs": "https://github.com/aaroi/isotone/issues",
   "peerDependenciesMeta": {
     "react": {
       "optional": true

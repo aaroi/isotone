@@ -63,7 +63,7 @@ const note: IterationNote = {
 it('applies theme prop changes and follows system changes while mounted', async () => {
   document.body.style.backgroundColor = 'black';
   await render('auto');
-  const panel = container.querySelector<HTMLElement>('.iso-iter-root');
+  const panel = container.querySelector<HTMLElement>('.isotone-root');
   expect(panel?.dataset.theme).toBe('dark');
   await render('light');
   expect(panel?.dataset.theme).toBe('light');
@@ -83,8 +83,8 @@ it('passes an explicit theme through the standalone React mount', async () => {
   document.body.style.backgroundColor = 'black';
   const off = mountIteration({ endpoint: '/notes', theme: 'light' });
   await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-  const host = document.querySelector('[data-iso-iterate="root"]');
-  expect(host?.shadowRoot?.querySelector('.iso-iter-root')?.getAttribute('data-theme')).toBe('light');
+  const host = document.querySelector('[data-isotone="root"]');
+  expect(host?.shadowRoot?.querySelector('.isotone-root')?.getAttribute('data-theme')).toBe('light');
   await act(async () => {
     off();
     await vi.advanceTimersByTimeAsync(0);
@@ -100,12 +100,12 @@ it('does not restore a deleted note when an older refresh finishes', async () =>
     return ++reads === 1 ? Promise.resolve(response([note])) : refresh.promise;
   }));
   await render();
-  await click('.iso-iter-fab');
-  expect(container.querySelector('.iso-iter-note-hit')?.textContent).toContain('Original note');
+  await click('.isotone-fab');
+  expect(container.querySelector('.isotone-note-hit')?.textContent).toContain('Original note');
   await click('[aria-label="Delete note"]');
-  expect(container.querySelectorAll('.iso-iter-note')).toHaveLength(0);
+  expect(container.querySelectorAll('.isotone-note')).toHaveLength(0);
   await act(async () => refresh.resolve(response([note])));
-  expect(container.querySelectorAll('.iso-iter-note')).toHaveLength(0);
+  expect(container.querySelectorAll('.isotone-note')).toHaveLength(0);
 });
 
 it('does not replace an edited note with a stale refresh', async () => {
@@ -116,8 +116,8 @@ it('does not replace an edited note with a stale refresh', async () => {
     return ++reads === 1 ? Promise.resolve(response([note])) : refresh.promise;
   }));
   await render();
-  await click('.iso-iter-fab');
-  await click('.iso-iter-note-hit');
+  await click('.isotone-fab');
+  await click('.isotone-note-hit');
   const textarea = container.querySelector('textarea');
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(textarea, 'Edited note');
@@ -125,7 +125,7 @@ it('does not replace an edited note with a stale refresh', async () => {
   });
   await click('[aria-label="Save edit"]');
   await act(async () => refresh.resolve(response([note])));
-  expect(container.querySelector('.iso-iter-note-hit')?.textContent).toContain('Edited note');
+  expect(container.querySelector('.isotone-note-hit')?.textContent).toContain('Edited note');
 });
 
 it('accepts only the newest refresh when requests finish out of order', async () => {
@@ -134,8 +134,8 @@ it('accepts only the newest refresh when requests finish out of order', async ()
   let reads = 0;
   vi.stubGlobal('fetch', vi.fn(() => ++reads === 1 ? first.promise : second.promise));
   await render();
-  await click('.iso-iter-fab');
+  await click('.isotone-fab');
   await act(async () => second.resolve(response([{ ...note, feedback: 'Newer note' }])));
   await act(async () => first.resolve(response([note])));
-  expect(container.querySelector('.iso-iter-note-hit')?.textContent).toContain('Newer note');
+  expect(container.querySelector('.isotone-note-hit')?.textContent).toContain('Newer note');
 });

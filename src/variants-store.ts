@@ -1,8 +1,8 @@
 /**
- * iso-iterate — overlay variants store (node only).
+ * isotone — overlay variants store (node only).
  *
  * An overlay variant is a directory of alternative source files under
- * `.iso-iterate/variants/<id>/`, mirrored at their repo-relative paths, plus
+ * `.isotone/variants/<id>/`, mirrored at their repo-relative paths, plus
  * a `variant.json` manifest recording which git blob each override was made
  * from. That blob is the three-way merge base: when the real file moves on,
  * `syncVariant` diffs the override against what it started from and what
@@ -41,15 +41,15 @@ import { ensureFileIgnored, ensureDirIgnored, type NotesRequest, type NotesRespo
 import { withFileLock, writeJson } from './file-store';
 
 /** Default location of the variants tree, relative to the project root. */
-export const DEFAULT_VARIANTS_DIR = '.iso-iterate/variants';
+export const DEFAULT_VARIANTS_DIR = '.isotone/variants';
 
 /** Relative to root. Holds `{ "active": ["<id>", ...] }`, at most one id per
  *  group. The Vite plugin keeps this out of git; nothing here assumes that. */
-export const ACTIVE_FILE = '.iso-iterate/active.json';
+export const ACTIVE_FILE = '.isotone/active.json';
 
 /** Relative to root. A JSON array of {@link KnobAxis}; committed, since the
  *  defaults in it are part of the design. Missing or malformed reads as none. */
-export const KNOBS_FILE = '.iso-iterate/knobs.json';
+export const KNOBS_FILE = '.isotone/knobs.json';
 
 export interface VariantsStoreOptions {
   /** Project root: Vite's root or the CLI's cwd. Absolute. */
@@ -534,7 +534,7 @@ export function syncVariant(
         continue;
       }
 
-      const baseTmp = join(tmpdir(), `iso-iterate-base-${randomUUID()}`);
+      const baseTmp = join(tmpdir(), `isotone-base-${randomUUID()}`);
       writeFileSync(baseTmp, baseContent);
       try {
         const result = mergeFile(overrideAbs, baseTmp, currentAbs);
@@ -761,7 +761,7 @@ export function variantsResponse(opts: VariantsStoreOptions, req: NotesRequest):
       removed = removed.filter((v) => v.id === body.optionId);
     }
     // Save a local recovery copy before removing any definitions or files.
-    const recovery = join(resolve(opts.root), '.iso-iterate', 'removed', randomUUID());
+    const recovery = join(resolve(opts.root), '.isotone', 'removed', randomUUID());
     try {
       mkdirSync(recovery, { recursive: true });
       ensureDirIgnored(dirname(recovery));

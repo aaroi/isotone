@@ -21,7 +21,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
     const measure = () => {
       const instant = root.dataset.instant === 'true' || reduced?.matches;
       // Finish all reads before cancelling animations or adding exit snapshots.
-      const panels = Array.from(root.querySelectorAll<HTMLElement>('.iso-iter-panel:not(.iso-iter-exit)'), element => {
+      const panels = Array.from(root.querySelectorAll<HTMLElement>('.isotone-panel:not(.isotone-exit)'), element => {
         const open = element.dataset.open === 'true';
         const transform = open ? getComputedStyle(element).transform : 'none';
         const matrix = transform !== 'none' && typeof DOMMatrix !== 'undefined' ? new DOMMatrix(transform) : undefined;
@@ -42,7 +42,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
           removeExit(element);
           if (!instant && typeof element.animate === 'function' && element.querySelectorAll('[data-motion-key]').length <= MAX_ANIMATED_ITEMS) {
             const ghost = element.cloneNode(true) as HTMLElement;
-            ghost.classList.add('iso-iter-exit');
+            ghost.classList.add('isotone-exit');
             ghost.dataset.open = 'true';
             ghost.inert = true;
             ghost.setAttribute('aria-hidden', 'true');
@@ -84,9 +84,9 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
     const mutations = new MutationObserver(records => {
       const changed = records.some(record => {
         if (record.type === 'attributes') return record.target === root ||
-          (record.target instanceof Element && record.target.matches('.iso-iter-panel:not(.iso-iter-exit)'));
+          (record.target instanceof Element && record.target.matches('.isotone-panel:not(.isotone-exit)'));
         return [...record.addedNodes, ...record.removedNodes].some(node =>
-          node instanceof Element && node.matches('.iso-iter-panel:not(.iso-iter-exit)'));
+          node instanceof Element && node.matches('.isotone-panel:not(.isotone-exit)'));
       });
       if (changed) measure();
     });
