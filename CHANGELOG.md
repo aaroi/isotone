@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.2
+
+- Clarify that existing projects must move the whole local data directory,
+  including knob definitions and active variant state.
+- Remove the obsolete overlay selector management client after its server
+  endpoint was retired.
+- Keep `lastSave` scoped to the note just saved while the panel independently
+  reports older unsynced notes.
+
 ## 0.4.1
 
 - Keep long feedback in the composer with a clear 4,000-character limit; older

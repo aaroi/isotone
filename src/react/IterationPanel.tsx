@@ -254,7 +254,7 @@ export function IterationPanel({
         { w: innerWidth, h: innerHeight }, context);
       setNotes(prev => [...prev, { id: savedId, route, feedback, element: null,
         done: false, createdAt: new Date().toISOString(), ...context }]);
-      setUnsynced(store.lastSave === 'local');
+      setUnsynced(store.hasUnsyncedNotes);
       setNotesOpen(true);
     } finally {
       finish();
@@ -312,7 +312,7 @@ export function IterationPanel({
       setNotes((prev) =>
         prev.map((n) => (n.id === tempId ? { ...n, id: savedId } : n)),
       );
-      setUnsynced(store.lastSave === 'local');
+      setUnsynced(store.hasUnsyncedNotes);
     } catch {
       setNotes((prev) =>
         previous

@@ -12,8 +12,10 @@ its coding agent. The package and CLI are now `isotone`; the exported API names,
    CLI commands, standalone script URLs (`/isotone.js`), environment variables
    (`ISOTONE_UPDATE_CHECK` and `ISOTONE_VARIANT`), and agent instructions.
    Keep API names such as `iteration`, `IterationPanel`, and `mountIteration`.
-4. If the project has local variants, move `.iso-iterate/variants/` to
-   `.isotone/variants/` and update ignore rules. Check each variant preview
+4. Move the entire `.iso-iterate/` directory to `.isotone/`, including
+   `knobs.json`, `active.json`, and any local variants. Update ignore rules,
+   including a `.git/info/exclude` entry for `.isotone/active.json` if the
+   old active file was ignored there. Check each variant preview
    before promotion: a stored base snapshot containing the old package import
    can appear stale after the rename. Recreate or sync that variant against the
    renamed source rather than promoting it blindly. Leave
@@ -26,6 +28,6 @@ On the same browser origin, Isotone carries forward the previous default
 storage keys for offline notes, drafts, and knob selections. A different host,
 port, or browser profile has separate storage. Custom keys stay unchanged.
 
-The published `isotone@0.4.0` includes a one-time `migrate` command. Later
-versions use this guide; there is no migration command to maintain. Existing
-`iso-iterate` versions remain installable.
+Use `isotone@0.4.1` or newer. The older 0.4.0 package includes a one-time
+`migrate` command but also has note-saving bugs fixed in 0.4.1; use this guide
+for the work repositories. Existing `iso-iterate` versions remain installable.
