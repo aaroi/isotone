@@ -13,9 +13,8 @@ Run `pnpm check` for types, lint, build, and tests. For package or adapter
 changes, also run `pnpm check:package`. Inspect both themes, keyboard use,
 reduced motion, scrolling, and long content when changing UI.
 
-Do not publish, push, or expose a development server merely because an
-implementation task is underway. Follow [the release guide](releasing.md)
-when a release is requested.
+Merging into `main` publishes automatically. Follow [the release guide](releasing.md)
+before merging; use a development branch until the change is ready for npm.
 
 The runtime is TypeScript throughout. The expensive work is DOM traversal, disk
 access, and redundant updates; avoiding that work matters more here than adding

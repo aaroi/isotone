@@ -1,9 +1,10 @@
 # Keep this filename: npm's trusted publisher is bound to publish.yml.
-name: Publish release
+name: Publish main
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,23 +14,58 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  check:
-    if: github.event.release.prerelease == false
+  prepare:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.release.tag_name }}
-      - name: Check release tag matches package version
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+      - name: Check this is still main
+        id: current
         run: |
-          node --input-type=module - <<'JS'
-          import { readFileSync } from 'node:fs';
-          import { strict as assert } from 'node:assert';
-          const { version } = JSON.parse(readFileSync('package.json', 'utf8'));
-          assert.equal(process.env.RELEASE_TAG, `v${version}`, 'Release tag must be v<package.json version>');
-          JS
+          git fetch origin main
+          if [ "$(git rev-parse origin/main)" = "$GITHUB_SHA" ]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.current.outputs.ready == 'true'
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Prepare the next version
+        if: steps.current.outputs.ready == 'true'
+        run: |
+          published=$(npm view isotone version)
+          node scripts/prepare-release.mjs "$published"
+          git add package.json CHANGELOG.md
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m "chore: prepare Isotone $(node -p 'require("./package.json").version')"
+            git push origin HEAD:main
+          fi
+      - name: Publish the prepared main commit
+        if: steps.current.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run publish.yml --ref main
+
+  check:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      unpublished: ${{ steps.version.outputs.unpublished }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the dispatch still points to main
+        run: |
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
       - uses: pnpm/action-setup@v4
         with:
           version: 10.33.0
@@ -37,11 +73,22 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+      - name: Check version
+        id: version
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if npm view "isotone@$version" version >/dev/null 2>&1; then
+            echo 'unpublished=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'unpublished=true' >> "$GITHUB_OUTPUT"
+          fi
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm check:package
       - run: mkdir release && npm pack --ignore-scripts --pack-destination release
       - uses: actions/upload-artifact@v4
+        if: steps.version.outputs.unpublished == 'true'
         with:
           name: npm-package
           path: release/*.tgz
@@ -50,6 +97,7 @@ jobs:
 
   publish:
     needs: check
+    if: needs.check.outputs.unpublished == 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -71,5 +119,28 @@ jobs:
             throw new Error('npm 11.5.1 or newer is required for trusted publishing');
           }
           JS
-      # Publish the tested archive without running project code in this OIDC job.
       - run: npm publish ./release/*.tgz --ignore-scripts --provenance --access public
+
+  release:
+    needs: [check, publish]
+    if: always() && needs.check.result == 'success' && (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Tag the published commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            npm view "isotone@$VERSION" version >/dev/null && break
+            if [ "$attempt" = 5 ]; then exit 1; fi
+            sleep 10
+          done
+          gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && exit 0
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Isotone $VERSION" --generate-notes

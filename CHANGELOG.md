@@ -2,10 +2,14 @@
 
 ## Unreleased
 
+## 1.0.0
+
 - Put host-project setup and feedback handling first in the agent guide, and
   move Isotone source and design rules into maintainer documentation.
 - Keep maintainer-only guides in the public repository rather than the npm
   archive, while retaining consumer guides and the README screenshot.
+- Publish tested main commits automatically, with a committed version bump and
+  npm provenance tied to the exact release commit.
 
 ## 0.4.2
 

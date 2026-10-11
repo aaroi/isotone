@@ -35,9 +35,9 @@ The suggested command pins the specific version you just checked, rather than a
 `latest` tag that could move before installation. For example:
 
 ```sh
-npm install -D --save-exact isotone@0.4.2
-pnpm add -D --exact isotone@0.4.2
-yarn add -D --exact isotone@0.4.2
+npm install -D --save-exact isotone@1.0.0
+pnpm add -D --exact isotone@1.0.0
+yarn add -D --exact isotone@1.0.0
 ```
 
 These examples illustrate the syntax; use the version reported by your check.
@@ -86,8 +86,9 @@ A lockfile records the selected dependency tree. `npm ci` installs that tree
 without updating the manifest or lockfile; publishing another version does not
 change it. [npm ci](https://docs.npmjs.com/cli/v11/commands/npm-ci/)
 
-`npm update` respects the declared range. Before 1.0, `^0.3.4` accepts patch
-releases below `0.4.0`; it does not adopt `0.4.0`. `^0.0.4` stays below `0.0.5`.
+`npm update` respects the declared range. `^1.0.0` accepts compatible minor
+and patch releases below `2.0.0`. Older `^0.3.4` installs stay below `0.4.0`;
+they do not adopt `1.0.0`. `^0.0.4` stays below `0.0.5`.
 An explicit install of a new version deliberately changes that choice.
 [npm's range examples](https://docs.npmjs.com/cli/v11/commands/npm-update/)
 
