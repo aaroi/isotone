@@ -160,12 +160,7 @@ ${PILL_ACTIVE_CSS}
 .isotone-list { display: flex; flex-direction: column; gap: 0; flex: 0 1 auto; max-height: calc(var(--iso-list-height) + 2 * var(--iso-space) - 8px); min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: calc(0px - var(--iso-space)) calc(-8px - var(--iso-note-outset)) calc(-2px - var(--iso-space)); padding: var(--iso-space) 8px; scroll-padding-block: var(--iso-space); mask-image: linear-gradient(to bottom, transparent, #000 var(--iso-space), #000 calc(100% - var(--iso-space)), transparent); }
 .isotone-empty { color: var(--iso-muted); font-size: 11px; line-height: 1.7; padding: 8px; }
 .isotone-note { position: relative; flex: none; }
-.isotone-request-heading { display: flex; align-items: center; gap: 8px; line-height: 14px; }
-.isotone-request-kind { font-size: 10px; font-weight: 550; color: var(--iso-muted); }
-.isotone-request-heading code, .isotone-request-fallback { font: 10px/16px ui-monospace, 'SF Mono', Menlo, monospace; }
-.isotone-request-heading code { color: var(--iso-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isotone-request-more { flex: none; color: var(--iso-faint); font-size: 9px; }
-.isotone-request-fallback { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .isotone-note-hit { text-align: left; display: block; width: 100%; border-radius: 8px; padding: var(--iso-note-padding-y) var(--iso-note-padding-x); line-height: 18px; }
 .isotone-note-hit p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
