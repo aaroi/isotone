@@ -12,6 +12,7 @@ import {
   visibleAxes,
 } from '../core/variants';
 import { Icon } from './icons';
+import { MOTION } from './motion';
 import { useLayoutMotion } from './useLayoutMotion';
 
 export function refreshSource(source: VariantsSource): void {
@@ -469,21 +470,48 @@ function SaveDefaults({
       setState('Could not save. Try again.');
     }
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => setState(''), 2500);
+    timer.current = setTimeout(() => setState(''), 3000);
   }
+  // The button itself carries the result for a few seconds: its label crossfades
+  // and its width eases between the two label widths.
+  const label = state && state !== 'Saving…' ? state : 'Save as defaults';
+  const button = useRef<HTMLButtonElement>(null);
+  const text = useRef<HTMLSpanElement>(null);
+  const width = useRef(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only a label change needs a measurement.
+  useLayoutEffect(() => {
+    const node = button.current;
+    if (!node) return;
+    node.style.width = '';
+    const next = node.offsetWidth;
+    const previous = width.current;
+    width.current = next;
+    const instant = node.closest('[data-instant="true"]') ||
+      (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+    if (!previous || instant || typeof node.animate !== 'function') return;
+    text.current?.animate(
+      [{ opacity: 0, transform: 'translateY(3px)' }, { opacity: 1, transform: 'translateY(0)' }],
+      { duration: MOTION.enter, easing: MOTION.easeOut },
+    );
+    if (Math.abs(previous - next) < 0.5) return;
+    node.animate(
+      [{ width: `${previous}px` }, { width: `${next}px` }],
+      { duration: MOTION.reflow, easing: MOTION.easeOut },
+    );
+  }, [label]);
   return (
     <div className="isotone-save-row">
       <button
+        ref={button}
         type="button"
         className="isotone-save"
         disabled={state === 'Saving…'}
+        aria-busy={state === 'Saving…'}
         onClick={() => void save()}
       >
-        Save as defaults
+        <span className="isotone-save-label" ref={text}>{label}</span>
       </button>
-      <span className="isotone-save-state" role="status">
-        {state}
-      </span>
+      <span className="isotone-save-state" role="status">{state}</span>
     </div>
   );
 }

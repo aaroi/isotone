@@ -38,6 +38,16 @@ export type { VariantsStoreOptions } from '../variants-store';
 export { VARIANTS_ENDPOINT } from '../core/variants';
 import { VARIANTS_ENDPOINT } from '../core/variants';
 
+export interface ServeRequestOptions {
+  /**
+   * Accept requests from any loopback page (localhost, 127.0.0.1, [::1]) on
+   * any port. Needed when the app's dev server and this API listen on
+   * different ports, since the page's origin then never matches the API host.
+   * Off by default: only the API's own origin is accepted.
+   */
+  loopbackOrigins?: boolean;
+}
+
 /**
  * A convenience Next-compatible adapter: given a `Request`/`NextRequest` and the
  * `file`, return a `NextResponse`-shaped `{ status, headers, body }`. Frameworks
@@ -46,10 +56,11 @@ import { VARIANTS_ENDPOINT } from '../core/variants';
 export async function serveNotesRequest(
   file: string,
   request: Request,
+  options: ServeRequestOptions = {},
 ): Promise<{ status: number; headers: Record<string, string>; body: unknown }> {
   try {
     const url = new URL(request.url);
-    checkOrigin(request.headers.get('origin'), url.host);
+    checkOrigin(request.headers.get('origin'), url.host, options.loopbackOrigins);
     const body = request.method === 'POST' ? await readWebJson(request) : undefined;
     return notesResponse(file, {
       method: request.method,
@@ -70,10 +81,11 @@ export async function serveNotesRequest(
 export async function serveVariantsRequest(
   opts: VariantsStoreOptions,
   request: Request,
+  options: ServeRequestOptions = {},
 ): Promise<{ status: number; headers: Record<string, string>; body: unknown }> {
   try {
     const url = new URL(request.url);
-    checkOrigin(request.headers.get('origin'), url.host);
+    checkOrigin(request.headers.get('origin'), url.host, options.loopbackOrigins);
     const body = request.method === 'POST' ? await readWebJson(request) : undefined;
     const mounted = url.pathname.startsWith(VARIANTS_ENDPOINT)
       ? url.pathname.slice(VARIANTS_ENDPOINT.length)

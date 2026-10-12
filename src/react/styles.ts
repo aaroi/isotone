@@ -83,7 +83,6 @@ ${APPEARANCE_CSS}
 .isotone-root .isotone-vars > .isotone-panel-head:not(:has(.isotone-save)) { display: none; }
 .isotone-root .isotone-vars > .isotone-panel-head :is(h2, .isotone-icon) { display: none; }
 .isotone-root .isotone-axis-menu { top: var(--iso-menu-top, 6px); max-height: calc(100% - var(--iso-menu-top, 6px) - 6px); }
-.isotone-root .isotone-save-state { top: auto; bottom: 27px; }
 .isotone-panel-head h2 { font-size: 12px; font-weight: 600; letter-spacing: -.01em; }
 .isotone-head-actions { display: flex; align-items: center; gap: 6px; margin-right: auto; }
 .isotone-icon { width: 28px; height: 28px; display: inline-grid; place-items: center; flex: none; color: var(--iso-muted); border-radius: 6px; }
@@ -132,9 +131,10 @@ ${APPEARANCE_CSS}
 .isotone-pick[aria-pressed='true'] { background: var(--iso-selected-face); box-shadow: var(--iso-selected-shadow); }
 ${PILL_ACTIVE_CSS}
 .isotone-secondary { padding: 6px 9px; font-size: 11px; font-weight: 500; white-space: nowrap; }
-.isotone-save { min-height: 24px; padding: 2px 7px; font-size: 11px; white-space: nowrap; }
+.isotone-save { min-height: 24px; padding: 2px 7px; font-size: 11px; white-space: nowrap; overflow: hidden; }
 .isotone-save-row { position: relative; }
-.isotone-save-state { position: absolute; right: 0; top: 27px; z-index: 3; background: var(--iso-bg); border-radius: 4px; white-space: nowrap; font-size: 9px; color: var(--iso-muted); pointer-events: none; }
+.isotone-save-state { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.isotone-save-label { display: block; }
 /* A local action sheet overlays controls, preserving every underlying position. */
 .isotone-axis-menu { position: absolute; inset: 48px 6px auto; z-index: 2; background: var(--iso-popup-face); border-radius: 6px; max-height: calc(100% - 54px); box-shadow: var(--iso-popup-shadow); display: flex; flex-direction: column; transform-origin: top left; opacity: 0; transform: translateY(-4px) scale(.97); visibility: hidden; transition: opacity var(--iso-exit) var(--iso-ease-out), transform var(--iso-exit) var(--iso-ease-out), visibility 0s var(--iso-exit); }
 .isotone-axis-menu[data-open='true'] { visibility: visible; opacity: 1; transform: none; transition-delay: 0s; }
