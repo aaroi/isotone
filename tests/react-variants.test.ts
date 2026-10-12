@@ -349,17 +349,17 @@ describe('IterationPanel with variants', () => {
     await click(fab());
     const field = container.querySelector<HTMLTextAreaElement>('textarea');
     if (!field) throw new Error('missing composer');
-    expect(field.style.height).toBe('24px');
-    Object.defineProperty(field, 'scrollHeight', { configurable: true, get: () => field.value.split('\n').length * 20 + 4 });
+    expect(field.style.height).toBe('22px');
+    Object.defineProperty(field, 'scrollHeight', { configurable: true, get: () => field.value.split('\n').length * 20 + 2 });
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
     const type = async (value: string) => act(async () => {
       setter?.call(field, value);
       field.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await type('One\nTwo\nThree');
-    expect(field.style.height).toBe('64px');
+    expect(field.style.height).toBe('62px');
     await type('');
-    expect(field.style.height).toBe('24px');
+    expect(field.style.height).toBe('22px');
   });
 
   it('remeasures the scroll-through inset when context changes without changing the text', async () => {

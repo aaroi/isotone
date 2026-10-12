@@ -89,7 +89,6 @@ export function IterationPanel({
   const pendingWrites = useRef(0);
   const noteRequest = useRef(0);
   const [editing, setEditing] = useState<IterationNote | null>(null);
-  const [unsynced, setUnsynced] = useState(false);
   const [notice, setNotice] = useState('');
   const [theme, setTheme] = useState(() => detectTheme(themePreference));
   const [instant, setInstant] = useState(false);
@@ -113,7 +112,7 @@ export function IterationPanel({
   const visible =
     isRouteVisible(route, rule) &&
     (notesAvailable || variantsAvailable || variantsOpen);
-  const hasContext = Boolean(editing || variantTarget || targets.length || notice || unsynced);
+  const hasContext = Boolean(editing || variantTarget || targets.length || notice);
   // Context changes the scroll-through inset; measure again when that changes
   // or a route restores the composer after its DOM was removed.
   // biome-ignore lint/correctness/useExhaustiveDependencies: hasContext changes the CSS inset used by scrollHeight.
@@ -122,7 +121,7 @@ export function IterationPanel({
     if (!field || !notesOpen || !visible) return;
     const resize = () => {
       field.style.height = '0px';
-      field.style.height = `${text ? Math.max(24, field.scrollHeight) : 24}px`;
+      field.style.height = `${text ? Math.max(22, field.scrollHeight) : 22}px`;
       field.dataset.scrolled = String(field.scrollTop > 0);
     };
     resize();
@@ -194,7 +193,6 @@ export function IterationPanel({
         // An old refresh must not restore deleted notes or undo optimistic edits.
         if (request !== noteRequest.current || revision !== noteRevision.current || pendingWrites.current) return;
         setNotes(fresh);
-        setUnsynced(store.hasUnsyncedNotes);
       })
       .catch(() => {});
   }
@@ -206,6 +204,16 @@ export function IterationPanel({
       pendingWrites.current--;
     };
   }
+  // Focus the composer after a pin without leaving select mode.
+  const keepPicking = useRef(false);
+  const focusWhilePicking = useCallback(() => {
+    cancelAnimationFrame(focusFrame.current);
+    focusFrame.current = requestAnimationFrame(() => {
+      keepPicking.current = true;
+      textareaRef.current?.focus();
+      keepPicking.current = false;
+    });
+  }, []);
   const focusComposer = useCallback(() => {
     cancelAnimationFrame(focusFrame.current);
     focusFrame.current = requestAnimationFrame(() =>
@@ -254,7 +262,6 @@ export function IterationPanel({
         { w: innerWidth, h: innerHeight }, context);
       setNotes(prev => [...prev, { id: savedId, route, feedback, element: null,
         done: false, createdAt: new Date().toISOString(), ...context }]);
-      setUnsynced(store.hasUnsyncedNotes);
       setNotesOpen(true);
     } finally {
       finish();
@@ -312,7 +319,6 @@ export function IterationPanel({
       setNotes((prev) =>
         prev.map((n) => (n.id === tempId ? { ...n, id: savedId } : n)),
       );
-      setUnsynced(store.hasUnsyncedNotes);
     } catch {
       setNotes((prev) =>
         previous
@@ -480,8 +486,9 @@ export function IterationPanel({
     };
     const onMove = (e: MouseEvent) => {
       cancelAnimationFrame(frame);
+      const deferred = e.shiftKey;
       frame = requestAnimationFrame(() => {
-        const el = elementAt(e);
+        const el = deferred ? null : elementAt(e);
         setHoverRect(el ? el.getBoundingClientRect() : null);
       });
     };
@@ -496,11 +503,14 @@ export function IterationPanel({
       );
     };
     const onClick = (e: MouseEvent) => {
+      // Shift passes the click through so the page can open menus and tabs first.
+      if (e.shiftKey) return;
       const el = elementAt(e);
       if (!el) return;
       e.preventDefault();
       e.stopImmediatePropagation();
       toggleTarget(el);
+      focusWhilePicking();
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === ' ') {
@@ -535,7 +545,18 @@ export function IterationPanel({
       window.removeEventListener('click', onClick, true);
       window.removeEventListener('keydown', onKey, true);
     };
-  }, [picking, focusComposer]);
+  }, [picking, focusComposer, focusWhilePicking]);
+  // Pointer events inside the dock stay inside it, so a host dropdown that closes
+  // on an outside press is not dismissed by using the dock. React listens on the
+  // shadow root too, and it registered first, so its handlers still run.
+  useEffect(() => {
+    const shadow = rootRef.current?.getRootNode();
+    if (!(shadow instanceof ShadowRoot)) return;
+    const stop = (e: Event) => e.stopPropagation();
+    const types = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchstart', 'touchend', 'click'];
+    for (const type of types) shadow.addEventListener(type, stop);
+    return () => { for (const type of types) shadow.removeEventListener(type, stop); };
+  }, []);
   useEffect(() => {
     if (!picking) {
       setRects([]);
@@ -720,10 +741,9 @@ export function IterationPanel({
                   </button>
                 </span>
               ))}
-              {(notice || unsynced) && (
+              {notice && (
                 <p role="status" className="isotone-notice">
-                  {notice ||
-                    'Saved in this browser. It will sync when the dev server returns.'}
+                  {notice}
                 </p>
               )}
             </div>
@@ -732,7 +752,8 @@ export function IterationPanel({
               value={text}
               aria-label="Feedback for the agent"
               onChange={(e) => setText(e.target.value)}
-              onFocus={() => setPicking(false)}
+              onFocus={() => { if (!keepPicking.current) setPicking(false); }}
+              onPointerDown={() => setPicking(false)}
               onScroll={event => {
                 event.currentTarget.dataset.scrolled = String(event.currentTarget.scrollTop > 0);
               }}
@@ -761,6 +782,8 @@ export function IterationPanel({
                 aria-label="Select elements"
                 aria-pressed={picking}
                 className="isotone-pick isotone-icon"
+                // Keep focus where it is, so a focused composer stays focused.
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
                   cancelAnimationFrame(focusFrame.current);
                   setPicking((v) => !v);
@@ -768,7 +791,6 @@ export function IterationPanel({
               >
                 <Icon name="pin" size={14} />
               </button>
-              {picking && <span className="isotone-key-hint">Click or Space to pin · Enter to finish</span>}
               <button
                 type="button"
                 aria-label={editing ? 'Save edit' : 'Send note'}
@@ -800,7 +822,7 @@ export function IterationPanel({
       <div className="isotone-rail-track" aria-hidden="true" />
       {picking && (
         <div className="isotone-hint" data-isotone>
-          <span>{targets.length} selected · click to add or remove</span>
+          <span>{targets.length} selected · click to add or remove · hold ⇧ to use the page</span>
           <button
             type="button"
             onClick={() => {
