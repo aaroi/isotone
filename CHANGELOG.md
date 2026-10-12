@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.0.2
+
+- feat: polish the variants dialog, select mode and feedback field (#7)
+
 ## 1.0.1
 
 - ci: tag successful npm publishes before registry propagation (#6)
