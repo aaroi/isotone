@@ -51,8 +51,8 @@ configuration, and production guards. Node.js 20 or later is required.
 ## The loop
 
 1. Open Feedback with **⌘/Ctrl + Shift + .** Write a note, pin elements, and send.
-2. Your agent reads `npx isotone --json`, makes the change, and runs
-   `npx isotone --done <id>`.
+2. Your agent reads `npx isotone --json`, makes and verifies the change, then
+   closes the note with `npx isotone --done <id>`. Until then it stays in the panel.
 3. Review the result. For alternatives, the agent creates a
    [variant](docs/variants.md) you can switch to in the same page.
 
