@@ -94,6 +94,13 @@ const handle = async (request: Request) => {
 export { handle as GET, handle as POST, handle as DELETE };
 ```
 
+When the page and this API listen on different ports, for example a Next dev
+server and a separate local API, the browser's origin never matches the API's
+host and every request gets a 403 `origin not allowed`. Pass
+`{ loopbackOrigins: true }` as the third argument of `serveNotesRequest` (or
+`serveVariantsRequest`) to accept pages served from localhost, 127.0.0.1 or
+[::1] on any port. Non-loopback origins are still rejected.
+
 For this manual route, add `.iteration-feedback.json` to the project's `.gitignore`.
 The Vite plugin and standalone server ignore their notes file automatically; the
 transport-only request adapter does not modify Git configuration.

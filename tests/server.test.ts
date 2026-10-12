@@ -89,6 +89,20 @@ describe('serveNotesRequest (fetch/gitworker adapter)', () => {
   });
 });
 
+describe('serveNotesRequest origins', () => {
+  const page = (origin: string) => new Request('http://127.0.0.1:4101/api/iteration/notes', { headers: { origin } });
+
+  it('rejects a page on another port unless loopback origins are allowed', async () => {
+    const file = tempFile();
+    expect((await serveNotesRequest(file, page('http://localhost:4150'))).status).toBe(403);
+    expect((await serveNotesRequest(file, page('http://localhost:4150'), { loopbackOrigins: true })).status).toBe(200);
+  });
+
+  it('still rejects a non-loopback page when loopback origins are allowed', async () => {
+    expect((await serveNotesRequest(tempFile(), page('https://example.com'), { loopbackOrigins: true })).status).toBe(403);
+  });
+});
+
 describe('the ./server subpath surface', () => {
   // The framework-agnostic story rests on `notesResponse` being reachable
   // without importing vite — a regression here surfaced as "Export named
