@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.0.3
+
+- feat: tell agents how to close a note from the CLI (#8)
+
 ## 1.0.2
 
 - feat: polish the variants dialog, select mode and feedback field (#7)
