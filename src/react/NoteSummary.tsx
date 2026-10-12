@@ -7,10 +7,11 @@ function SummaryTag({ label }: { label: string }) {
 }
 
 /** Keep machine-directed requests readable without changing the agent's original text. */
-export function NoteSummary({ note }: { note: IterationNote }) {
+export function NoteSummary({ note, page }: { note: IterationNote; page?: string }) {
   if (!note.feedback.startsWith('[set-defaults]')) {
     const elements = note.elements ?? (note.element ? [note.element] : []);
     const references = [
+      ...(page ? [{ key: `page:${page}`, label: page }] : []),
       ...(note.variant ? [{
         key: `variant:${note.variant.axisId}`,
         label: `${note.variant.label}${note.variant.optionLabel ? ` / ${note.variant.optionLabel}` : ''}`,
@@ -46,7 +47,8 @@ export function NoteSummary({ note }: { note: IterationNote }) {
   // Same row as every other note: the text, then compact tags for the picks.
   return <>
     <p>{note.feedback}</p>
-    {tags.length > 0 && <span className="isotone-meta">
+    {(page || tags.length > 0) && <span className="isotone-meta">
+      {page && <SummaryTag label={page} />}
       {tags.slice(0, 3).map(tag => <SummaryTag key={`${tag.name}-${tag.value}`} label={`${tag.name} ${tag.value}`} />)}
       {tags.length > 3 && <span className="isotone-request-more">+{tags.length - 3}</span>}
     </span>}

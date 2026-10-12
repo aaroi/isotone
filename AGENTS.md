@@ -17,7 +17,9 @@ for Vite, standalone servers, React mounts, and other request handlers.
 The loop for every note is act, verify, close. A fixed note stays open in the
 reviewer's panel until you run `npx isotone --done <id>`.
 
-Run `npx isotone --json` in the project under review. Each note includes a route,
+Run `npx isotone --json` in the project under review. When several agents share a
+dev server, list only your page's notes with `npx isotone <route> --json`, and run
+`npx isotone --working <id>` on a note when you start it so the reviewer sees it in progress. Each note includes a route,
 viewport, pinned elements, optional variant or host context, and a `doneCommand`
 for open notes. Reproduce the request at that route and viewport, make the source
 change, verify it, then run the note's `doneCommand`. A unique ID prefix works.

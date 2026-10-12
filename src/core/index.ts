@@ -53,6 +53,8 @@ export interface IterationNote extends NoteContext {
   element: IterationElement | null;
   done: boolean;
   doneAt?: string | null;
+  /** Set while an agent says it is working on the note. Stale after a while. */
+  workingAt?: string | null;
   createdAt: string;
   /** The window size the note was written at — layout feedback only means
    *  something at the breakpoint it was seen on. */
@@ -313,6 +315,36 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
+  /**
+   * The open notes on every route, but cheaply: `rev` is the revision of the
+   * last answer, and an unchanged server replies with no rows (`notes: null`).
+   * Older servers ignore `rev` and return the list, which counts as changed.
+   * Notes this browser kept while the server was away are pushed first, and
+   * stay in the result until the server has them. Failures throw, so the
+   * caller can back off.
+   */
+  async function pollNotes(rev: string | null): Promise<{ rev: string | null; notes: IterationNote[] | null }> {
+    if (!endpoint) return { rev: null, notes: localAll().filter((n) => !n.done) };
+    if (localAll().length) await migrateLocalBacklog().catch(() => {});
+    const local = localAll();
+    const data = await request(`${endpoint}?rev=${encodeURIComponent(rev ?? '')}`, undefined, async (res) => {
+      if (!res.ok) throw new Error(`Loading iteration notes failed (${res.status})`);
+      return await res.json() as IterationNote[] | { rev?: unknown; unchanged?: unknown; notes?: unknown };
+    });
+    if (Array.isArray(data)) return { rev: null, notes: merge(data, local) };
+    const next = typeof data?.rev === 'string' ? data.rev : null;
+    // The panel already holds its own local saves, so an unchanged server means
+    // nothing to replace.
+    if (data?.unchanged === true && next !== null) return { rev: next, notes: null };
+    if (!Array.isArray(data?.notes)) throw new Error('Unexpected notes response');
+    return { rev: next, notes: merge(data.notes as IterationNote[], local) };
+  }
+
+  function merge(remote: IterationNote[], local: IterationNote[]): IterationNote[] {
+    const pendingIds = new Set(local.map((note) => note.id));
+    return [...remote.filter((note) => !pendingIds.has(note.id)), ...local];
+  }
+
   /** Every still-open note across all routes, newest first. */
   async function pendingNotes(): Promise<IterationNote[]> {
     if (!endpoint) {
@@ -453,6 +485,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
 
   return {
     listNotes,
+    pollNotes,
     pendingNotes,
     saveNote,
     deleteNote,

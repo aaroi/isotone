@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { notesResponse, readNotes } from '../src/store';
+import { notesResponse, readNotes, updateNotes } from '../src/store';
 import * as server from '../src/server/index';
 import { PAYLOAD_MAX, serveNotesRequest } from '../src/server/index';
 
@@ -86,6 +86,41 @@ describe('serveNotesRequest (fetch/gitworker adapter)', () => {
     );
     const rows = listed.body as Array<{ element: { selector: string } | null }>;
     expect(rows[0].element?.selector).toBe('button:first-child');
+  });
+});
+
+describe('notes revision polling', () => {
+  it('answers a repeat poll with no rows until the notes change', () => {
+    const file = tempFile();
+    notesResponse(file, { method: 'POST', url: '/api/notes', body: { route: '/', feedback: 'one' } });
+    const first = notesResponse(file, { method: 'GET', url: '/api/notes?all=1&rev=' }).body as { rev: string; notes: unknown[] };
+    expect(first.notes).toHaveLength(1);
+    const same = notesResponse(file, { method: 'GET', url: `/api/notes?all=1&rev=${first.rev}` }).body;
+    expect(same).toEqual({ rev: first.rev, unchanged: true });
+    notesResponse(file, { method: 'POST', url: '/api/notes', body: { route: '/', feedback: 'two' } });
+    const next = notesResponse(file, { method: 'GET', url: `/api/notes?all=1&rev=${first.rev}` }).body as { rev: string; notes: unknown[] };
+    expect(next.rev).not.toBe(first.rev);
+    expect(next.notes).toHaveLength(2);
+  });
+
+  it('polls only the open backlog and notices a closed note', () => {
+    const file = tempFile();
+    notesResponse(file, { method: 'POST', url: '/api/notes', body: { id: 'a', route: '/', feedback: 'one' } });
+    const first = notesResponse(file, { method: 'GET', url: '/api/notes?rev=' }).body as { rev: string; notes: { id: string }[] };
+    updateNotes(file, (notes) => notes.map((n) => ({ ...n, done: true })));
+    const next = notesResponse(file, { method: 'GET', url: `/api/notes?rev=${first.rev}` }).body as { rev: string; notes: unknown[] };
+    expect(next.notes).toEqual([]);
+  });
+
+  it('answers a missing file with a stable empty revision', () => {
+    const file = tempFile();
+    const first = notesResponse(file, { method: 'GET', url: '/api/notes?rev=' }).body as { rev: string };
+    expect(notesResponse(file, { method: 'GET', url: `/api/notes?rev=${first.rev}` }).body).toEqual({ rev: first.rev, unchanged: true });
+  });
+
+  it('keeps answering a plain list when no revision is asked for', () => {
+    const file = tempFile();
+    expect(notesResponse(file, { method: 'GET', url: '/api/notes?all=1' }).body).toEqual([]);
   });
 });
 
