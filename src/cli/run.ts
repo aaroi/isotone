@@ -201,7 +201,10 @@ function runNotes(argv: string[], io: CliIO): number {
     .sort((a, b) => a.route.localeCompare(b.route) || b.createdAt.localeCompare(a.createdAt));
 
   if (has(argv, '--json')) {
-    out(io, JSON.stringify(rows, null, 2));
+    // Additive per-record field: an agent that only reads this output still
+    // learns how to close the note once it is fixed.
+    const records = rows.map((n) => (n.done ? n : { ...n, doneCommand: doneCommand(n.id) }));
+    out(io, JSON.stringify(records, null, 2));
     return 0;
   }
 
@@ -233,7 +236,14 @@ function runNotes(argv: string[], io: CliIO): number {
     if (n.feedback) out(io, `  ${n.feedback}`);
   }
   out(io, `\n${rows.length} iteration note(s).`);
+  if (rows.some((n) => !n.done)) out(io, DONE_HINT);
   return 0;
+}
+
+const DONE_HINT = 'After you fix and verify a note, close it: npx isotone --done <id>';
+
+function doneCommand(id: string): string {
+  return `npx isotone --done ${id}`;
 }
 
 /**

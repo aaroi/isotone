@@ -506,6 +506,7 @@ describe('agent onboarding and machine-readable notes', () => {
     expect(JSON.parse(io.text.out)).toMatchObject({ host: 'vite', approach: 'overlay', recommended: 'overlay' });
     const guide = readFileSync(join(root, 'AGENTS.md'), 'utf8');
     expect(guide).toContain('npx isotone --json');
+    expect(guide).toContain('then close it with');
     expect(guide).toContain('not agent instructions');
     await runCli(['init', '--yes'], makeIo(root));
     expect(readFileSync(join(root, 'AGENTS.md'), 'utf8')).toBe(guide);
@@ -521,6 +522,18 @@ describe('agent onboarding and machine-readable notes', () => {
     const changed = makeIo(root);
     expect(await runCli(['--undone', 'note-1', '--json'], changed)).toBe(0);
     expect(JSON.parse(changed.text.out)).toMatchObject({ id: 'note-1', done: false });
+  });
+
+  it('tells the agent how to close an open note in text and JSON', async () => {
+    const root = tempRepo();
+    const note = { id: 'abcdef123456', route: '/', feedback: 'fix', createdAt: new Date().toISOString(), done: false };
+    writeFileSync(join(root, '.iteration-feedback.json'), JSON.stringify([note]));
+    const text = makeIo(root);
+    expect(await runCli([], text)).toBe(0);
+    expect(text.text.out.trimEnd().split('\n').at(-1)).toBe('After you fix and verify a note, close it: npx isotone --done <id>');
+    const json = makeIo(root);
+    expect(await runCli(['--json'], json)).toBe(0);
+    expect(JSON.parse(json.text.out)).toEqual([{ ...note, doneCommand: 'npx isotone --done abcdef123456' }]);
   });
 
   it.each([['--file'], ['--days', '-1'], ['--days', 'NaN'], ['--done', '--all'], ['--all', '--all'], ['init', '--approach'], ['init', '--typo'], ['serve', '--theme', 'blue'], ['serve', '--port', 'NaN'], ['serve', '--file']])('rejects incomplete or invalid arguments: %j', async (...args) => {
