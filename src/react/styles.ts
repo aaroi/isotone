@@ -69,7 +69,7 @@ ${APPEARANCE_CSS}
 .isotone-root[data-tools='2'] .isotone-rail-button[aria-label='Variants'] { right: calc(var(--iso-rail-end) + var(--iso-rail-step)); }
 .isotone-root[data-tools='2'] .isotone-rail-button::before { inset: var(--iso-rail-key-inset) calc(var(--iso-rail-gap) / 2); }
 .isotone-tool-label { display: none; }
-.isotone-badge { position: absolute; right: -3px; top: -3px; display: grid; place-items: center; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: var(--iso-label-face); box-shadow: var(--iso-label-shadow); color: var(--iso-launcher-ink); font-size: 9px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.isotone-badge { position: absolute; right: -3px; top: -3px; pointer-events: none; display: grid; place-items: center; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: var(--iso-label-face); box-shadow: var(--iso-label-shadow); color: var(--iso-launcher-ink); font-size: 9px; font-weight: 500; font-variant-numeric: tabular-nums; }
 /* Panels are sections inside the dock. Only long content scrolls. */
 .isotone-panel { order: 0; position: relative; display: none; flex-direction: column; min-height: 0; flex: 0 1 auto; width: 100%; }
 .isotone-panel[data-open='true'] { display: flex; }
