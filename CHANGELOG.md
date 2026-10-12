@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.0.5
+
+- fix: render saved-defaults notes like every other note (#10)
+
 ## 1.0.4
 
 - Let split dev servers reach the notes API; show save results in the button (#9)
