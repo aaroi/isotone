@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.0.4
+
+- Let split dev servers reach the notes API; show save results in the button (#9)
+
 ## 1.0.3
 
 - feat: tell agents how to close a note from the CLI (#8)
