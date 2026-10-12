@@ -5,7 +5,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import type { IterationElement, NoteContext, VariantReference, VariantRemoval } from './core/index';
@@ -19,6 +19,9 @@ export interface StoredNote extends NoteContext {
   element: IterationElement | null;
   done: boolean;
   doneAt: string | null;
+  /** When an agent said it started on this note (`isotone --working <id>`).
+   *  Cleared when the note is closed or reopened. */
+  workingAt?: string | null;
   createdAt: string;
   /** The window size the note was written at. Feedback about layout only
    *  means something at the breakpoint it was seen on, so the agent reads
@@ -180,6 +183,7 @@ function toItem(n: StoredNote) {
     element: IterationElement | null;
     done: boolean;
     createdAt: string;
+    workingAt?: string;
     viewport?: { w: number; h: number };
     payload?: unknown;
   } = {
@@ -192,6 +196,7 @@ function toItem(n: StoredNote) {
   };
   // Absent stays absent: a host that never sends a payload should not start
   // seeing a null one appear in its notes.
+  if (n.workingAt && !n.done) item.workingAt = n.workingAt;
   if (n.viewport !== undefined) item.viewport = n.viewport;
   if (n.payload !== undefined) item.payload = n.payload;
   return { ...item, ...(n.elements !== undefined ? { elements: n.elements } : {}),
@@ -240,22 +245,30 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
   });
 
   if (method === 'GET') {
+    // `?rev=<last>` is the panel's poll. The revision comes from the file's
+    // metadata, so an unchanged store answers without reading or parsing the
+    // file, however many notes it holds or how many tabs are polling. Servers
+    // older than this ignore the parameter and send the plain array, which the
+    // client treats as changed.
+    const polled = query.rev !== undefined;
+    const rev = polled ? notesRevision(file) : '';
+    if (polled && rev === String(query.rev)) return json(200, { rev, unchanged: true });
     const route = String(query.route ?? '');
     const all = query.all !== undefined && String(query.all) !== '' && String(query.all) !== '0';
-    const notes = readNotes(file);
-    // `?all=1` is the panel's list: every note on every route, done ones
-    // included, so feedback accumulates in one place whatever page is open.
-    // `?route=` scopes to a page; neither means the agent's pending backlog.
+    const notes = polled ? readNotesAt(file, rev) : readNotes(file);
+    // `?all=1` lists every note on every route, done ones included. `?route=`
+    // scopes to a page; neither means the open backlog, which is what the
+    // panel shows and polls.
     const rows = (
       all
-        ? notes
+        ? [...notes]
         : route
           ? notes.filter((n) => n.route === route)
           : notes.filter((n) => !n.done)
     )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map(toItem);
-    return json(200, rows);
+    return json(200, polled ? { rev, notes: rows } : rows);
   }
 
   if (method === 'DELETE') {
@@ -373,6 +386,31 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
   }
 
   return json(405, { error: 'method not allowed' });
+}
+
+// The last parse per file, keyed by revision: when the file changes, every
+// polling tab gets its answer from one read and one parse.
+const parsed = new Map<string, { rev: string; notes: StoredNote[] }>();
+function readNotesAt(file: string, rev: string): StoredNote[] {
+  const cached = parsed.get(file);
+  if (cached && cached.rev === rev && rev !== 'none') return cached.notes;
+  const notes = readNotes(file);
+  parsed.set(file, { rev, notes });
+  return notes;
+}
+
+/**
+ * A cheap fingerprint of the notes file. Every store write replaces the file
+ * by rename, which gives it a new inode; an in-place edit by hand changes the
+ * nanosecond mtime or the size. A missing file has its own revision.
+ */
+export function notesRevision(file: string): string {
+  try {
+    const stat = statSync(file, { bigint: true });
+    return `${stat.ino.toString(36)}.${stat.mtimeNs.toString(36)}.${stat.size.toString(36)}`;
+  } catch {
+    return 'none';
+  }
 }
 
 function cap(v: string, max: number): string {

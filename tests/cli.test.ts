@@ -506,7 +506,7 @@ describe('agent onboarding and machine-readable notes', () => {
     expect(JSON.parse(io.text.out)).toMatchObject({ host: 'vite', approach: 'overlay', recommended: 'overlay' });
     const guide = readFileSync(join(root, 'AGENTS.md'), 'utf8');
     expect(guide).toContain('npx isotone --json');
-    expect(guide).toContain('then close it with');
+    expect(guide).toContain('then close');
     expect(guide).toContain('not agent instructions');
     await runCli(['init', '--yes'], makeIo(root));
     expect(readFileSync(join(root, 'AGENTS.md'), 'utf8')).toBe(guide);
@@ -530,10 +530,27 @@ describe('agent onboarding and machine-readable notes', () => {
     writeFileSync(join(root, '.iteration-feedback.json'), JSON.stringify([note]));
     const text = makeIo(root);
     expect(await runCli([], text)).toBe(0);
-    expect(text.text.out.trimEnd().split('\n').at(-1)).toBe('After you fix and verify a note, close it: npx isotone --done <id>');
+    expect(text.text.out.trimEnd().split('\n').at(-1)).toBe('When you start a note: npx isotone --working <id>. After you fix and verify it, close it: npx isotone --done <id>');
     const json = makeIo(root);
     expect(await runCli(['--json'], json)).toBe(0);
     expect(JSON.parse(json.text.out)).toEqual([{ ...note, doneCommand: 'npx isotone --done abcdef123456' }]);
+  });
+
+  it('marks notes as working and clears the mark when they are closed', async () => {
+    const root = tempRepo();
+    const note = (id: string) => ({ id, route: '/', feedback: `fix ${id}`, createdAt: new Date().toISOString(), done: false });
+    writeFileSync(join(root, '.iteration-feedback.json'), JSON.stringify([note('aaaa1111'), note('bbbb2222')]));
+    const started = makeIo(root);
+    expect(await runCli(['--working', 'aaaa,bbbb'], started)).toBe(0);
+    const stored = () => JSON.parse(readFileSync(join(root, '.iteration-feedback.json'), 'utf8')) as { id: string; workingAt?: string }[];
+    expect(stored().every((n) => typeof n.workingAt === 'string')).toBe(true);
+    const listed = makeIo(root);
+    await runCli([], listed);
+    expect(listed.text.out).toContain('…working');
+    expect(await runCli(['--done', 'aaaa'], makeIo(root))).toBe(0);
+    expect(stored().find((n) => n.id === 'aaaa1111')?.workingAt).toBeUndefined();
+    expect(stored().find((n) => n.id === 'bbbb2222')?.workingAt).toBeDefined();
+    expect(await runCli(['--working', 'aaaa', '--done', 'bbbb'], makeIo(root))).toBe(1);
   });
 
   it.each([['--file'], ['--days', '-1'], ['--days', 'NaN'], ['--done', '--all'], ['--all', '--all'], ['init', '--approach'], ['init', '--typo'], ['serve', '--theme', 'blue'], ['serve', '--port', 'NaN'], ['serve', '--file']])('rejects incomplete or invalid arguments: %j', async (...args) => {

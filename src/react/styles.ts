@@ -172,6 +172,17 @@ ${PILL_ACTIVE_CSS}
    surrounds a 16px face without reserving trailing space in every row. */
 .isotone-note > .isotone-x { position: absolute; right: -8px; top: -8px; width: 24px; height: 24px; isolation: isolate; opacity: .6; background: none; box-shadow: none; }
 .isotone-x::before { content: ''; position: absolute; inset: 4px; border-radius: 50%; z-index: -1; background: var(--iso-bg); box-shadow: 0 0 0 1px var(--iso-edge); }
+/* One chip per page that has open notes, this page first. */
+.isotone-pages { display: flex; flex: none; min-width: 0; border-top: 0; border-bottom: 0; border-inline: 0; gap: 4px; overflow-x: auto; overscroll-behavior: contain; margin: 0 calc(0px - var(--iso-space)); padding: 0 var(--iso-space); }
+.isotone-page { flex: 0 1 auto; display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 160px; height: 22px; padding: 0 7px; border-radius: var(--iso-control-radius); border: 1px solid var(--iso-edge); background: transparent; color: var(--iso-muted); font-size: 10px; }
+.isotone-page > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.isotone-page small { color: var(--iso-faint); font-size: 9px; font-variant-numeric: tabular-nums; }
+.isotone-page[aria-pressed='true'] { color: var(--iso-fg); background: var(--iso-label-face); box-shadow: var(--iso-label-lift-shadow); }
+/* An agent has said it is working on a note: a soft pulse on the note, and a ring on the launcher.
+   Both are driven by one shared clock (see syncPulse), so they beat together. */
+.isotone-note-hit { position: relative; }
+.isotone-working { position: absolute; left: 3px; top: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--iso-focus); }
+.isotone-ring { position: absolute; inset: 0; border-radius: 999px; pointer-events: none; }
 .isotone-list:empty { display: none; }
 ${FEEDBACK_LAYOUT_CSS}
 .isotone-compose { flex: none; display: flex; flex-direction: column; }
@@ -218,6 +229,7 @@ ${FEEDBACK_LAYOUT_CSS}
 }
 @media (max-height: 580px) { .isotone-list { --iso-list-height: 72px; } .isotone-root .isotone-textarea { max-height: calc(64px + var(--iso-textarea-inset)); } }
 @media (prefers-reduced-motion: reduce) {
+  .isotone-ring { box-shadow: 0 0 0 2px color-mix(in srgb, var(--iso-focus) 50%, transparent); }
   .isotone-root .isotone-rail-track { transition: none; }
   .isotone-root .isotone-panel, .isotone-root .isotone-axis-menu, .isotone-root .isotone-rail-tools { transition-property: opacity, visibility; }
   .isotone-root button { transition: opacity 125ms ease; }

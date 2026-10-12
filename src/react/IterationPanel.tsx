@@ -52,6 +52,48 @@ export interface IterationPanelProps {
   /** Default: Cmd/Ctrl+Shift+Period. false disables the shortcut. */
   shortcut?: IterationShortcut | false;
 }
+const PULSE_MS = 2000;
+
+/**
+ * Pulse a node on the document's own clock. Every pulse starts at the timeline's
+ * origin, so the launcher ring and every note dot beat together whenever they
+ * appear, instead of each starting from its own mount time.
+ */
+function syncPulse(spread: number) {
+  return (node: HTMLElement | null) => {
+    if (!node || typeof node.animate !== 'function') return;
+    if (node.closest('[data-instant="true"]') ||
+      (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+    const tint = 'color-mix(in srgb, var(--iso-focus) 55%, transparent)';
+    const pulse = node.animate([
+      { boxShadow: `0 0 0 0 ${tint}`, offset: 0 },
+      { boxShadow: `0 0 0 ${spread}px transparent`, offset: 0.7 },
+      { boxShadow: `0 0 0 ${spread}px transparent`, offset: 1 },
+    ], { duration: PULSE_MS, iterations: Infinity, easing: 'ease-out' });
+    pulse.startTime = 0;
+  };
+}
+const dotPulse = syncPulse(6);
+const ringPulse = syncPulse(8);
+
+/** How often an open page asks whether the notes changed. */
+const POLL_MS = 2500;
+/** The slowest retry while the server cannot be reached. */
+const POLL_MAX_MS = 30_000;
+
+/** Whether a poll changed anything the panel draws, without a deep diff. */
+function sameNotes(a: IterationNote[], b: IterationNote[]): boolean {
+  if (a.length !== b.length) return false;
+  const byId = new Map(a.map((note) => [note.id, note]));
+  return b.every((note) => {
+    const old = byId.get(note.id);
+    return old !== undefined && JSON.stringify(old) === JSON.stringify(note);
+  });
+}
+
+/** How long "an agent is working on this" is believed without a sign of life. */
+const WORKING_FRESH_MS = 20 * 60 * 1000;
+
 const DEFAULT_SHORTCUT: IterationShortcut = {
   code: 'Period',
   mod: true,
@@ -85,6 +127,10 @@ export function IterationPanel({
   const [rects, setRects] = useState<(Rect & { selector: string })[]>([]);
   const [text, setText] = useState('');
   const [notes, setNotes] = useState<IterationNote[]>([]);
+  // Which pages' notes the list shows. Unset means this page only.
+  const [scope, setScope] = useState<string[] | null>(null);
+  const [clock, setClock] = useState(() => Math.floor(Date.now() / 60_000) * 60_000);
+  const pollRev = useRef<string | null>(null);
   const noteRevision = useRef(0);
   const pendingWrites = useRef(0);
   const noteRequest = useRef(0);
@@ -167,9 +213,31 @@ export function IterationPanel({
     if (active === fabRef.current) rootRef.current?.querySelector<HTMLButtonElement>('.isotone-rail-button')?.focus();
   }, [railOpen, instant]);
   const draftKey = `${nsKey}::draft::${route}`;
-  const visibleNotes = useMemo(() => notes
-    .filter((n) => !n.done)
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt)), [notes]);
+  const openNotes = useMemo(() => notes.filter((n) => !n.done), [notes]);
+  // Pages that have open notes, this one first, so the row of page chips reads
+  // the same on every page.
+  const pages = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const n of openNotes) counts.set(n.route, (counts.get(n.route) ?? 0) + 1);
+    const others = [...counts.keys()].filter((r) => r !== route).sort();
+    return { counts, others };
+  }, [openNotes, route]);
+  const selectedPages = useMemo(() => {
+    const chosen = (scope ?? [route]).filter((r) => r === route || pages.counts.has(r));
+    return new Set(chosen.length ? chosen : [route]);
+  }, [scope, route, pages]);
+  const visibleNotes = useMemo(() => openNotes
+    .filter((n) => selectedPages.has(n.route))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt)), [openNotes, selectedPages]);
+  // An agent's claim goes stale: a crashed or abandoned run should not pulse forever.
+  const working = useMemo(() => new Set(visibleNotes
+    .filter((n) => n.workingAt && clock - Date.parse(n.workingAt) < WORKING_FRESH_MS)
+    .map((n) => n.id)), [visibleNotes, clock]);
+  function togglePage(page: string) {
+    const next = new Set(selectedPages);
+    if (next.has(page)) next.delete(page); else next.add(page);
+    setScope(next.size ? [...next] : [route]);
+  }
   const pendingActions = useMemo(() => notes.flatMap(n =>
     !n.done && n.route === route && n.variantAction ? [n.variantAction] : []), [notes, route]);
   const shortcutLabel = shortcut
@@ -188,10 +256,14 @@ export function IterationPanel({
     const request = ++noteRequest.current;
     const revision = noteRevision.current;
     void store
-      .listNotes()
-      .then((fresh) => {
+      .pollNotes(null)
+      .then((result) => ({ rev: result.rev, notes: result.notes ?? [] }))
+      // Server away: show what this browser kept, if anything.
+      .catch(() => store.pendingNotes().then((fresh) => ({ rev: null, notes: fresh })))
+      .then(({ rev, notes: fresh }) => {
         // An old refresh must not restore deleted notes or undo optimistic edits.
         if (request !== noteRequest.current || revision !== noteRevision.current || pendingWrites.current) return;
+        pollRev.current = rev;
         setNotes(fresh);
       })
       .catch(() => {});
@@ -355,11 +427,65 @@ export function IterationPanel({
     }
   }
 
-  // Reopen/revisit fetches fresh state without a background polling loop.
+  // Opening a surface or changing route loads at once; the poll below keeps it current.
   // biome-ignore lint/correctness/useExhaustiveDependencies: open-time refresh; store is stable.
   useEffect(() => {
     loadNotes();
   }, [notesOpen, variantsOpen, route]);
+  // Keep the list current while the page is in front: an agent closing a note
+  // shows up here without a reload. Only the notes request is repeated, so
+  // nothing on the page, the composer or an edit in progress is touched. An
+  // idle poll costs the server one stat; a hidden tab does not poll at all;
+  // an unreachable server is retried less and less often.
+  useEffect(() => {
+    if (!notesAvailable || !visible) return;
+    let stopped = false;
+    let running = false;
+    let failures = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      clearTimeout(timer);
+      if (stopped || document.hidden) return;
+      timer = setTimeout(() => void tick(), Math.min(POLL_MS * 2 ** failures, POLL_MAX_MS));
+    };
+    const tick = async () => {
+      if (stopped || running || document.hidden) return;
+      running = true;
+      const request = noteRequest.current;
+      const revision = noteRevision.current;
+      try {
+        const result = await store.pollNotes(pollRev.current);
+        failures = 0;
+        // A local save, delete or reload while the request was out wins over it.
+        if (stopped || request !== noteRequest.current || revision !== noteRevision.current || pendingWrites.current) return;
+        pollRev.current = result.rev;
+        const fresh = result.notes;
+        if (fresh) setNotes((prev) => (sameNotes(prev, fresh) ? prev : fresh));
+        // Coarse on purpose: the value only ages out stale claims, and an
+        // unchanged minute lets React skip the render.
+        setClock(Math.floor(Date.now() / 60_000) * 60_000);
+      } catch {
+        failures = Math.min(failures + 1, 8);
+      } finally {
+        running = false;
+        schedule();
+      }
+    };
+    const wake = () => {
+      if (document.hidden) { clearTimeout(timer); return; }
+      failures = 0;
+      void tick();
+    };
+    schedule();
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('focus', wake);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('focus', wake);
+    };
+  }, [notesAvailable, visible, store]);
   useEffect(() => {
     if (variants && notesOpen && !variantsOpen) refreshSource(variants);
   }, [notesOpen, variantsOpen, variants]);
@@ -553,7 +679,9 @@ export function IterationPanel({
     const shadow = rootRef.current?.getRootNode();
     if (!(shadow instanceof ShadowRoot)) return;
     const stop = (e: Event) => e.stopPropagation();
-    const types = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchstart', 'touchend', 'click'];
+    // Presses and clicks only. Releases (pointerup, mouseup, touchend) still
+    // reach the page, so a host drag that ends over the dock still ends.
+    const types = ['pointerdown', 'mousedown', 'touchstart', 'click'];
     for (const type of types) shadow.addEventListener(type, stop);
     return () => { for (const type of types) shadow.removeEventListener(type, stop); };
   }, []);
@@ -649,6 +777,23 @@ export function IterationPanel({
               <Icon name="close" />
             </button>
           </div>
+          {pages.counts.size > 1 && (
+            <fieldset className="isotone-pages" aria-label="Pages">
+              {[route, ...pages.others].map((page) => (
+                <button
+                  key={page}
+                  type="button"
+                  className="isotone-page"
+                  aria-pressed={selectedPages.has(page)}
+                  title={page === route ? `This page · ${page}` : page}
+                  onClick={() => togglePage(page)}
+                >
+                  <span onPointerOver={showOverflowTitle}>{page === route ? 'This page' : page}</span>
+                  <small>{pages.counts.get(page) ?? 0}</small>
+                </button>
+              ))}
+            </fieldset>
+          )}
           <ul ref={listRef} className="isotone-list">
             {visibleNotes.map((note) => (
               <li
@@ -662,7 +807,8 @@ export function IterationPanel({
                   aria-current={editing?.id === note.id ? true : undefined}
                   onClick={() => beginEdit(note)}
                 >
-                  <NoteSummary note={note} />
+                  {working.has(note.id) && <span className="isotone-working" ref={dotPulse} role="img" aria-label="An agent is working on this" title="An agent is working on this" />}
+                  <NoteSummary note={note} page={note.route !== route ? note.route : undefined} />
                 </button>
                 <button
                   type="button"
@@ -816,6 +962,7 @@ export function IterationPanel({
       data-tools={Number(Boolean(variants)) + Number(notesAvailable)}
       data-instant={instant}
       data-notes-open={notesOpen}
+      data-working={working.size > 0}
       data-open={open}
       className="isotone-root"
     >
@@ -929,7 +1076,7 @@ export function IterationPanel({
           aria-hidden={railOpen}
           tabIndex={railOpen ? -1 : 0}
           aria-label={notesAvailable ? 'Isotone' : 'Variants'}
-          title={`Isotone${shortcutLabel ? ` · ${shortcutLabel}` : ''}`}
+          title={`Isotone${working.size ? ` · ${working.size} in progress` : ''}${shortcutLabel ? ` · ${shortcutLabel}` : ''}`}
           aria-expanded={railOpen}
           onClick={() => {
             if (open) closeAll();
@@ -937,6 +1084,7 @@ export function IterationPanel({
             else openInitial();
           }}
         >
+          {working.size > 0 && <span className="isotone-ring" ref={ringPulse} />}
           <Icon name="iterate" />
           {visibleNotes.length > 0 && (
             <span className="isotone-badge">{visibleNotes.length}</span>

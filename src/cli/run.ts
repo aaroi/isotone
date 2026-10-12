@@ -58,6 +58,7 @@ function printHelp(io: CliIO): void {
   out(io, 'Notes (the file is .iteration-feedback.json in the current directory)');
   out(io, '  isotone                    open notes, all routes');
   out(io, '  isotone <route>            one route');
+  out(io, '  isotone --working <id>     tell the panel you started on a note (a,b for several)');
   out(io, '  isotone --done <id>        mark addressed (an id prefix is enough)');
   out(io, '  isotone --undone <id>      reopen');
   out(io, '  isotone --all              include done notes');
@@ -140,9 +141,9 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
 function runNotes(argv: string[], io: CliIO): number {
   let routes: string[];
   try {
-    routes = parseArgs(argv, ['--days', '--file', '--done', '--undone'], ['--all', '--json']);
+    routes = parseArgs(argv, ['--days', '--file', '--done', '--undone', '--working'], ['--all', '--json']);
     if (routes.length > 1) throw new Error('Give at most one route.');
-    if (has(argv, '--done') && has(argv, '--undone')) throw new Error('Use either --done or --undone, not both.');
+    if ([has(argv, '--done'), has(argv, '--undone'), has(argv, '--working')].filter(Boolean).length > 1) throw new Error('Use only one of --done, --undone and --working.');
   } catch (error) {
     errOut(io, (error as Error).message);
     return 1;
@@ -162,6 +163,35 @@ function runNotes(argv: string[], io: CliIO): number {
   const notes = readNotes(file);
   const within = (iso: string, d: number) => Date.now() - new Date(iso).getTime() < d * 86_400_000;
 
+  const workingIdx = argv.indexOf('--working');
+  if (workingIdx >= 0) {
+    // One flag, one or more ids: `--working a1b2,c3d4`. The panel shows these
+    // as in progress until they are closed or the claim goes stale.
+    const prefixes = (argv[workingIdx + 1] ?? '').split(',').map((p) => p.trim()).filter(Boolean);
+    if (!prefixes.length) {
+      errOut(io, 'Give the feedback id (prefix ok): isotone --working <id>');
+      return 1;
+    }
+    const claimed: StoredNote[] = [];
+    try {
+      updateNotes(file, (current) => {
+        claimed.length = 0;
+        for (const prefix of prefixes) {
+          const match = findNoteByPrefix(current, prefix);
+          match.workingAt = new Date().toISOString();
+          claimed.push(match);
+        }
+        return current;
+      });
+    } catch (err) {
+      errOut(io, (err as Error).message);
+      return 1;
+    }
+    if (has(argv, '--json')) out(io, JSON.stringify(claimed, null, 2));
+    else for (const match of claimed) out(io, `working: [${match.id.slice(0, 8)}] ${match.route} — ${match.feedback.slice(0, 60)}`);
+    return 0;
+  }
+
   const flipIdx = doneIdx >= 0 ? doneIdx : undoneIdx;
   if (flipIdx >= 0) {
     const prefix = argv[flipIdx + 1];
@@ -175,6 +205,7 @@ function runNotes(argv: string[], io: CliIO): number {
         match = findNoteByPrefix(current, prefix);
         match.done = doneIdx >= 0;
         match.doneAt = match.done ? new Date().toISOString() : null;
+        delete match.workingAt;
         return current;
       });
     } catch (err) {
@@ -224,7 +255,7 @@ function runNotes(argv: string[], io: CliIO): number {
     }
     const when = n.createdAt.slice(0, 16).replace('T', ' ');
     const at = n.viewport ? ` · ${n.viewport.w}×${n.viewport.h}` : '';
-    const done = n.done ? ' ✓done' : '';
+    const done = n.done ? ' ✓done' : n.workingAt ? ' …working' : '';
     out(io, `- [${n.id.slice(0, 8)}] (${when}${at})${done}`);
     for (const element of n.elements ?? (n.element ? [n.element] : [])) {
       const label = element.text ? `"${element.text}"` : '(no text)';
@@ -240,7 +271,7 @@ function runNotes(argv: string[], io: CliIO): number {
   return 0;
 }
 
-const DONE_HINT = 'After you fix and verify a note, close it: npx isotone --done <id>';
+const DONE_HINT = 'When you start a note: npx isotone --working <id>. After you fix and verify it, close it: npx isotone --done <id>';
 
 function doneCommand(id: string): string {
   return `npx isotone --done ${id}`;

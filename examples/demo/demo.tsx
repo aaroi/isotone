@@ -8,6 +8,7 @@ const params = new URLSearchParams(location.search);
 const capture = params.get('capture');
 const screenshot = capture === 'light' || capture === 'dark';
 const review = params.get('review') === '1';
+const page = params.get('route') ?? '/';
 const stress = !screenshot && params.get('stress') === '1';
 const session = screenshot ? capture : stress ? 'stress' : 'interactive';
 const endpoint = `/demo-notes/${session}`;
@@ -83,7 +84,7 @@ function Panel({ theme }: { theme: IterationTheme }) {
     };
   }, []);
   useEffect(() => {
-    panel.current?.render(<IterationPanel route="/" theme={theme} updateEndpoint={screenshot ? undefined : params.has('update-preview') ? '/demo-update' : '/api/iteration/update'}
+    panel.current?.render(<IterationPanel route={page} theme={theme} updateEndpoint={screenshot ? undefined : params.has('update-preview') ? '/demo-update' : '/api/iteration/update'}
       store={{ endpoint, key: `isotone-public-demo-${session}` }}
       variants={source} defaultTab="variants" shortcut={screenshot ? false : undefined} />);
   }, [theme]);
@@ -164,6 +165,12 @@ function Demo() {
         <label>Panel <select value={panelTheme} onChange={event => setPanelTheme(event.target.value as IterationTheme)}>
           {(['auto', 'system', 'light', 'dark'] as const).map(theme => <option key={theme}>{theme}</option>)}
         </select></label>
+        <fieldset><legend>Page</legend>{[['/', 'Overview'], ['/pricing', 'Pricing'], ['/settings', 'Settings']].map(([route, name]) =>
+          <a key={route} className="demo-page" aria-current={page === route ? 'page' : undefined} href={route === '/' ? '/' : `/?route=${route}`}>{name}</a>)}</fieldset>
+        <fieldset><legend>Agent</legend>
+          <button type="button" onClick={() => void fetch(`/demo-agent?action=start&route=${encodeURIComponent(page)}`, { method: 'POST' })}>Starts a note</button>
+          <button type="button" onClick={() => void fetch(`/demo-agent?action=finish&route=${encodeURIComponent(page)}`, { method: 'POST' })}>Finishes it</button>
+          <button type="button" onClick={() => void fetch('/demo-agent?action=reset', { method: 'POST' })}>Reset notes</button></fieldset>
         <a href="/preview.html">Screenshot view ↗</a>
         <a href={stress ? '/' : '/?stress=1'}>{stress ? 'Normal demo' : 'Stress test'}</a>
       </div>
@@ -171,7 +178,7 @@ function Demo() {
     <main className="workspace">
       <aside className="sidebar"><div className="workspace-mark">◈</div><span className="nav-current">Overview</span><span>Projects</span><span>Activity</span><span>Settings</span></aside>
       <div className="workspace-content">
-        <div className="page-heading"><div><p className="eyebrow">Workspace</p><h1>Overview</h1></div><NewProjectMenu /></div>
+        <div className="page-heading"><div><p className="eyebrow">Workspace</p><h1>{page === '/pricing' ? 'Pricing' : page === '/settings' ? 'Settings' : 'Overview'}</h1></div><NewProjectMenu /></div>
         <p className="page-description">A little more clarity. A little less busywork.</p>
         <section id="overview-cards" className="overview-cards" aria-label="Overview cards">
           {[['Active projects', '12', '+2 this month'], ['Tasks complete', '248', 'Looking good'], ['Team members', '8', 'All connected']].map(([label, value, detail]) =>
@@ -182,7 +189,7 @@ function Demo() {
           {[['Website refresh', 'Design', 'In progress'], ['Mobile experience', 'Product', 'In review'], ['Component library', 'Engineering', 'Ready']].map(([title, team, status], index) =>
             <article key={title}><span className={`project-icon project-icon-${index}`}>↗</span><div><strong>{title}</strong><small>{team}</small></div><span className="status">{status}</span></article>)}
         </section>
-        {!screenshot && <p className="demo-hint">Open the diamond in the corner to leave feedback or try a variant. Demo notes are isolated and reset when the server restarts. To test select mode against a dropdown, open New project, press the pin in the feedback composer, then Shift-click a menu item to reach it without pinning.</p>}
+        {!screenshot && <p className="demo-hint">Try the page links and the Agent buttons above: the panel lists this page's notes, shows other pages as chips, and follows the agent without a reload. Open the diamond in the corner to leave feedback or try a variant. Demo notes are isolated and reset when the server restarts. To test select mode against a dropdown, open New project, press the pin in the feedback composer, then Shift-click a menu item to reach it without pinning.</p>}
       </div>
     </main>
     <Panel theme={panelTheme} />

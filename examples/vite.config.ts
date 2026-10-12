@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
-import { notesResponse, writeNotes } from '../src/store';
+import { notesResponse, updateNotes, writeNotes } from '../src/store';
 import { iteration } from '../src/vite/index';
 import { checkOrigin, readNodeJson, sendFailure } from '../src/server/http';
 
@@ -33,6 +33,18 @@ function demoNotes(): Plugin {
             ['Use the same spacing between all cards.', 'Overview cards'],
             ['Keep this title on one line when the window is narrow.', 'Workspace overview'],
           ];
+          // Notes on other pages, so the page chips have something to show.
+          const elsewhere: [string, string, string][] = [
+            ['/pricing', 'The plan names are too similar.', 'Plans'],
+            ['/pricing', 'Show the yearly saving next to the toggle.', 'Billing toggle'],
+            ['/settings', 'Group the notification options.', 'Notifications'],
+          ];
+          elsewhere.forEach(([route, feedback, text], index) => { notes.push({
+            id: `demo-elsewhere-${index}`, route, feedback,
+            element: { tag: 'section', text, selector: '#overview-cards' },
+            done: false, doneAt: null,
+            createdAt: new Date(Date.now() + (index + 20) * 1000).toISOString(),
+          }); });
           examples.forEach(([feedback, text], index) => { notes.push({
             id: `demo-review-${index}`, route: '/', feedback,
             element: { tag: 'section', text, selector: '#overview-cards' },
@@ -61,6 +73,32 @@ function demoNotes(): Plugin {
             currentVersion: '0.3.4', latestVersion: '0.4.0', status: 'available',
             upgrade: { manager: 'pnpm', command: 'pnpm add -D --exact isotone@0.4.0', cwd: '/workspace/example-app' },
           }));
+          return;
+        }
+        // Stands in for an agent: `start` is `isotone --working` on the oldest
+        // open note nobody has started, `finish` is `--done` on the oldest started one.
+        if ((req.url ?? '').startsWith('/demo-agent') && req.method === 'POST') {
+          try { checkOrigin(req.headers.origin, req.headers.host ?? ''); } catch (error) { sendFailure(res, error); return; }
+          const action = new URL(req.url ?? '', 'http://x').searchParams.get('action');
+          const file = files.get('/demo-notes/interactive') as string;
+          const route = new URL(req.url ?? '', 'http://x').searchParams.get('route');
+          let touched = '';
+          updateNotes(file, (notes) => {
+            if (action === 'reset') {
+              for (const n of notes) { n.done = false; n.doneAt = null; delete n.workingAt; }
+              return notes;
+            }
+            const open = notes.filter((n) => !n.done && (!route || n.route === route))
+              .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+            const target = action === 'start' ? open.find((n) => !n.workingAt) : open.find((n) => n.workingAt);
+            if (!target) return notes;
+            touched = target.id;
+            if (action === 'start') target.workingAt = new Date().toISOString();
+            else { target.done = true; target.doneAt = new Date().toISOString(); delete target.workingAt; }
+            return notes;
+          });
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, touched }));
           return;
         }
         const file = files.get((req.url ?? '').split('?')[0]);
