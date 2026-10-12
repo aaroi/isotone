@@ -116,6 +116,30 @@ function Panel({ theme }: { theme: IterationTheme }) {
   return <div ref={host} data-isotone="demo" />;
 }
 
+/** A host dropdown that closes on any outside press, like most UI libraries. */
+function NewProjectMenu() {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: Event) => {
+      if (!event.composedPath().includes(wrap.current as EventTarget)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('mousedown', close);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      document.removeEventListener('mousedown', close);
+    };
+  }, [open]);
+  return <div className="new-project-wrap" ref={wrap}>
+    <button className="new-project" type="button" aria-expanded={open} onClick={() => setOpen(v => !v)}>New project</button>
+    {open && <div className="demo-menu" role="menu">
+      {['Blank project', 'From template', 'Import from file'].map(item => <button key={item} type="button" role="menuitem" onClick={() => setOpen(false)}>{item}</button>)}
+    </div>}
+  </div>;
+}
+
 function Demo() {
   const [pageTheme, setPageTheme] = useState<'light' | 'dark'>(() => screenshot ? capture : savedTheme('iso-demo-page', ['light', 'dark'], 'dark'));
   const [panelTheme, setPanelTheme] = useState<IterationTheme>(() => screenshot ? 'auto' : savedTheme('iso-demo-panel', ['auto', 'system', 'light', 'dark'], 'auto'));
@@ -147,7 +171,7 @@ function Demo() {
     <main className="workspace">
       <aside className="sidebar"><div className="workspace-mark">◈</div><span className="nav-current">Overview</span><span>Projects</span><span>Activity</span><span>Settings</span></aside>
       <div className="workspace-content">
-        <div className="page-heading"><div><p className="eyebrow">Workspace</p><h1>Overview</h1></div><button className="new-project" type="button">New project</button></div>
+        <div className="page-heading"><div><p className="eyebrow">Workspace</p><h1>Overview</h1></div><NewProjectMenu /></div>
         <p className="page-description">A little more clarity. A little less busywork.</p>
         <section id="overview-cards" className="overview-cards" aria-label="Overview cards">
           {[['Active projects', '12', '+2 this month'], ['Tasks complete', '248', 'Looking good'], ['Team members', '8', 'All connected']].map(([label, value, detail]) =>
@@ -158,7 +182,7 @@ function Demo() {
           {[['Website refresh', 'Design', 'In progress'], ['Mobile experience', 'Product', 'In review'], ['Component library', 'Engineering', 'Ready']].map(([title, team, status], index) =>
             <article key={title}><span className={`project-icon project-icon-${index}`}>↗</span><div><strong>{title}</strong><small>{team}</small></div><span className="status">{status}</span></article>)}
         </section>
-        {!screenshot && <p className="demo-hint">Open the diamond in the corner to leave feedback or try a variant. Demo notes are isolated and reset when the server restarts.</p>}
+        {!screenshot && <p className="demo-hint">Open the diamond in the corner to leave feedback or try a variant. Demo notes are isolated and reset when the server restarts. To test select mode against a dropdown, open New project, press the pin in the feedback composer, then Shift-click a menu item to reach it without pinning.</p>}
       </div>
     </main>
     <Panel theme={panelTheme} />

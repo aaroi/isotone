@@ -82,14 +82,14 @@ ${APPEARANCE_CSS}
 .isotone-root .isotone-vars > .isotone-panel-head:has(.isotone-save) { position: relative; z-index: 1; margin-top: calc(0px - var(--iso-space)); background: linear-gradient(to bottom, transparent, var(--iso-bg) var(--iso-space)); }
 .isotone-root .isotone-vars > .isotone-panel-head:not(:has(.isotone-save)) { display: none; }
 .isotone-root .isotone-vars > .isotone-panel-head :is(h2, .isotone-icon) { display: none; }
-.isotone-root .isotone-axis-menu { top: 6px; min-height: min(260px, calc(100% - 12px)); max-height: calc(100% - 12px); }
+.isotone-root .isotone-axis-menu { top: var(--iso-menu-top, 6px); max-height: calc(100% - var(--iso-menu-top, 6px) - 6px); }
 .isotone-root .isotone-save-state { top: auto; bottom: 27px; }
 .isotone-panel-head h2 { font-size: 12px; font-weight: 600; letter-spacing: -.01em; }
 .isotone-head-actions { display: flex; align-items: center; gap: 6px; margin-right: auto; }
 .isotone-icon { width: 28px; height: 28px; display: inline-grid; place-items: center; flex: none; color: var(--iso-muted); border-radius: 6px; }
 .isotone-count { margin-left: 5px; color: var(--iso-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .isotone-vars { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; }
-.isotone-variants-panel:has(.isotone-axis-menu[data-open='true']) { flex-basis: min(360px, calc(100dvh - 76px)); }
+.isotone-vars { min-height: min(var(--iso-menu-need, 0px), calc(100dvh - 76px)); }
 .isotone-vars-body { flex: 1; overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: var(--iso-space); display: flex; flex-direction: column; gap: var(--iso-space); }
 /* The footer overlaps only the scroller's bottom padding: content fades beneath
    it while scrolling, but the last control remains fully visible at the end. */
@@ -157,7 +157,7 @@ ${PILL_ACTIVE_CSS}
    Cancelling margin/padding keeps the first row in place at scroll start; the
    expanded height preserves the content allowance and composer position.
    The side gutters contain the corner action and keyboard focus outlines. */
-.isotone-list { display: flex; flex-direction: column; gap: 0; flex: 0 1 auto; max-height: calc(var(--iso-list-height) + 2 * var(--iso-space) - 8px); min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: calc(0px - var(--iso-space)) calc(-8px - var(--iso-note-outset)); padding: var(--iso-space) 8px; scroll-padding-block: var(--iso-space); mask-image: linear-gradient(to bottom, transparent, #000 var(--iso-space), #000 calc(100% - var(--iso-space)), transparent); }
+.isotone-list { display: flex; flex-direction: column; gap: 0; flex: 0 1 auto; max-height: calc(var(--iso-list-height) + 2 * var(--iso-space) - 8px); min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: calc(0px - var(--iso-space)) calc(-8px - var(--iso-note-outset)) calc(-2px - var(--iso-space)); padding: var(--iso-space) 8px; scroll-padding-block: var(--iso-space); mask-image: linear-gradient(to bottom, transparent, #000 var(--iso-space), #000 calc(100% - var(--iso-space)), transparent); }
 .isotone-empty { color: var(--iso-muted); font-size: 11px; line-height: 1.7; padding: 8px; }
 .isotone-note { position: relative; flex: none; }
 .isotone-request-heading { display: flex; align-items: center; gap: 8px; line-height: 14px; }
@@ -189,14 +189,13 @@ ${FEEDBACK_LAYOUT_CSS}
 .isotone-context > .isotone-chip:not(:only-child) { max-width: calc(100% - 32px); }
 .isotone-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isotone-chip button { display: grid; place-items: center; flex: none; width: 16px; height: 16px; border-radius: 3px; background: transparent; box-shadow: none; }
-.isotone-root .isotone-textarea { --iso-textarea-inset: 8px; display: block; width: 100%; flex: none; height: 24px; min-height: calc(24px + var(--iso-textarea-inset)); max-height: calc(120px + var(--iso-textarea-inset)); overflow-y: auto; resize: none; margin-top: calc(0px - var(--iso-textarea-inset)); padding: calc(var(--iso-textarea-inset) + 2px) 2px 2px; color: var(--iso-fg); background: transparent; border: 0; border-radius: 0; font-size: 12px; line-height: 20px; box-shadow: none; cursor: text; }
+.isotone-root .isotone-textarea { --iso-textarea-inset: 8px; display: block; width: 100%; flex: none; height: 22px; min-height: calc(22px + var(--iso-textarea-inset)); max-height: calc(120px + var(--iso-textarea-inset)); overflow-y: auto; resize: none; margin-top: calc(0px - var(--iso-textarea-inset)); padding: calc(var(--iso-textarea-inset) + 1px) 1px 1px; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--iso-fg) 14%, transparent) transparent; color: var(--iso-fg); background: transparent; border: 0; border-radius: 0; font-size: 12px; line-height: 20px; box-shadow: none; cursor: text; }
 /* Text scrolls through the gap below tags, or the field inset without tags. */
 .isotone-root .isotone-context:empty + .isotone-textarea { --iso-textarea-inset: var(--iso-input-padding); }
 .isotone-textarea::placeholder { color: var(--iso-faint); }
 .isotone-root .isotone-textarea:focus-visible { outline: none; }
 .isotone-textarea[data-scrolled='true'] { mask-image: linear-gradient(to bottom, transparent, #000 8px); }
 .isotone-toolbar { display: flex; flex: none; align-items: center; gap: 7px; height: 28px; }
-.isotone-key-hint { color: var(--iso-faint); font-size: 9px; }
 .isotone-pick[aria-pressed='true'] { color: var(--iso-fg); }
 .isotone-pick, .isotone-send { position: relative; width: 24px; height: 24px; }
 /* Keep a 28px hit area around the quieter composer faces. */

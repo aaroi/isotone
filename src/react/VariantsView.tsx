@@ -1,5 +1,5 @@
 import { showOverflowTitle } from './tooltips';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { VariantReference } from '../core/index';
 import {
   axisDefault,
@@ -100,6 +100,48 @@ export function VariantsView({
     if (!menu) setMenuOpen(false);
   }, [menu]);
 
+  // The panel grows only when the dialog's own content cannot fit in it, and the
+  // dialog sits directly above the clicked heading when there is room.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the dialog's content changes with the selected selector and its options.
+  useLayoutEffect(() => {
+    const root = bodyRef.current?.parentElement;
+    const dialog = menuRef.current;
+    const scroll = dialog?.querySelector<HTMLElement>('.isotone-menu-scroll');
+    if (!root) return;
+    const clear = () => {
+      root.style.removeProperty('--iso-menu-need');
+      root.style.removeProperty('--iso-menu-top');
+    };
+    if (!menuOpen || !dialog || !scroll) { clear(); return; }
+    const place = () => {
+      const natural = dialog.offsetHeight + scroll.scrollHeight - scroll.clientHeight;
+      root.style.setProperty('--iso-menu-need', `${natural + 12}px`);
+      const heading = trigger.current?.isConnected ? trigger.current.getBoundingClientRect().top : 0;
+      const top = heading - root.getBoundingClientRect().top - natural - 6;
+      root.style.setProperty('--iso-menu-top', `${Number.isFinite(top) && top >= 6 ? top : 6}px`);
+    };
+    place();
+    window.addEventListener('resize', place);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(place);
+    observer?.observe(scroll);
+    return () => {
+      window.removeEventListener('resize', place);
+      observer?.disconnect();
+      clear();
+    };
+  }, [menuOpen, menu, menuOptions.length, error]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: closeMenu only touches state setters and refs, so the listener follows menuOpen alone.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const dialog = menuRef.current;
+      if (dialog && !e.composedPath().includes(dialog)) closeMenu();
+    };
+    window.addEventListener('pointerdown', onPointerDown, true);
+    return () => window.removeEventListener('pointerdown', onPointerDown, true);
+  }, [menuOpen]);
+
   useEffect(() => {
     if (menuOpen)
       menuRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
@@ -167,7 +209,7 @@ export function VariantsView({
       <div className="isotone-vars-body" ref={node => { bodyRef.current = node; node?.toggleAttribute('inert', menuOpen); }}>
         {sourceError && <p className="isotone-danger" role="alert">{sourceError}</p>}
         {shown.length === 0 && (
-          <p className="isotone-empty">No variant selectors on this page.</p>
+          <p className="isotone-empty">No variants on this page yet. Ask your agent to create variants of any design and they will appear here.</p>
         )}
         {shown.map((axis) => {
           const thumbnails = axis.kind !== 'range' && axis.kind !== 'color' && axis.options.length > 0 && axis.options.every(option => option.image);
