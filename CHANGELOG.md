@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.0.6
+
+- fix: stop the launcher flickering when hovered at the count badge (#11)
+
 ## 1.0.5
 
 - fix: render saved-defaults notes like every other note (#10)

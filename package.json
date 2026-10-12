@@ -1,6 +1,6 @@
 {
   "name": "isotone",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "type": "module",
   "license": "MIT",
   "description": "Local feedback and design variants for your running web app. Pin elements, leave notes, and give your coding agent the context to make the change.",
