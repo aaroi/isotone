@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.0.7
+
+- feat: live notes, page scope and agent progress in the panel (#12)
+
 ## 1.0.6
 
 - fix: stop the launcher flickering when hovered at the count badge (#11)
