@@ -935,6 +935,29 @@ describe('review dock interactions', () => {
     expect(body.element.selector).toBe('#one');
     a.remove(); b.remove();
   });
+  it('finishes selecting on Enter from an empty composer, and leaves select mode after sending', async () => {
+    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await click(container.querySelector('.isotone-fab'));
+    const card = document.createElement('section'); card.id = 'card'; card.textContent = 'Card';
+    document.body.append(card);
+    Object.defineProperty(document, 'elementFromPoint', { value: () => card, configurable: true });
+    const textarea = container.querySelector<HTMLTextAreaElement>('textarea');
+    const enter = () => act(async () => { textarea?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true, cancelable: true })); });
+    await click(byText('Select elements'));
+    await click(card);
+    await act(async () => { await new Promise(r => requestAnimationFrame(r)); });
+    expect(container.querySelector('.isotone-hint')).not.toBeNull();
+    await enter();
+    expect(container.querySelector('.isotone-hint')).toBeNull();
+    expect(container.querySelectorAll('.isotone-chip')).toHaveLength(1);
+
+    await click(byText('Select elements'));
+    await typeFeedback('More room');
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ id: 'saved' }) })));
+    await enter();
+    expect(container.querySelector('.isotone-hint')).toBeNull();
+    card.remove();
+  });
   it('fades the select hint and lets the page through when the pointer nears it', async () => {
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(container.querySelector('.isotone-fab'));
