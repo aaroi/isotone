@@ -3,3 +3,6 @@ dist
 *.tsbuildinfo
 .iteration-feedback.json
 .tmp-vite-*/
+demo-dist
+.vercel
+.env*

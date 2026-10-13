@@ -5,29 +5,34 @@ import {
 } from '../../src/react/index';
 
 const params = new URLSearchParams(location.search);
+// The public demo is a static build: no dev server, so notes live in this
+// browser and the Agent buttons edit them here instead of on disk.
+const hosted = import.meta.env.MODE === 'hosted';
+const HOSTED_KEY = 'isotone-hosted-demo';
 const capture = params.get('capture');
 const screenshot = capture === 'light' || capture === 'dark';
 const review = params.get('review') === '1';
 // README image scenes: `focus` (feedback panel), `both` (variants and feedback), `pin` (select mode).
 const scene = screenshot ? params.get('scene') ?? 'focus' : null;
 const page = params.get('route') ?? '/';
-const stress = !screenshot && params.get('stress') === '1';
-const session = screenshot ? capture : stress ? 'stress' : 'interactive';
+const stress = !screenshot && !hosted && params.get('stress') === '1';
+const session = screenshot ? capture : hosted ? 'hosted' : stress ? 'stress' : 'interactive';
 const endpoint = `/demo-notes/${session}`;
-/** A small line drawing of the overview cards in a layout, used as a thumbnail. */
-function layoutThumb(columns: number): string {
-  const rows = Math.ceil(3 / columns);
-  // Drawn in the upper right, clear of the label the panel puts bottom left.
-  const w = (64 - (columns - 1) * 5) / columns;
-  const h = (30 - (rows - 1) * 4) / rows;
-  const cards = Array.from({ length: 3 }, (_, i) =>
-    `<rect x="${44 + (i % columns) * (w + 5)}" y="${9 + Math.floor(i / columns) * (h + 4)}" width="${w}" height="${h}" rx="2.5" fill="none" stroke="#8b8e99" stroke-width="1.5"/>`).join('');
-  return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 64">${cards}</svg>`)}`;
+/** A miniature of the overview cards in one layout, used as a thumbnail. Cards are
+ *  [x, y, w, h] in a 150 × 72 box; the drawing stays centred above the label the
+ *  panel puts bottom left. */
+function layoutThumb(cards: [number, number, number, number][]): string {
+  const shapes = cards.map(([x, y, w, h]) =>
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="#8b8e99" fill-opacity=".14" stroke="#8b8e99" stroke-opacity=".7"/>` +
+    `<rect x="${x + 4}" y="${y + 4}" width="${Math.min(14, w - 8)}" height="2.5" rx="1.25" fill="#8b8e99"/>`).join('');
+  return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 72">${shapes}</svg>`)}`;
 }
 const axes: VariantAxis[] = [
   { id: 'layout', label: 'Card layout', defaultOption: 'row', options: [
-    { id: 'row', label: 'Row', image: layoutThumb(3) }, { id: 'grid', label: 'Grid', image: layoutThumb(2) },
-    { id: 'list', label: 'List', image: layoutThumb(1) },
+    { id: 'row', label: 'Row', image: layoutThumb([[33, 12, 26, 32], [62, 12, 26, 32], [91, 12, 26, 32]]) },
+    { id: 'feature', label: 'Feature', image: layoutThumb([[33, 9, 84, 18], [33, 30, 41, 15], [76, 30, 41, 15]]) },
+    { id: 'sidebar', label: 'Sidebar', image: layoutThumb([[33, 9, 41, 36], [76, 9, 41, 16.5], [76, 28.5, 41, 16.5]]) },
+    { id: 'list', label: 'List', image: layoutThumb([[33, 9, 84, 10], [33, 22, 84, 10], [33, 35, 84, 10]]) },
   ] },
   { id: 'spacing', label: 'Spacing', defaultOption: 'compact', options: [
     { id: 'compact', label: 'Compact' }, { id: 'comfy', label: 'Comfy' }, { id: 'spacious', label: 'Spacious' },
@@ -73,6 +78,98 @@ const source = createVariantsSource({
   },
 });
 
+type DemoNote = Record<string, unknown> & {
+  id: string; route: string; feedback: string; done: boolean; doneAt: string | null; createdAt: string; workingAt?: string;
+};
+function readHostedNotes(): DemoNote[] {
+  try { return JSON.parse(localStorage.getItem(HOSTED_KEY) ?? '[]') as DemoNote[]; } catch { return []; }
+}
+function writeHostedNotes(notes: DemoNote[]) {
+  try { localStorage.setItem(HOSTED_KEY, JSON.stringify(notes)); } catch { /* Private mode: the demo runs, notes just don't stick. */ }
+}
+function seedHostedNotes() {
+  const seed: [string, string, string][] = [
+    ['/', 'Give the cards a little more room.', 'Overview cards'],
+    ['/', 'Shorten this to "Active".', 'Active projects'],
+    ['/pricing', 'The plan names are too similar.', 'Plans'],
+    ['/settings', 'Group the notification options.', 'Notifications'],
+  ];
+  writeHostedNotes(seed.map(([route, feedback, text], index) => ({
+    id: `seed-${index}`, route, feedback, element: { tag: 'section', text, selector: '#overview-cards' },
+    done: false, doneAt: null, createdAt: new Date(Date.now() - (seed.length - index) * 60_000).toISOString(),
+  })));
+}
+/**
+ * The notes endpoint, answered inside the page for the static hosted build.
+ * It follows the dev server's contract closely enough for the real panel code
+ * to run unchanged, polling included, with localStorage standing in for the file.
+ */
+function serveNotesInPage(path: string) {
+  const network = window.fetch.bind(window);
+  window.fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+    if (url.pathname !== path) return network(input, init);
+    const reply = (status: number, body: unknown) =>
+      new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+    const query = url.searchParams;
+    const method = (init?.method ?? 'GET').toUpperCase();
+    const notes = readHostedNotes();
+    if (method === 'GET') {
+      let raw = '';
+      try { raw = localStorage.getItem(HOSTED_KEY) ?? ''; } catch { /* Empty. */ }
+      let hash = 0;
+      for (let i = 0; i < raw.length; i++) hash = (hash * 31 + raw.charCodeAt(i)) | 0;
+      const rev = `${raw.length}.${(hash >>> 0).toString(36)}`;
+      const polled = query.has('rev');
+      if (polled && query.get('rev') === rev) return reply(200, { rev, unchanged: true });
+      const route = query.get('route');
+      const rows = (query.get('all') && query.get('all') !== '0' ? notes : route ? notes.filter((n) => n.route === route) : notes.filter((n) => !n.done))
+        .sort((x, y) => y.createdAt.localeCompare(x.createdAt));
+      return reply(200, polled ? { rev, notes: rows } : rows);
+    }
+    if (method === 'DELETE') {
+      writeHostedNotes(notes.filter((n) => n.id !== query.get('id')));
+      return reply(200, { ok: true });
+    }
+    const body = JSON.parse(String(init?.body ?? '{}')) as Partial<DemoNote> & { elements?: unknown[]; element?: unknown };
+    const feedback = String(body.feedback ?? '').trim();
+    if (!body.route || !feedback) return reply(400, { error: 'route and feedback are required' });
+    const fields = Object.fromEntries(['element', 'elements', 'variant', 'variantAction', 'payload', 'viewport']
+      .filter((key) => body[key] !== undefined).map((key) => [key, body[key]]));
+    // Like the server, a new "save as defaults" replaces the open one on its page.
+    const defaults = feedback.startsWith('[set-defaults]') && !notes.some((n) => n.id === body.id)
+      ? notes.find((n) => !n.done && n.route === body.route && n.feedback.startsWith('[set-defaults]')) : undefined;
+    const existing = notes.find((n) => n.id === (defaults?.id ?? body.id));
+    if (existing) {
+      Object.assign(existing, fields, { feedback }, defaults ? { createdAt: new Date().toISOString() } : {});
+      writeHostedNotes(notes);
+      return reply(200, { id: existing.id });
+    }
+    const id = typeof body.id === 'string' ? body.id : crypto.randomUUID();
+    writeHostedNotes([...notes, { ...fields, id, route: body.route, feedback, element: body.element ?? null, done: false, doneAt: null, createdAt: new Date().toISOString() }]);
+    return reply(201, { id });
+  };
+}
+if (hosted && !screenshot) {
+  try { if (localStorage.getItem(HOSTED_KEY) === null) seedHostedNotes(); } catch { /* No storage. */ }
+  serveNotesInPage(endpoint);
+}
+/** The hosted stand-in for an agent running `isotone --working` and `--done`. */
+function hostedAgent(action: 'start' | 'finish' | 'reset') {
+  if (action === 'reset') { seedHostedNotes(); return; }
+  const notes = readHostedNotes();
+  const open = notes.filter((n) => !n.done && n.route === page);
+  const target = action === 'start' ? open.find((n) => !n.workingAt) : open.find((n) => n.workingAt);
+  if (!target) return;
+  if (action === 'start') target.workingAt = new Date().toISOString();
+  else { target.done = true; target.doneAt = new Date().toISOString(); delete target.workingAt; }
+  writeHostedNotes(notes);
+}
+function agent(action: 'start' | 'finish' | 'reset') {
+  if (hosted) hostedAgent(action);
+  else void fetch(`/demo-agent?action=${action}&route=${encodeURIComponent(page)}`, { method: 'POST' });
+}
+
 function savedTheme<T extends string>(key: string, choices: readonly T[], fallback: T): T {
   try {
     const saved = localStorage.getItem(key);
@@ -102,7 +199,7 @@ function Panel({ theme }: { theme: IterationTheme }) {
     };
   }, []);
   useEffect(() => {
-    panel.current?.render(<IterationPanel route={page} theme={theme} updateEndpoint={screenshot ? undefined : params.has('update-preview') ? '/demo-update' : '/api/iteration/update'}
+    panel.current?.render(<IterationPanel route={page} theme={theme} updateEndpoint={screenshot || hosted ? undefined : params.has('update-preview') ? '/demo-update' : '/api/iteration/update'}
       store={{ endpoint, key: `isotone-public-demo-${session}` }}
       variants={source} defaultTab="variants" shortcut={screenshot ? false : undefined} />);
   }, [theme]);
@@ -196,7 +293,7 @@ function Demo() {
   }, [pageTheme, panelTheme]);
   return <>
     {!screenshot && <header className="demo-controls">
-      <a href="/" className="brand">Isotone <span>{stress ? 'stress test · 500 selectors / 500 notes' : 'live demo'}</span></a>
+      <a href={hosted ? 'https://github.com/aaroi/isotone' : '/'} className="brand">Isotone <span>{stress ? 'stress test · 500 selectors / 500 notes' : 'live demo'}</span></a>
       <div className="theme-controls">
         <fieldset><legend>Page</legend>{(['light', 'dark'] as const).map(theme =>
           <button key={theme} type="button" aria-pressed={pageTheme === theme} onClick={() => setPageTheme(theme)}>{theme}</button>)}</fieldset>
@@ -206,11 +303,13 @@ function Demo() {
         <fieldset><legend>Page</legend>{[['/', 'Overview'], ['/pricing', 'Pricing'], ['/settings', 'Settings']].map(([route, name]) =>
           <a key={route} className="demo-page" aria-current={page === route ? 'page' : undefined} href={route === '/' ? '/' : `/?route=${route}`}>{name}</a>)}</fieldset>
         <fieldset><legend>Agent</legend>
-          <button type="button" onClick={() => void fetch(`/demo-agent?action=start&route=${encodeURIComponent(page)}`, { method: 'POST' })}>Starts a note</button>
-          <button type="button" onClick={() => void fetch(`/demo-agent?action=finish&route=${encodeURIComponent(page)}`, { method: 'POST' })}>Finishes it</button>
-          <button type="button" onClick={() => void fetch('/demo-agent?action=reset', { method: 'POST' })}>Reset notes</button></fieldset>
-        <a href="/preview.html">Screenshot view ↗</a>
-        <a href={stress ? '/' : '/?stress=1'}>{stress ? 'Normal demo' : 'Stress test'}</a>
+          <button type="button" onClick={() => agent('start')}>Starts a note</button>
+          <button type="button" onClick={() => agent('finish')}>Finishes it</button>
+          <button type="button" onClick={() => agent('reset')}>Reset notes</button></fieldset>
+        {hosted
+          ? <a href="https://github.com/aaroi/isotone">GitHub ↗</a>
+          : <><a href="/preview.html">Screenshot view ↗</a>
+            <a href={stress ? '/' : '/?stress=1'}>{stress ? 'Normal demo' : 'Stress test'}</a></>}
       </div>
     </header>}
     <main className="workspace">
@@ -220,14 +319,15 @@ function Demo() {
         <p className="page-description">A little more clarity. A little less busywork.</p>
         <section id="overview-cards" className="overview-cards" aria-label="Overview cards">
           {[['Active projects', '12', '+2 this month'], ['Tasks complete', '248', 'Looking good'], ['Team members', '8', 'All connected']].map(([label, value, detail]) =>
-            <article key={label}><p>{label}</p>{' '}<strong>{value}</strong>{' '}<small>{detail}</small></article>)}
+            <article key={label}><p>{label}</p><strong>{value}</strong><small>{detail}</small></article>)}
         </section>
         <div className="section-heading"><h2>Recent projects</h2><span>View all</span></div>
         <section className="projects" aria-label="Recent projects">
           {[['Website refresh', 'Design', 'In progress'], ['Mobile experience', 'Product', 'In review'], ['Component library', 'Engineering', 'Ready']].map(([title, team, status], index) =>
             <article key={title}><span className={`project-icon project-icon-${index}`}>↗</span><div><strong>{title}</strong><small>{team}</small></div><span className="status">{status}</span></article>)}
         </section>
-        {!screenshot && <p className="demo-hint">Try the page links and the Agent buttons above: the panel lists this page's notes, shows other pages as chips, and follows the agent without a reload. Open the diamond in the corner to leave feedback or try a variant. Demo notes are isolated and reset when the server restarts. To test select mode against a dropdown, open New project, press the pin in the feedback composer, then Shift-click a menu item to reach it without pinning.</p>}
+        {hosted && <p className="demo-hint">This page is a stand-in for your app. Open the panel with the diamond in the corner, or ⌘/Ctrl + Shift + . Switch the card layout, spacing and colour in Variants. In Feedback, press the crosshair, click a card and write what you'd change. The Agent buttons up top do what your coding agent would do with <code>npx isotone --working</code> and <code>--done</code>. In a real project the notes go to a JSON file your agent reads. Here they stay in this browser.</p>}
+        {!screenshot && !hosted && <p className="demo-hint">Try the page links and the Agent buttons above: the panel lists this page's notes, shows other pages as chips, and follows the agent without a reload. Open the diamond in the corner to leave feedback or try a variant. Demo notes are isolated and reset when the server restarts. To test select mode against a dropdown, open New project, press the pin in the feedback composer, then Shift-click a menu item to reach it without pinning.</p>}
       </div>
     </main>
     <Panel theme={panelTheme} />

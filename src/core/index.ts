@@ -116,6 +116,26 @@ export function describeIterationElement(
 }
 
 /** Lazy DOM views: describing one element never walks unrelated subtrees. */
+/**
+ * The element's text as a reader sees it. `textContent` runs block children
+ * together ("Active projects12+2 this month"), so prefer the browser's
+ * `innerText`, and without one (jsdom, detached nodes) put a space around
+ * every child that is not inline.
+ */
+function renderedText(el: Element): string {
+  const inner = (el as HTMLElement).innerText;
+  if (typeof inner === 'string' && el.isConnected) return inner;
+  const view = el.ownerDocument?.defaultView;
+  const walk = (node: Node): string => {
+    if (node.nodeType === 3) return node.nodeValue ?? '';
+    if (node.nodeType !== 1) return '';
+    const text = Array.from(node.childNodes, walk).join('');
+    const display = view?.getComputedStyle(node as Element).display ?? '';
+    return node === el || display.startsWith('inline') ? text : ` ${text} `;
+  };
+  return walk(el);
+}
+
 export function elementAsNode(el: Element): NodeLike {
   const cache = new WeakMap<Element, NodeLike>();
   const view = (n: Element | null | undefined): NodeLike | null => {
@@ -125,7 +145,7 @@ export function elementAsNode(el: Element): NodeLike {
     const created: NodeLike = {
       tagName: n.tagName,
       id: n.id || null,
-      get textContent() { return n.textContent; },
+      get textContent() { return renderedText(n); },
       get parentElement() { return view(n.parentElement); },
       get children() { return Array.from(n.children, (child) => view(child) as NodeLike); },
       get indexInParent() {
