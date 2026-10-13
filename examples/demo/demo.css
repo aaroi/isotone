@@ -45,21 +45,12 @@ h1 { margin: 0; font-size: 30px; font-weight: 600; letter-spacing: -.045em; line
 .status { margin-left: auto; border: 1px solid var(--line); padding: 2px 7px; border-radius: 10px; font-size: 9px; color: var(--muted); white-space: nowrap; }
 .demo-hint { max-width: 380px; color: var(--muted); font-size: 12px; margin-top: 30px; }
 /* Capture treatment belongs to the host only. The actual tool is mounted
-   outside .workspace, so its type, borders and controls stay untouched. */
-:root[data-capture='true'] .workspace { position: relative; isolation: isolate; overflow: hidden; min-height: 100dvh; grid-template-columns: 96px minmax(0, 1fr); }
-:root[data-capture='true'] .workspace > * { filter: blur(.6px); opacity: .7; }
-:root[data-capture='true'] .workspace::after {
-  content: '';
-  position: absolute;
-  inset: -12px;
-  z-index: 1;
-  pointer-events: none;
-  background: color-mix(in srgb, var(--bg) 64%, transparent);
-  -webkit-backdrop-filter: blur(2.5px);
-  backdrop-filter: blur(2.5px);
-  -webkit-mask-image: radial-gradient(ellipse 74% 66% at 78% 74%, transparent 0%, #000 70%);
-  mask-image: radial-gradient(ellipse 74% 66% at 78% 74%, transparent 0%, #000 70%);
-}
+   outside .workspace, so its type, borders and controls stay untouched. The
+   outline stands in for the pinned element the first note points at. */
+:root[data-capture='true'] .workspace { min-height: 100dvh; grid-template-columns: 96px minmax(0, 1fr); }
+:root[data-capture='true'] #overview-cards { outline: 2px solid var(--pin); outline-offset: 6px; border-radius: 6px; }
+:root[data-capture='true'][data-theme='light'] { --pin: #2563eb; }
+:root[data-capture='true'][data-theme='dark'] { --pin: #81aaff; }
 :root[data-capture='true'] .sidebar { padding: 28px 16px; font-size: 10px; gap: 25px; }
 :root[data-capture='true'] .workspace-content { padding: 28px 22px; }
 :root[data-capture='true'] .overview-cards { gap: 10px; }

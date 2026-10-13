@@ -208,7 +208,9 @@ ${FEEDBACK_LAYOUT_CSS}
 .isotone-pick::after, .isotone-send::after { content: ''; position: absolute; inset: -2px; border-radius: inherit; }
 .isotone-send { display: grid; place-items: center; margin-left: auto; flex: none; }
 .isotone-notice { font-size: 10px; color: var(--iso-muted); }
-.isotone-hint { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 14px; border-radius: 24px; background: var(--iso-bg); box-shadow: var(--iso-shadow); font-size: 11px; white-space: nowrap; }
+.isotone-hint { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 14px; border-radius: 24px; background: var(--iso-bg); box-shadow: var(--iso-shadow); font-size: 11px; white-space: nowrap; transition: opacity 120ms ease; }
+/* Near the pointer the hint fades and lets the page underneath be hovered and pinned. */
+.isotone-root .isotone-hint[data-away='true'] { opacity: 0; pointer-events: none; }
 .isotone-hint button { display: flex; align-items: center; gap: 8px; border-radius: 14px; padding: 5px 9px; }
 .isotone-hint kbd { font: inherit; color: var(--iso-muted); }
 .isotone-hover { position: fixed; pointer-events: none; border: 1px solid var(--iso-pick-line); background: var(--iso-pick-fill); border-radius: 5px; z-index: 2147483001; }

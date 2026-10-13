@@ -935,6 +935,25 @@ describe('review dock interactions', () => {
     expect(body.element.selector).toBe('#one');
     a.remove(); b.remove();
   });
+  it('fades the select hint and lets the page through when the pointer nears it', async () => {
+    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await click(container.querySelector('.isotone-fab'));
+    Object.defineProperty(document, 'elementFromPoint', { value: () => null, configurable: true });
+    await click(byText('Select elements'));
+    const hint = container.querySelector<HTMLElement>('.isotone-hint');
+    if (!hint) throw new Error('hint missing');
+    hint.getBoundingClientRect = () => ({ left: 300, right: 700, top: 16, bottom: 52, width: 400, height: 36, x: 300, y: 16, toJSON: () => ({}) });
+    const move = async (clientX: number, clientY: number) => {
+      await act(async () => {
+        window.dispatchEvent(new MouseEvent('mousemove', { clientX, clientY, bubbles: true }));
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+      });
+    };
+    await move(500, 60);
+    expect(hint.dataset.away).toBe('true');
+    await move(500, 400);
+    expect(hint.dataset.away).toBe('false');
+  });
   it('surfaces a failed removal request without losing options', async () => {
     const source = createVariantsSource({ axes: AXES });
     await render(createElement(VariantsView, { source, onManage: async () => { throw new Error('Disk unavailable'); } }));

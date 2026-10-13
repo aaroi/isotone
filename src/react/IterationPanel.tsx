@@ -124,6 +124,10 @@ export function IterationPanel({
     null,
   );
   const [hoverRect, setHoverRect] = useState<Rect | null>(null);
+  // The select-mode hint steps aside while the pointer is near it, so it never
+  // covers an element the user wants to pin.
+  const [hintAway, setHintAway] = useState(false);
+  const hintRef = useRef<HTMLDivElement>(null);
   const [rects, setRects] = useState<(Rect & { selector: string })[]>([]);
   const [text, setText] = useState('');
   const [notes, setNotes] = useState<IterationNote[]>([]);
@@ -614,6 +618,15 @@ export function IterationPanel({
       cancelAnimationFrame(frame);
       const deferred = e.shiftKey;
       frame = requestAnimationFrame(() => {
+        const hint = hintRef.current?.getBoundingClientRect();
+        const reach = 48;
+        setHintAway(
+          !!hint &&
+            e.clientX > hint.left - reach &&
+            e.clientX < hint.right + reach &&
+            e.clientY > hint.top - reach &&
+            e.clientY < hint.bottom + reach,
+        );
         const el = deferred ? null : elementAt(e);
         setHoverRect(el ? el.getBoundingClientRect() : null);
       });
@@ -667,6 +680,7 @@ export function IterationPanel({
       document.body.style.cursor = cursor;
       cancelAnimationFrame(frame);
       setHoverRect(null);
+      setHintAway(false);
       window.removeEventListener('mousemove', onMove, true);
       window.removeEventListener('click', onClick, true);
       window.removeEventListener('keydown', onKey, true);
@@ -968,7 +982,7 @@ export function IterationPanel({
     >
       <div className="isotone-rail-track" aria-hidden="true" />
       {picking && (
-        <div className="isotone-hint" data-isotone>
+        <div ref={hintRef} className="isotone-hint" data-isotone data-away={hintAway}>
           <span>{targets.length} selected · click to add or remove · hold ⇧ to use the page</span>
           <button
             type="button"

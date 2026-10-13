@@ -17,12 +17,22 @@ function demoNotes(): Plugin {
       for (const session of ['interactive', 'light', 'dark', 'stress']) {
         const file = join(directory, `${session}.json`);
         files.set(`/demo-notes/${session}`, file);
-        const notes = [{
+        const notes: Parameters<typeof writeNotes>[1] = [{
           id: 'demo-card-spacing', route: '/',
           feedback: 'Give the cards a little more room.',
           element: { tag: 'section', text: 'Overview cards', selector: '#overview-cards' },
           done: false, doneAt: null, createdAt: new Date().toISOString(),
         }];
+        if (session === 'light' || session === 'dark') {
+          // The README image: one note the agent is working on, one waiting.
+          notes[0].workingAt = new Date().toISOString();
+          notes.push({
+            id: 'demo-capture-label', route: '/',
+            feedback: 'Shorten this to "Active".',
+            element: { tag: 'p', text: 'Active projects', selector: '#overview-cards article p' },
+            done: false, doneAt: null, createdAt: new Date(Date.now() + 1000).toISOString(),
+          });
+        }
         if (session === 'interactive') {
           const examples = [
             ['Make the empty state more useful.', 'Projects'],

@@ -90,7 +90,7 @@ function Panel({ theme }: { theme: IterationTheme }) {
   }, [theme]);
   useEffect(() => {
     if (!screenshot && !review) return;
-    // Wait for the secondary root, then open the two real product surfaces.
+    // Wait for the secondary root, then open the feedback panel alone.
     let frame = 0;
     const open = () => {
       const shadow = host.current?.shadowRoot;
@@ -103,8 +103,7 @@ function Panel({ theme }: { theme: IterationTheme }) {
         const feedback = shadow?.querySelector<HTMLButtonElement>('[aria-label="Feedback"]');
         const variants = shadow?.querySelector<HTMLButtonElement>('[aria-label="Variants"]');
         if (feedback?.getAttribute('aria-expanded') !== 'true') feedback?.click();
-        if (screenshot && variants?.getAttribute('aria-expanded') !== 'true') variants?.click();
-        if (!screenshot && variants?.getAttribute('aria-expanded') === 'true') variants?.click();
+        if (variants?.getAttribute('aria-expanded') === 'true') variants?.click();
         frame = requestAnimationFrame(() => {
           (shadow?.activeElement as HTMLElement | null)?.blur();
           document.documentElement.dataset.previewReady = 'true';

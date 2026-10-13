@@ -51,7 +51,8 @@ The sample app's Spacing, Accent colour, Card radius and Card padding selectors
 remain inside the panel. Clean Highlight is the product default; there is no
 active-pill design switcher.
 
-`/preview.html` composes real components in both themes for the README image.
+`/preview.html` frames the live demo for the README image. Capture it at
+1200 × 720 with a device scale of 2.
 Demo feedback uses seeded files in a temporary
 directory, separate from project notes; the server removes them when it closes.
 Open `/?stress=1` for 500 selectors and 500 notes, including long labels and large
