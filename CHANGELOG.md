@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.0.10
+
+- Hosted demo with a first-visit tour, and Enter finishes selecting (#15)
+
 ## 1.0.9
 
 - docs: lead the README with how Isotone works, and show the variants panel (#14)
