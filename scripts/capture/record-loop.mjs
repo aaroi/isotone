@@ -67,13 +67,12 @@ await clickAt(await inPanel('[aria-label="Green"]'), 850);
 await clickAt(await inPanel('[aria-label="Variants"]'), 300);
 await clickAt(await inPanel('[aria-label="Feedback"]'), 700);
 await clickAt(await inPanel('[aria-label="Select elements"]'), 500);
-// Aim at the card's own padding so the whole card is pinned.
-const card = await b.eval(`(() => { const r = document.querySelector('#overview-cards article:nth-child(2)').getBoundingClientRect(); return [r.right - 28, r.top + r.height * 0.55]; })()`);
+// Aim at the card's chart, which lets clicks through, so the whole card is pinned.
+const card = await b.eval(`(() => { const r = document.querySelector('#overview-cards article:nth-child(2)').getBoundingClientRect(); return [r.left + r.width * 0.5, r.bottom - 22]; })()`);
 await glide(card, 900); await sleep(450);
 await b.click(...card); await sleep(600);
 await b.type('Make this number stand out more'); await sleep(400);
 await b.key('Enter', 'Enter', 13); await sleep(700);
-await b.key('Escape', 'Escape', 27); await sleep(300);
 await glide([W * 0.3, H * 0.86], 700); await sleep(300);
 
 // 3. The demo's pretend agent picks the note up (isotone --working) about

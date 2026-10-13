@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowRight, Check, Copy, X } from 'lucide-react';
+import { Check, Copy, X } from 'lucide-react';
 
 /**
  * A short guided tour for first-time visitors. It never blocks the page: each
- * step points at one control, says what to do there, and moves on when the
+ * step highlights what to click, says what it does, and moves on when the
  * visitor does it. It reads the panel's state from its shadow DOM, so the
  * panel itself knows nothing about the tour.
  */
@@ -20,6 +20,9 @@ function shadow() {
 function inPanel(selector: string) {
   return shadow()?.querySelector<HTMLElement>(selector) ?? null;
 }
+function allInPanel(selector: string) {
+  return [...(shadow()?.querySelectorAll<HTMLElement>(selector) ?? [])];
+}
 function readPanel(): PanelState {
   const root = inPanel('.isotone-root');
   if (!root) return closedPanel;
@@ -35,7 +38,7 @@ const samePanel = (a: PanelState, b: PanelState) =>
   a.open === b.open && a.variants === b.variants && a.notes === b.notes && a.picking === b.picking && a.pinned === b.pinned;
 
 export function tourSeen() {
-  try { return localStorage.getItem(TOUR_KEY) !== null; } catch { return true; }
+  try { return localStorage.getItem(TOUR_KEY) !== null; } catch { return false; }
 }
 function rememberTour() {
   try { localStorage.setItem(TOUR_KEY, 'seen'); } catch { /* The tour just shows again next time. */ }
@@ -43,8 +46,11 @@ function rememberTour() {
 
 const mac = /Mac|iPhone|iPad/.test(navigator.platform);
 const touch = matchMedia('(pointer: coarse)').matches;
+const press = touch ? 'Tap' : 'Click';
 
 type AgentState = 'waiting' | 'working' | 'done';
+/** What to highlight: a key that changes whenever the highlighted things change, and how to find them. */
+type Highlight = { key: string; find: () => Element[] };
 
 export function Tour({ onClose, subscribeVariants }: {
   onClose: () => void;
@@ -58,18 +64,18 @@ export function Tour({ onClose, subscribeVariants }: {
 
   const close = useCallback(() => { rememberTour(); onClose(); }, [onClose]);
 
-  // The panel's open state, polled; cheap, and the panel stays unaware of us.
+  // The panel's state, polled; cheap, and the panel stays unaware of the tour.
   useEffect(() => {
     const timer = setInterval(() => setPanel(previous => {
       const next = readPanel();
       return samePanel(previous, next) ? previous : next;
-    }), 150);
+    }), 120);
     return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
     if (step === 'open' && panel.open) {
-      const timer = setTimeout(() => setStep('variants'), 350);
+      const timer = setTimeout(() => setStep('variants'), 300);
       return () => clearTimeout(timer);
     }
   }, [step, panel.open]);
@@ -82,7 +88,7 @@ export function Tour({ onClose, subscribeVariants }: {
       if (action) return;
       note.current = id;
       setAgent('waiting');
-      setStep(current => (current === 'pin' || current === 'variants' ? 'agent' : current));
+      setStep(current => (current === 'variants' || current === 'pin' ? 'agent' : current));
     };
     const progress = (event: Event) => {
       const { id, state } = (event as CustomEvent<{ id: string; state: AgentState }>).detail;
@@ -106,23 +112,21 @@ export function Tour({ onClose, subscribeVariants }: {
   const content = stepContent(step, panel, switched, agent);
   return <TourCard
     step={step}
-    target={content.target}
+    highlight={content.highlight}
     onSkip={close}
     footer={step === 'welcome'
       ? <>
-          <button type="button" className="tour-button tour-primary" onClick={next}>Show me <ArrowRight size={14} /></button>
-          <button type="button" className="tour-button" onClick={close}>Skip</button>
+          <TourButton primary onClick={next}>Start</TourButton>
+          <TourButton onClick={close}>Skip</TourButton>
         </>
       : step === 'finish'
         ? <>
-            <button type="button" className="tour-button tour-primary" onClick={close}>Done</button>
-            <a className="tour-button" href="https://github.com/aaroi/isotone" target="_blank" rel="noreferrer">View on GitHub</a>
+            <TourButton primary onClick={close}>Done</TourButton>
+            <a className="tour-button" href="https://github.com/aaroi/isotone" target="_blank" rel="noreferrer">GitHub</a>
           </>
         : <>
-            <button type="button" className={`tour-button${content.ready ? ' tour-primary' : ''}`} onClick={next}>
-              {content.ready ? 'Next' : 'Skip step'}
-            </button>
-            <button type="button" className="tour-link" onClick={close}>End tour</button>
+            <TourButton primary={content.ready} onClick={next}>Next</TourButton>
+            <button type="button" className="tour-link" onMouseDown={keepFocus} onClick={close}>End tour</button>
           </>}
   >
     <div className="tour-step" key={step}>
@@ -132,6 +136,16 @@ export function Tour({ onClose, subscribeVariants }: {
   </TourCard>;
 }
 
+/**
+ * Pressing a tour button must not take focus from the page or the panel:
+ * select mode and the composer both listen for Enter where focus already is.
+ */
+const keepFocus = (event: { preventDefault: () => void }) => event.preventDefault();
+
+function TourButton({ primary, onClick, children }: { primary?: boolean; onClick: () => void; children: ReactNode }) {
+  return <button type="button" className={`tour-button${primary ? ' tour-primary' : ''}`} onMouseDown={keepFocus} onClick={onClick}>{children}</button>;
+}
+
 function Keys({ keys }: { keys: string[] }) {
   return <span className="tour-keys">{keys.map(key => <kbd key={key}>{key}</kbd>)}</span>;
 }
@@ -139,74 +153,96 @@ function Keys({ keys }: { keys: string[] }) {
 function Status({ done, children }: { done: boolean; children: ReactNode }) {
   return <p className="tour-status" data-done={done}>
     {done ? <Check size={13} strokeWidth={2.25} /> : <span className="tour-pulse" />}
-    {children}
+    <span>{children}</span>
   </p>;
 }
 
-/** What each step says, and where it points, given what the visitor has done so far. */
+const one = (selector: string): Highlight => ({ key: selector, find: () => [inPanel(selector)].filter(e => e !== null) });
+
+/** What each step says and highlights, given what the visitor has done so far. */
 function stepContent(step: Step, panel: PanelState, switched: boolean, agent: AgentState): {
-  title: string; body: ReactNode; target: (() => Element | null) | null; ready?: boolean;
+  title: string; body: ReactNode; highlight: Highlight | null; ready?: boolean;
 } {
-  const fab = () => inPanel('.isotone-fab');
+  const fab = one('.isotone-fab');
   switch (step) {
     case 'welcome': return {
-      title: 'This page stands in for your app',
-      body: <p>Isotone is the button in the bottom-right corner. In your own project it sits on top of your real pages while you develop. The tour takes about a minute.</p>,
-      target: null,
+      title: 'This is a pretend app',
+      body: <p>Isotone is the round button in the bottom-right corner. You add it to your own app while you're building it, so you can compare design variants and leave notes for your coding agent. This takes about a minute.</p>,
+      highlight: null,
     };
     case 'open': return {
       title: 'Open Isotone',
-      body: touch
-        ? <p>Tap the button in the corner.</p>
-        : <p>Click the button in the corner, or press <Keys keys={[mac ? '⌘' : 'Ctrl', '⇧', '.']} />.</p>,
-      target: fab,
+      body: <>
+        <p>{press} the highlighted button.</p>
+        {!touch && <p className="tour-hint">You can also press <Keys keys={[mac ? '⌘' : 'Ctrl', '⇧', '.']} /></p>}
+      </>,
+      highlight: fab,
     };
-    case 'variants': return {
-      title: 'Switch between variants',
-      body: panel.variants
-        ? <>
-            <p>Say you asked your agent for a few ways to lay out the cards. They show up here, and picking one changes the page.</p>
-            {switched
-              ? <Status done>Spacing, colour and the sliders work the same way.</Status>
-              : <p className="tour-hint">Try Feature or List.</p>}
-          </>
-        : <p>Open <b>Variants</b> from the corner.</p>,
-      target: panel.variants ? () => inPanel('.isotone-variants-panel') : panel.open ? () => inPanel('[aria-label="Variants"]') : fab,
-      ready: switched,
-    };
-    case 'pin': return {
-      title: 'Point at what you mean',
-      body: !panel.notes
-        ? <p>When something on the page needs to change, open <b>Feedback</b> from the corner.</p>
-        : panel.pinned
-          ? <p>Write what you'd change and press <Keys keys={['↵']} /> to send it.</p>
-          : panel.picking
-            ? <p>Click one of the cards at the top to pin it.</p>
-            : <p>Press the crosshair, then click one of the cards at the top.</p>,
-      target: !panel.notes
-        ? panel.open ? () => inPanel('[aria-label="Feedback"]') : fab
-        : panel.pinned ? () => inPanel('.isotone-compose')
-          : panel.picking ? () => document.getElementById('overview-cards')
-            : () => inPanel('[aria-label="Select elements"]'),
-    };
+    case 'variants':
+      if (!panel.variants) return {
+        title: 'Try a variant',
+        body: <p>{press} the highlighted button to open Variants.</p>,
+        highlight: panel.open ? one('[aria-label="Variants"]') : fab,
+        ready: switched,
+      };
+      return {
+        title: 'Try a variant',
+        body: switched
+          ? <>
+              <p>The cards on the page changed. In your own app, this switches the real thing.</p>
+              <p className="tour-hint">Spacing, colour and the sliders below work the same way.</p>
+            </>
+          : <p>Say you asked your agent for a few ways to lay out the cards. They show up here. {press} one of the highlighted layouts and watch the page.</p>,
+        highlight: switched ? null : {
+          key: 'layouts',
+          find: () => allInPanel('fieldset[aria-label="Card layout"] .isotone-thumb[aria-pressed="false"]'),
+        },
+        ready: switched,
+      };
+    case 'pin':
+      if (!panel.notes) return {
+        title: 'Leave a note',
+        body: <p>Now say something on the page needs fixing. {press} the highlighted button to open Feedback.</p>,
+        highlight: panel.open ? one('[aria-label="Feedback"]') : fab,
+      };
+      if (panel.picking && !panel.pinned) return {
+        title: 'Leave a note',
+        body: <p>{press} one of the cards on the page.</p>,
+        highlight: { key: 'cards', find: () => [document.getElementById('overview-cards')].filter(e => e !== null) },
+      };
+      if (panel.picking) return {
+        title: 'Leave a note',
+        body: <p>The card is selected. You can pick more, or press <Keys keys={['↵']} /> to stop selecting.</p>,
+        highlight: null,
+      };
+      if (panel.pinned) return {
+        title: 'Leave a note',
+        body: <p>Write what you'd change, like "make this number bigger", and press <Keys keys={['↵']} /> to send it.</p>,
+        highlight: one('.isotone-compose'),
+      };
+      return {
+        title: 'Leave a note',
+        body: <p>{press} the crosshair to start selecting.</p>,
+        highlight: one('[aria-label="Select elements"]'),
+      };
     case 'agent': return {
       title: 'Your agent picks it up',
       body: <>
-        <p>In your project the note goes to a JSON file with the page, the element and what you wrote. Your agent reads it with <code>npx isotone</code>. A pretend agent stands in for it here.</p>
+        <p>In your project the note is saved to a file, with the page, the card and what you wrote. Your agent reads it with <code>npx isotone</code>. This demo has a pretend agent.</p>
         {agent === 'waiting' && <Status done={false}>Waiting for the agent</Status>}
-        {agent === 'working' && <Status done={false}>Working on it. The dot by your note means the agent has it.</Status>}
-        {agent === 'done' && <Status done>Done. The agent closed the note.</Status>}
+        {agent === 'working' && <Status done={false}>The agent is on it. The dot by your note shows that.</Status>}
+        {agent === 'done' && <Status done>Done. The agent closed your note.</Status>}
       </>,
-      target: panel.notes ? () => inPanel('.isotone-notes-panel') : fab,
+      highlight: panel.notes ? one('.isotone-list') : fab,
       ready: agent === 'done',
     };
     case 'finish': return {
-      title: 'Now try it on your app',
+      title: 'Try it in your own app',
       body: <>
-        <p>Install it and run <code>init</code>. It works with Vite or any other dev server, and nothing goes into your production build.</p>
+        <p>Run these in your project. It works with Vite and other dev servers, and none of it ends up in your production build.</p>
         <Install />
       </>,
-      target: null,
+      highlight: null,
     };
   }
 }
@@ -226,24 +262,29 @@ function Install() {
 }
 
 type Box = { x: number; y: number; width: number; height: number; radius: number };
+type Spot = { x: number; y: number };
 
 /**
- * The floating card and the ring around its target. Both follow the target
- * every frame, since panels open with motion and the page reflows when a
- * variant changes.
+ * The floating card and the rings around what it highlights. Rings follow
+ * their targets every frame and fade in fresh when the targets change, so they
+ * never slide across the page. The card stays next to the Isotone panel and
+ * only moves once the panel's size has settled.
  */
-function TourCard({ step, target, footer, onSkip, children }: {
+function TourCard({ step, highlight, footer, onSkip, children }: {
   step: Step;
-  target: (() => Element | null) | null;
+  highlight: Highlight | null;
   footer: ReactNode;
   onSkip: () => void;
   children: ReactNode;
 }) {
   const card = useRef<HTMLDivElement>(null);
-  const [ring, setRing] = useState<Box | null>(null);
-  const [spot, setSpot] = useState<{ x: number; y: number } | null>(null);
-  const placed = useRef(false);
-  const centred = target === null;
+  const [rings, setRings] = useState<Box[]>([]);
+  const [spot, setSpot] = useState<Spot | null>(null);
+  const [animate, setAnimate] = useState(false);
+  const pending = useRef<{ spot: Spot; since: number } | null>(null);
+  const centred = step === 'welcome' || step === 'finish';
+  const find = useRef(highlight?.find);
+  find.current = highlight?.find;
 
   useLayoutEffect(() => {
     let frame = 0;
@@ -251,21 +292,33 @@ function TourCard({ step, target, footer, onSkip, children }: {
       frame = requestAnimationFrame(tick);
       const node = card.current;
       if (!node) return;
-      const element = target?.() ?? null;
-      const rect = element?.getBoundingClientRect();
-      const visible = rect && rect.width > 0 && rect.height > 0;
-      const box = visible ? ringBox(element, rect) : null;
-      setRing(previous => sameBox(previous, box) ? previous : box);
-      const position = place(visible ? clearOfPanel(element, rect) : null, node.offsetWidth, node.offsetHeight);
-      setSpot(previous => previous && previous.x === position.x && previous.y === position.y ? previous : position);
+      const boxes = (find.current?.() ?? []).map(ringBox).filter(b => b !== null);
+      setRings(previous => sameBoxes(previous, boxes) ? previous : boxes);
+      const desired = place(centred ? null : dockArea(), node.offsetWidth, node.offsetHeight);
+      setSpot(current => {
+        if (!current || near(current, desired)) {
+          pending.current = null;
+          return current ?? desired;
+        }
+        // Wait until the panel has stopped moving before following it.
+        const now = performance.now();
+        if (!pending.current || !near(pending.current.spot, desired)) {
+          pending.current = { spot: desired, since: now };
+          return current;
+        }
+        return now - pending.current.since > 140 ? desired : current;
+      });
     };
     tick();
     return () => cancelAnimationFrame(frame);
-  }, [target]);
+  }, [centred]);
 
+  // The first placement is instant; later moves glide.
   useEffect(() => {
-    if (spot) requestAnimationFrame(() => { placed.current = true; });
-  }, [spot]);
+    if (!spot || animate) return;
+    const frame = requestAnimationFrame(() => setAnimate(true));
+    return () => cancelAnimationFrame(frame);
+  }, [spot, animate]);
 
   useEffect(() => {
     if (!centred) return;
@@ -277,13 +330,19 @@ function TourCard({ step, target, footer, onSkip, children }: {
   const index = GUIDED.indexOf(step);
   return <div className="tour" data-isotone data-centred={centred}>
     {centred && <div className="tour-scrim" />}
-    {ring && <div className="tour-ring" style={{ transform: `translate(${ring.x}px, ${ring.y}px)`, width: ring.width, height: ring.height, borderRadius: ring.radius }} />}
+    {rings.map((ring, i) => <div
+      // A new key per highlight, so changed targets fade in rather than slide.
+      // biome-ignore lint/suspicious/noArrayIndexKey: the highlight's own key changes with its targets; the index only tells its rings apart.
+      key={`${highlight?.key}-${i}`}
+      className="tour-ring"
+      style={{ transform: `translate(${ring.x}px, ${ring.y}px)`, width: ring.width, height: ring.height, borderRadius: ring.radius }}
+    />)}
     <div
       ref={card}
       className="tour-card"
       role="dialog"
       aria-label="Isotone tour"
-      data-placed={placed.current}
+      data-animate={animate}
       style={spot ? { transform: `translate(${spot.x}px, ${spot.y}px)` } : { visibility: 'hidden' }}
     >
       <div className="tour-top">
@@ -292,8 +351,8 @@ function TourCard({ step, target, footer, onSkip, children }: {
               {GUIDED.map((s, i) => <i key={s} aria-hidden="true" data-state={i < index ? 'done' : i === index ? 'now' : 'next'} />)}
               <span>{index + 1} of {GUIDED.length}</span>
             </span>
-          : <span className="tour-eyebrow">{step === 'welcome' ? 'Welcome' : 'All done'}</span>}
-        <button type="button" className="tour-close" aria-label="Close tour" title="Close tour" onClick={onSkip}><X size={14} /></button>
+          : <span className="tour-eyebrow">{step === 'welcome' ? 'Isotone demo' : 'That’s it'}</span>}
+        <button type="button" className="tour-close" aria-label="Close tour" title="Close tour" onMouseDown={keepFocus} onClick={onSkip}><X size={14} /></button>
       </div>
       {children}
       <div className="tour-footer">{footer}</div>
@@ -301,43 +360,46 @@ function TourCard({ step, target, footer, onSkip, children }: {
   </div>;
 }
 
-function ringBox(element: Element | null, rect: DOMRect): Box {
-  const pad = 5;
-  const radius = element ? Number.parseFloat(getComputedStyle(element).borderTopLeftRadius) || 8 : 8;
+const near = (a: Spot, b: Spot) => Math.abs(a.x - b.x) < 2 && Math.abs(a.y - b.y) < 2;
+
+function ringBox(element: Element): Box | null {
+  const rect = element.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return null;
+  const pad = 4;
+  const radius = Number.parseFloat(getComputedStyle(element).borderTopLeftRadius) || 8;
   return {
     x: Math.round(rect.left - pad), y: Math.round(rect.top - pad),
     width: Math.round(rect.width + pad * 2), height: Math.round(rect.height + pad * 2),
     radius: Math.min(radius + pad, (rect.height + pad * 2) / 2),
   };
 }
-function sameBox(a: Box | null, b: Box | null) {
-  return a === b || (a !== null && b !== null && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height && a.radius === b.radius);
+function sameBoxes(a: Box[], b: Box[]) {
+  return a.length === b.length && a.every((box, i) => {
+    const other = b[i];
+    return other !== undefined && box.x === other.x && box.y === other.y && box.width === other.width && box.height === other.height && box.radius === other.radius;
+  });
 }
 
-/** For a control inside Isotone, the area to keep clear is the whole open panel, not just the control. */
-function clearOfPanel(element: Element | null, rect: DOMRect): DOMRect {
-  const root = element?.getRootNode();
-  if (!(root instanceof ShadowRoot)) return rect;
-  let { left, top, right, bottom } = rect;
+/** Everything Isotone shows in the corner: the button, the rail and any open panel. */
+function dockArea(): DOMRect | null {
+  const root = shadow();
+  if (!root) return null;
+  let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
   for (const part of root.querySelectorAll('.isotone-panel[data-open="true"], .isotone-fab, .isotone-rail')) {
     const box = part.getBoundingClientRect();
     if (box.width === 0 || box.height === 0) continue;
     left = Math.min(left, box.left); top = Math.min(top, box.top);
     right = Math.max(right, box.right); bottom = Math.max(bottom, box.bottom);
   }
-  return new DOMRect(left, top, right - left, bottom - top);
+  return left === Infinity ? null : new DOMRect(left, top, right - left, bottom - top);
 }
 
-/** Beside the target if there's room, then below, then above; centred when there's no target. */
-function place(target: DOMRect | null | undefined, width: number, height: number) {
-  const vw = window.innerWidth, vh = window.innerHeight, margin = 16, gap = 18;
+/** Left of the panel, lined up with its bottom; on narrow screens, along the top. Centred without a target. */
+function place(target: DOMRect | null, width: number, height: number): Spot {
+  const vw = window.innerWidth, vh = window.innerHeight, margin = 16, gap = 20;
   const clampX = (x: number) => Math.round(Math.min(Math.max(x, margin), vw - width - margin));
   const clampY = (y: number) => Math.round(Math.min(Math.max(y, margin), vh - height - margin));
   if (!target) return { x: clampX((vw - width) / 2), y: clampY((vh - height) / 2 - vh * 0.04) };
-  // Narrow screens: full width, above the target when it fits there, otherwise at the bottom.
-  if (vw < 640) return target.top >= height + margin * 2 ? { x: margin, y: margin } : { x: margin, y: clampY(vh - height - margin) };
   if (target.left - gap - width >= margin) return { x: Math.round(target.left - gap - width), y: clampY(target.bottom - height) };
-  if (target.bottom + gap + height <= vh - margin) return { x: clampX(target.left + target.width / 2 - width / 2), y: Math.round(target.bottom + gap) };
-  if (target.top - gap - height >= margin) return { x: clampX(target.right - width), y: Math.round(target.top - gap - height) };
-  return { x: clampX(target.right + gap), y: clampY(target.top) };
+  return { x: clampX(margin), y: margin };
 }

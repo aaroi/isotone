@@ -381,6 +381,7 @@ export function IterationPanel({
     );
     cancelEdit();
     setNotice('');
+    setPicking(false);
     focusComposer();
     try {
       const savedId = await store.saveNote(
@@ -661,10 +662,13 @@ export function IterationPanel({
         return;
       }
       if (e.key !== 'Escape' && e.key !== 'Enter') return;
-      // Enter in the composer sends; picking finishes only from the page.
+      // Clicking an element moves focus to the composer so you can type right
+      // away. Enter there sends what you wrote; with nothing written yet it
+      // finishes selecting, as the hint says.
       if (
+        e.key === 'Enter' &&
         e.composedPath().includes(textareaRef.current as EventTarget) &&
-        e.key === 'Enter'
+        (e.shiftKey || e.isComposing || textareaRef.current?.value.trim())
       )
         return;
       e.preventDefault();

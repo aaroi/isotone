@@ -1,9 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import {
-  Box, Calendar, ChevronDown, CircleDot, Gem, Inbox, Layers, LayoutGrid, ListFilter, Moon, Play, Plus, Search,
-  SlidersHorizontal, SquarePen, Sun,
-} from 'lucide-react';
+import { Gem, Moon, Play, Plus, Search, Sun } from 'lucide-react';
 import {
   createVariantsSource, IterationPanel, type IterationTheme, type VariantAxis,
 } from '../../src/react/index';
@@ -300,10 +297,6 @@ function GitHubMark() {
   return <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" /></svg>;
 }
 
-function NavItem({ icon, label, current, count }: { icon: ReactNode; label: string; current?: boolean; count?: number }) {
-  return <span className="nav-item" aria-current={current ? 'page' : undefined}>{icon}<span>{label}</span>{count ? <small>{count}</small> : null}</span>;
-}
-
 /** A small trend line under a stat; decoration only. */
 function Sparkline() {
   const points = [14, 18, 16, 22, 21, 27, 25, 31, 30, 36];
@@ -325,27 +318,18 @@ function Faces() {
   </div>;
 }
 
-/** Project progress as a ring that fills clockwise. */
-function Progress({ value }: { value: number }) {
-  const r = 6, c = 2 * Math.PI * r;
-  return <svg className="progress" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-    <circle cx="8" cy="8" r={r} className="progress-track" />
-    <circle cx="8" cy="8" r={r} className="progress-value" strokeDasharray={`${c * value} ${c}`} transform="rotate(-90 8 8)" />
-  </svg>;
-}
-
-const projects: [string, string, number, string, string, string][] = [
-  ['Website refresh', 'Design', 0.64, 'Oct 28', 'In progress', '#e4a37b'],
-  ['Mobile experience', 'Product', 0.82, 'Nov 4', 'In review', '#7aa7e0'],
-  ['Component library', 'Engineering', 1, 'Oct 16', 'Ready', '#9fd0a8'],
-  ['Billing migration', 'Engineering', 0.18, 'Dec 2', 'Planned', '#c99be0'],
+const projects: [string, string, number, string, string][] = [
+  ['Website refresh', 'Design', 0.64, 'Oct 28', 'In progress'],
+  ['Mobile experience', 'Product', 0.82, 'Nov 4', 'In review'],
+  ['Component library', 'Engineering', 1, 'Oct 16', 'Ready'],
+  ['Billing migration', 'Engineering', 0.18, 'Dec 2', 'Planned'],
 ];
 
 function Demo() {
   const [pageTheme, setPageTheme] = useState<'light' | 'dark'>(() => screenshot ? capture : savedTheme('iso-demo-page', ['light', 'dark'], 'dark'));
   const [panelTheme, setPanelTheme] = useState<IterationTheme>(() => screenshot ? 'auto' : savedTheme('iso-demo-panel', ['auto', 'system', 'light', 'dark'], 'auto'));
-  // First visit to the hosted demo starts the tour; locally it's one click away.
-  const [touring, setTouring] = useState(() => !screenshot && (hosted || params.get('tour') === '1') && !tourSeen());
+  // Every first visit starts with the tour. The Tour button brings it back.
+  const [touring, setTouring] = useState(() => !screenshot && !review && !stress && (params.get('tour') === '1' || !tourSeen()));
   useEffect(() => {
     document.documentElement.dataset.theme = pageTheme;
     document.documentElement.dataset.capture = String(screenshot);
@@ -379,66 +363,46 @@ function Demo() {
       </div>
     </header>}
     <div className="app">
-      <aside className="sidebar">
-        <div className="sidebar-top">
-          <span className="workspace-switch"><span className="workspace-logo">L</span>Lumen<ChevronDown size={13} /></span>
-          <span className="sidebar-tools"><Search size={15} /><SquarePen size={15} /></span>
+      <header className="app-header">
+        <span className="app-logo"><span className="app-mark">L</span>Lumen</span>
+        <nav className="app-tabs" aria-label="Lumen">
+          {['Overview', 'Projects', 'Reports', 'Team'].map(tab => <span key={tab} aria-current={tab === 'Overview' ? 'page' : undefined}>{tab}</span>)}
+        </nav>
+        <div className="app-header-actions">
+          <button type="button" className="button button-icon" aria-label="Search" title="Search"><Search size={15} /></button>
+          <span className="avatar" aria-hidden="true">SR</span>
         </div>
-        <nav className="nav">
-          <NavItem icon={<Inbox size={15} />} label="Inbox" count={3} />
-          <NavItem icon={<CircleDot size={15} />} label="My issues" />
-        </nav>
-        <nav className="nav">
-          <p className="nav-label">Workspace</p>
-          <NavItem icon={<LayoutGrid size={15} />} label="Overview" current />
-          <NavItem icon={<Box size={15} />} label="Projects" />
-          <NavItem icon={<Calendar size={15} />} label="Cycles" />
-          <NavItem icon={<Layers size={15} />} label="Views" />
-        </nav>
-        <nav className="nav">
-          <p className="nav-label">Teams</p>
-          {[['Design', '#e4a37b'], ['Product', '#7aa7e0'], ['Engineering', '#9fd0a8']].map(([team, colour]) =>
-            <NavItem key={team} icon={<span className="team-mark" style={{ background: colour }}>{team[0]}</span>} label={team} />)}
-        </nav>
-      </aside>
-      <main className="main">
-        <div className="topbar">
-          <span className="crumbs"><LayoutGrid size={14} />Overview</span>
-          <div className="topbar-actions">
-            <button type="button" className="button button-ghost"><ListFilter size={14} />Filter</button>
-            <button type="button" className="button button-ghost"><SlidersHorizontal size={14} />Display</button>
-            <NewProjectMenu />
-          </div>
-        </div>
-        <div className="content">
-          <div className="page-heading">
+      </header>
+      <main className="content">
+        <div className="page-heading">
+          <div>
             <h1>Overview</h1>
             <p className="page-description">Week 42 · 4 projects, 2 due this month</p>
           </div>
-          <section id="overview-cards" className="overview-cards" aria-label="Overview cards">
-            {([['Active projects', '12', '+2', 'this month', <Sparkline key="s" />], ['Tasks complete', '248', '', 'Looking good', <WeekBars key="b" />], ['Team members', '8', '', 'All connected', <Faces key="f" />]] as const).map(([label, value, delta, detail, viz]) =>
-              <article key={label}>
-                <p>{label}</p>
-                <strong>{value}</strong>
-                <small>{delta && <b>{delta}</b>}{delta ? ` ${detail}` : detail}</small>
-                {viz}
-              </article>)}
-          </section>
-          <div className="section-heading"><h2>Recent projects</h2><span>View all</span></div>
-          <section className="projects" aria-label="Recent projects">
-            {projects.map(([title, team, progress, due, status, lead]) =>
-              <article key={title}>
-                <Progress value={progress} />
-                <strong>{title}</strong>
-                <small className="project-team">{team}</small>
-                <span className="project-lead" style={{ background: lead }} aria-hidden="true" />
-                <span className="project-percent">{Math.round(progress * 100)}%</span>
-                <span className="project-due">{due}</span>
-                <span className="status" data-status={status.toLowerCase().replace(' ', '-')}>{status}</span>
-              </article>)}
-          </section>
-          {!screenshot && !hosted && <p className="demo-hint">Notes sent here go to a temporary file and a pretend agent picks each one up a moment later. To test select mode against a dropdown, open New project, press the crosshair in the feedback composer, then Shift-click a menu item to reach it without pinning.</p>}
+          <NewProjectMenu />
         </div>
+        <section id="overview-cards" className="overview-cards" aria-label="Overview cards">
+          {([['Active projects', '12', '+2', 'this month', <Sparkline key="s" />], ['Tasks complete', '248', '', 'Looking good', <WeekBars key="b" />], ['Team members', '8', '', 'All connected', <Faces key="f" />]] as const).map(([label, value, delta, detail, viz]) =>
+            <article key={label}>
+              <p>{label}</p>
+              <strong>{value}</strong>
+              <small>{delta && <b>{delta}</b>}{delta ? ` ${detail}` : detail}</small>
+              {viz}
+            </article>)}
+        </section>
+        <div className="section-heading"><h2>Projects</h2><span>View all</span></div>
+        <section className="projects" aria-label="Projects">
+          <div className="projects-head" aria-hidden="true"><span>Name</span><span>Team</span><span>Progress</span><span>Due</span><span>Status</span></div>
+          {projects.map(([title, team, progress, due, status]) =>
+            <article key={title}>
+              <strong>{title}</strong>
+              <small className="project-team">{team}</small>
+              <span className="project-progress"><span className="bar"><i style={{ width: `${progress * 100}%` }} /></span>{Math.round(progress * 100)}%</span>
+              <span className="project-due">{due}</span>
+              <span className="status" data-status={status.toLowerCase().replace(' ', '-')}>{status}</span>
+            </article>)}
+        </section>
+        {!screenshot && !hosted && <p className="demo-hint">Notes sent here go to a temporary file and a pretend agent picks each one up a moment later. To test select mode against a dropdown, open New project, press the crosshair in the feedback composer, then Shift-click a menu item to reach it without pinning.</p>}
       </main>
     </div>
     <Panel theme={panelTheme} />
