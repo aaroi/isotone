@@ -40,12 +40,12 @@ standalone consumers. The build bundles only the icons used by the panel.
 ## Local workflow
 
 `pnpm dev` starts the fictional demo at `http://127.0.0.1:4173`. Its top bar
-provides the theme settings:
-
-| Control | What it changes |
-| --- | --- |
-| Page | The mock app's actual light or dark background |
-| Panel | Automatic page detection, system preference, or an explicit theme |
+has a Panel theme select (automatic page detection, system preference, or an
+explicit theme), a light and dark toggle for the page, and a Tour button. The
+tour (`examples/demo/tour.tsx`) starts by itself on a browser's first visit and
+remembers when it was closed; `/?tour=1` starts it regardless. A pretend agent marks each new note as being worked on a moment after it
+is sent and closes it a few seconds later, the way `--working` and `--done`
+would.
 
 The sample app's Spacing, Accent colour, Card radius and Card padding selectors
 remain inside the panel. Clean Highlight is the product default; there is no
@@ -59,6 +59,18 @@ window's rounded corners have no frame. `?scene=focus` shows the feedback panel 
 `?scene=pin` shows select mode with a pinned card, and `?theme=light` switches
 the page. Give headless captures a long virtual time budget (15s) so the panel's
 opening motion has settled.
+
+`docs/assets/loop.gif` is recorded by `scripts/capture/record-loop.mjs`, which
+drives the hosted demo build through the Chrome DevTools Protocol and encodes the
+frames with ffmpeg. The header comment has the commands.
+
+## Hosted demo
+
+`pnpm build:demo` builds the demo as a static site in `demo-dist/`. Without a
+dev server, the page answers the notes endpoint itself from `localStorage`, and
+the pretend agent edits those notes there. It is
+deployed to [isotone.vercel.app](https://isotone.vercel.app) with
+`vercel deploy --prod`; `vercel.json` holds the build command.
 Demo feedback uses seeded files in a temporary
 directory, separate from project notes; the server removes them when it closes.
 Open `/?stress=1` for 500 selectors and 500 notes, including long labels and large

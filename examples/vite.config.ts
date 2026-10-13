@@ -85,30 +85,20 @@ function demoNotes(): Plugin {
           }));
           return;
         }
-        // Stands in for an agent: `start` is `isotone --working` on the oldest
-        // open note nobody has started, `finish` is `--done` on the oldest started one.
+        // The pretend agent: `start` is `isotone --working` on one note, `finish` is `--done`.
         if ((req.url ?? '').startsWith('/demo-agent') && req.method === 'POST') {
           try { checkOrigin(req.headers.origin, req.headers.host ?? ''); } catch (error) { sendFailure(res, error); return; }
-          const action = new URL(req.url ?? '', 'http://x').searchParams.get('action');
-          const file = files.get('/demo-notes/interactive') as string;
-          const route = new URL(req.url ?? '', 'http://x').searchParams.get('route');
-          let touched = '';
-          updateNotes(file, (notes) => {
-            if (action === 'reset') {
-              for (const n of notes) { n.done = false; n.doneAt = null; delete n.workingAt; }
-              return notes;
-            }
-            const open = notes.filter((n) => !n.done && (!route || n.route === route))
-              .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-            const target = action === 'start' ? open.find((n) => !n.workingAt) : open.find((n) => n.workingAt);
+          const query = new URL(req.url ?? '', 'http://x').searchParams;
+          const action = query.get('action');
+          for (const file of files.values()) updateNotes(file, (notes) => {
+            const target = notes.find((n) => n.id === query.get('id') && !n.done);
             if (!target) return notes;
-            touched = target.id;
             if (action === 'start') target.workingAt = new Date().toISOString();
             else { target.done = true; target.doneAt = new Date().toISOString(); delete target.workingAt; }
             return notes;
           });
           res.writeHead(200, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({ ok: true, touched }));
+          res.end(JSON.stringify({ ok: true }));
           return;
         }
         const file = files.get((req.url ?? '').split('?')[0]);
@@ -133,4 +123,6 @@ export default defineConfig({
       file: join(tmpdir(), 'isotone-demo-adapter.json'),
     })],
   server: { host: '127.0.0.1', port: 4173, strictPort: true },
+  // `pnpm build:demo` builds the hosted demo; it keeps notes in the browser.
+  build: { outDir: '../demo-dist', emptyOutDir: true, rollupOptions: { input: fileURLToPath(new URL('index.html', import.meta.url)) } },
 });

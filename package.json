@@ -57,6 +57,7 @@
     "check": "pnpm typecheck && pnpm lint && pnpm build && pnpm test",
     "prepublishOnly": "pnpm check",
     "dev": "vite --config examples/vite.config.ts",
+    "build:demo": "vite build --config examples/vite.config.ts --mode hosted",
     "check:package": "node scripts/check-package.mjs"
   },
   "peerDependencies": {
