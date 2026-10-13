@@ -3,7 +3,7 @@
 Click an element in your running app, say what should change, and your coding
 agent gets the note with the exact element attached.
 
-![The Isotone panels over a dark app: thumbnail, segmented, colour and range variants above the feedback notes](docs/assets/preview.jpg)
+![The Isotone panels over a dark app: thumbnail, segmented, colour and range variants above the feedback notes](docs/assets/preview.png)
 
 ## How it works
 

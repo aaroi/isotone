@@ -52,8 +52,10 @@ remain inside the panel. Clean Highlight is the product default; there is no
 active-pill design switcher.
 
 `/preview.html` frames the live demo for the README image. The README image is
-`?scene=both` (variants and feedback panels) captured at an 880 × 920 window
-with a device scale of 2. `?scene=focus` shows the feedback panel alone,
+`?scene=both` (variants and feedback panels) captured at an 816 × 856 window
+with a device scale of 2 and a transparent background
+(`--default-background-color=00000000` in headless Chrome), saved as PNG so the
+window's rounded corners have no frame. `?scene=focus` shows the feedback panel alone,
 `?scene=pin` shows select mode with a pinned card, and `?theme=light` switches
 the page. Give headless captures a long virtual time budget (15s) so the panel's
 opening motion has settled.

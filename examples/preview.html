@@ -6,19 +6,20 @@
   <title>Isotone · product preview</title>
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; background: #f5f5f6; }
+    /* Transparent around the window, so the README image has no frame of its own. */
+    html, body { margin: 0; background: transparent; }
     /* Capture at the window size the scene sets (see development.md) with a
        device scale of 2. ?scene=focus|both|pin picks what the live demo shows;
        ?theme=light switches the page theme. */
-    main { margin: auto; padding: 32px; }
-    .window { border: 1px solid #26272e; border-radius: 15px; overflow: hidden; background: #0d0e11; box-shadow: 0 3px 0 #dcdce0; }
+    main { margin: 0; padding: 0; }
+    .window { border: 1px solid #26272e; border-radius: 15px; overflow: hidden; background: #0d0e11; }
     .window-bar { height: 32px; border-bottom: 1px solid #282a31; display: flex; align-items: center; padding: 0 12px; gap: 5px; }
     .window-bar i { width: 5px; height: 5px; border-radius: 50%; background: #41434d; }
     .window-bar span { font: 10px ui-sans-serif, system-ui, -apple-system, sans-serif; color: #8c8d98; margin: auto; padding-right: 22px; }
-    .light .window { border-color: #dcdce2; background: #fff; box-shadow: 0 3px 0 #e6e6e9; }
+    .light .window { border-color: #dcdce2; background: #fff; }
     .light .window-bar { border-color: #e7e7eb; }
     .light .window-bar i { background: #cfcfd6; }
-    iframe { display: block; width: 100%; height: calc(100vh - 98px); border: 0; }
+    iframe { display: block; width: 100%; height: calc(100vh - 34px); border: 0; }
   </style>
 </head>
 <body>

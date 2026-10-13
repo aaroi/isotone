@@ -35,7 +35,7 @@
   },
   "files": [
     "dist",
-    "docs/assets/preview.jpg",
+    "docs/assets/preview.png",
     "docs/integrations.md",
     "docs/migration.md",
     "docs/updates.md",
