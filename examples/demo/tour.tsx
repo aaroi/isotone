@@ -112,6 +112,7 @@ export function Tour({ onClose, subscribeVariants }: {
   const content = stepContent(step, panel, switched, agent);
   return <TourCard
     step={step}
+    layout={`${panel.variants}-${panel.notes}`}
     highlight={content.highlight}
     onSkip={close}
     footer={step === 'welcome'
@@ -163,7 +164,8 @@ const one = (selector: string): Highlight => ({ key: selector, find: () => [inPa
 function stepContent(step: Step, panel: PanelState, switched: boolean, agent: AgentState): {
   title: string; body: ReactNode; highlight: Highlight | null; ready?: boolean;
 } {
-  const fab = one('.isotone-fab');
+  // The pill behind the button: it stays visible when hovering swaps the button for the tools.
+  const fab = one('.isotone-rail-track');
   switch (step) {
     case 'welcome': return {
       title: 'This is a pretend app',
@@ -262,16 +264,19 @@ function Install() {
 }
 
 type Box = { x: number; y: number; width: number; height: number; radius: number };
-type Spot = { x: number; y: number };
+/** Where the card sits: its left edge, and its bottom edge's distance from the bottom of the window. */
+type Spot = { x: number; bottom: number };
 
 /**
  * The floating card and the rings around what it highlights. Rings follow
  * their targets every frame and fade in fresh when the targets change, so they
- * never slide across the page. The card stays next to the Isotone panel and
- * only moves once the panel's size has settled.
+ * never slide across the page. The card is placed only when something that
+ * should move it happens: a step, a panel opening or closing, its own size, or
+ * the window size. Hovering, panel motion and page reflow never move it.
  */
-function TourCard({ step, highlight, footer, onSkip, children }: {
+function TourCard({ step, layout, highlight, footer, onSkip, children }: {
   step: Step;
+  layout: string;
   highlight: Highlight | null;
   footer: ReactNode;
   onSkip: () => void;
@@ -281,7 +286,6 @@ function TourCard({ step, highlight, footer, onSkip, children }: {
   const [rings, setRings] = useState<Box[]>([]);
   const [spot, setSpot] = useState<Spot | null>(null);
   const [animate, setAnimate] = useState(false);
-  const pending = useRef<{ spot: Spot; since: number } | null>(null);
   const centred = step === 'welcome' || step === 'finish';
   const find = useRef(highlight?.find);
   find.current = highlight?.find;
@@ -290,28 +294,39 @@ function TourCard({ step, highlight, footer, onSkip, children }: {
     let frame = 0;
     const tick = () => {
       frame = requestAnimationFrame(tick);
-      const node = card.current;
-      if (!node) return;
       const boxes = (find.current?.() ?? []).map(ringBox).filter(b => b !== null);
       setRings(previous => sameBoxes(previous, boxes) ? previous : boxes);
-      const desired = place(centred ? null : dockArea(), node.offsetWidth, node.offsetHeight);
-      setSpot(current => {
-        if (!current || near(current, desired)) {
-          pending.current = null;
-          return current ?? desired;
-        }
-        // Wait until the panel has stopped moving before following it.
-        const now = performance.now();
-        if (!pending.current || !near(pending.current.spot, desired)) {
-          pending.current = { spot: desired, since: now };
-          return current;
-        }
-        return now - pending.current.since > 140 ? desired : current;
-      });
     };
     tick();
     return () => cancelAnimationFrame(frame);
-  }, [centred]);
+  }, []);
+
+  const placedFor = useRef<boolean | null>(null);
+  const anchor = useRef<DOMRect | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `layout` changing is what should place the card again.
+  useLayoutEffect(() => {
+    const node = card.current;
+    if (!node) return;
+    const place = (measure: boolean) => {
+      if (measure) anchor.current = centred ? null : dockArea();
+      const next = spotFor(anchor.current, node.offsetWidth, node.offsetHeight);
+      setSpot(current => current && current.x === next.x && current.bottom === next.bottom ? current : next);
+    };
+    // A panel that just opened or closed is still moving; measure it once it has settled.
+    const settled = setTimeout(() => place(true), 420);
+    // Right away on the first placement and when the card leaves or returns to the centre.
+    if (placedFor.current !== centred) { placedFor.current = centred; place(true); }
+    // New text changes only the card's height, which never needs a new measurement.
+    const resized = new ResizeObserver(() => place(false));
+    resized.observe(node);
+    const onWindow = () => place(true);
+    window.addEventListener('resize', onWindow);
+    return () => {
+      clearTimeout(settled);
+      resized.disconnect();
+      window.removeEventListener('resize', onWindow);
+    };
+  }, [layout, centred]);
 
   // The first placement is instant; later moves glide.
   useEffect(() => {
@@ -343,7 +358,7 @@ function TourCard({ step, highlight, footer, onSkip, children }: {
       role="dialog"
       aria-label="Isotone tour"
       data-animate={animate}
-      style={spot ? { transform: `translate(${spot.x}px, ${spot.y}px)` } : { visibility: 'hidden' }}
+      style={spot ? { transform: `translate(${spot.x}px, ${-spot.bottom}px)` } : { visibility: 'hidden' }}
     >
       <div className="tour-top">
         {index >= 0
@@ -359,8 +374,6 @@ function TourCard({ step, highlight, footer, onSkip, children }: {
     </div>
   </div>;
 }
-
-const near = (a: Spot, b: Spot) => Math.abs(a.x - b.x) < 2 && Math.abs(a.y - b.y) < 2;
 
 function ringBox(element: Element): Box | null {
   const rect = element.getBoundingClientRect();
@@ -380,26 +393,33 @@ function sameBoxes(a: Box[], b: Box[]) {
   });
 }
 
-/** Everything Isotone shows in the corner: the button, the rail and any open panel. */
+/**
+ * The corner Isotone uses: its open panels, plus room for the tools as they
+ * look when hovering fans them out, so hovering never changes the answer.
+ */
 function dockArea(): DOMRect | null {
   const root = shadow();
-  if (!root) return null;
-  let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
-  for (const part of root.querySelectorAll('.isotone-panel[data-open="true"], .isotone-fab, .isotone-rail')) {
+  const corner = root?.querySelector('.isotone-root')?.getBoundingClientRect();
+  if (!root || !corner) return null;
+  let left = corner.right - 96, top = corner.bottom - 44, right = corner.right, bottom = corner.bottom;
+  for (const part of root.querySelectorAll('.isotone-panel[data-open="true"]')) {
     const box = part.getBoundingClientRect();
     if (box.width === 0 || box.height === 0) continue;
     left = Math.min(left, box.left); top = Math.min(top, box.top);
     right = Math.max(right, box.right); bottom = Math.max(bottom, box.bottom);
   }
-  return left === Infinity ? null : new DOMRect(left, top, right - left, bottom - top);
+  return new DOMRect(left, top, right - left, bottom - top);
 }
 
-/** Left of the panel, lined up with its bottom; on narrow screens, along the top. Centred without a target. */
-function place(target: DOMRect | null, width: number, height: number): Spot {
+/**
+ * Left of the panel with the bottoms lined up, so new text grows the card
+ * upwards; along the top on narrow screens; centred without an anchor.
+ */
+function spotFor(target: DOMRect | null, width: number, height: number): Spot {
   const vw = window.innerWidth, vh = window.innerHeight, margin = 16, gap = 20;
   const clampX = (x: number) => Math.round(Math.min(Math.max(x, margin), vw - width - margin));
-  const clampY = (y: number) => Math.round(Math.min(Math.max(y, margin), vh - height - margin));
-  if (!target) return { x: clampX((vw - width) / 2), y: clampY((vh - height) / 2 - vh * 0.04) };
-  if (target.left - gap - width >= margin) return { x: Math.round(target.left - gap - width), y: clampY(target.bottom - height) };
-  return { x: clampX(margin), y: margin };
+  const clampBottom = (bottom: number) => Math.round(Math.min(Math.max(bottom, margin), vh - height - margin));
+  if (!target) return { x: clampX((vw - width) / 2), bottom: clampBottom((vh - height) / 2 + vh * 0.04) };
+  if (target.left - gap - width >= margin) return { x: Math.round(target.left - gap - width), bottom: clampBottom(vh - target.bottom) };
+  return { x: clampX(margin), bottom: clampBottom(vh - height - margin) };
 }
