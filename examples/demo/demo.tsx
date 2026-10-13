@@ -8,11 +8,27 @@ const params = new URLSearchParams(location.search);
 const capture = params.get('capture');
 const screenshot = capture === 'light' || capture === 'dark';
 const review = params.get('review') === '1';
+// README image scenes: `focus` (feedback panel), `both` (variants and feedback), `pin` (select mode).
+const scene = screenshot ? params.get('scene') ?? 'focus' : null;
 const page = params.get('route') ?? '/';
 const stress = !screenshot && params.get('stress') === '1';
 const session = screenshot ? capture : stress ? 'stress' : 'interactive';
 const endpoint = `/demo-notes/${session}`;
+/** A small line drawing of the overview cards in a layout, used as a thumbnail. */
+function layoutThumb(columns: number): string {
+  const rows = Math.ceil(3 / columns);
+  // Drawn in the upper right, clear of the label the panel puts bottom left.
+  const w = (64 - (columns - 1) * 5) / columns;
+  const h = (30 - (rows - 1) * 4) / rows;
+  const cards = Array.from({ length: 3 }, (_, i) =>
+    `<rect x="${44 + (i % columns) * (w + 5)}" y="${9 + Math.floor(i / columns) * (h + 4)}" width="${w}" height="${h}" rx="2.5" fill="none" stroke="#8b8e99" stroke-width="1.5"/>`).join('');
+  return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 64">${cards}</svg>`)}`;
+}
 const axes: VariantAxis[] = [
+  { id: 'layout', label: 'Card layout', defaultOption: 'row', options: [
+    { id: 'row', label: 'Row', image: layoutThumb(3) }, { id: 'grid', label: 'Grid', image: layoutThumb(2) },
+    { id: 'list', label: 'List', image: layoutThumb(1) },
+  ] },
   { id: 'spacing', label: 'Spacing', defaultOption: 'compact', options: [
     { id: 'compact', label: 'Compact' }, { id: 'comfy', label: 'Comfy' }, { id: 'spacious', label: 'Spacious' },
   ] },
@@ -22,8 +38,8 @@ const axes: VariantAxis[] = [
     { id: 'violet', label: 'Violet', value: '#a18be0' },
   ] },
 ];
+axes.push({ id: 'card-radius', label: 'Card radius', kind: 'range', min: 0, max: 24, step: 1, defaultValue: 11, unit: 'px' });
 if (!screenshot) axes.push(
-  { id: 'card-radius', label: 'Card radius', kind: 'range', min: 0, max: 24, step: 1, defaultValue: 11, unit: 'px' },
   { id: 'card-padding', label: 'Card padding', kind: 'range', min: 8, max: 32, step: 2, defaultValue: 18, unit: 'px' },
 );
 if (stress) {
@@ -41,6 +57,7 @@ const source = createVariantsSource({
   axes, selections: { spacing: 'comfy' },
   onChange(selections) {
     document.documentElement.dataset.spacing = selections.spacing;
+    document.documentElement.dataset.layout = selections.layout;
     document.documentElement.style.setProperty('--accent', selections.accent);
     for (const id of ['card-radius', 'card-padding']) {
       if (selections[id] !== undefined) document.documentElement.style.setProperty(`--${id}`, `${selections[id]}px`);
@@ -71,7 +88,8 @@ function Panel({ theme }: { theme: IterationTheme }) {
     const shadow = host.current.attachShadow({ mode: 'open' });
     if (screenshot) {
       const style = document.createElement('style');
-      style.textContent = '.isotone-root { transform: scale(1.1); transform-origin: bottom right; right: 22px; bottom: 22px; } .isotone-textarea { caret-color: transparent; }';
+      // Select mode draws fixed outlines and a hint, which a scaled root would displace.
+      style.textContent = `${scene === 'pin' ? '' : '.isotone-root { transform: scale(1.1); transform-origin: bottom right; right: 22px; bottom: 22px; }'} .isotone-textarea { caret-color: transparent; }`;
       shadow.append(style);
     }
     const target = document.createElement('div');
@@ -103,9 +121,11 @@ function Panel({ theme }: { theme: IterationTheme }) {
         const feedback = shadow?.querySelector<HTMLButtonElement>('[aria-label="Feedback"]');
         const variants = shadow?.querySelector<HTMLButtonElement>('[aria-label="Variants"]');
         if (feedback?.getAttribute('aria-expanded') !== 'true') feedback?.click();
-        if (variants?.getAttribute('aria-expanded') === 'true') variants?.click();
+        const wantVariants = scene === 'both';
+        if ((variants?.getAttribute('aria-expanded') === 'true') !== wantVariants) variants?.click();
         frame = requestAnimationFrame(() => {
-          (shadow?.activeElement as HTMLElement | null)?.blur();
+          if (scene === 'pin') pinScene(shadow);
+          else (shadow?.activeElement as HTMLElement | null)?.blur();
           document.documentElement.dataset.previewReady = 'true';
         });
       });
@@ -114,6 +134,23 @@ function Panel({ theme }: { theme: IterationTheme }) {
     return () => cancelAnimationFrame(frame);
   }, []);
   return <div ref={host} data-isotone="demo" />;
+}
+
+/** Select mode mid-flow: one card pinned and a note being typed. */
+function pinScene(shadow: ShadowRoot | null | undefined) {
+  shadow?.querySelector<HTMLButtonElement>('[aria-label="Select elements"]')?.click();
+  const first = document.querySelector<HTMLElement>('#overview-cards article');
+  // Give select mode a moment to attach its listeners before the scripted pointer acts.
+  setTimeout(() => {
+    const r = first?.getBoundingClientRect();
+    if (r) first?.dispatchEvent(new MouseEvent('click', { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, bubbles: true, composed: true, detail: 1 }));
+    const textarea = shadow?.querySelector<HTMLTextAreaElement>('textarea');
+    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+    if (textarea && setValue) {
+      setValue.call(textarea, 'Give this card more room');
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }, 300);
 }
 
 /** A host dropdown that closes on any outside press, like most UI libraries. */
@@ -146,7 +183,9 @@ function Demo() {
   useEffect(() => {
     document.documentElement.dataset.theme = pageTheme;
     document.documentElement.dataset.capture = String(screenshot);
+    if (scene) document.documentElement.dataset.scene = scene;
     document.documentElement.dataset.spacing = source.getSelections().spacing;
+    document.documentElement.dataset.layout = source.getSelections().layout;
   }, [pageTheme]);
   useEffect(() => {
     if (screenshot) return;
@@ -181,7 +220,7 @@ function Demo() {
         <p className="page-description">A little more clarity. A little less busywork.</p>
         <section id="overview-cards" className="overview-cards" aria-label="Overview cards">
           {[['Active projects', '12', '+2 this month'], ['Tasks complete', '248', 'Looking good'], ['Team members', '8', 'All connected']].map(([label, value, detail]) =>
-            <article key={label}><p>{label}</p><strong>{value}</strong><small>{detail}</small></article>)}
+            <article key={label}><p>{label}</p>{' '}<strong>{value}</strong>{' '}<small>{detail}</small></article>)}
         </section>
         <div className="section-heading"><h2>Recent projects</h2><span>View all</span></div>
         <section className="projects" aria-label="Recent projects">

@@ -1,57 +1,48 @@
 # Isotone
 
-Point at the part of your app you want changed, say what should change, and your
-coding agent gets the exact element, page and screen size with your note.
+Ask your coding agent for design variants, switch between them in your running
+app, and pin feedback to the exact elements you want changed.
 
-![A running app with one pinned element and the Isotone feedback panel](docs/assets/preview.jpg)
+![The Isotone panels over a dark app: thumbnail, segmented, colour and range variants above the feedback notes](docs/assets/preview.png)
 
-## Why
+## How it works
 
-Coding agents write UI fast, but telling one which piece of UI you mean is slow.
-You type "the label above the number in the first stats card", the agent guesses
-a component, and the next round goes to correcting the guess. Comparing two
-design directions is worse: you ask for one, review it, ask for the other, and
-try to remember what the first looked like.
+Isotone adds a small panel to your app while it runs in development.
 
-Some agents let you select an element, Claude Code among them, but only inside
-the browser they ship with. You lose your own browser with its sign-ins,
-extensions, devtools and window sizes, and each selection lives in a single chat
-message.
+Ask your agent for variants of anything on the page: a layout, a spacing scale,
+a colour, a component. They appear in the panel's Variants tab as thumbnails,
+segmented choices, colour swatches or sliders, and switching one updates the
+live page. Save your picks as the defaults for the agent to apply, or leave
+feedback on a single option.
 
-Isotone is a purpose-built tool for design engineering with a coding agent. It
-runs in your dev server and adds a small panel to the page you already have open:
+When something needs changing, open Feedback with **⌘/Ctrl + Shift + .**, click
+the elements you mean, write the change and send. Each note is saved to a JSON
+file in your project with the page route, the viewport size, and a selector and
+the text of every element you pinned.
 
-- Pin one or more elements and write a note. The note records the route, the
-  viewport, and a selector and the visible text of every pinned element.
-- Keep a backlog. Notes go to a JSON file in your project, so you can keep
-  writing while the agent works through them.
-- Follow progress. The agent marks a note as started and closes it when the
-  change is verified, and the panel updates without a reload.
-- Compare variants. The agent can build two or three versions of a component.
-  You switch between them on the live page, comment on one, or keep the default.
-- Use any agent. Agents read notes with `npx isotone --json`, so nothing depends
-  on a particular agent, editor or browser.
+Your agent reads the notes with `npx isotone --json`, makes the changes, and
+closes each note when it's done. The panel marks the note the agent is working
+on and updates without a reload, so you can keep adding notes while it works.
 
-There is no account, database or hosted service, and nothing is added to
-production builds.
+Comparing design directions one prompt at a time is slow, and so is describing
+UI to an agent in words. Element pickers built into agents such as Claude Code
+only work inside the agent's own browser. Isotone works in the browser you
+already use, with any agent that can run a command.
 
-## Install
-
-Run in the project you want to review:
+## Add it to a project
 
 ```sh
 npm install -D isotone
 npx isotone init --yes
 ```
 
-`init` detects your setup, prints the integration to add, and adds a short
-workflow to `AGENTS.md` so your agent knows the loop. It does not edit app code.
+`init` detects your setup, prints the one change to make, and adds a short
+section to `AGENTS.md` that teaches your agent the loop. Your agent can apply
+the change for you. Nothing is added to production builds.
 
-For **Vite**, add the plugin next to your existing plugins. It works with any
-Vite framework:
+On **Vite**, the change is one plugin, and it works with any framework:
 
 ```ts
-import { defineConfig } from 'vite';
 import { iteration } from 'isotone/vite';
 
 export default defineConfig({
@@ -59,8 +50,8 @@ export default defineConfig({
 });
 ```
 
-For **any other dev server**, run `npx isotone serve` and add this to your
-development HTML:
+On **any other dev server**, run `npx isotone serve` and add one script tag to
+your development HTML:
 
 ```html
 <script src="http://127.0.0.1:4123/isotone.js" defer></script>
@@ -70,19 +61,11 @@ The [integration guide](docs/integrations.md) covers Next and other route
 handlers, React embeds, themes and production guards. Node.js 20 or later is
 required. Coming from the previous package? See the [migration guide](docs/migration.md).
 
-## The loop
+## Keys
 
-1. Open Feedback with **⌘/Ctrl + Shift + .**, pin elements, write a note and send.
-2. Your agent reads `npx isotone --json`, marks the note it starts with
-   `npx isotone --working <id>`, makes and checks the change, then closes it
-   with `npx isotone --done <id>`.
-3. Review the result on the page. For alternatives, ask for
-   [variants](docs/variants.md) and switch between them in place.
-
-The panel lists the current page's notes. When other pages have open notes,
-page chips let you include them. Click a saved note to edit it. **Enter** sends
-and **Shift + Enter** adds a newline. While selecting, click to pin, hold
-**Shift** to use the page normally, and press Enter or Escape to finish.
+**Enter** sends a note and **Shift + Enter** adds a newline. Click a saved note
+to edit it. In select mode, click to pin or unpin, hold **Shift** to use the page
+normally, and press **Enter** or **Escape** to finish.
 
 ## Updates
 

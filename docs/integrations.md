@@ -24,7 +24,7 @@ import { iteration } from 'isotone/vite';
 plugins: [/* existing plugins */, iteration()]
 ```
 
-Restart the dev server. Notes and source-file variants are available immediately.
+Restart the dev server. Source-file variants and notes are available immediately.
 The panel carries its own React runtime, so React, Vue, Svelte and vanilla Vite
 projects use the same setup. It does not enter the host's dependency optimizer or
 Fast Refresh graph. Nothing is injected in a production build.
