@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.0.8
+
+- feat: close either panel from a corner button
+
 ## 1.0.7
 
 - feat: live notes, page scope and agent progress in the panel (#12)
