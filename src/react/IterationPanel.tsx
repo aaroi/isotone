@@ -749,6 +749,7 @@ export function IterationPanel({
           aria-hidden={!variantsOpen}
           ref={node => { node?.toggleAttribute('inert', !variantsOpen); }}
         >
+          <PanelClose label="Close variants" onClose={() => { setVariantsOpen(false); setExpanded(false); }} />
           <VariantsView
             source={variants}
             active={variantsOpen}
@@ -770,6 +771,14 @@ export function IterationPanel({
           aria-hidden={!notesOpen}
           ref={node => { node?.toggleAttribute('inert', !notesOpen); }}
         >
+          <PanelClose
+            label="Close feedback"
+            onClose={() => {
+              setNotesOpen(false);
+              setExpanded(false);
+              setPicking(false);
+            }}
+          />
           <div className="isotone-panel-head">
             <h2>
               Feedback{' '}
@@ -1106,5 +1115,14 @@ export function IterationPanel({
         </button>
       </fieldset>
     </div>
+  );
+}
+
+/** A quiet close control in the panel's top-left corner. */
+function PanelClose({ label, onClose }: { label: string; onClose: () => void }) {
+  return (
+    <button type="button" className="isotone-panel-close" aria-label={label} title={label} onClick={onClose}>
+      <Icon name="close" size={12} />
+    </button>
   );
 }

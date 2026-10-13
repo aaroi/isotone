@@ -75,7 +75,17 @@ ${APPEARANCE_CSS}
 .isotone-panel[data-open='true'] { display: flex; }
 .isotone-variants-panel { flex-shrink: 1; max-height: calc(100dvh - 76px); }
 .isotone-notes-panel { flex-shrink: 0; max-height: calc(100dvh - 76px); padding: var(--iso-space); gap: var(--iso-space); }
-.isotone-root .isotone-panel { background: var(--iso-bg); border: 1px solid var(--iso-line); border-radius: 12px; box-shadow: var(--iso-panel-shadow); overflow: hidden; }
+.isotone-root .isotone-panel { background: var(--iso-bg); border: 1px solid var(--iso-line); border-radius: 12px; box-shadow: var(--iso-panel-shadow); }
+/* The close control sits on the panel's top-left corner, half outside it, with
+   the same face as a note's delete button, a touch larger. It fades in while the
+   pointer is over the panel; keyboard focus and touch screens always show it. */
+.isotone-panel-close { position: absolute; left: -9px; top: -9px; z-index: 3; width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border: 0; isolation: isolate; color: var(--iso-muted); background: none; opacity: 0; }
+.isotone-panel-close::before { content: ''; position: absolute; inset: 4px; border-radius: 50%; z-index: -1; background: var(--iso-bg); box-shadow: 0 0 0 1px var(--iso-edge); transition: background-color 120ms ease; }
+.isotone-root .isotone-panel > .isotone-panel-close { transition: opacity 220ms ease, color 120ms ease; }
+.isotone-root .isotone-panel:hover > .isotone-panel-close, .isotone-panel-close:focus-visible { opacity: 1; }
+.isotone-root .isotone-panel > .isotone-panel-close:hover { color: var(--iso-fg); }
+.isotone-panel-close:hover::before { background: var(--iso-control-hover-face); }
+@media (hover: none) { .isotone-panel-close { opacity: 1; } }
 .isotone-panel-head { flex: 0 0 42px; min-height: 42px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 14px; gap: 8px; border-bottom: 1px solid var(--iso-line); }
 .isotone-root .isotone-notes-panel > .isotone-panel-head { display: none; }
 .isotone-root .isotone-vars > .isotone-panel-head { order: 2; flex: 0 0 auto; min-height: 48px; padding: var(--iso-space); border: 0; }
@@ -89,6 +99,8 @@ ${APPEARANCE_CSS}
 .isotone-count { margin-left: 5px; color: var(--iso-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .isotone-vars { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; }
 .isotone-vars { min-height: min(var(--iso-menu-need, 0px), calc(100dvh - 76px)); }
+/* The panel no longer clips, so its corner close can overhang; the variants body clips itself. */
+.isotone-root .isotone-panel > .isotone-vars { overflow: hidden; border-radius: 11px; }
 .isotone-vars-body { flex: 1; overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: var(--iso-space); display: flex; flex-direction: column; gap: var(--iso-space); }
 /* The footer overlaps only the scroller's bottom padding: content fades beneath
    it while scrolling, but the last control remains fully visible at the end. */
@@ -238,6 +250,8 @@ ${FEEDBACK_LAYOUT_CSS}
   .isotone-root button:not(:disabled):active > svg { transform: none; }
 }
 .isotone-root[data-instant='true'] *, .isotone-root[data-instant='true'] *::before, .isotone-root[data-instant='true'] *::after { transition-duration: 0s !important; transition-delay: 0s !important; animation: none !important; }
+/* Instant mode follows any key press, but the corner close only ever appears under the pointer, so it keeps its fade. */
+.isotone-root[data-instant='true'] .isotone-panel > .isotone-panel-close { transition-duration: 220ms, 120ms !important; }
 ${UPDATE_NOTICE_CSS}
 `;
 /**
