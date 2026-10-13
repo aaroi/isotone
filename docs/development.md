@@ -59,6 +59,18 @@ window's rounded corners have no frame. `?scene=focus` shows the feedback panel 
 `?scene=pin` shows select mode with a pinned card, and `?theme=light` switches
 the page. Give headless captures a long virtual time budget (15s) so the panel's
 opening motion has settled.
+
+`docs/assets/loop.gif` is recorded by `scripts/capture/record-loop.mjs`, which
+drives the hosted demo build through the Chrome DevTools Protocol and encodes the
+frames with ffmpeg. The header comment has the commands.
+
+## Hosted demo
+
+`pnpm build:demo` builds the demo as a static site in `demo-dist/`. Without a
+dev server, the page answers the notes endpoint itself from `localStorage`, and
+the Agent buttons edit those notes the way `--working` and `--done` would. It is
+deployed to [isotone.vercel.app](https://isotone.vercel.app) with
+`vercel deploy --prod`; `vercel.json` holds the build command.
 Demo feedback uses seeded files in a temporary
 directory, separate from project notes; the server removes them when it closes.
 Open `/?stress=1` for 500 selectors and 500 notes, including long labels and large

@@ -77,7 +77,10 @@ h1 { margin: 0; font-size: 30px; font-weight: 600; letter-spacing: -.045em; line
 :root[data-capture='true'] .new-project, :root[data-capture='true'] .status { display: none; }
 @media (max-width: 680px) { .workspace { grid-template-columns: 90px minmax(0, 1fr); } .sidebar { padding: 30px 14px; font-size: 10px; } .workspace-content { padding: 28px 20px; } .overview-cards { grid-template-columns: 1fr; } .demo-controls { padding: 14px 20px; } }
 :root[data-capture='true'] .overview-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-:root[data-layout='grid'] .overview-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+:root[data-layout='feature'] .overview-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+:root[data-layout='feature'] .overview-cards article:first-child { grid-column: span 2; }
+:root[data-layout='sidebar'] .overview-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+:root[data-layout='sidebar'] .overview-cards article:first-child { grid-row: span 2; }
 :root[data-layout='list'] .overview-cards { grid-template-columns: minmax(0, 1fr); }
 
 .new-project-wrap { position: relative; }

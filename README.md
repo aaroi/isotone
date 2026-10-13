@@ -3,7 +3,9 @@
 Ask your coding agent for design variants, switch between them in your running
 app, and pin feedback to the exact elements you want changed.
 
-![The Isotone panels over a dark app: thumbnail, segmented, colour and range variants above the feedback notes](docs/assets/preview.png)
+![Switching layout, spacing and colour variants, pinning a card with a note, and an agent picking the note up and closing it](docs/assets/loop.gif)
+
+Try it in your browser at [isotone.vercel.app](https://isotone.vercel.app). Nothing to install.
 
 ## How it works
 
@@ -14,6 +16,8 @@ a colour, a component. They appear in the panel's Variants tab as thumbnails,
 segmented choices, colour swatches or sliders, and switching one updates the
 live page. Save your picks as the defaults for the agent to apply, or leave
 feedback on a single option.
+
+![The Variants panel with thumbnail, segmented, colour and range selectors above the feedback notes](docs/assets/preview.png)
 
 When something needs changing, open Feedback with **⌘/Ctrl + Shift + .**, click
 the elements you mean, write the change and send. Each note is saved to a JSON

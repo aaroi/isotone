@@ -133,4 +133,6 @@ export default defineConfig({
       file: join(tmpdir(), 'isotone-demo-adapter.json'),
     })],
   server: { host: '127.0.0.1', port: 4173, strictPort: true },
+  // `pnpm build:demo` builds the hosted demo; it keeps notes in the browser.
+  build: { outDir: '../demo-dist', emptyOutDir: true, rollupOptions: { input: fileURLToPath(new URL('index.html', import.meta.url)) } },
 });
