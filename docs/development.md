@@ -40,12 +40,12 @@ standalone consumers. The build bundles only the icons used by the panel.
 ## Local workflow
 
 `pnpm dev` starts the fictional demo at `http://127.0.0.1:4173`. Its top bar
-provides the theme settings:
-
-| Control | What it changes |
-| --- | --- |
-| Page | The mock app's actual light or dark background |
-| Panel | Automatic page detection, system preference, or an explicit theme |
+has a Panel theme select (automatic page detection, system preference, or an
+explicit theme), a light and dark toggle for the page, and a Tour button that
+starts the first-visit tour (`examples/demo/tour.tsx`). `/?tour=1` starts it on
+load. A pretend agent marks each new note as being worked on a moment after it
+is sent and closes it a few seconds later, the way `--working` and `--done`
+would.
 
 The sample app's Spacing, Accent colour, Card radius and Card padding selectors
 remain inside the panel. Clean Highlight is the product default; there is no
@@ -68,7 +68,8 @@ frames with ffmpeg. The header comment has the commands.
 
 `pnpm build:demo` builds the demo as a static site in `demo-dist/`. Without a
 dev server, the page answers the notes endpoint itself from `localStorage`, and
-the Agent buttons edit those notes the way `--working` and `--done` would. It is
+the pretend agent edits those notes there. The tour starts on a visitor's first
+visit and remembers when it was closed. It is
 deployed to [isotone.vercel.app](https://isotone.vercel.app) with
 `vercel deploy --prod`; `vercel.json` holds the build command.
 Demo feedback uses seeded files in a temporary
