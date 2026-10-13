@@ -16,13 +16,13 @@ const outDir = mkdtempSync(join(tmpdir(), 'isotone-loop-'));
 const W = 920, H = 620;
 const b = await launch({ width: W, height: H, scale: 2 });
 await b.goto(url);
-// Only this page's two notes, so the panel shows no page chips.
-await b.eval(`(() => { const key = 'isotone-hosted-demo'; localStorage.setItem(key, JSON.stringify(JSON.parse(localStorage.getItem(key)).filter((n) => n.route === '/'))); })()`);
+// No tour: the recording shows the panel on its own.
+await b.eval(`localStorage.setItem('isotone-demo-tour', 'seen')`);
 await b.goto(url);
 // Demo scaffolding out, a visible pointer in.
 await b.eval(`(() => {
-  document.querySelector('.demo-controls')?.remove();
-  document.querySelector('.demo-hint')?.remove();
+  document.querySelector('.demo-bar')?.remove();
+  document.querySelector('.app').style.minHeight = '100dvh';
   const c = document.createElement('div');
   c.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.5L10 19z" fill="#fff" stroke="#000" stroke-width="1.4" stroke-linejoin="round"/></svg>';
   c.style.cssText = 'position:fixed;left:0;top:0;z-index:2147483647;pointer-events:none;transform:translate(-200px,-200px);filter:drop-shadow(0 1px 2px rgb(0 0 0 / .5))';
@@ -76,16 +76,9 @@ await b.key('Enter', 'Enter', 13); await sleep(700);
 await b.key('Escape', 'Escape', 27); await sleep(300);
 await glide([W * 0.3, H * 0.86], 700); await sleep(300);
 
-// 3. The agent picks it up (isotone --working), then closes it (--done).
-const agent = (action) => b.eval(`((action) => {
-  const key = 'isotone-hosted-demo'; const notes = JSON.parse(localStorage.getItem(key));
-  const open = notes.filter((n) => !n.done && n.route === '/').sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const n = action === 'start' ? open[0] : open.find((x) => x.workingAt);
-  if (action === 'start') n.workingAt = new Date().toISOString(); else { n.done = true; n.doneAt = new Date().toISOString(); delete n.workingAt; }
-  localStorage.setItem(key, JSON.stringify(notes));
-})('${action}')`);
-await agent('start'); await sleep(4200);
-await agent('finish'); await sleep(3000);
+// 3. The demo's pretend agent picks the note up (isotone --working) about
+// 1.6s after it's sent, then closes it (--done) about 5s later.
+await sleep(7600);
 
 await b.send('Page.stopScreencast');
 b.close();

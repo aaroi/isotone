@@ -1,14 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
+import {
+  Box, Calendar, ChevronDown, CircleDot, Gem, Inbox, Layers, LayoutGrid, ListFilter, Moon, Play, Plus, Search,
+  SlidersHorizontal, SquarePen, Sun,
+} from 'lucide-react';
 import {
   createVariantsSource, IterationPanel, type IterationTheme, type VariantAxis,
 } from '../../src/react/index';
+import { Tour, tourSeen } from './tour';
 
 const params = new URLSearchParams(location.search);
 // The public demo is a static build: no dev server, so notes live in this
 // browser and the Agent buttons edit them here instead of on disk.
 const hosted = import.meta.env.MODE === 'hosted';
-const HOSTED_KEY = 'isotone-hosted-demo';
+const HOSTED_KEY = 'isotone-hosted-demo-v2';
 const capture = params.get('capture');
 const screenshot = capture === 'light' || capture === 'dark';
 const review = params.get('review') === '1';
@@ -91,8 +96,6 @@ function seedHostedNotes() {
   const seed: [string, string, string][] = [
     ['/', 'Give the cards a little more room.', 'Overview cards'],
     ['/', 'Shorten this to "Active".', 'Active projects'],
-    ['/pricing', 'The plan names are too similar.', 'Plans'],
-    ['/settings', 'Group the notification options.', 'Notifications'],
   ];
   writeHostedNotes(seed.map(([route, feedback, text], index) => ({
     id: `seed-${index}`, route, feedback, element: { tag: 'section', text, selector: '#overview-cards' },
@@ -154,21 +157,39 @@ if (hosted && !screenshot) {
   try { if (localStorage.getItem(HOSTED_KEY) === null) seedHostedNotes(); } catch { /* No storage. */ }
   serveNotesInPage(endpoint);
 }
-/** The hosted stand-in for an agent running `isotone --working` and `--done`. */
-function hostedAgent(action: 'start' | 'finish' | 'reset') {
-  if (action === 'reset') { seedHostedNotes(); return; }
-  const notes = readHostedNotes();
-  const open = notes.filter((n) => !n.done && n.route === page);
-  const target = action === 'start' ? open.find((n) => !n.workingAt) : open.find((n) => n.workingAt);
-  if (!target) return;
-  if (action === 'start') target.workingAt = new Date().toISOString();
-  else { target.done = true; target.doneAt = new Date().toISOString(); delete target.workingAt; }
-  writeHostedNotes(notes);
+/**
+ * A pretend coding agent. A moment after a note is sent it marks it as being
+ * worked on, like `isotone --working`, and a few seconds later closes it, like
+ * `--done`. The tour listens to the same events.
+ */
+function runPretendAgent() {
+  const network = window.fetch.bind(window);
+  window.fetch = async (input, init) => {
+    const response = await network(input, init);
+    const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+    if (url.pathname !== endpoint || (init?.method ?? 'GET').toUpperCase() !== 'POST' || response.status !== 201) return response;
+    const { id } = await response.clone().json() as { id: string };
+    const feedback = String((JSON.parse(String(init?.body ?? '{}')) as { feedback?: string }).feedback ?? '');
+    window.dispatchEvent(new CustomEvent('demo:note', { detail: { id, action: feedback.startsWith('[') } }));
+    setTimeout(() => void agentStep(id, 'working'), 1600);
+    setTimeout(() => void agentStep(id, 'done'), 6400);
+    return response;
+  };
 }
-function agent(action: 'start' | 'finish' | 'reset') {
-  if (hosted) hostedAgent(action);
-  else void fetch(`/demo-agent?action=${action}&route=${encodeURIComponent(page)}`, { method: 'POST' });
+async function agentStep(id: string, state: 'working' | 'done') {
+  if (hosted) {
+    const notes = readHostedNotes();
+    const note = notes.find((n) => n.id === id && !n.done);
+    if (!note) return;
+    if (state === 'working') note.workingAt = new Date().toISOString();
+    else { note.done = true; note.doneAt = new Date().toISOString(); delete note.workingAt; }
+    writeHostedNotes(notes);
+  } else {
+    await fetch(`/demo-agent?action=${state === 'working' ? 'start' : 'finish'}&id=${encodeURIComponent(id)}`, { method: 'POST' });
+  }
+  window.dispatchEvent(new CustomEvent('demo:agent', { detail: { id, state } }));
 }
+if (!screenshot) runPretendAgent();
 
 function savedTheme<T extends string>(key: string, choices: readonly T[], fallback: T): T {
   try {
@@ -240,7 +261,8 @@ function pinScene(shadow: ShadowRoot | null | undefined) {
   // Give select mode a moment to attach its listeners before the scripted pointer acts.
   setTimeout(() => {
     const r = first?.getBoundingClientRect();
-    if (r) first?.dispatchEvent(new MouseEvent('click', { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, bubbles: true, composed: true, detail: 1 }));
+    // Aim at the chart, which lets clicks through to the card itself.
+    if (r) first?.dispatchEvent(new MouseEvent('click', { clientX: r.left + r.width / 2, clientY: r.bottom - 20, bubbles: true, composed: true, detail: 1 }));
     const textarea = shadow?.querySelector<HTMLTextAreaElement>('textarea');
     const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
     if (textarea && setValue) {
@@ -267,16 +289,63 @@ function NewProjectMenu() {
     };
   }, [open]);
   return <div className="new-project-wrap" ref={wrap}>
-    <button className="new-project" type="button" aria-expanded={open} onClick={() => setOpen(v => !v)}>New project</button>
+    <button className="button button-primary new-project" type="button" aria-expanded={open} onClick={() => setOpen(v => !v)}><Plus size={14} />New project</button>
     {open && <div className="demo-menu" role="menu">
       {['Blank project', 'From template', 'Import from file'].map(item => <button key={item} type="button" role="menuitem" onClick={() => setOpen(false)}>{item}</button>)}
     </div>}
   </div>;
 }
 
+function GitHubMark() {
+  return <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" /></svg>;
+}
+
+function NavItem({ icon, label, current, count }: { icon: ReactNode; label: string; current?: boolean; count?: number }) {
+  return <span className="nav-item" aria-current={current ? 'page' : undefined}>{icon}<span>{label}</span>{count ? <small>{count}</small> : null}</span>;
+}
+
+/** A small trend line under a stat; decoration only. */
+function Sparkline() {
+  const points = [14, 18, 16, 22, 21, 27, 25, 31, 30, 36];
+  const path = points.map((y, i) => `${i ? 'L' : 'M'}${(i / (points.length - 1)) * 100} ${40 - y}`).join(' ');
+  return <svg className="stat-viz spark" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+    <path d={`${path} L100 40 L0 40 Z`} className="spark-fill" />
+    <path d={path} className="spark-line" vectorEffect="non-scaling-stroke" />
+  </svg>;
+}
+function WeekBars() {
+  return <div className="stat-viz bars" aria-hidden="true">
+    {[42, 58, 50, 71, 64, 88, 76].map(h => <i key={h} style={{ height: `${h}%` }} />)}
+  </div>;
+}
+function Faces() {
+  return <div className="stat-viz faces" aria-hidden="true">
+    {['#e4a37b', '#7aa7e0', '#9fd0a8', '#c99be0', '#e0c27a'].map(c => <i key={c} style={{ background: c }} />)}
+    <i className="faces-more" />
+  </div>;
+}
+
+/** Project progress as a ring that fills clockwise. */
+function Progress({ value }: { value: number }) {
+  const r = 6, c = 2 * Math.PI * r;
+  return <svg className="progress" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="8" cy="8" r={r} className="progress-track" />
+    <circle cx="8" cy="8" r={r} className="progress-value" strokeDasharray={`${c * value} ${c}`} transform="rotate(-90 8 8)" />
+  </svg>;
+}
+
+const projects: [string, string, number, string, string, string][] = [
+  ['Website refresh', 'Design', 0.64, 'Oct 28', 'In progress', '#e4a37b'],
+  ['Mobile experience', 'Product', 0.82, 'Nov 4', 'In review', '#7aa7e0'],
+  ['Component library', 'Engineering', 1, 'Oct 16', 'Ready', '#9fd0a8'],
+  ['Billing migration', 'Engineering', 0.18, 'Dec 2', 'Planned', '#c99be0'],
+];
+
 function Demo() {
   const [pageTheme, setPageTheme] = useState<'light' | 'dark'>(() => screenshot ? capture : savedTheme('iso-demo-page', ['light', 'dark'], 'dark'));
   const [panelTheme, setPanelTheme] = useState<IterationTheme>(() => screenshot ? 'auto' : savedTheme('iso-demo-panel', ['auto', 'system', 'light', 'dark'], 'auto'));
+  // First visit to the hosted demo starts the tour; locally it's one click away.
+  const [touring, setTouring] = useState(() => !screenshot && (hosted || params.get('tour') === '1') && !tourSeen());
   useEffect(() => {
     document.documentElement.dataset.theme = pageTheme;
     document.documentElement.dataset.capture = String(screenshot);
@@ -292,46 +361,97 @@ function Demo() {
     } catch { /* Theme controls still work without storage. */ }
   }, [pageTheme, panelTheme]);
   return <>
-    {!screenshot && <header className="demo-controls">
-      <a href={hosted ? 'https://github.com/aaroi/isotone' : '/'} className="brand">Isotone <span>{stress ? 'stress test · 500 selectors / 500 notes' : 'live demo'}</span></a>
-      <div className="theme-controls">
-        <fieldset><legend>Page</legend>{(['light', 'dark'] as const).map(theme =>
-          <button key={theme} type="button" aria-pressed={pageTheme === theme} onClick={() => setPageTheme(theme)}>{theme}</button>)}</fieldset>
-        <label>Panel <select value={panelTheme} onChange={event => setPanelTheme(event.target.value as IterationTheme)}>
-          {(['auto', 'system', 'light', 'dark'] as const).map(theme => <option key={theme}>{theme}</option>)}
-        </select></label>
-        <fieldset><legend>Page</legend>{[['/', 'Overview'], ['/pricing', 'Pricing'], ['/settings', 'Settings']].map(([route, name]) =>
-          <a key={route} className="demo-page" aria-current={page === route ? 'page' : undefined} href={route === '/' ? '/' : `/?route=${route}`}>{name}</a>)}</fieldset>
-        <fieldset><legend>Agent</legend>
-          <button type="button" onClick={() => agent('start')}>Starts a note</button>
-          <button type="button" onClick={() => agent('finish')}>Finishes it</button>
-          <button type="button" onClick={() => agent('reset')}>Reset notes</button></fieldset>
-        {hosted
-          ? <a href="https://github.com/aaroi/isotone">GitHub ↗</a>
-          : <><a href="/preview.html">Screenshot view ↗</a>
-            <a href={stress ? '/' : '/?stress=1'}>{stress ? 'Normal demo' : 'Stress test'}</a></>}
+    {!screenshot && <header className="demo-bar">
+      <a href={hosted ? 'https://github.com/aaroi/isotone' : '/'} className="brand"><Gem size={15} strokeWidth={1.75} />Isotone</a>
+      <span className="demo-bar-note">{stress ? 'Stress test · 500 selectors and 500 notes' : 'Demo. The page below stands in for your app.'}</span>
+      <div className="demo-bar-actions">
+        {!hosted && <>
+          <label className="demo-select">Panel <select value={panelTheme} onChange={event => setPanelTheme(event.target.value as IterationTheme)}>
+            {(['auto', 'system', 'light', 'dark'] as const).map(theme => <option key={theme}>{theme}</option>)}
+          </select></label>
+          <a className="button button-ghost" href="/preview.html">Screenshot view</a>
+          <a className="button button-ghost" href={stress ? '/' : '/?stress=1'}>{stress ? 'Normal demo' : 'Stress test'}</a>
+        </>}
+        <button type="button" className="button button-ghost" onClick={() => setTouring(true)} disabled={touring}><Play size={13} />Tour</button>
+        <button type="button" className="button button-icon" aria-label={pageTheme === 'dark' ? 'Light page' : 'Dark page'} title={pageTheme === 'dark' ? 'Light page' : 'Dark page'}
+          onClick={() => setPageTheme(pageTheme === 'dark' ? 'light' : 'dark')}>{pageTheme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}</button>
+        <a className="button button-icon" href="https://github.com/aaroi/isotone" aria-label="GitHub" title="GitHub"><GitHubMark /></a>
       </div>
     </header>}
-    <main className="workspace">
-      <aside className="sidebar"><div className="workspace-mark">◈</div><span className="nav-current">Overview</span><span>Projects</span><span>Activity</span><span>Settings</span></aside>
-      <div className="workspace-content">
-        <div className="page-heading"><div><p className="eyebrow">Workspace</p><h1>{page === '/pricing' ? 'Pricing' : page === '/settings' ? 'Settings' : 'Overview'}</h1></div><NewProjectMenu /></div>
-        <p className="page-description">A little more clarity. A little less busywork.</p>
-        <section id="overview-cards" className="overview-cards" aria-label="Overview cards">
-          {[['Active projects', '12', '+2 this month'], ['Tasks complete', '248', 'Looking good'], ['Team members', '8', 'All connected']].map(([label, value, detail]) =>
-            <article key={label}><p>{label}</p><strong>{value}</strong><small>{detail}</small></article>)}
-        </section>
-        <div className="section-heading"><h2>Recent projects</h2><span>View all</span></div>
-        <section className="projects" aria-label="Recent projects">
-          {[['Website refresh', 'Design', 'In progress'], ['Mobile experience', 'Product', 'In review'], ['Component library', 'Engineering', 'Ready']].map(([title, team, status], index) =>
-            <article key={title}><span className={`project-icon project-icon-${index}`}>↗</span><div><strong>{title}</strong><small>{team}</small></div><span className="status">{status}</span></article>)}
-        </section>
-        {hosted && <p className="demo-hint">This page is a stand-in for your app. Open the panel with the diamond in the corner, or ⌘/Ctrl + Shift + . Switch the card layout, spacing and colour in Variants. In Feedback, press the crosshair, click a card and write what you'd change. The Agent buttons up top do what your coding agent would do with <code>npx isotone --working</code> and <code>--done</code>. In a real project the notes go to a JSON file your agent reads. Here they stay in this browser.</p>}
-        {!screenshot && !hosted && <p className="demo-hint">Try the page links and the Agent buttons above: the panel lists this page's notes, shows other pages as chips, and follows the agent without a reload. Open the diamond in the corner to leave feedback or try a variant. Demo notes are isolated and reset when the server restarts. To test select mode against a dropdown, open New project, press the pin in the feedback composer, then Shift-click a menu item to reach it without pinning.</p>}
-      </div>
-    </main>
+    <div className="app">
+      <aside className="sidebar">
+        <div className="sidebar-top">
+          <span className="workspace-switch"><span className="workspace-logo">L</span>Lumen<ChevronDown size={13} /></span>
+          <span className="sidebar-tools"><Search size={15} /><SquarePen size={15} /></span>
+        </div>
+        <nav className="nav">
+          <NavItem icon={<Inbox size={15} />} label="Inbox" count={3} />
+          <NavItem icon={<CircleDot size={15} />} label="My issues" />
+        </nav>
+        <nav className="nav">
+          <p className="nav-label">Workspace</p>
+          <NavItem icon={<LayoutGrid size={15} />} label="Overview" current />
+          <NavItem icon={<Box size={15} />} label="Projects" />
+          <NavItem icon={<Calendar size={15} />} label="Cycles" />
+          <NavItem icon={<Layers size={15} />} label="Views" />
+        </nav>
+        <nav className="nav">
+          <p className="nav-label">Teams</p>
+          {[['Design', '#e4a37b'], ['Product', '#7aa7e0'], ['Engineering', '#9fd0a8']].map(([team, colour]) =>
+            <NavItem key={team} icon={<span className="team-mark" style={{ background: colour }}>{team[0]}</span>} label={team} />)}
+        </nav>
+      </aside>
+      <main className="main">
+        <div className="topbar">
+          <span className="crumbs"><LayoutGrid size={14} />Overview</span>
+          <div className="topbar-actions">
+            <button type="button" className="button button-ghost"><ListFilter size={14} />Filter</button>
+            <button type="button" className="button button-ghost"><SlidersHorizontal size={14} />Display</button>
+            <NewProjectMenu />
+          </div>
+        </div>
+        <div className="content">
+          <div className="page-heading">
+            <h1>Overview</h1>
+            <p className="page-description">Week 42 · 4 projects, 2 due this month</p>
+          </div>
+          <section id="overview-cards" className="overview-cards" aria-label="Overview cards">
+            {([['Active projects', '12', '+2', 'this month', <Sparkline key="s" />], ['Tasks complete', '248', '', 'Looking good', <WeekBars key="b" />], ['Team members', '8', '', 'All connected', <Faces key="f" />]] as const).map(([label, value, delta, detail, viz]) =>
+              <article key={label}>
+                <p>{label}</p>
+                <strong>{value}</strong>
+                <small>{delta && <b>{delta}</b>}{delta ? ` ${detail}` : detail}</small>
+                {viz}
+              </article>)}
+          </section>
+          <div className="section-heading"><h2>Recent projects</h2><span>View all</span></div>
+          <section className="projects" aria-label="Recent projects">
+            {projects.map(([title, team, progress, due, status, lead]) =>
+              <article key={title}>
+                <Progress value={progress} />
+                <strong>{title}</strong>
+                <small className="project-team">{team}</small>
+                <span className="project-lead" style={{ background: lead }} aria-hidden="true" />
+                <span className="project-percent">{Math.round(progress * 100)}%</span>
+                <span className="project-due">{due}</span>
+                <span className="status" data-status={status.toLowerCase().replace(' ', '-')}>{status}</span>
+              </article>)}
+          </section>
+          {!screenshot && !hosted && <p className="demo-hint">Notes sent here go to a temporary file and a pretend agent picks each one up a moment later. To test select mode against a dropdown, open New project, press the crosshair in the feedback composer, then Shift-click a menu item to reach it without pinning.</p>}
+        </div>
+      </main>
+    </div>
     <Panel theme={panelTheme} />
+    {touring && <Tour onClose={() => setTouring(false)} subscribeVariants={subscribeVariants} />}
   </>;
+}
+/** Calls back when a selection changes, which is what the tour waits for. */
+function subscribeVariants(listener: () => void) {
+  let last = JSON.stringify(source.getSelections());
+  return source.subscribe(() => {
+    const now = JSON.stringify(source.getSelections());
+    if (now !== last) { last = now; listener(); }
+  });
 }
 
 const mount = document.getElementById('demo');
