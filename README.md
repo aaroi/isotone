@@ -1,28 +1,33 @@
 # Isotone
 
-Click an element in your running app, say what should change, and your coding
-agent gets the note with the exact element attached.
+Ask your coding agent for design variants, switch between them in your running
+app, and pin feedback to the exact elements you want changed.
 
 ![The Isotone panels over a dark app: thumbnail, segmented, colour and range variants above the feedback notes](docs/assets/preview.png)
 
 ## How it works
 
-Isotone adds a small panel to your app while it runs in development. Press
-**⌘/Ctrl + Shift + .**, click the elements you mean, write the change and send.
-Each note is saved to a JSON file in your project with the page route, the
-viewport size, and a selector and the text of every element you pinned.
+Isotone adds a small panel to your app while it runs in development.
+
+Ask your agent for variants of anything on the page: a layout, a spacing scale,
+a colour, a component. They appear in the panel's Variants tab as thumbnails,
+segmented choices, colour swatches or sliders, and switching one updates the
+live page. Save your picks as the defaults for the agent to apply, or leave
+feedback on a single option.
+
+When something needs changing, open Feedback with **⌘/Ctrl + Shift + .**, click
+the elements you mean, write the change and send. Each note is saved to a JSON
+file in your project with the page route, the viewport size, and a selector and
+the text of every element you pinned.
 
 Your agent reads the notes with `npx isotone --json`, makes the changes, and
 closes each note when it's done. The panel marks the note the agent is working
 on and updates without a reload, so you can keep adding notes while it works.
 
-To compare directions, ask the agent for variants of a component. They appear in
-the panel's Variants tab, where you switch between them on the live page and
-keep the one you want.
-
-Describing UI to an agent in words is slow, and element pickers built into
-agents such as Claude Code only work inside the agent's own browser. Isotone
-works in the browser you already use, with any agent that can run a command.
+Comparing design directions one prompt at a time is slow, and so is describing
+UI to an agent in words. Element pickers built into agents such as Claude Code
+only work inside the agent's own browser. Isotone works in the browser you
+already use, with any agent that can run a command.
 
 ## Add it to a project
 

@@ -53,7 +53,7 @@ export function isHelp(arg: string | undefined): boolean {
 }
 
 function printHelp(io: CliIO): void {
-  out(io, 'isotone — notes and variants between a reviewer’s browser and a coding agent');
+  out(io, 'isotone — variants and notes between a reviewer’s browser and a coding agent');
   out(io);
   out(io, 'Notes (the file is .iteration-feedback.json in the current directory)');
   out(io, '  isotone                    open notes, all routes');

@@ -174,7 +174,7 @@ function printApproach(io: CliIO, approach: Approach, host: Host): void {
     out(io, '  // Add iteration() to your existing plugins array; keep the other plugins.');
     out(io, '  export default defineConfig({ plugins: [iteration()] });');
     out(io, '');
-    out(io, 'That serves the notes and variants endpoints from the dev server and injects the');
+    out(io, 'That serves the variants and notes endpoints from the dev server and injects the');
     out(io, 'panel. Alternative source files live under .isotone/variants/<id>/<repo-relative');
     out(io, 'path>, one directory per variant, with a variant.json manifest next to them; the');
     out(io, 'plugin swaps them in for the real files while that variant is active, one selector');
