@@ -48,7 +48,7 @@ ${APPEARANCE_CSS}
 /* Panels move independently; their content and corners retain their natural size. */
 .isotone-root[data-open='true'] { width: var(--iso-dock-width); }
 .isotone-root { pointer-events: none; }
-.isotone-root :is(.isotone-panel, .isotone-rail-button, .isotone-fab, .isotone-hint) { pointer-events: auto; }
+.isotone-root :is(.isotone-panel, .isotone-rail-button, .isotone-fab) { pointer-events: auto; }
 /* The horizontal pill stays anchored while its panels open above it. */
 .isotone-rail, .isotone-rail-tools { display: contents; border: 0; margin: 0; padding: 0; min-width: 0; }
 .isotone-root[data-expanded='true'] { min-height: 44px; }
@@ -134,7 +134,7 @@ ${APPEARANCE_CSS}
 .isotone-picker input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .isotone-picker:has(input:focus-visible) { outline: 2px solid var(--iso-focus); outline-offset: 3px; }
 /* Raised actions share one face, edge and hover treatment. */
-.isotone-save, .isotone-secondary, .isotone-send, .isotone-hint button { border-radius: var(--iso-control-radius); color: var(--iso-fg); background: var(--iso-control-face); box-shadow: var(--iso-control-shadow); }
+.isotone-save, .isotone-secondary, .isotone-send, .isotone-picking button { border-radius: var(--iso-control-radius); color: var(--iso-fg); background: var(--iso-control-face); box-shadow: var(--iso-control-shadow); }
 /* Persistent selections share the raised action material, never the recessed
    field/slot material. Keep the face and shadow together in this one rule. */
 .isotone-note-editing .isotone-note-hit,
@@ -209,7 +209,7 @@ ${FEEDBACK_LAYOUT_CSS}
 .isotone-chip button { display: grid; place-items: center; flex: none; width: 16px; height: 16px; border-radius: 3px; background: transparent; box-shadow: none; }
 .isotone-root .isotone-textarea { --iso-textarea-inset: 8px; display: block; width: 100%; flex: none; height: 22px; min-height: calc(22px + var(--iso-textarea-inset)); max-height: calc(120px + var(--iso-textarea-inset)); overflow-y: auto; resize: none; margin-top: calc(0px - var(--iso-textarea-inset)); padding: calc(var(--iso-textarea-inset) + 1px) 1px 1px; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--iso-fg) 14%, transparent) transparent; color: var(--iso-fg); background: transparent; border: 0; border-radius: 0; font-size: 12px; line-height: 20px; box-shadow: none; cursor: text; }
 /* Text scrolls through the gap below tags, or the field inset without tags. */
-.isotone-root .isotone-context:empty + .isotone-textarea { --iso-textarea-inset: var(--iso-input-padding); }
+.isotone-root .isotone-context:empty + .isotone-entry .isotone-textarea { --iso-textarea-inset: var(--iso-input-padding); }
 .isotone-textarea::placeholder { color: var(--iso-faint); }
 .isotone-root .isotone-textarea:focus-visible { outline: none; }
 .isotone-textarea[data-scrolled='true'] { mask-image: linear-gradient(to bottom, transparent, #000 8px); }
@@ -220,11 +220,17 @@ ${FEEDBACK_LAYOUT_CSS}
 .isotone-pick::after, .isotone-send::after { content: ''; position: absolute; inset: -2px; border-radius: inherit; }
 .isotone-send { display: grid; place-items: center; margin-left: auto; flex: none; }
 .isotone-notice { font-size: 10px; color: var(--iso-muted); }
-.isotone-hint { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 14px; border-radius: 24px; background: var(--iso-bg); box-shadow: var(--iso-shadow); font-size: 11px; white-space: nowrap; transition: opacity 120ms ease; }
-/* Near the pointer the hint fades and lets the page underneath be hovered and pinned. */
-.isotone-root .isotone-hint[data-away='true'] { opacity: 0; pointer-events: none; }
-.isotone-hint button { display: flex; align-items: center; gap: 8px; border-radius: 14px; padding: 5px 9px; }
-.isotone-hint kbd { font: inherit; color: var(--iso-muted); }
+.isotone-entry { position: relative; display: flex; flex-direction: column; gap: 8px; }
+/* Select mode covers the field and says how to finish, next to the elements the user is picking. */
+.isotone-picking { position: absolute; inset: -4px; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 0 4px 0 8px; border-radius: 6px; background: var(--iso-well); cursor: default; animation: isotone-picking-in 140ms ease-out; }
+.isotone-picking > svg { flex: none; color: var(--iso-fg); }
+.isotone-picking p { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; margin: 0; }
+.isotone-picking span { font-size: 12px; line-height: 16px; color: var(--iso-fg); font-variant-numeric: tabular-nums; }
+.isotone-picking small { font-size: 10px; line-height: 14px; color: var(--iso-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.isotone-picking button { flex: none; display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 9px; }
+.isotone-picking kbd { font: inherit; color: var(--iso-muted); }
+@keyframes isotone-picking-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .isotone-picking { animation: none; } }
 .isotone-hover { position: fixed; pointer-events: none; border: 1px solid var(--iso-pick-line); background: var(--iso-pick-fill); border-radius: 5px; z-index: 2147483001; }
 .isotone-selected { border: 2px solid var(--iso-pick-line); background: var(--iso-pick-selected-fill); }
 @media (hover: hover) and (pointer: fine) {
@@ -234,7 +240,7 @@ ${FEEDBACK_LAYOUT_CSS}
   .isotone-seg:not(:disabled):hover { color: var(--iso-fg); }
   .isotone-seg[aria-pressed='false']:not(:disabled):hover { box-shadow: var(--iso-hover-shadow); }
   .isotone-thumb[aria-pressed='false']:not(:disabled):hover { box-shadow: var(--iso-thumb-hover-shadow); }
-  .isotone-root :where(.isotone-save, .isotone-secondary, .isotone-send, .isotone-hint button):not(:disabled):hover { background: var(--iso-control-hover-face); box-shadow: var(--iso-control-hover-shadow); }
+  .isotone-root :where(.isotone-save, .isotone-secondary, .isotone-send, .isotone-picking button):not(:disabled):hover { background: var(--iso-control-hover-face); box-shadow: var(--iso-control-hover-shadow); }
   .isotone-chip button:hover { color: var(--iso-fg); background: var(--iso-hover); }
   .isotone-x:hover { color: var(--iso-fg); }
   .isotone-x:hover::before { background: var(--iso-control-hover-face); }

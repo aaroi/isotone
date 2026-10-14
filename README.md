@@ -69,7 +69,8 @@ required. Coming from the previous package? See the [migration guide](docs/migra
 
 **Enter** sends a note and **Shift + Enter** adds a newline. Click a saved note
 to edit it. In select mode, click to pin or unpin, hold **Shift** to use the page
-normally, and press **Enter** or **Escape** to finish.
+normally, and press **Enter** or **Escape** to finish. You can also just start
+typing your note.
 
 ## Updates
 
