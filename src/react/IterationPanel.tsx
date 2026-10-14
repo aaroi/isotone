@@ -124,10 +124,6 @@ export function IterationPanel({
     null,
   );
   const [hoverRect, setHoverRect] = useState<Rect | null>(null);
-  // The select-mode hint steps aside while the pointer is near it, so it never
-  // covers an element the user wants to pin.
-  const [hintAway, setHintAway] = useState(false);
-  const hintRef = useRef<HTMLDivElement>(null);
   const [rects, setRects] = useState<(Rect & { selector: string })[]>([]);
   const [text, setText] = useState('');
   const [notes, setNotes] = useState<IterationNote[]>([]);
@@ -280,16 +276,6 @@ export function IterationPanel({
       pendingWrites.current--;
     };
   }
-  // Focus the composer after a pin without leaving select mode.
-  const keepPicking = useRef(false);
-  const focusWhilePicking = useCallback(() => {
-    cancelAnimationFrame(focusFrame.current);
-    focusFrame.current = requestAnimationFrame(() => {
-      keepPicking.current = true;
-      textareaRef.current?.focus();
-      keepPicking.current = false;
-    });
-  }, []);
   const focusComposer = useCallback(() => {
     cancelAnimationFrame(focusFrame.current);
     focusFrame.current = requestAnimationFrame(() =>
@@ -619,15 +605,6 @@ export function IterationPanel({
       cancelAnimationFrame(frame);
       const deferred = e.shiftKey;
       frame = requestAnimationFrame(() => {
-        const hint = hintRef.current?.getBoundingClientRect();
-        const reach = 48;
-        setHintAway(
-          !!hint &&
-            e.clientX > hint.left - reach &&
-            e.clientX < hint.right + reach &&
-            e.clientY > hint.top - reach &&
-            e.clientY < hint.bottom + reach,
-        );
         const el = deferred ? null : elementAt(e);
         setHoverRect(el ? el.getBoundingClientRect() : null);
       });
@@ -650,7 +627,6 @@ export function IterationPanel({
       e.preventDefault();
       e.stopImmediatePropagation();
       toggleTarget(el);
-      focusWhilePicking();
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === ' ') {
@@ -661,16 +637,18 @@ export function IterationPanel({
         if (!e.repeat) toggleTarget(el);
         return;
       }
-      if (e.key !== 'Escape' && e.key !== 'Enter') return;
-      // Clicking an element moves focus to the composer so you can type right
-      // away. Enter there sends what you wrote; with nothing written yet it
-      // finishes selecting, as the hint says.
-      if (
-        e.key === 'Enter' &&
-        e.composedPath().includes(textareaRef.current as EventTarget) &&
-        (e.shiftKey || e.isComposing || textareaRef.current?.value.trim())
-      )
+      // The composer is covered while selecting. Typing a character finishes
+      // selecting and lands in the composer, unless the page has an input focused.
+      const typing = e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey && !e.isComposing;
+      if (typing) {
+        const el = e.composedPath().find((node): node is Element => node instanceof Element);
+        if (el && !el.closest('[data-isotone]') && el.closest('input, textarea, select, [contenteditable]')) return;
+        setPicking(false);
+        setNotesOpen(true);
+        textareaRef.current?.focus();
         return;
+      }
+      if (e.key !== 'Escape' && e.key !== 'Enter') return;
       e.preventDefault();
       e.stopImmediatePropagation();
       setPicking(false);
@@ -684,12 +662,11 @@ export function IterationPanel({
       document.body.style.cursor = cursor;
       cancelAnimationFrame(frame);
       setHoverRect(null);
-      setHintAway(false);
       window.removeEventListener('mousemove', onMove, true);
       window.removeEventListener('click', onClick, true);
       window.removeEventListener('keydown', onKey, true);
     };
-  }, [picking, focusComposer, focusWhilePicking]);
+  }, [picking, focusComposer]);
   // Pointer events inside the dock stay inside it, so a host dropdown that closes
   // on an outside press is not dismissed by using the dock. React listens on the
   // shadow root too, and it registered first, so its handlers still run.
@@ -920,12 +897,13 @@ export function IterationPanel({
                 </p>
               )}
             </div>
+            <div className="isotone-entry">
             <textarea
               ref={textareaRef}
               value={text}
               aria-label="Feedback for the agent"
               onChange={(e) => setText(e.target.value)}
-              onFocus={() => { if (!keepPicking.current) setPicking(false); }}
+              onFocus={() => setPicking(false)}
               onPointerDown={() => setPicking(false)}
               onScroll={event => {
                 event.currentTarget.dataset.scrolled = String(event.currentTarget.scrollTop > 0);
@@ -975,6 +953,26 @@ export function IterationPanel({
                 <Icon name="send" size={14} />
               </button>
             </div>
+            {picking && (
+              <div className="isotone-picking">
+                <Icon name="pin" size={14} />
+                <p>
+                  <span>{targets.length ? `${targets.length} selected` : 'Click elements on the page'}</span>
+                  <small>Hold ⇧ to use the page normally</small>
+                </p>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setPicking(false);
+                    focusComposer();
+                  }}
+                >
+                  Done <kbd>esc</kbd>
+                </button>
+              </div>
+            )}
+            </div>
             </fieldset>
           </div>
         </section>
@@ -994,20 +992,6 @@ export function IterationPanel({
       className="isotone-root"
     >
       <div className="isotone-rail-track" aria-hidden="true" />
-      {picking && (
-        <div ref={hintRef} className="isotone-hint" data-isotone data-away={hintAway}>
-          <span>{targets.length} selected · click to add or remove · hold ⇧ to use the page</span>
-          <button
-            type="button"
-            onClick={() => {
-              setPicking(false);
-              focusComposer();
-            }}
-          >
-            Done <kbd>↵</kbd>
-          </button>
-        </div>
-      )}
       {picking &&
         [
           ...rects,

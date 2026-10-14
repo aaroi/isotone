@@ -30,7 +30,7 @@ function readPanel(): PanelState {
     open: root.dataset.open === 'true',
     variants: inPanel('.isotone-variants-panel')?.dataset.open === 'true',
     notes: inPanel('.isotone-notes-panel')?.dataset.open === 'true',
-    picking: Boolean(inPanel('.isotone-hint')),
+    picking: Boolean(inPanel('.isotone-picking')),
     pinned: Boolean(inPanel('.isotone-context .isotone-chip')),
   };
 }
@@ -214,7 +214,7 @@ function stepContent(step: Step, panel: PanelState, switched: boolean, agent: Ag
       };
       if (panel.picking) return {
         title: 'Leave a note',
-        body: <p>The card is selected. You can pick more, or press <Keys keys={['↵']} /> to stop selecting.</p>,
+        body: <p>The card is selected. You can pick more, or press <Keys keys={['esc']} /> when you're done.</p>,
         highlight: null,
       };
       if (panel.pinned) return {
