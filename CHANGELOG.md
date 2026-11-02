@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.1.0
+
 - Overlay variants switch in the browser in React projects on Vite 6 or later.
   The plugin loads every version of an overridden file once, so a component
   switch is a re-render, and a switch that changes a hook or other
