@@ -94,7 +94,8 @@ function printVariantHelp(io: CliIO): void {
   out(io, '                   [--group <id>] [--group-label <text>]');
   out(io, '                                           start one; --note copies route and element from a note,');
   out(io, '                                           --group makes it one alternative of a shared selector');
-  out(io, '  variant add <id> <file...>               copy real files into it, then edit the copies');
+  out(io, '  variant add <id> [--new] <file...>       copy real files into it, then edit the copies;');
+  out(io, '                                           --new starts a file the project does not have');
   out(io, '  variant path <id> <file>                 where the copy of <file> lives');
   out(io, '  variant rm <id> <file>                   stop overriding one file');
   out(io, '  variant group <id> <groupId> [--label <text>]');
@@ -197,13 +198,16 @@ function cmdNew(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
 }
 
 function cmdAdd(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const [id, ...files] = rest;
+  const { present: create, rest: args } = extractBoolFlag(rest, '--new');
+  const [id, ...files] = args;
   if (!id || files.length === 0) {
-    errOut(io, 'Usage: isotone variant add <id> <file...>');
+    errOut(io, 'Usage: isotone variant add <id> [--new] <file...>');
     return 1;
   }
-  for (const file of files) addVariantFile(opts, id, file);
-  out(io, `added ${files.length} file(s) to "${id}"`);
+  for (const file of files) addVariantFile(opts, id, file, { create });
+  out(io, create
+    ? `created ${files.length} new file(s) in "${id}"`
+    : `added ${files.length} file(s) to "${id}"`);
   return 0;
 }
 

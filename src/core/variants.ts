@@ -404,7 +404,8 @@ export interface OverlayVariant {
    * when the file was not hashable), so a later change to the real file can
    * be detected and three-way merged into the override.
    */
-  files: Record<string, { base: string | null }>;
+  /** `added`: a file the project does not have; the variant introduces it. */
+  files: Record<string, { base: string | null; added?: true }>;
 }
 
 /** An overlay variant as the endpoint lists it: the manifest plus what the
@@ -640,11 +641,30 @@ function overlayHint(v: OverlayVariantStatus): string {
 }
 
 /**
+ * The tab's live variant store, which the Vite plugin creates on the page
+ * in live mode (`window.__isotoneLive`). Only the part the panel uses.
+ */
+export interface LiveVariantSelection {
+  readonly active: string[];
+  /** Switch the tab; true when the page has to reload to show it. */
+  select(next: string[]): boolean;
+  subscribe(listener: () => void): () => void;
+  reload(): void;
+}
+
+function pageLiveStore(): LiveVariantSelection | null {
+  if (typeof window === 'undefined') return null;
+  const store = (window as { __isotoneLive?: LiveVariantSelection & { version?: number } }).__isotoneLive;
+  return store && store.version === 1 ? store : null;
+}
+
+/**
  * A `VariantsSource` over the overlay endpoint. One select axis per group on
  * the route; choosing an option replaces that group's active member and
- * posts the whole active set, and the server answers by hot-swapping the
- * files, so nothing here has to re-render anything. `refresh()` re-reads
- * the listing; the panel calls it when it opens.
+ * posts the whole active set. In live mode the tab's store switches the page
+ * at once (or asks for a reload), and the post makes the pick the server's
+ * default; otherwise the server answers the post by hot-swapping the files.
+ * `refresh()` re-reads the listing; the panel calls it when it opens.
  */
 export function createOverlayVariantsSource(cfg: {
   /** Absolute or same-origin URL of the variants endpoint. */
@@ -654,6 +674,8 @@ export function createOverlayVariantsSource(cfg: {
   storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
   /** The element knobs write their properties on. Default: `document.documentElement`. */
   knobRoot?: Parameters<typeof applyKnobValues>[2] | null;
+  /** The tab's live store. Default: the one the Vite plugin put on the page, if any. */
+  live?: LiveVariantSelection | null;
 }): VariantsSource & {
   refresh(): Promise<void>;
   readonly list: OverlayVariantsList | null;
@@ -666,10 +688,15 @@ export function createOverlayVariantsSource(cfg: {
   let activation: Promise<void> | null = null;
   let revision = 0;
   let refreshRevision = 0;
+  let reloadAfterPost = false;
   const listeners = new Set<() => void>();
   const emit = () => {
     for (const l of listeners) l();
   };
+  const live = cfg.live === undefined ? pageLiveStore() : cfg.live;
+  // The server's default can move the tab too (a CLI `variant use`).
+  live?.subscribe(emit);
+  const current = (): string[] => live?.active ?? intended ?? list?.active ?? [];
   const selects = (): SelectVariantAxis[] => (list ? overlayAxes(list, cfg.getRoute()) : []);
   const knobAxes = (): KnobAxis[] => knobsFor(list?.knobs, cfg.getRoute());
   const axes = (): VariantAxis[] => [...selects(), ...knobAxes()];
@@ -735,8 +762,15 @@ export function createOverlayVariantsSource(cfg: {
       if (sentRevision === revision) intended = null;
       emit();
     }
+    // The tab already shows the pick in its URL; a server render reads the
+    // set just posted, so the reload waits for it.
+    if (reloadAfterPost && live) {
+      reloadAfterPost = false;
+      live.reload();
+    }
   }
   function activate(active: string[]): void {
+    if (live?.select(active)) reloadAfterPost = true;
     intended = active;
     revision++;
     error = null;
@@ -784,7 +818,7 @@ export function createOverlayVariantsSource(cfg: {
     },
     getAxes: axes,
     getSelections() {
-      const active = new Set(intended ?? list?.active ?? []);
+      const active = new Set(current());
       const picks = Object.fromEntries(
         selects().map((axis) => [
           axis.id,
@@ -810,7 +844,7 @@ export function createOverlayVariantsSource(cfg: {
       // The group's members leave the set and the pick joins it; the other
       // groups' picks ride along untouched.
       const members = new Set(axis.options.map((o) => o.id));
-      const next = (intended ?? list?.active ?? []).filter((id) => !members.has(id));
+      const next = current().filter((id) => !members.has(id));
       if (value !== OVERLAY_DEFAULT_OPTION) next.push(value);
       activate(next);
     },

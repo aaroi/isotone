@@ -154,7 +154,8 @@ function isPlausibleVariant(v: unknown): v is OverlayVariant {
     typeof o.files === 'object' &&
     !Array.isArray(o.files) &&
     Object.entries(o.files).every(([key, entry]) => isSafeManifestKey(key) && entry && typeof entry === 'object' &&
-      ('base' in entry) && (entry.base === null || (typeof entry.base === 'string' && /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(entry.base))))
+      ('base' in entry) && (entry.base === null || (typeof entry.base === 'string' && /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(entry.base))) &&
+      (!('added' in entry) || entry.added === true))
   );
 }
 
@@ -192,6 +193,18 @@ function isStale(base: string | null, currentHash: string | null): boolean {
   return base === null || currentHash === null || currentHash !== base;
 }
 
+/** Every valid manifest, oldest first, without the per-file status that
+ *  {@link listVariants} hashes for. */
+export function readVariants(opts: VariantsStoreOptions): OverlayVariant[] {
+  const dir = variantsDir(opts);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => readVariant(opts, e.name))
+    .filter((v): v is OverlayVariant => v !== null)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
 export function listVariants(opts: VariantsStoreOptions): OverlayVariantStatus[] {
   const dir = variantsDir(opts);
   if (!existsSync(dir)) return [];
@@ -211,6 +224,12 @@ export function listVariants(opts: VariantsStoreOptions): OverlayVariantStatus[]
       const overrideAbs = join(dir, id, file);
       if (!existsSync(overrideAbs)) {
         missing.push(file);
+        continue;
+      }
+      // A file the variant adds is current for as long as the project still
+      // lacks it; once a real one appears, the two need a person.
+      if (entry.added) {
+        if (existsSync(join(root, file))) stale.push(file);
         continue;
       }
       const hashKey = `${entry.base?.length}:${file}`;
@@ -287,10 +306,16 @@ export function setVariantGroup(
   });
 }
 
+/**
+ * Copy a real file into the variant. With `create`, the file is one the
+ * project does not have yet: the variant gets an empty file at that path,
+ * and the plugin resolves imports of it while the variant is loaded.
+ */
 export function addVariantFile(
   opts: VariantsStoreOptions,
   id: string,
   file: string,
+  { create = false }: { create?: boolean } = {},
 ): OverlayVariant {
   return mutateVariants(opts, () => {
     const manifest = readVariant(opts, id);
@@ -300,9 +325,17 @@ export function addVariantFile(
     // Idempotent: a file already tracked keeps its override and its base
     // untouched. Re-adding is a no-op, not a refresh (sync is how you refresh).
     if (Object.hasOwn(manifest.files, key)) return manifest;
-    if (!existsSync(sourceAbs)) throw new Error(`"${file}" does not exist`);
     const destAbs = join(variantDir(opts, id), key);
     if (!staysInside(variantDir(opts, id), destAbs)) throw new Error('Override path escapes the variant directory');
+    if (create) {
+      if (existsSync(sourceAbs)) throw new Error(`"${file}" already exists; add it without --new`);
+      mkdirSync(dirname(destAbs), { recursive: true });
+      if (!existsSync(destAbs)) writeFileSync(destAbs, '');
+      manifest.files = { ...manifest.files, [key]: { base: null, added: true } };
+      writeVariant(opts, manifest);
+      return manifest;
+    }
+    if (!existsSync(sourceAbs)) throw new Error(`"${file}" does not exist. Use --new for a file the variant adds.`);
     mkdirSync(dirname(destAbs), { recursive: true });
     writeFileSync(destAbs, readFileSync(sourceAbs));
     manifest.files = { ...manifest.files, [key]: { base: blobOf(sourceAbs) } };
@@ -515,6 +548,12 @@ export function syncVariant(
     for (const [file, entry] of Object.entries(manifest.files)) {
       const currentAbs = join(root, file);
       const overrideAbs = join(vDir, file);
+      if (entry.added) {
+        // Nothing to merge into; a real file that appeared meanwhile is a
+        // conflict for a person to settle.
+        (existsSync(currentAbs) ? conflicts : unchanged).push(file);
+        continue;
+      }
       const currentHash = currentBlob(currentAbs);
 
       if (!isStale(entry.base, currentHash)) {

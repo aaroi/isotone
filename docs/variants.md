@@ -7,7 +7,9 @@ panel's Variants tab. Two host shapes:
 A variant is a directory under `.isotone/variants/<id>/` holding copies
 of source files at their repo-relative paths plus a `variant.json`
 manifest. While the variant is active, the plugin serves the copy in place
-of the real file. Variants that override the same files, or share a
+of the real file. In a React project on Vite 6 or later the browser loads
+every version up front and switches between them itself (see
+[live switching](#live-switching)). Variants that override the same files, or share a
 `--group`, are alternatives of one decision and appear as one selector with
 Default and each option; unrelated variants get their own selectors and can
 be active at the same time. A selector shows only on the variant's route;
@@ -144,10 +146,58 @@ variant picks, as `Knobs: Fade starts 40% (fade-from)` with a `knobs`
 payload of `fade-from:40`; the agent writes the number into the source and
 into the knob file's `defaultValue`.
 
-## What live switching needs from the host
+## Live switching
 
-A switch is delivered as a Vite hot update, so it swaps in place exactly
-where an edit to that file would.
+In a React project on Vite 6 or later, the plugin serves each overridden
+script as a small dispatcher module that imports every version of the file:
+the real one as `<file>?isotone=_base` and each variant's copy as
+`<file>?isotone=<id>`. Each export becomes one binding, decided in the
+browser:
+
+- A component becomes a wrapper that renders the active version. A switch
+  re-renders it, and state outside it survives.
+- A value that is identical in every version passes through.
+- Anything else (a hook, a helper function, a constant object, a context) is
+  fixed when the page loads, because React cannot swap a hook under a mounted
+  component. A switch that changes one reloads the page.
+
+Every copy of a file defines its functions and objects afresh, so a copied
+file that exports a hook or helper reloads on every switch even when that
+export is unchanged. Keep a variant's copies to files that export only
+components, and move shared helpers into files the variant leaves alone.
+
+The selection belongs to the tab. Picking an option writes it to the URL as
+`?v=<group>:<variant>`, in the same grammar as host variants, and the URL
+keeps it through client-side navigation, so a copied link opens the same
+variant. A tab without `?v=` shows `.isotone/active.json`, and the panel
+writes each pick there too, as the default for new tabs and for the agent.
+Two tabs with different `?v=` values show different variants side by side.
+
+A variant can add a file the project does not have:
+`isotone variant add <id> --new <file>` starts an empty one. Import it
+relatively, or through an alias whose last path segments name it.
+
+`variants: { live: false }` turns this off and switches by swapping whole
+files over HMR, which is also what non-React hosts, CSS files, Vite 5 and
+`vite build` use. Files the plugin serves whole even in live mode: route
+modules (a default export beside `loader`, `action`, `meta` and similar,
+which the router's plugin reads one by one), and files whose exports it
+cannot list (`export *`, destructured exports).
+
+**Server rendering.** The server renders from `.isotone/active.json`, since
+it cannot tell which tab a request is for. A component mismatch between the
+server and the tab hydrates from the server's version and switches right
+after. When a link opens a tab whose `?v=` differs from the server in a
+fixed export, the tab saves its set as the default and reloads once. A
+reload in such a tab leaves the default alone and hydrates with a
+recoverable mismatch instead, so two tabs never take the server back and
+forth.
+
+## What whole-file switching needs from the host
+
+Without live switching (or for a file it serves whole), a switch is
+delivered as a Vite hot update, so it swaps in place exactly where an edit to
+that file would.
 
 - **Framework HMR support.** Keep the host's Vite framework plugin. React uses
   Fast Refresh through `@vitejs/plugin-react` or its framework wrapper; Vue and
