@@ -9,7 +9,15 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
 // `normalizePath` is a plain function, so importing it as a value does not
 // pull vite's nominal `Plugin` type into the structural return type below.
-import { type HmrContext, normalizePath, type Plugin, type ResolvedConfig } from 'vite';
+import {
+  type DevEnvironment,
+  type EnvironmentModuleNode,
+  type HmrContext,
+  type HotUpdateOptions,
+  normalizePath,
+  type Plugin,
+  type ResolvedConfig,
+} from 'vite';
 
 import { ensureDirIgnored, ensureFileIgnored, notesResponse, NOTES_ENDPOINT } from '../store';
 import type { RouteGateOptions } from '../core/index';
@@ -18,18 +26,32 @@ import type { IterationTheme } from '../react/theme';
 import { readBundle } from '../standalone/bundle';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../update';
 import { checkOrigin, readNodeJson, sendFailure } from '../server/http';
-import { VARIANTS_ENDPOINT } from '../core/variants';
+import { type OverlayVariant, overlayGroups, VARIANTS_ENDPOINT } from '../core/variants';
 import {
   ACTIVE_FILE,
   listVariants,
   overrideSourcePath,
   readActive,
   readVariant,
+  readVariants,
   resolveOverride,
+  variantDir,
   variantsDir,
   variantsResponse,
   type VariantsStoreOptions,
 } from '../variants-store';
+import { isRouteModule, scanExports } from './exports';
+import {
+  ACTIVE_EVENT,
+  BASE_VERSION,
+  dispatcherModule,
+  LIVE_MODULE,
+  type LiveConfig,
+  liveRuntimeModule,
+  liveStoreScript,
+  RESOLVED_LIVE_MODULE,
+  VERSION_QUERY,
+} from './live';
 
 export interface IterationViteOptions {
   /** Inject the bundled panel. false keeps endpoints and variants for a manual mount. */
@@ -72,6 +94,14 @@ export interface IterationViteOptions {
          *  default: the files are the reviewable artefact and commit with
          *  the change they propose. */
         ignored?: boolean;
+        /**
+         * Switch variants in the browser instead of recompiling files. Every
+         * version of an overridden script is loaded once, components switch
+         * by re-rendering, and the selection is kept in the tab's `?v=`.
+         * On by default in a React project on Vite 6 or later; `false` swaps
+         * whole files over HMR as before.
+         */
+        live?: boolean;
       };
 }
 
@@ -115,6 +145,16 @@ const MANIFEST = 'variant.json';
  */
 const SPECIAL_QUERY = /[?&](raw|url|inline|no-inline|worker|sharedworker|html-proxy)(?:[&=]|$)/;
 
+/** Element type comparisons, which a component wrapper would break. */
+const COMPARES_TYPES = /\.type\s*[!=]==?|[!=]==?\s*[\w$.]+\.type\b/;
+
+/** The version a module id names (`?isotone=<id>`), or null for any other module. */
+function versionOfId(id: string | null): string | null {
+  const at = id?.indexOf('?') ?? -1;
+  if (!id || at < 0) return null;
+  return new URLSearchParams(id.slice(at + 1)).get(VERSION_QUERY);
+}
+
 /** `dir` itself or a path below it; never a sibling whose name merely
  *  starts the same (`src-old` under `src`). */
 function isInside(dir: string, path: string): boolean {
@@ -156,8 +196,175 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
   const overrides = new Map<string, string | null>();
   // Real source paths activate() is reporting as changed right now. Their
   // hot update must go through, where an ordinary edit of an overridden
-  // real file is dropped (see handleHotUpdate).
-  const swapping = new Set<string>();
+  // real file is dropped (see handleHotUpdate). Each path keeps the
+  // environments that have already seen the swap: Vite 6 and later ask every
+  // environment about one change, the browser first and the server after.
+  const swapping = new Map<string, Set<string>>();
+
+  // Live mode (see ./live.ts). Decided in configureServer, where the server's
+  // environments show which Vite this is.
+  let live = false;
+  let hasReact = false;
+  let ssrHost = false;
+  let manifests: OverlayVariant[] | null = null;
+  let byFile: Map<string, string[]> | null = null;
+  let addedFiles: Map<string, string[]> | null = null;
+  // The export names each dispatcher was written with, by real path. A
+  // version whose names change needs a new dispatcher, which is a reload.
+  const dispatched = new Map<string, string>();
+  let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const readManifests = (): OverlayVariant[] => {
+    manifests ??= readVariants(vopts);
+    return manifests;
+  };
+  /** Variant ids that have a copy of each file, by forward-slash absolute path. */
+  const versionsByFile = (): Map<string, string[]> => {
+    if (byFile) return byFile;
+    byFile = new Map();
+    for (const variant of readManifests()) {
+      for (const key of Object.keys(variant.files)) {
+        const path = normalizePath(join(vopts.root, key));
+        byFile.set(path, [...(byFile.get(path) ?? []), variant.id]);
+      }
+    }
+    return byFile;
+  };
+  /** Files only variants have, keyed by their path without an extension. */
+  const filesOnlyInVariants = (): Map<string, string[]> => {
+    if (addedFiles) return addedFiles;
+    addedFiles = new Map();
+    for (const path of versionsByFile().keys()) {
+      if (existsSync(path)) continue;
+      const stem = path.replace(/\.[cm]?[jt]sx?$/, '');
+      addedFiles.set(stem, [...(addedFiles.get(stem) ?? []), path]);
+    }
+    return addedFiles;
+  };
+  const forgetManifests = () => {
+    manifests = null;
+    byFile = null;
+    addedFiles = null;
+    overrides.clear();
+  };
+  const groupsOf = (list: OverlayVariant[]): LiveConfig['groups'] =>
+    overlayGroups(list).map((group) => ({ id: group.id, members: group.members.map((m) => m.id) }));
+  const liveConfig = (): LiveConfig => ({
+    groups: groupsOf(readManifests()),
+    active: currentActive(),
+    ssr: ssrHost,
+    endpoint: VARIANTS_ENDPOINT,
+  });
+  const overrideOf = (id: string, path: string): string | null => {
+    const key = normalizePath(relative(vopts.root, path));
+    const manifest = readManifests().find((v) => v.id === id);
+    if (!manifest || !Object.hasOwn(manifest.files, key)) return null;
+    const file = join(variantDir(vopts, id), key);
+    return existsSync(file) ? file : null;
+  };
+
+  /**
+   * How to dispatch `path`, or null to serve it whole: a script with at
+   * least one variant copy, whose every version lists its exports plainly,
+   * and which is not a route module a framework reads export by export.
+   */
+  const dispatchPlan = (path: string): { key: string; versions: (string | null)[]; names: string[] } | null => {
+    if (!/\.[cm]?[jt]sx?$/.test(path)) return null;
+    const ids = versionsByFile().get(path);
+    if (!ids?.length) return null;
+    const versions: (string | null)[] = [];
+    const names = new Set<string>();
+    const sources: [string | null, string][] = [];
+    if (existsSync(path)) sources.push([null, path]);
+    for (const id of ids) {
+      const file = overrideOf(id, path);
+      if (file) sources.push([id, file]);
+    }
+    for (const [id, file] of sources) {
+      const code = readFileSync(file, 'utf8');
+      // Code that compares element types (`child.type === Tab`) would see
+      // the wrapper on one side and its own component on the other.
+      if (COMPARES_TYPES.test(code)) return null;
+      const found = scanExports(code);
+      if (!found || isRouteModule(found)) return null;
+      for (const name of found) names.add(name);
+      versions.push(id);
+    }
+    // A file without exports runs for its side effects (an entry, a
+    // registration); loading every version would run them all.
+    if (versions.length === 0 || names.size === 0) return null;
+    return { key: normalizePath(relative(vopts.root, path)), versions, names: [...names].sort() };
+  };
+  const namesChanged = (path: string): boolean => {
+    const plan = dispatchPlan(path);
+    return !plan || plan.names.join(',') !== dispatched.get(path);
+  };
+  let reloadPage: () => void = () => {};
+  const swapWaiters = new Set<() => void>();
+
+  /**
+   * Which modules a file change updates in one environment (`null`: Vite 5,
+   * which asks once for all of them). `undefined` lets Vite decide.
+   */
+  const hotModules = <M extends { id: string | null }>(
+    changed: string,
+    modulesOf: (file: string) => Iterable<M> | undefined,
+    env: string | null,
+  ): M[] | undefined => {
+    if (!variantsOptions) return undefined;
+    const client = env === null || env === 'client';
+    // The module graph keys files by their forward-slash form, which is
+    // what `join` produces on POSIX and not on Windows.
+    if (isInside(vDir, changed)) {
+      overrides.clear();
+      const hit = overrideSourcePath(vopts, changed);
+      // The manifest, or a file directly in the variants dir: nothing the
+      // browser has loaded. The panel re-lists variants when it opens.
+      if (!hit || hit.file === MANIFEST) return [];
+      const source = normalizePath(join(vopts.root, hit.file));
+      // Live: the copy has a module of its own; update just that one.
+      if (live && client && dispatched.has(source)) {
+        if (namesChanged(source)) {
+          reloadPage();
+          return [];
+        }
+        return [...(modulesOf(source) ?? [])].filter((m) => versionOfId(m.id) === hit.id);
+      }
+      if (!currentActive().includes(hit.id)) return [];
+      // The browser holds the real file's URL, so the override's edit has
+      // to be delivered as if the real file changed.
+      return [...(modulesOf(source) ?? [])];
+    }
+    // A change activate() reported.
+    const seen = swapping.get(changed);
+    let swap = false;
+    if (seen) {
+      if (env === null) {
+        swapping.delete(changed);
+        swap = true;
+      } else if (!seen.has(env)) {
+        seen.add(env);
+        swap = true;
+        for (const check of [...swapWaiters]) check();
+      }
+    }
+    const path = normalizePath(changed);
+    if (live && client && dispatched.has(path)) {
+      // The dispatcher already holds every version; the tab switched itself.
+      if (swap) return [];
+      if (namesChanged(path)) {
+        reloadPage();
+        return [];
+      }
+      return [...(modulesOf(path) ?? [])].filter((m) => versionOfId(m.id) === BASE_VERSION);
+    }
+    // Let Vite compute the swap's update as usual.
+    if (swap) return undefined;
+    // The real source of an overridden file: the browser is showing the
+    // override, so there is nothing to update from this edit.
+    if (overridable(changed) && overrideFor(currentActive(), changed)) return [];
+    return undefined;
+  };
 
   const currentActive = (): string[] => {
     // A build takes its set from the environment: `ISOTONE_VARIANT=a,b`.
@@ -209,40 +416,80 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
       };
       vDir = variantsDir(vopts);
       activeFile = join(vopts.root, ACTIVE_FILE);
+      hasReact = (config.plugins ?? []).some((p) => /react/i.test(p.name));
+      ssrHost = config.appType !== 'spa' && config.appType !== 'mpa';
+      forgetManifests();
     },
-    load(id) {
+    async resolveId(source: string, importer: string | undefined, opts: { ssr?: boolean; isEntry?: boolean } = {}) {
+      if (!variantsOptions) return null;
+      if (source === LIVE_MODULE) return RESOLVED_LIVE_MODULE;
+      if (!importer) return null;
+      // A dispatcher's own imports, `./file.tsx?isotone=<id>`: resolved here
+      // so a version of a file only variants have still has an id.
+      const marker = source.indexOf(`?${VERSION_QUERY}=`);
+      if (live && marker > 0 && source.startsWith('./')) {
+        const dir = dirname(importer.replace(/[?#].*$/, ''));
+        return normalizePath(resolve(dir, source.slice(0, marker))) + source.slice(marker);
+      }
+      // A file a variant adds, imported by variant code. Vite's resolver
+      // cannot find it on disk, so answer with the path the variant gives it.
+      const added = filesOnlyInVariants();
+      if (added.size === 0 || source.startsWith('\0')) return null;
+      const bare = source.replace(/[?#].*$/, '');
+      const leaf = bare.slice(bare.lastIndexOf('/') + 1).replace(/\.[cm]?[jt]sx?$/, '');
+      const candidates = [...added.entries()].filter(([stem]) =>
+        stem.endsWith(`/${leaf}`) || stem.endsWith(`/${leaf}/index`));
+      if (candidates.length === 0) return null;
+      const resolved = await this.resolve(source, importer, { ...opts, skipSelf: true });
+      if (resolved) return resolved;
+      const importerPath = importer.replace(/[?#].*$/, '');
+      const target = bare.startsWith('.') ? normalizePath(resolve(dirname(importerPath), bare)).replace(/\.[cm]?[jt]sx?$/, '') : null;
+      // A relative import names the file exactly; an aliased one (`@/x/y`)
+      // is matched on everything after its first segment.
+      const tail = bare.split('/').slice(1).join('/').replace(/\.[cm]?[jt]sx?$/, '');
+      const hits = candidates.filter(([stem]) => target
+        ? stem === target || stem === `${target}/index`
+        : tail !== '' && (stem.endsWith(`/${tail}`) || stem.endsWith(`/${tail}/index`)));
+      if (hits.length !== 1) return null;
+      const paths = hits[0]?.[1] ?? [];
+      return paths.length === 1 ? paths[0] : null;
+    },
+    load(id: string, opts?: { ssr?: boolean }) {
       if (!variantsOptions || SPECIAL_QUERY.test(id)) return null;
+      if (id === RESOLVED_LIVE_MODULE) return { code: liveRuntimeModule(liveConfig()), map: null };
       // `?v=<hash>`, `?t=<timestamp>`, `?import`: vite's own request
       // decorations, never part of the path on disk.
       const path = id.replace(/[?#].*$/, '');
       if (!overridable(path)) return null;
+      const query = id.slice(path.length).replace(/^\?/, '').replace(/#.*$/, '');
+      const version = live ? new URLSearchParams(query).get(VERSION_QUERY) : null;
+      if (version !== null) {
+        const from = version === BASE_VERSION ? (existsSync(path) ? path : null) : overrideOf(version, path);
+        return { code: from ? readFileSync(from, 'utf8') : 'export {};\n', map: null };
+      }
+      // The browser gets a dispatcher; a server render keeps the whole-file
+      // swap, since the server cannot know which tab it renders for.
+      if (live && !opts?.ssr && query === '') {
+        const plan = dispatchPlan(path);
+        if (plan) {
+          dispatched.set(path, plan.names.join(','));
+          const name = path.slice(path.lastIndexOf('/') + 1);
+          return { code: dispatcherModule(plan.key, name, plan.versions, plan.names), map: null };
+        }
+      }
       const override = overrideFor(currentActive(), path);
       if (!override) return null;
       return { code: readFileSync(override, 'utf8'), map: null };
     },
+    // Vite 6 and later call this once per environment and skip
+    // handleHotUpdate; Vite 5 only knows handleHotUpdate.
+    hotUpdate(this: { environment: DevEnvironment }, ctx: HotUpdateOptions): EnvironmentModuleNode[] | undefined {
+      const env = this.environment;
+      return hotModules(ctx.file, (f) => env.moduleGraph.getModulesByFile(f), env.name);
+    },
     handleHotUpdate(ctx: HmrContext) {
-      if (!variantsOptions) return;
-      const { file: changed, server } = ctx;
-      if (isInside(vDir, changed)) {
-        overrides.clear();
-        const hit = overrideSourcePath(vopts, changed);
-        // The manifest, or a file directly in the variants dir: nothing the
-        // browser has loaded. The panel re-lists variants when it opens.
-        if (!hit || hit.file === MANIFEST) return [];
-        if (!currentActive().includes(hit.id)) return [];
-        // The browser holds the real file's URL, so the override's edit has
-        // to be delivered as if the real file changed.
-        // The module graph keys files by their forward-slash form, which is
-        // what `join` produces on POSIX and not on Windows.
-        const source = normalizePath(join(vopts.root, hit.file));
-        return [...(server.moduleGraph.getModulesByFile(source) ?? [])];
-      }
-      // A change activate() reported: let Vite compute the update as usual.
-      if (swapping.delete(changed)) return;
-      // The real source of an overridden file: the browser is showing the
-      // override, so there is nothing to update from this edit.
-      if (overridable(changed) && overrideFor(currentActive(), changed)) return [];
-      return;
+      const { server } = ctx;
+      return hotModules(ctx.file, (f) => server.moduleGraph.getModulesByFile(f), null) as HmrContext['modules'] | undefined;
     },
     configureServer(server) {
       if (!isDev) return;
@@ -301,6 +548,34 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
         // would see the new set twice and switch nothing.
         activeIds = readActive(vopts);
 
+        // Live switching needs the host's React for the wrappers and Vite 6's
+        // per-environment hot updates, so the server render keeps its swap
+        // while the browser's dispatchers are left alone.
+        live = (variantsOptions.live ?? hasReact) && server.environments !== undefined;
+        const clientGraph = () => server.environments?.client?.moduleGraph ?? server.moduleGraph;
+        const signature = () => JSON.stringify(readManifests().map((v) => [v.id, v.group ?? '', Object.keys(v.files).sort()]));
+        let listed = live ? signature() : '';
+        // A dispatcher is written for one set of versions and names. When
+        // either changes, the browser needs new dispatchers, which a hot
+        // update cannot deliver: drop them and reload the page once.
+        reloadPage = () => {
+          if (reloadTimer) clearTimeout(reloadTimer);
+          reloadTimer = setTimeout(() => {
+            reloadTimer = null;
+            const graph = clientGraph();
+            // Files that were dispatchers, and files that have just gained a
+            // variant and still hold their plain transform.
+            const paths = new Set([...dispatched.keys(), ...versionsByFile().keys()]);
+            for (const path of paths) {
+              for (const mod of graph.getModulesByFile(path) ?? []) graph.invalidateModule(mod as never);
+            }
+            const runtime = graph.getModuleById(RESOLVED_LIVE_MODULE);
+            if (runtime) graph.invalidateModule(runtime as never);
+            dispatched.clear();
+            server.ws.send({ type: 'full-reload', path: '*' });
+          }, 50);
+        };
+
         /**
          * Switch the browser to the set `next` without reloading the page.
          * Every file overridden by a variant that entered or left the set
@@ -315,13 +590,13 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
          * hot-swapped and falls back to a reload for that one, exactly as
          * it would for a hand edit.
          */
-        const activate = (next: string[], removedFiles: string[] = []) => {
+        const activate = (next: string[], removedFiles: string[] = []): Promise<void> => {
           const prev = currentActive();
           const changed = [
             ...prev.filter((id) => !next.includes(id)),
             ...next.filter((id) => !prev.includes(id)),
           ];
-          if (changed.length === 0 && removedFiles.length === 0) return;
+          if (changed.length === 0 && removedFiles.length === 0) return Promise.resolve();
           activeIds = next;
           overrides.clear();
           const sources = new Set<string>(removedFiles.map((file) => join(vopts.root, file)));
@@ -331,12 +606,49 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
               sources.add(join(vopts.root, key));
             }
           }
+          const emitted: string[] = [];
           for (const source of sources) {
             const loaded = server.moduleGraph.getModulesByFile(normalizePath(source));
             if (!loaded || loaded.size === 0) continue;
-            swapping.add(source);
+            swapping.set(source, new Set());
+            emitted.push(source);
             server.watcher.emit('change', source);
           }
+          // Live tabs switch themselves; this tells the ones still on the
+          // server's default to follow it, once a reload would render it.
+          const settled = serverSawSwap(emitted);
+          if (live) void settled.then(() => server.ws.send({ type: 'custom', event: ACTIVE_EVENT, data: { active: next } }));
+          return settled;
+        };
+
+        /**
+         * Resolves once every server environment (an SSR render) has taken
+         * the swap of `files`, or after a second. A tab that reloads right
+         * after its POST would otherwise be rendered from the old files and
+         * fail to hydrate.
+         */
+        const serverSawSwap = (files: string[]): Promise<void> => {
+          const envs = Object.keys(server.environments ?? {}).filter((name) => name !== 'client');
+          if (!live || files.length === 0 || envs.length === 0) return Promise.resolve();
+          return new Promise<void>((done) => {
+            const check = () => {
+              const seen = files.every((file) => {
+                const by = swapping.get(file);
+                return !by || envs.every((env) => by.has(env));
+              });
+              if (!seen) return;
+              finish();
+            };
+            const timer = setTimeout(() => finish(), 1000);
+            const finish = () => {
+              clearTimeout(timer);
+              swapWaiters.delete(check);
+              // The update itself goes out after the hook that marked it.
+              setTimeout(done, 30);
+            };
+            swapWaiters.add(check);
+            check();
+          });
         };
 
         // The exclude helpers canonicalize through the filesystem, so the
@@ -370,12 +682,21 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
           (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined)).then((body) => {
             // connect strips the mount from `req.url`, which is the shape
             // variantsResponse routes on ("/", "/active?...").
-            const result = answer(res, () =>
-              variantsResponse(vopts, { method, url: req.url, body }),
-            );
-            if (result?.status === 200 && method === 'POST') {
+            let result: ReturnType<typeof variantsResponse>;
+            try {
+              result = variantsResponse(vopts, { method, url: req.url, body });
+            } catch (error) {
+              sendFailure(res, error);
+              return;
+            }
+            const send = () => { answer(res, () => result); };
+            if (result.status === 200 && method === 'POST') {
               const updated = result.body as { active: string[]; changedFiles?: string[] };
-              activate(updated.active, updated.changedFiles);
+              // Answer once the switch is in place, so the panel can reload
+              // straight into it.
+              activate(updated.active, updated.changedFiles).then(send, send);
+            } else {
+              send();
             }
           }).catch((error) => sendFailure(res, error));
         });
@@ -389,15 +710,38 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
         server.watcher.on('all', (_event: string, changed: string) => {
           const path = resolve(changed);
           if (path === activeFile) {
-            activate(readActive(vopts));
+            void activate(readActive(vopts));
           } else if (isInside(vDir, path)) {
             // Covers adds and unlinks, which handleHotUpdate never sees.
-            overrides.clear();
+            forgetManifests();
+            if (live) {
+              const now = signature();
+              if (now !== listed) {
+                listed = now;
+                reloadPage();
+              }
+            }
           }
         });
       }
 
-      if (options.panel === false) return;
+      // The tab's variant store has to exist before the app's modules run,
+      // so it rides in the document itself, with the server's current set.
+      const liveScript = () => (live ? liveStoreScript(liveConfig()) : null);
+      if (options.panel === false) {
+        if (!live) return;
+        server.middlewares.use((req, res, next) => {
+          if (!(req.headers.accept ?? '').includes('text/html')) {
+            next();
+            return;
+          }
+          delete req.headers['if-none-match'];
+          delete req.headers['if-modified-since'];
+          injectHtmlResponse(res, null, liveScript);
+          next();
+        });
+        return;
+      }
 
       // A self-contained bundle keeps the panel out of the host's dependency
       // graph and works in React, Vue, Svelte and plain Vite apps alike.
@@ -421,7 +765,7 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
         // gets 304 and never sees the panel. Ask for the full document.
         delete req.headers['if-none-match'];
         delete req.headers['if-modified-since'];
-        injectHtmlResponse(res, mountCode);
+        injectHtmlResponse(res, mountCode, liveScript);
         next();
       });
     },
@@ -485,7 +829,7 @@ function mountModuleSource(rule: RouteGateOptions, key: string, variants: boolea
   `;
 }
 
-function injectHtmlResponse(res: ServerResponse, code: string): void {
+function injectHtmlResponse(res: ServerResponse, code: string | null, head: () => string | null = () => null): void {
   if (INJECTED.has(res)) return;
   INJECTED.add(res);
 
@@ -555,9 +899,12 @@ function injectHtmlResponse(res: ServerResponse, code: string): void {
     buffering = false;
     const body = Buffer.concat(chunks).toString('utf8');
     if (body.includes('<html') && (body.includes('<head') || body.includes('</body>'))) {
-      const script = `<script type="module" data-isotone-inject>${code}</script>`;
+      const script = code === null ? '' : `<script type="module" data-isotone-inject>${code}</script>`;
+      // Classic, not a module: it runs during parsing, before any module.
+      const store = head();
+      const early = store ? `<script data-isotone-live>${store.replace(/<\/script/gi, '<\\/script')}</script>` : '';
       if (!res.headersSent) originalSetHeader('Cache-Control', 'no-store');
-      return originalEnd(withNativeFetch(injectIntoHead(body, script)), cb);
+      return originalEnd(withNativeFetch(injectIntoHead(body, `${early}${script}`)), cb);
     }
     return originalEnd(Buffer.concat(chunks), cb);
   }) as unknown as ServerResponse['end'];

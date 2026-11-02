@@ -301,3 +301,63 @@ describe('overlay activation races', () => {
     expect(store.getSelections().a).toBe('a');
   });
 });
+
+describe('overlay source over a live tab', () => {
+  const listing: OverlayVariantsList = {
+    active: [],
+    variants: ['a', 'b'].map((id) => ({ id, label: id, group: 'g', createdAt: '', files: {}, stale: [], missing: [] })),
+  };
+  const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+  function fakeLive(reloadFor: string[] = []) {
+    const listeners = new Set<() => void>();
+    const live = {
+      active: [] as string[],
+      select: vi.fn((next: string[]) => {
+        if (next.some((id) => reloadFor.includes(id))) return true;
+        live.active = next;
+        for (const l of listeners) l();
+        return false;
+      }),
+      subscribe: (l: () => void) => { listeners.add(l); return () => listeners.delete(l); },
+      reload: vi.fn(),
+    };
+    return live;
+  }
+
+  it('shows the tab selection at once and still tells the server', async () => {
+    const posts: string[][] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url, init?: RequestInit) => {
+      if (init?.method !== 'POST') return Response.json({ ...listing, active: ['b'] });
+      posts.push(JSON.parse(String(init.body)).active);
+      return Response.json({ active: posts.at(-1) });
+    }));
+    const live = fakeLive();
+    const source = createOverlayVariantsSource({ endpoint: '/variants', getRoute: () => '/', storage: null, knobRoot: null, live });
+    await source.refresh();
+    // The tab's own selection wins over the server's default.
+    expect(source.getSelections().g).toBe('default');
+    source.setSelection('g', 'a');
+    expect(live.select).toHaveBeenCalledWith(['a']);
+    expect(source.getSelections().g).toBe('a');
+    await settle();
+    expect(posts).toEqual([['a']]);
+    expect(live.reload).not.toHaveBeenCalled();
+  });
+
+  it('reloads once the server has the set, when the tab cannot switch in place', async () => {
+    let release!: (response: Response) => void;
+    vi.stubGlobal('fetch', vi.fn(async (_url, init?: RequestInit) => {
+      if (init?.method !== 'POST') return Response.json(listing);
+      return new Promise<Response>((resolve) => { release = resolve; });
+    }));
+    const live = fakeLive(['b']);
+    const source = createOverlayVariantsSource({ endpoint: '/variants', getRoute: () => '/', storage: null, knobRoot: null, live });
+    await source.refresh();
+    source.setSelection('g', 'b');
+    await settle();
+    expect(live.reload).not.toHaveBeenCalled();
+    release(Response.json({ active: ['b'] }));
+    await settle();
+    expect(live.reload).toHaveBeenCalledTimes(1);
+  });
+});

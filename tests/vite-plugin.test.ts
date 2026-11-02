@@ -800,3 +800,175 @@ describe('selector removal requests', () => {
     expect(hooks.load(source)).not.toBeNull();
   });
 });
+
+/* ── live variants ────────────────────────────────────────────────────── */
+
+interface LiveHooks extends Hooks {
+  resolveId(source: string, importer?: string): Promise<string | null>;
+  load(id: string, opts?: { ssr?: boolean }): { code: string } | null;
+  hotUpdate(this: { environment: { name: string; moduleGraph: { getModulesByFile: (f: string) => Set<{ id: string }> | undefined } } }, ctx: { file: string }): unknown[] | undefined;
+}
+
+/** A React project on Vite 6+: live switching turns itself on. */
+function livePlugin(root: string): { hooks: LiveHooks; server: FakeServer & { environments: unknown } } {
+  const hooks = iteration({}) as unknown as LiveHooks;
+  (hooks.configResolved as (c: unknown) => void)({
+    root, command: 'serve', assetsInclude: () => false, appType: 'spa',
+    plugins: [{ name: 'vite:react-babel' }],
+  });
+  const server = Object.assign(fakeServer(root), {
+    environments: { client: { moduleGraph: { getModulesByFile: vi.fn(), invalidateModule: vi.fn(), getModuleById: vi.fn() } } },
+  });
+  hooks.configureServer(server);
+  return { hooks, server };
+}
+
+describe('live variants', () => {
+  it('serves a dispatcher in the browser and keeps the whole-file swap for SSR', () => {
+    const { root, source } = tempProject();
+    writeActive({ root }, ['b']);
+    const { hooks } = livePlugin(root);
+    const dispatcher = hooks.load(source)?.code ?? '';
+    expect(dispatcher).toContain('"./Button.tsx?isotone=_base"');
+    expect(dispatcher).toContain('"./Button.tsx?isotone=b"');
+    expect(dispatcher).toContain('export { __e0 as label };');
+    expect(hooks.load(`${source}?isotone=_base`)?.code).toContain('"real"');
+    expect(hooks.load(`${source}?isotone=b`)?.code).toContain('variant b');
+    expect(hooks.load(source, { ssr: true })?.code).toContain('variant b');
+    // The runtime module imports the host's own React.
+    expect(hooks.load('\0isotone-live')?.code).toContain(`import * as React from 'react';`);
+  });
+
+  it('stays off without React, and on Vite 5', () => {
+    const { root, source } = tempProject();
+    writeActive({ root }, ['b']);
+    const plain = plugin(root, 'serve');
+    plain.configureServer(fakeServer(root));
+    expect(plain.load(source)?.code).toContain('variant b');
+  });
+
+  it('swaps a route module whole, since its framework reads the exports', () => {
+    const { root } = tempProject();
+    const route = join(root, 'src', 'route.tsx');
+    writeFileSync(route, 'export async function loader() {}\nexport default function Page() {}\n');
+    execFileSync('git', ['add', '.'], { cwd: root });
+    createVariant({ root }, { id: 'r' });
+    addVariantFile({ root }, 'r', 'src/route.tsx');
+    const { hooks } = livePlugin(root);
+    expect(hooks.load(route)).toBeNull();
+  });
+
+  it('resolves a file only a variant has, relative or aliased', async () => {
+    const { root } = tempProject();
+    createVariant({ root }, { id: 'n' });
+    addVariantFile({ root }, 'n', 'src/parts/NewThing.tsx', { create: true });
+    writeFileSync(join(variantDir({ root }, 'n'), 'src', 'parts', 'NewThing.tsx'), 'export function NewThing() {}\n');
+    const { hooks } = livePlugin(root);
+    (hooks as unknown as { resolve: unknown }).resolve = async () => null;
+    const resolveId = hooks.resolveId.bind(hooks as never);
+    const importer = `${join(root, 'src', 'Button.tsx')}?isotone=n`;
+    const added = join(root, 'src', 'parts', 'NewThing.tsx');
+    expect(await resolveId('./parts/NewThing', importer)).toBe(added);
+    expect(await resolveId('@/parts/NewThing', importer)).toBe(added);
+    expect(await resolveId('./parts/Missing', importer)).toBeNull();
+    expect(await resolveId('./NewThing.tsx?isotone=n', join(root, 'src', 'parts', 'NewThing.tsx')))
+      .toBe(`${added}?isotone=n`);
+    // Its dispatcher has no real version to import.
+    expect(hooks.load(added)?.code).not.toContain('_base');
+  });
+
+  it('updates only the edited version in the browser, and the swap only on the server', async () => {
+    const { root, source, override } = tempProject();
+    const { hooks, server } = livePlugin(root);
+    hooks.load(source);
+    const mods = new Set([{ id: source }, { id: `${source}?isotone=_base` }, { id: `${source}?isotone=b` }]);
+    const client = { name: 'client', moduleGraph: { getModulesByFile: () => mods } };
+    const ssr = { name: 'ssr', moduleGraph: { getModulesByFile: () => new Set([{ id: source }]) } };
+    expect(hooks.hotUpdate.call({ environment: client }, { file: override })).toEqual([{ id: `${source}?isotone=b` }]);
+    expect(hooks.hotUpdate.call({ environment: client }, { file: source })).toEqual([{ id: `${source}?isotone=_base` }]);
+
+    // A switch: the browser's dispatcher already has both versions, the
+    // server render gets Vite's usual update, and live tabs hear about it.
+    server.moduleGraph.getModulesByFile.mockImplementation((f: string) => (f === source ? new Set([{ id: f }]) : undefined));
+    await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] });
+    expect(server.watcher.emit).toHaveBeenCalledWith('change', source);
+    expect(hooks.hotUpdate.call({ environment: client }, { file: source })).toEqual([]);
+    expect(hooks.hotUpdate.call({ environment: ssr }, { file: source })).toBeUndefined();
+    expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: ['b'] } });
+  });
+
+  it('answers a switch once the server render has taken it', async () => {
+    const { root, source } = tempProject();
+    const { hooks, server } = livePlugin(root);
+    (server.environments as Record<string, unknown>).ssr = { moduleGraph: {} };
+    server.moduleGraph.getModulesByFile.mockImplementation((f: string) => (f === source ? new Set([{ id: f }]) : undefined));
+    let answered = false;
+    const pending = request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] }).then((r) => { answered = true; return r; });
+    await new Promise((r) => setTimeout(r, 60));
+    expect(answered).toBe(false);
+    const ssr = { name: 'ssr', moduleGraph: { getModulesByFile: () => new Set([{ id: source }]) } };
+    hooks.hotUpdate.call({ environment: ssr }, { file: source });
+    expect((await pending).status).toBe(200);
+  });
+
+  it('reloads the page when a version gains an export', async () => {
+    vi.useFakeTimers();
+    try {
+      const { root, source, override } = tempProject();
+      const { hooks, server } = livePlugin(root);
+      hooks.load(source);
+      writeFileSync(override, 'export const label = "variant b";\nexport const extra = 1;\n');
+      const client = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([{ id: source }]) } };
+      expect(hooks.hotUpdate.call({ environment: client }, { file: override })).toEqual([]);
+      vi.advanceTimersByTime(100);
+      expect(server.ws.send).toHaveBeenCalledWith({ type: 'full-reload', path: '*' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('serves files whole that have no exports or compare element types', () => {
+    const { root } = tempProject();
+    const entry = join(root, 'src', 'main.tsx');
+    const tabs = join(root, 'src', 'Tabs.tsx');
+    writeFileSync(entry, 'render();\n');
+    writeFileSync(tabs, 'export function Tab() {}\nexport function Tabs({ children }) { return children.filter((c) => c.type === Tab); }\n');
+    createVariant({ root }, { id: 'e' });
+    addVariantFile({ root }, 'e', 'src/main.tsx');
+    addVariantFile({ root }, 'e', 'src/Tabs.tsx');
+    const { hooks } = livePlugin(root);
+    expect(hooks.load(entry)).toBeNull();
+    expect(hooks.load(tabs)).toBeNull();
+  });
+
+  it('resolves a file a variant adds without live switching, for a build too', async () => {
+    const { root } = tempProject();
+    createVariant({ root }, { id: 'n' });
+    addVariantFile({ root }, 'n', 'src/NewThing.tsx', { create: true });
+    const hooks = plugin(root, 'build') as unknown as LiveHooks;
+    (hooks as unknown as { resolve: unknown }).resolve = async () => null;
+    expect(await hooks.resolveId.call(hooks as never, './NewThing', join(root, 'src', 'Button.tsx')))
+      .toBe(join(root, 'src', 'NewThing.tsx'));
+  });
+
+  it('drops the plain transform of a file that just gained a variant', () => {
+    vi.useFakeTimers();
+    try {
+      const { root, table } = tempProject();
+      const { server } = livePlugin(root);
+      const onAll = server.watcher.on.mock.calls.find((c) => c[0] === 'all')?.[1] as (e: string, f: string) => void;
+      const graph = (server.environments as { client: { moduleGraph: { getModulesByFile: ReturnType<typeof vi.fn>; invalidateModule: ReturnType<typeof vi.fn> } } }).client.moduleGraph;
+      const mod = { id: table };
+      graph.getModulesByFile.mockImplementation((f: string) => (f === table ? new Set([mod]) : undefined));
+      createVariant({ root }, { id: 't2' });
+      addVariantFile({ root }, 't2', 'src/Table.tsx');
+      onAll('add', join(variantDir({ root }, 't2'), 'variant.json'));
+      vi.advanceTimersByTime(100);
+      expect(graph.invalidateModule).toHaveBeenCalledWith(mod);
+      expect(server.ws.send).toHaveBeenCalledWith({ type: 'full-reload', path: '*' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+

@@ -35,11 +35,15 @@ they compare them:
 ```sh
 npx isotone variant new <id> --note <notePrefix>
 npx isotone variant add <id> <file...>
+npx isotone variant add <id> --new <file>
 npx isotone variant path <id> <file>
 ```
 
-Edit the copied file. Use `--group` for alternatives of the same decision and
-scope them to the note's route. `variant use <id>` previews one; promote it only
+Edit the copied file. `--new` starts a file the project does not have yet.
+Where you can, copy only files that export components. A copied file that
+exports a hook, helper or constant object makes every switch reload the page.
+Use `--group` for alternatives of the same decision and scope them to the
+note's route. `variant use <id>` previews one; promote it only
 when the reviewer chooses it. See [variants](docs/variants.md) for stale-file
 checks and promotion. A `[set-defaults]` note names the selected variants and
 knobs to make permanent. Removal requests remain notes until an agent changes

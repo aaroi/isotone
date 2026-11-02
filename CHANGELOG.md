@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Overlay variants switch in the browser in React projects on Vite 6 or later.
+  The plugin loads every version of an overridden file once, so a component
+  switch is a re-render, and a switch that changes a hook or other
+  non-component export reloads the page once. The pick lives in the tab's
+  `?v=`, so links reproduce it and two tabs can compare variants.
+  `variants: { live: false }` keeps whole-file HMR swaps.
+- `isotone variant add <id> --new <file>` lets a variant add a file the
+  project does not have.
+
 ## 1.0.10
 
 - Hosted demo with a first-visit tour, and Enter finishes selecting (#15)

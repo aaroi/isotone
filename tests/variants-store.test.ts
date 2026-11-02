@@ -658,3 +658,31 @@ describe('selector requests', () => {
     expect(listVariants(opts).map(v => v.id)).toEqual(['one']);
   });
 });
+
+describe('files a variant adds', () => {
+  it('starts an empty copy that stays current until the project gets the file', () => {
+    const { root, opts } = tempRepo();
+    createVariant(opts, { id: 'n' });
+    expect(() => addVariantFile(opts, 'n', 'src/New.tsx')).toThrow(/--new/);
+    expect(() => addVariantFile(opts, 'n', 'src/Button.tsx', { create: true })).toThrow(/already exists/);
+    addVariantFile(opts, 'n', 'src/New.tsx', { create: true });
+    expect(readVariant(opts, 'n')?.files['src/New.tsx']).toEqual({ base: null, added: true });
+    expect(readFileSync(join(variantDir(opts, 'n'), 'src', 'New.tsx'), 'utf8')).toBe('');
+    expect(listVariants(opts)[0]?.stale).toEqual([]);
+    expect(syncVariant(opts, 'n')).toEqual({ merged: [], conflicts: [], unchanged: ['src/New.tsx'] });
+
+    // Someone created the real file meanwhile: a person has to decide.
+    writeFileSync(join(root, 'src', 'New.tsx'), 'export {};\n');
+    expect(listVariants(opts)[0]?.stale).toEqual(['src/New.tsx']);
+    expect(syncVariant(opts, 'n').conflicts).toEqual(['src/New.tsx']);
+  });
+
+  it('promotes by creating the file', () => {
+    const { root, opts } = tempRepo();
+    createVariant(opts, { id: 'n' });
+    addVariantFile(opts, 'n', 'src/New.tsx', { create: true });
+    writeFileSync(join(variantDir(opts, 'n'), 'src', 'New.tsx'), 'export const n = 1;\n');
+    expect(promoteVariant(opts, 'n').files).toEqual(['src/New.tsx']);
+    expect(readFileSync(join(root, 'src', 'New.tsx'), 'utf8')).toBe('export const n = 1;\n');
+  });
+});
