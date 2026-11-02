@@ -323,8 +323,85 @@ describe('dispatcherModule', () => {
     const code = dispatcherModule('src/Picker.tsx', 'Picker.tsx', [null, 'picker-a'], ['Picker', 'default', 'delete']);
     expect(code).toContain(`import * as __v0 from "./Picker.tsx?isotone=_base";`);
     expect(code).toContain(`import * as __v1 from "./Picker.tsx?isotone=picker-a";`);
-    expect(code).toContain('export { __e0 as Picker };');
-    expect(code).toContain('export default __e1;');
+    // Component-shaped names exist before the module runs, for import cycles.
+    expect(code).toContain('export function Picker(props, ref)');
+    expect(code).toContain('Picker = __f["Picker"];');
+    expect(code).toContain('export default function __isotoneDefault(props, ref)');
+    expect(code).toContain('__isotoneDefault = __f["default"];');
     expect(code).toContain('export { __e2 as delete };');
+  });
+
+  it('runs as a module, and a stand-in taken before it ran still renders', async () => {
+    const store = makeStore('/');
+    const binder = liveBinder(React as unknown as Parameters<typeof liveBinder>[0], store);
+    const code = dispatcherModule('src/Picker.tsx', 'Picker.tsx', [null, 'picker-a'], ['Picker', 'PAGE'])
+      .replace(/^import \{ live as __isotone \}.*$/m, 'const __isotone = globalThis.__liveBinder;')
+      .replace(/^import \* as __v0 .*$/m, 'const __v0 = globalThis.__v0;')
+      .replace(/^import \* as __v1 .*$/m, 'const __v1 = globalThis.__v1;');
+    const g = globalThis as Record<string, unknown>;
+    g.__liveBinder = binder;
+    g.__v0 = { Picker: () => createElement('b', null, 'base'), PAGE: 20 };
+    g.__v1 = { Picker: () => createElement('b', null, 'A'), PAGE: 20 };
+    const url = `data:text/javascript,${encodeURIComponent(code)}`;
+    const mod = await import(/* @vite-ignore */ url) as { Picker: React.FC; PAGE: number };
+    expect(mod.PAGE).toBe(20);
+    expect((mod.Picker as { displayName?: string }).displayName).toBe('Picker');
+    delete g.__liveBinder; delete g.__v0; delete g.__v1;
+  });
+});
+
+describe('the binder after the review', () => {
+  let root: Root;
+  let host: HTMLElement;
+  beforeEach(() => {
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+    delete (window as LiveWindow).__isotoneLive;
+  });
+  const bindAs = (key: string, store: LiveStore, ids: (string | null)[], modules: Record<string, unknown>[], names: string[]) =>
+    liveBinder(React as unknown as Parameters<typeof liveBinder>[0], store).file(key, ids, modules, names);
+
+  it('renders through the stand-in a cycle captured early', () => {
+    const store = makeStore('/');
+    const out = bindAs('src/Picker.tsx', store, [null, 'picker-a'], [
+      { Picker: () => createElement('b', null, 'base') },
+      { Picker: () => createElement('b', null, 'A') },
+    ], ['Picker']);
+    const render = (out as unknown as { __isotoneRender: (n: string, p: object) => unknown }).__isotoneRender;
+    function StandIn(props: object) { return render('Picker', props) as React.ReactElement; }
+    act(() => root.render(createElement(StandIn)));
+    expect(host.textContent).toBe('base');
+    act(() => { store.select(['picker-a']); });
+    expect(host.textContent).toBe('A');
+  });
+
+  it('treats an anonymous default export in a JSX file as a component', () => {
+    const store = makeStore('/');
+    const register = vi.spyOn(store, 'register');
+    bindAs('src/Card.tsx', store, [null, 'picker-a'], [{ default: () => null }, { default: () => null }], ['default']);
+    expect(register).toHaveBeenLastCalledWith('src/Card.tsx', [null, 'picker-a'], false);
+    bindAs('src/config.ts', store, [null, 'picker-a'], [{ default: () => 1 }, { default: () => 2 }], ['default']);
+    expect(register).toHaveBeenLastCalledWith('src/config.ts', [null, 'picker-a'], true);
+  });
+
+  it('picks by the order of the active set, as the server does', () => {
+    const store = makeStore('/?v=nav:picker-b,hooks:hook-x');
+    const out = bindAs('src/shared.ts', store, [null, 'hook-x', 'picker-b'], [{ v: 0 }, { v: 1 }, { v: 2 }].map((m) => ({ value: m })), ['value']);
+    expect((out.value as { v: number }).v).toBe(2);
+  });
+});
+
+describe('the store with a malformed query', () => {
+  afterEach(() => { delete (window as LiveWindow).__isotoneLive; });
+  it('ignores escapes it cannot decode', () => {
+    const store = makeStore('/?%E0=1&v=nav:picker-a');
+    expect(store.active).toEqual(['picker-a']);
+    store.select(['picker-b']);
+    expect(location.search).toBe('?%E0=1&v=nav:picker-b');
   });
 });

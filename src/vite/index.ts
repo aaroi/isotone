@@ -145,6 +145,9 @@ const MANIFEST = 'variant.json';
  */
 const SPECIAL_QUERY = /[?&](raw|url|inline|no-inline|worker|sharedworker|html-proxy)(?:[&=]|$)/;
 
+/** Element type comparisons, which a component wrapper would break. */
+const COMPARES_TYPES = /\.type\s*[!=]==?|[!=]==?\s*[\w$.]+\.type\b/;
+
 /** The version a module id names (`?isotone=<id>`), or null for any other module. */
 function versionOfId(id: string | null): string | null {
   const at = id?.indexOf('?') ?? -1;
@@ -278,12 +281,18 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
       if (file) sources.push([id, file]);
     }
     for (const [id, file] of sources) {
-      const found = scanExports(readFileSync(file, 'utf8'));
+      const code = readFileSync(file, 'utf8');
+      // Code that compares element types (`child.type === Tab`) would see
+      // the wrapper on one side and its own component on the other.
+      if (COMPARES_TYPES.test(code)) return null;
+      const found = scanExports(code);
       if (!found || isRouteModule(found)) return null;
       for (const name of found) names.add(name);
       versions.push(id);
     }
-    if (versions.length === 0) return null;
+    // A file without exports runs for its side effects (an entry, a
+    // registration); loading every version would run them all.
+    if (versions.length === 0 || names.size === 0) return null;
     return { key: normalizePath(relative(vopts.root, path)), versions, names: [...names].sort() };
   };
   const namesChanged = (path: string): boolean => {
@@ -414,11 +423,11 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
     async resolveId(source: string, importer: string | undefined, opts: { ssr?: boolean; isEntry?: boolean } = {}) {
       if (!variantsOptions) return null;
       if (source === LIVE_MODULE) return RESOLVED_LIVE_MODULE;
-      if (!live || !importer) return null;
+      if (!importer) return null;
       // A dispatcher's own imports, `./file.tsx?isotone=<id>`: resolved here
       // so a version of a file only variants have still has an id.
       const marker = source.indexOf(`?${VERSION_QUERY}=`);
-      if (marker > 0 && source.startsWith('./')) {
+      if (live && marker > 0 && source.startsWith('./')) {
         const dir = dirname(importer.replace(/[?#].*$/, ''));
         return normalizePath(resolve(dir, source.slice(0, marker))) + source.slice(marker);
       }
@@ -554,7 +563,10 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
           reloadTimer = setTimeout(() => {
             reloadTimer = null;
             const graph = clientGraph();
-            for (const path of dispatched.keys()) {
+            // Files that were dispatchers, and files that have just gained a
+            // variant and still hold their plain transform.
+            const paths = new Set([...dispatched.keys(), ...versionsByFile().keys()]);
+            for (const path of paths) {
               for (const mod of graph.getModulesByFile(path) ?? []) graph.invalidateModule(mod as never);
             }
             const runtime = graph.getModuleById(RESOLVED_LIVE_MODULE);
@@ -603,9 +615,10 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
             server.watcher.emit('change', source);
           }
           // Live tabs switch themselves; this tells the ones still on the
-          // server's default to follow it.
-          if (live) server.ws.send({ type: 'custom', event: ACTIVE_EVENT, data: { active: next } });
-          return serverSawSwap(emitted);
+          // server's default to follow it, once a reload would render it.
+          const settled = serverSawSwap(emitted);
+          if (live) void settled.then(() => server.ws.send({ type: 'custom', event: ACTIVE_EVENT, data: { active: next } }));
+          return settled;
         };
 
         /**

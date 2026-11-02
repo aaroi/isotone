@@ -13,7 +13,8 @@ describe('scanExports', () => {
       `import { x } from './x';`,
       `export function Picker() {}`,
       `export async function load() {}`,
-      `export const useProjects = () => {}, PAGE = 20;`,
+      `export const useProjects = () => {};`,
+      `export const PAGE = 20;`,
       `export let count = 0`,
       `export class Store {}`,
       `export abstract class Base {}`,
@@ -77,5 +78,23 @@ describe('isRouteModule', () => {
     // A nav config may export `links` without being a route.
     expect(isRouteModule(['links', 'NavItem'])).toBe(false);
     expect(isRouteModule(['default', 'Picker'])).toBe(false);
+  });
+});
+
+describe('scanExports after the review', () => {
+  it('serves several declarators whole instead of guessing', () => {
+    expect(scanExports('export const a = 1, b = 2;')).toBeNull();
+    expect(scanExports('export const a = 1,\n  b = 2;')).toBeNull();
+  });
+
+  it('does not take parameters or type arguments for exports', () => {
+    expect(scanExports('export const f = (x, y = 2) => x + y;')).toEqual(['f']);
+    expect(scanExports('export const C: FC<{ a: number, b: string }> = () => null;')).toEqual(['C']);
+    expect(scanExports("export const pair = ['a,b', 'c'];")).toEqual(['pair']);
+    expect(scanExports('export const m = new Map<string, number>();')).toEqual(['m']);
+  });
+
+  it('reads an export behind a one-line doc comment', () => {
+    expect(scanExports('/** The picker. */ export function Picker() {}')).toEqual(['Picker']);
   });
 });

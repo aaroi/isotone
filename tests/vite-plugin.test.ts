@@ -862,6 +862,7 @@ describe('live variants', () => {
     const { root } = tempProject();
     createVariant({ root }, { id: 'n' });
     addVariantFile({ root }, 'n', 'src/parts/NewThing.tsx', { create: true });
+    writeFileSync(join(variantDir({ root }, 'n'), 'src', 'parts', 'NewThing.tsx'), 'export function NewThing() {}\n');
     const { hooks } = livePlugin(root);
     (hooks as unknown as { resolve: unknown }).resolve = async () => null;
     const resolveId = hooks.resolveId.bind(hooks as never);
@@ -925,4 +926,49 @@ describe('live variants', () => {
       vi.useRealTimers();
     }
   });
+
+  it('serves files whole that have no exports or compare element types', () => {
+    const { root } = tempProject();
+    const entry = join(root, 'src', 'main.tsx');
+    const tabs = join(root, 'src', 'Tabs.tsx');
+    writeFileSync(entry, 'render();\n');
+    writeFileSync(tabs, 'export function Tab() {}\nexport function Tabs({ children }) { return children.filter((c) => c.type === Tab); }\n');
+    createVariant({ root }, { id: 'e' });
+    addVariantFile({ root }, 'e', 'src/main.tsx');
+    addVariantFile({ root }, 'e', 'src/Tabs.tsx');
+    const { hooks } = livePlugin(root);
+    expect(hooks.load(entry)).toBeNull();
+    expect(hooks.load(tabs)).toBeNull();
+  });
+
+  it('resolves a file a variant adds without live switching, for a build too', async () => {
+    const { root } = tempProject();
+    createVariant({ root }, { id: 'n' });
+    addVariantFile({ root }, 'n', 'src/NewThing.tsx', { create: true });
+    const hooks = plugin(root, 'build') as unknown as LiveHooks;
+    (hooks as unknown as { resolve: unknown }).resolve = async () => null;
+    expect(await hooks.resolveId.call(hooks as never, './NewThing', join(root, 'src', 'Button.tsx')))
+      .toBe(join(root, 'src', 'NewThing.tsx'));
+  });
+
+  it('drops the plain transform of a file that just gained a variant', () => {
+    vi.useFakeTimers();
+    try {
+      const { root, table } = tempProject();
+      const { server } = livePlugin(root);
+      const onAll = server.watcher.on.mock.calls.find((c) => c[0] === 'all')?.[1] as (e: string, f: string) => void;
+      const graph = (server.environments as { client: { moduleGraph: { getModulesByFile: ReturnType<typeof vi.fn>; invalidateModule: ReturnType<typeof vi.fn> } } }).client.moduleGraph;
+      const mod = { id: table };
+      graph.getModulesByFile.mockImplementation((f: string) => (f === table ? new Set([mod]) : undefined));
+      createVariant({ root }, { id: 't2' });
+      addVariantFile({ root }, 't2', 'src/Table.tsx');
+      onAll('add', join(variantDir({ root }, 't2'), 'variant.json'));
+      vi.advanceTimersByTime(100);
+      expect(graph.invalidateModule).toHaveBeenCalledWith(mod);
+      expect(server.ws.send).toHaveBeenCalledWith({ type: 'full-reload', path: '*' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
+

@@ -89,11 +89,15 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
   const replace = history.replaceState;
   const push = history.pushState;
 
+  // A malformed escape anywhere in the query must not stop the page.
+  const decode = (text: string): string => {
+    try { return decodeURIComponent(text.replace(/\+/g, ' ')); } catch { return text; }
+  };
   const readParam = (search: string): string | null => {
     for (const part of search.replace(/^\?/, '').split('&')) {
       const at = part.indexOf('=');
       const key = at < 0 ? part : part.slice(0, at);
-      if (decodeURIComponent(key) === PARAM) return decodeURIComponent((at < 0 ? '' : part.slice(at + 1)).replace(/\+/g, ' '));
+      if (decode(key) === PARAM) return decode(at < 0 ? '' : part.slice(at + 1));
     }
     return null;
   };
@@ -126,7 +130,7 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
     const kept = win.location.search.replace(/^\?/, '').split('&').filter((part) => {
       if (!part) return false;
       const at = part.indexOf('=');
-      return decodeURIComponent(at < 0 ? part : part.slice(0, at)) !== PARAM;
+      return decode(at < 0 ? part : part.slice(0, at)) !== PARAM;
     });
     if (value) kept.push(`${PARAM}=${encodeURIComponent(value).replace(/%3A/gi, ':').replace(/%2C/gi, ',')}`);
     return kept.length ? `?${kept.join('&')}` : '';
@@ -144,8 +148,10 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
   let explicit = fromUrl !== null;
   let reloading = false;
 
+  // The first id in the set that has this file, as the server's
+  // resolveOverride decides it.
   const versionOf = (ids: (string | null)[], set: string[]): string | null => {
-    for (const id of ids) if (id !== null && set.includes(id)) return id;
+    for (const id of set) if (ids.includes(id)) return id;
     return null;
   };
   const needsReload = (from: string[], to: string[]): boolean => {
@@ -281,12 +287,15 @@ export function liveBinder(
 
   const isClass = (value: unknown): boolean =>
     typeof value === 'function' && /^class[\s{]/.test(Function.prototype.toString.call(value));
-  const isComponent = (name: string, value: unknown): boolean => {
+  const isComponent = (name: string, value: unknown, jsx: boolean): boolean => {
     if (typeof value === 'function') {
       const proto = (value as { prototype?: { isReactComponent?: unknown } }).prototype;
       if (proto?.isReactComponent) return true;
       if (isClass(value)) return false;
-      return /^[A-Z]/.test(name === 'default' ? (value as { name?: string }).name ?? '' : name);
+      if (name !== 'default') return /^[A-Z]/.test(name);
+      const own = (value as { name?: string }).name ?? '';
+      // `export default () => …` in a JSX file is a component in practice.
+      return /^[A-Z]/.test(own) || (jsx && (own === '' || own === 'default'));
     }
     if (!value || typeof value !== 'object') return false;
     const tag = (value as { $$typeof?: unknown }).$$typeof;
@@ -298,12 +307,16 @@ export function liveBinder(
       // The version a selection shows: the active variant that has this
       // file, else the real file, else (a file only variants add) the first.
       const pick = (set: string[]): number => {
-        const hit = ids.findIndex((id) => id !== null && set.includes(id));
-        if (hit >= 0) return hit;
+        for (const id of set) {
+          const hit = ids.indexOf(id);
+          if (hit >= 0) return hit;
+        }
         const base = ids.indexOf(null);
         return base >= 0 ? base : 0;
       };
       const out: Record<string, unknown> = {};
+      const renders = new Map<string, (props: Record<string, unknown>, ref?: unknown) => unknown>();
+      const jsx = /x$/.test(key);
       let pinned = false;
       for (const name of names) {
         const values = modules.map((mod) => mod[name]);
@@ -313,7 +326,7 @@ export function liveBinder(
           continue;
         }
         const defined = values.filter((value) => value !== undefined);
-        if (defined.length > 0 && defined.every((value) => isComponent(name, value))) {
+        if (defined.length > 0 && defined.every((value) => isComponent(name, value, jsx))) {
           const render = (props: Record<string, unknown>, ref?: unknown) => {
             const index = React.useSyncExternalStore(
               store.subscribe,
@@ -324,6 +337,7 @@ export function liveBinder(
             if (component == null) return null;
             return React.createElement(component, ref == null ? props : { ...props, ref });
           };
+          renders.set(name, render);
           const wrapper = (refAsProp ? (props: Record<string, unknown>) => render(props) : React.forwardRef(render as (p: unknown, r: unknown) => unknown)) as Record<string, unknown>;
           const label = name === 'default'
             ? (defined[0] as { displayName?: string; name?: string }).displayName ?? (defined[0] as { name?: string }).name ?? 'Variant'
@@ -350,6 +364,18 @@ export function liveBinder(
         out[name] = values[pick(store.active)];
       }
       store.register(key, ids, pinned);
+      // The dispatcher's hoisted stand-ins render through this, for a module
+      // in an import cycle that took a component before the dispatcher ran.
+      Object.defineProperty(out, '__isotoneRender', {
+        value: (name: string, props: Record<string, unknown>, ref?: unknown) => {
+          const render = renders.get(name);
+          if (render) return render(props, ref);
+          const value = out[name];
+          return typeof value === 'function' || (value && typeof value === 'object')
+            ? React.createElement(value, ref == null ? props : { ...props, ref })
+            : null;
+        },
+      });
       return out;
     },
   };
@@ -388,12 +414,26 @@ export function dispatcherModule(
     const spec = `./${basename}?${VERSION_QUERY}=${id ?? BASE_VERSION}`;
     lines.push(`import * as __v${i} from ${JSON.stringify(spec)};`);
   });
+  // Component-shaped names (and the default) are function declarations, so
+  // they exist before this module runs: a module in an import cycle that
+  // reads one at its top level (`memo(Picker)`) gets a stand-in that renders
+  // the real binding. Each is reassigned to that binding once it is known.
+  const hoisted = (name: string) => name === 'default' || /^[A-Z][\w$]*$/.test(name);
+  const local = (name: string) => (name === 'default' ? '__isotoneDefault' : name);
+  for (const name of names.filter(hoisted)) {
+    const head = name === 'default' ? 'export default function __isotoneDefault' : `export function ${name}`;
+    lines.push(`${head}(props, ref) { return __f.__isotoneRender(${JSON.stringify(name)}, props, ref); }`);
+  }
   lines.push(
     `const __f = __isotone.file(${JSON.stringify(key)}, ${JSON.stringify(versions)}, [${versions.map((_, i) => `__v${i}`).join(', ')}], ${JSON.stringify(names)});`,
   );
   names.forEach((name, i) => {
+    if (hoisted(name)) {
+      lines.push(`${local(name)} = __f[${JSON.stringify(name)}];`);
+      return;
+    }
     lines.push(`const __e${i} = __f[${JSON.stringify(name)}];`);
-    lines.push(name === 'default' ? `export default __e${i};` : `export { __e${i} as ${name} };`);
+    lines.push(`export { __e${i} as ${name} };`);
   });
   lines.push('');
   return lines.join('\n');

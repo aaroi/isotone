@@ -179,10 +179,22 @@ relatively, or through an alias whose last path segments name it.
 
 `variants: { live: false }` turns this off and switches by swapping whole
 files over HMR, which is also what non-React hosts, CSS files, Vite 5 and
-`vite build` use. Files the plugin serves whole even in live mode: route
-modules (a default export beside `loader`, `action`, `meta` and similar,
-which the router's plugin reads one by one), and files whose exports it
-cannot list (`export *`, destructured exports).
+`vite build` use. In live mode the plugin still serves these files whole:
+
+- route modules (a default export beside `loader`, `action`, `meta` and
+  similar, which the router's plugin reads one by one);
+- files without exports, such as an entry, since every version would run;
+- files that compare element types (`child.type === Tab`), which a wrapper
+  would break;
+- files whose exports it cannot list (`export *`, destructuring, several
+  declarators in one `export const`).
+
+A file served whole, and every CSS file, follows `.isotone/active.json` in
+every tab, so it does not take part in per-tab selection. The browser also
+loads every version of a dispatched file, so a variant's copy runs even
+while its variant is off. A global stylesheet it imports applies on every
+tab, and a syntax error in it breaks pages that import the real file until
+it is fixed.
 
 **Server rendering.** The server renders from `.isotone/active.json`, since
 it cannot tell which tab a request is for. A component mismatch between the

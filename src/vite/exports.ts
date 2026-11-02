@@ -28,7 +28,8 @@ export function scanExports(code: string): string[] | null {
   const names = new Set<string>();
   const lines = code.split('\n');
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? '';
+    // A one-line block comment in front (`/** Doc */ export …`) is skipped.
+    const line = (lines[i] ?? '').replace(/^(?:\/\*.*?\*\/\s*)+/, '');
     if (!line.startsWith('export')) continue;
     const rest = line.slice('export'.length);
     if (rest !== '' && !/^[\s{*]/.test(rest)) continue; // `exported = 1`
@@ -75,11 +76,10 @@ export function scanExports(code: string): string[] | null {
       if (target.startsWith('{') || target.startsWith('[')) return null;
       const name = target.match(/^([A-Za-z_$][\w$]*)/)?.[1];
       if (!name) return null;
+      // Several declarators (`export const a = 1, b = 2`, possibly over
+      // lines) need a parser to list; serve such a file whole.
+      if (hasSecondDeclarator(target)) return null;
       names.add(name);
-      // `export const a = 1, b = 2` on one line.
-      for (const more of target.matchAll(/,\s*([A-Za-z_$][\w$]*)\s*(?::[^=,]+)?=/g)) {
-        if (more[1]) names.add(more[1]);
-      }
       continue;
     }
     return null;
@@ -91,4 +91,25 @@ export function scanExports(code: string): string[] | null {
 /** True for a module a route framework reads export by export. */
 export function isRouteModule(names: string[]): boolean {
   return names.includes('default') && names.some((name) => ROUTE_EXPORTS.has(name));
+}
+
+/**
+ * Whether a declaration line goes on to a second declarator: a comma outside
+ * brackets after its initializer starts, or a line that ends in one. Strings
+ * are blanked first so a comma inside one does not count.
+ */
+function hasSecondDeclarator(declaration: string): boolean {
+  const text = declaration
+    .replace(/\/\/.*$/, '')
+    .replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`/g, '""');
+  let depth = 0;
+  let initialized = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '(' || ch === '[' || ch === '{' || ch === '<') depth++;
+    else if (ch === ')' || ch === ']' || ch === '}' || (ch === '>' && text[i - 1] !== '=')) depth = Math.max(0, depth - 1);
+    else if (depth === 0 && ch === '=' && text[i + 1] !== '=' && text[i + 1] !== '>' && text[i - 1] !== '=') initialized = true;
+    else if (depth === 0 && ch === ',' && initialized) return true;
+  }
+  return depth === 0 && /,\s*$/.test(text);
 }
