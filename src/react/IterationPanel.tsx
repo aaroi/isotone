@@ -23,6 +23,7 @@ import { Icon } from './icons';
 import { useLayoutMotion } from './useLayoutMotion';
 import { useDockMotion } from './useDockMotion';
 import { UpdateNotice } from './UpdateNotice';
+import { MOTION } from './motion';
 
 export interface Rect {
   top: number;
@@ -55,6 +56,22 @@ export interface IterationPanelProps {
 const PULSE_MS = 2000;
 
 /**
+ * Where the composer floats while writing about pinned elements: the point
+ * that was clicked, kept relative to its element so it follows scrolling.
+ * x and y are the last known viewport point, for when the element is gone.
+ */
+interface Anchor {
+  selector: string;
+  dx: number;
+  dy: number;
+  x: number;
+  y: number;
+}
+/** Space between the clicked point and the floating composer, and its viewport margin. */
+const FLOAT_GAP = 12;
+const FLOAT_MARGIN = 8;
+
+/**
  * Pulse a node on the document's own clock. Every pulse starts at the timeline's
  * origin, so the launcher ring and every note dot beat together whenever they
  * appear, instead of each starting from its own mount time.
@@ -72,6 +89,28 @@ function syncPulse(spread: number) {
     ], { duration: PULSE_MS, iterations: Infinity, easing: 'ease-out' });
     pulse.startTime = 0;
   };
+}
+/** Keyboard use and reduced motion make the panel immediate. */
+function stillMotion(node: Element) {
+  return Boolean(node.closest('[data-instant="true"]')) ||
+    (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+/**
+ * Fade an element in once, when it mounts. A CSS animation would replay
+ * whenever the panel switches between keyboard and pointer use, since that
+ * toggles animations off and on again; an animation started here cannot.
+ * `data-still` on the element skips it.
+ */
+function fadeIn(node: HTMLElement | null) {
+  if (!node || typeof node.animate !== 'function' || node.dataset.still === 'true' || stillMotion(node)) return;
+  node.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: 'ease-out' });
+}
+/** The same, for a control whose surface stays put while its content arrives. */
+function fadeInContent(node: HTMLElement | null) {
+  if (!node || stillMotion(node)) return;
+  for (const child of node.children)
+    if (typeof child.animate === 'function')
+      child.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: 'ease-out' });
 }
 const dotPulse = syncPulse(6);
 const ringPulse = syncPulse(8);
@@ -119,7 +158,23 @@ export function IterationPanel({
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [picking, setPicking] = useState(false);
+  // Selecting that starts with the panel shows its cover at once, so the field
+  // underneath never shows through while the panel fades in.
+  const [pickingWithPanel, setPickingWithPanel] = useState(false);
   const [targets, setTargets] = useState<IterationElement[]>([]);
+  const targetsRef = useRef(targets);
+  targetsRef.current = targets;
+  // Set once an element is pinned: the composer leaves the dock and floats next to it.
+  const [anchor, setAnchor] = useState<Anchor | null>(null);
+  const anchorRef = useRef(anchor);
+  anchorRef.current = anchor;
+  const floating = anchor !== null;
+  const floatRef = useRef<HTMLDivElement>(null);
+  // The dock keeps the composer's height while it floats, so the panel stays put.
+  const slotHeight = useRef(0);
+  // Where the floating composer last was, so moving to a new pin glides there.
+  const lastFloat = useRef<{ left: number; top: number } | null>(null);
+  const floatNode = useRef<HTMLDivElement | null>(null);
   const [variantTarget, setVariantTarget] = useState<VariantReference | null>(
     null,
   );
@@ -178,7 +233,7 @@ export function IterationPanel({
     });
     observer.observe(field);
     return () => observer.disconnect();
-  }, [text, notesOpen, visible, hasContext]);
+  }, [text, notesOpen, visible, hasContext, floating]);
   useEffect(() => {
     if (!visible) {
       setHovered(false);
@@ -276,6 +331,16 @@ export function IterationPanel({
       pendingWrites.current--;
     };
   }
+  // Focus the composer after a pin without leaving select mode.
+  const keepPicking = useRef(false);
+  const focusWhilePicking = useCallback(() => {
+    cancelAnimationFrame(focusFrame.current);
+    focusFrame.current = requestAnimationFrame(() => {
+      keepPicking.current = true;
+      textareaRef.current?.focus({ preventScroll: true });
+      keepPicking.current = false;
+    });
+  }, []);
   const focusComposer = useCallback(() => {
     cancelAnimationFrame(focusFrame.current);
     focusFrame.current = requestAnimationFrame(() =>
@@ -287,6 +352,7 @@ export function IterationPanel({
     setNotesOpen(false);
     setVariantsOpen(false);
     setPicking(false);
+    setAnchor(null);
     setExpanded(false);
     setHovered(false);
     (previousFocus.current?.isConnected
@@ -294,17 +360,30 @@ export function IterationPanel({
       : fabRef.current
     )?.focus();
   }
-  function openInitial() {
+  /** A pointer opening feedback starts selecting; a keyboard opening goes straight to the field. */
+  function startFeedback(pointer: boolean) {
+    setNotesOpen(true);
+    if (pointer) {
+      cancelAnimationFrame(focusFrame.current);
+      setPickingWithPanel(!notesOpen);
+      setPicking(true);
+    } else focusComposer();
+  }
+  function openInitial(pointer: boolean) {
     previousFocus.current = document.activeElement as HTMLElement | null;
     setExpanded(true);
     if ((defaultTab === 'variants' || !notesAvailable) && variantsAvailable)
       setVariantsOpen(true);
-    else {
-      setNotesOpen(true);
-      focusComposer();
-    }
+    else startFeedback(pointer);
+  }
+  /** Put the composer back in the dock, keeping what was written and pinned. */
+  function dockComposer() {
+    setAnchor(null);
+    setPicking(false);
+    focusComposer();
   }
   function feedback(reference: VariantReference) {
+    setAnchor(null);
     setVariantTarget(reference);
     setNotesOpen(true);
     setExpanded(true);
@@ -368,6 +447,7 @@ export function IterationPanel({
     cancelEdit();
     setNotice('');
     setPicking(false);
+    setAnchor(null);
     focusComposer();
     try {
       const savedId = await store.saveNote(
@@ -398,6 +478,7 @@ export function IterationPanel({
     }
   }
   function beginEdit(note: IterationNote) {
+    setAnchor(null);
     setEditing(note);
     setText(note.feedback);
     setTargets(note.elements ?? (note.element ? [note.element] : []));
@@ -488,6 +569,7 @@ export function IterationPanel({
     if (draftRestored.current === draftKey) return;
     draftRestored.current = draftKey;
     restoringDraft.current = true;
+    setAnchor(null);
     setEditing(null);
     setText('');
     setTargets([]);
@@ -583,7 +665,8 @@ export function IterationPanel({
     if (!open || picking) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
-      if (editing) cancelEdit();
+      if (anchor) dockComposer();
+      else if (editing) cancelEdit();
       else closeAll();
     };
     window.addEventListener('keydown', onKey);
@@ -611,6 +694,7 @@ export function IterationPanel({
     };
     const toggleTarget = (el: Element) => {
       const target = describeIterationElement(elementAsNode(el));
+      const added = !targetsRef.current.some((t) => t.selector === target.selector);
       setTargets((prev) =>
         prev.some((t) => t.selector === target.selector)
           ? prev.filter((t) => t.selector !== target.selector)
@@ -618,6 +702,7 @@ export function IterationPanel({
             ? [...prev, target]
             : prev,
       );
+      return added ? target : null;
     };
     const onClick = (e: MouseEvent) => {
       // Shift passes the click through so the page can open menus and tabs first.
@@ -626,7 +711,19 @@ export function IterationPanel({
       if (!el) return;
       e.preventDefault();
       e.stopImmediatePropagation();
-      toggleTarget(el);
+      const added = toggleTarget(el);
+      // The composer comes to the element that was just pinned, ready for typing.
+      if (added) {
+        const r = el.getBoundingClientRect();
+        const pointed = e.detail > 0 || e.clientX !== 0 || e.clientY !== 0;
+        const x = pointed ? e.clientX : r.left;
+        const y = pointed ? e.clientY : r.bottom;
+        if (!anchorRef.current)
+          slotHeight.current = rootRef.current?.querySelector<HTMLElement>('.isotone-notes-panel .isotone-input')?.offsetHeight ?? 0;
+        setAnchor({ selector: added.selector, dx: x - r.left, dy: y - r.top, x, y });
+        setNotesOpen(true);
+        focusWhilePicking();
+      }
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === ' ') {
@@ -649,8 +746,21 @@ export function IterationPanel({
         return;
       }
       if (e.key !== 'Escape' && e.key !== 'Enter') return;
+      // The floating composer is not covered, so Enter there sends what is written.
+      const field = textareaRef.current;
+      if (
+        e.key === 'Enter' && anchorRef.current && field && !e.shiftKey &&
+        field.value.trim() && e.composedPath().includes(field)
+      )
+        return;
       e.preventDefault();
       e.stopImmediatePropagation();
+      // Enter keeps what was pinned. Escape cancels the selection: the pins go,
+      // what was written stays, and the composer returns to the dock.
+      if (e.key === 'Escape') {
+        setTargets([]);
+        setAnchor(null);
+      }
       setPicking(false);
       setNotesOpen(true);
       focusComposer();
@@ -666,7 +776,7 @@ export function IterationPanel({
       window.removeEventListener('click', onClick, true);
       window.removeEventListener('keydown', onKey, true);
     };
-  }, [picking, focusComposer]);
+  }, [picking, focusComposer, focusWhilePicking]);
   // Pointer events inside the dock stay inside it, so a host dropdown that closes
   // on an outside press is not dismissed by using the dock. React listens on the
   // shadow root too, and it registered first, so its handlers still run.
@@ -681,7 +791,112 @@ export function IterationPanel({
     return () => { for (const type of types) shadow.removeEventListener(type, stop); };
   }, []);
   useEffect(() => {
-    if (!picking) {
+    if (!notesOpen) setAnchor(null);
+  }, [notesOpen]);
+  // Place the floating composer beside its anchor, inside the viewport. It opens
+  // below the point when it fits and above otherwise, and keeps that side while
+  // it grows, so typing never makes it jump.
+  useLayoutEffect(() => {
+    const float = floatRef.current;
+    if (!anchor || !float) {
+      lastFloat.current = null;
+      return;
+    }
+    floatNode.current = float;
+    const from = lastFloat.current;
+    let frame: number | undefined;
+    let side: 'below' | 'above' | null = null;
+    const place = () => {
+      frame = undefined;
+      let { x, y } = anchor;
+      try {
+        const el = document.querySelector(anchor.selector);
+        if (el) {
+          const r = el.getBoundingClientRect();
+          x = r.left + anchor.dx;
+          y = r.top + anchor.dy;
+        }
+      } catch {}
+      const vw = document.documentElement.clientWidth || innerWidth;
+      const vh = innerHeight;
+      const w = float.offsetWidth;
+      const h = float.offsetHeight;
+      let left = x + FLOAT_GAP;
+      if (left + w > vw - FLOAT_MARGIN) left = x - FLOAT_GAP - w;
+      left = Math.max(FLOAT_MARGIN, Math.min(left, vw - w - FLOAT_MARGIN));
+      const fitsBelow = y + FLOAT_GAP + h <= vh - FLOAT_MARGIN;
+      const fitsAbove = y - FLOAT_GAP - h >= FLOAT_MARGIN;
+      if (side === null || (side === 'below' ? !fitsBelow && fitsAbove : !fitsAbove && fitsBelow))
+        side = fitsBelow || !fitsAbove ? 'below' : 'above';
+      float.style.left = `${left}px`;
+      if (side === 'below') {
+        const top = Math.max(FLOAT_MARGIN, Math.min(y + FLOAT_GAP, vh - h - FLOAT_MARGIN));
+        float.style.top = `${top}px`;
+        float.style.bottom = 'auto';
+        float.style.transformOrigin = `${x - left}px ${y - top}px`;
+      } else {
+        const bottom = Math.max(FLOAT_MARGIN, Math.min(vh - y + FLOAT_GAP, vh - h - FLOAT_MARGIN));
+        float.style.bottom = `${bottom}px`;
+        float.style.top = 'auto';
+        float.style.transformOrigin = `${x - left}px ${y - (vh - bottom - h)}px`;
+      }
+      lastFloat.current = { left, top: side === 'below' ? Number.parseFloat(float.style.top) : vh - Number.parseFloat(float.style.bottom) - h };
+    };
+    const schedule = () => { frame ??= requestAnimationFrame(place); };
+    place();
+    // The composer grows out of the clicked point once, when it opens. A later
+    // pin moves it, and it glides there rather than jumping.
+    const to = lastFloat.current;
+    const still = stillMotion(float) || typeof float.animate !== 'function';
+    let glide: Animation | undefined;
+    if (still) {
+      // Immediate: no movement.
+    } else if (!from)
+      glide = float.animate([{ opacity: 0, transform: 'scale(.96)' }, { opacity: 1, transform: 'none' }],
+        { duration: MOTION.enter, easing: MOTION.easeOut });
+    else if (to && (from.left !== to.left || from.top !== to.top))
+      glide = float.animate(
+        [{ translate: `${from.left - to.left}px ${from.top - to.top}px` }, { translate: '0 0' }],
+        { duration: MOTION.enter, easing: MOTION.easeOut },
+      );
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(schedule) : undefined;
+    observer?.observe(float);
+    window.addEventListener('scroll', schedule, { capture: true, passive: true });
+    window.addEventListener('resize', schedule);
+    return () => {
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      glide?.cancel();
+      observer?.disconnect();
+      window.removeEventListener('scroll', schedule, true);
+      window.removeEventListener('resize', schedule);
+    };
+  }, [anchor]);
+  // Leaving the page, the floating composer fades where it was instead of
+  // vanishing in one frame. Keyboard actions and reduced motion stay immediate.
+  useLayoutEffect(() => {
+    const last = floatNode.current;
+    const root = rootRef.current;
+    if (floating || !last || !root) return;
+    floatNode.current = null;
+    if (typeof last.animate !== 'function' || stillMotion(root)) return;
+    const ghost = last.cloneNode(true) as HTMLElement;
+    const field = last.querySelector('textarea');
+    const copy = ghost.querySelector('textarea');
+    if (field && copy) copy.value = field.value;
+    ghost.classList.add('isotone-exit');
+    ghost.inert = true;
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.removeAttribute('role');
+    root.appendChild(ghost);
+    const fade = ghost.animate([{ opacity: 1 }, { opacity: 0, transform: 'scale(.98)' }], {
+      duration: MOTION.exit, easing: MOTION.easeOut, fill: 'forwards',
+    });
+    fade.onfinish = () => ghost.remove();
+    return () => { fade.cancel(); ghost.remove(); };
+  }, [floating]);
+  // Pinned elements stay outlined while their note is written next to them.
+  useEffect(() => {
+    if (!picking && !floating) {
       setRects([]);
       return;
     }
@@ -718,7 +933,7 @@ export function IterationPanel({
       window.removeEventListener('scroll', schedule, true);
       window.removeEventListener('resize', schedule);
     };
-  }, [targets, picking]);
+  }, [targets, picking, floating]);
 
   const variantsPanel = variants && (
         <section
@@ -742,6 +957,165 @@ export function IterationPanel({
           />
         </section>
       );
+  // The dock names the element the floating composer sits next to.
+  const anchored = targets.find((t) => t.selector === anchor?.selector) ?? targets[0];
+  const awayLabel = anchored
+    ? `Next to ${anchored.text || anchored.tag}${targets.length > 1 ? ` and ${targets.length - 1} more` : ''}`
+    : 'Next to where you clicked';
+  // One composer, in the dock or floating beside the element being written about.
+  const composer = (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: This extends the native textarea's pointer area; keyboard users focus the textarea directly.
+    <fieldset
+      className="isotone-input"
+      aria-label="Feedback composer"
+      onClick={(event) => {
+        if (event.defaultPrevented || event.button !== 0) return;
+        const target = event.target as Element;
+        if (target.closest('button, textarea, input, select, a, [contenteditable="true"]')) return;
+        textareaRef.current?.focus({ preventScroll: true });
+      }}
+    >
+    <div className="isotone-context" aria-live="polite">
+      {editing && (
+        <span className="isotone-chip">
+          Editing note
+          <button
+            type="button"
+            aria-label="Cancel edit"
+            title="Cancel edit"
+            onClick={cancelEdit}
+          >
+            <Icon name="close" size={12} />
+          </button>
+        </span>
+      )}
+      {variantTarget && (
+        <span className="isotone-chip">
+          <Icon name="sliders" size={12} />
+          <span onPointerOver={showOverflowTitle}>
+            {variantTarget.label}
+            {variantTarget.optionLabel
+              ? ` / ${variantTarget.optionLabel}`
+              : ''}
+          </span>
+          {!editing?.variantAction && <button
+            type="button"
+            aria-label="Remove variant reference"
+            title="Remove reference"
+            onClick={() => setVariantTarget(null)}
+          >
+            <Icon name="close" size={12} />
+          </button>}
+        </span>
+      )}
+      {targets.map((target, index) => (
+        <span
+          key={target.selector}
+          className="isotone-chip"
+        >
+          <span onPointerOver={showOverflowTitle}>{target.text || target.tag}</span>
+          <button
+            type="button"
+            aria-label={`Remove pinned element ${index + 1}`}
+            title="Unpin element"
+            onClick={() =>
+              setTargets((prev) =>
+                prev.filter((t) => t.selector !== target.selector),
+              )
+            }
+          >
+            <Icon name="close" size={12} />
+          </button>
+        </span>
+      ))}
+      {notice && (
+        <p role="status" className="isotone-notice">
+          {notice}
+        </p>
+      )}
+    </div>
+    <div className="isotone-entry">
+    <textarea
+      ref={textareaRef}
+      value={text}
+      aria-label="Feedback for the agent"
+      onChange={(e) => setText(e.target.value)}
+      onFocus={() => { if (!keepPicking.current) setPicking(false); }}
+      onPointerDown={() => setPicking(false)}
+      onScroll={event => {
+        event.currentTarget.dataset.scrolled = String(event.currentTarget.scrollTop > 0);
+      }}
+      onKeyDown={(e) => {
+        if (
+          e.key === 'Enter' &&
+          !e.shiftKey &&
+          !e.nativeEvent.isComposing
+        ) {
+          e.preventDefault();
+          void send();
+        }
+      }}
+      placeholder={
+        targets.length || variantTarget
+          ? 'Feedback on your selection…'
+          : 'What would you change?'
+      }
+      rows={1}
+      className="isotone-textarea"
+    />
+    <div className="isotone-toolbar">
+      <button
+        type="button"
+        title="Select elements"
+        aria-label="Select elements"
+        aria-pressed={picking}
+        className="isotone-pick isotone-icon"
+        // Keep focus where it is, so a focused composer stays focused.
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => {
+          cancelAnimationFrame(focusFrame.current);
+          setPickingWithPanel(false);
+          setPicking((v) => !v);
+        }}
+      >
+        <Icon name="pin" size={14} />
+      </button>
+      {floating && picking && (
+        <span ref={fadeIn} className="isotone-float-hint">Click to pin more · hold ⇧ to use the page</span>
+      )}
+      <button
+        type="button"
+        aria-label={editing ? 'Save edit' : 'Send note'}
+        disabled={!text.trim()}
+        className="isotone-send"
+        title={editing ? 'Save edit (Enter)' : 'Send note (Enter)'}
+        onClick={() => void send()}
+      >
+        <Icon name="send" size={14} />
+      </button>
+    </div>
+    {picking && !floating && (
+      <div ref={fadeIn} className="isotone-picking" data-still={pickingWithPanel}>
+        <Icon name="pin" size={14} />
+        <p>
+          <span>{targets.length ? `${targets.length} selected` : 'Click elements on the page'}</span>
+          <small>Hold ⇧ to use the page normally</small>
+        </p>
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            setPicking(false);
+            focusComposer();
+          }}
+        >
+          Done <kbd>↵</kbd>
+        </button>
+      </div>
+    )}
+    </div>
+    </fieldset>
+  );
   const notesPanel = notesAvailable && (
         <section
           id={`${id}-notes`}
@@ -827,153 +1201,24 @@ export function IterationPanel({
             ))}
           </ul>
           <div className="isotone-compose">
-            {/* biome-ignore lint/a11y/useKeyWithClickEvents: This extends the native textarea's pointer area; keyboard users focus the textarea directly. */}
-            <fieldset
-              className="isotone-input"
-              aria-label="Feedback composer"
-              onClick={(event) => {
-                if (event.defaultPrevented || event.button !== 0) return;
-                const target = event.target as Element;
-                if (target.closest('button, textarea, input, select, a, [contenteditable="true"]')) return;
-                textareaRef.current?.focus({ preventScroll: true });
-              }}
-            >
-            <div className="isotone-context" aria-live="polite">
-              {editing && (
-                <span className="isotone-chip">
-                  Editing note
-                  <button
-                    type="button"
-                    aria-label="Cancel edit"
-                    title="Cancel edit"
-                    onClick={cancelEdit}
-                  >
-                    <Icon name="close" size={12} />
-                  </button>
-                </span>
-              )}
-              {variantTarget && (
-                <span className="isotone-chip">
-                  <Icon name="sliders" size={12} />
-                  <span onPointerOver={showOverflowTitle}>
-                    {variantTarget.label}
-                    {variantTarget.optionLabel
-                      ? ` / ${variantTarget.optionLabel}`
-                      : ''}
-                  </span>
-                  {!editing?.variantAction && <button
-                    type="button"
-                    aria-label="Remove variant reference"
-                    title="Remove reference"
-                    onClick={() => setVariantTarget(null)}
-                  >
-                    <Icon name="close" size={12} />
-                  </button>}
-                </span>
-              )}
-              {targets.map((target, index) => (
-                <span
-                  key={target.selector}
-                  className="isotone-chip"
-                >
-                  <span onPointerOver={showOverflowTitle}>{target.text || target.tag}</span>
-                  <button
-                    type="button"
-                    aria-label={`Remove pinned element ${index + 1}`}
-                    title="Unpin element"
-                    onClick={() =>
-                      setTargets((prev) =>
-                        prev.filter((t) => t.selector !== target.selector),
-                      )
-                    }
-                  >
-                    <Icon name="close" size={12} />
-                  </button>
-                </span>
-              ))}
-              {notice && (
-                <p role="status" className="isotone-notice">
-                  {notice}
-                </p>
-              )}
-            </div>
-            <div className="isotone-entry">
-            <textarea
-              ref={textareaRef}
-              value={text}
-              aria-label="Feedback for the agent"
-              onChange={(e) => setText(e.target.value)}
-              onFocus={() => setPicking(false)}
-              onPointerDown={() => setPicking(false)}
-              onScroll={event => {
-                event.currentTarget.dataset.scrolled = String(event.currentTarget.scrollTop > 0);
-              }}
-              onKeyDown={(e) => {
-                if (
-                  e.key === 'Enter' &&
-                  !e.shiftKey &&
-                  !e.nativeEvent.isComposing
-                ) {
-                  e.preventDefault();
-                  void send();
-                }
-              }}
-              placeholder={
-                targets.length || variantTarget
-                  ? 'Feedback on your selection…'
-                  : 'What would you change?'
-              }
-              rows={1}
-              className="isotone-textarea"
-            />
-            <div className="isotone-toolbar">
+            {floating ? (
               <button
                 type="button"
-                title="Select elements"
-                aria-label="Select elements"
-                aria-pressed={picking}
-                className="isotone-pick isotone-icon"
-                // Keep focus where it is, so a focused composer stays focused.
+                ref={fadeInContent}
+                className="isotone-away"
+                title="Write here instead"
+                style={{ minHeight: slotHeight.current || undefined }}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  cancelAnimationFrame(focusFrame.current);
-                  setPicking((v) => !v);
-                }}
+                onClick={dockComposer}
               >
                 <Icon name="pin" size={14} />
+                <span className="isotone-away-text">
+                  <span>Writing on the page</span>
+                  <small>{awayLabel}</small>
+                </span>
+                <span className="isotone-away-action">Move here</span>
               </button>
-              <button
-                type="button"
-                aria-label={editing ? 'Save edit' : 'Send note'}
-                disabled={!text.trim()}
-                className="isotone-send"
-                title={editing ? 'Save edit (Enter)' : 'Send note (Enter)'}
-                onClick={() => void send()}
-              >
-                <Icon name="send" size={14} />
-              </button>
-            </div>
-            {picking && (
-              <div className="isotone-picking">
-                <Icon name="pin" size={14} />
-                <p>
-                  <span>{targets.length ? `${targets.length} selected` : 'Click elements on the page'}</span>
-                  <small>Hold ⇧ to use the page normally</small>
-                </p>
-                <button
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    setPicking(false);
-                    focusComposer();
-                  }}
-                >
-                  Done <kbd>esc</kbd>
-                </button>
-              </div>
-            )}
-            </div>
-            </fieldset>
+            ) : composer}
           </div>
         </section>
       );
@@ -992,7 +1237,7 @@ export function IterationPanel({
       className="isotone-root"
     >
       <div className="isotone-rail-track" aria-hidden="true" />
-      {picking &&
+      {(picking || floating) &&
         [
           ...rects,
           ...(hoverRect
@@ -1019,6 +1264,16 @@ export function IterationPanel({
             }}
           />
         ))}
+      {floating && notesOpen && (
+        <div
+          ref={floatRef}
+          className="isotone-float"
+          role="dialog"
+          aria-label="Feedback on the selection"
+        >
+          {composer}
+        </div>
+      )}
       <UpdateNotice endpoint={updateEndpoint} active={open} />
       <fieldset
         aria-label="Isotone tools"
@@ -1070,10 +1325,12 @@ export function IterationPanel({
               title="Feedback"
               aria-controls={`${id}-notes`}
               aria-expanded={notesOpen}
-              onClick={() => {
-                setNotesOpen((v) => !v);
+              onClick={(event) => {
                 setExpanded(false);
-                if (!notesOpen) focusComposer();
+                if (notesOpen) {
+                  setNotesOpen(false);
+                  setPicking(false);
+                } else startFeedback(event.detail > 0);
               }}
             >
               <Icon name="message" /><span className="isotone-tool-label">Feedback <span className="isotone-count">{visibleNotes.length || ""}</span></span>
@@ -1089,10 +1346,10 @@ export function IterationPanel({
           aria-label={notesAvailable ? 'Isotone' : 'Variants'}
           title={`Isotone${working.size ? ` · ${working.size} in progress` : ''}${shortcutLabel ? ` · ${shortcutLabel}` : ''}`}
           aria-expanded={railOpen}
-          onClick={() => {
+          onClick={(event) => {
             if (open) closeAll();
             else if (expanded) setExpanded(false);
-            else openInitial();
+            else openInitial(event.detail > 0);
           }}
         >
           {working.size > 0 && <span className="isotone-ring" ref={ringPulse} />}
