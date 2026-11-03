@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.1.1
+
 - feat: open feedback in select mode, and write the note next to the pinned element
 
 ## 1.1.0
