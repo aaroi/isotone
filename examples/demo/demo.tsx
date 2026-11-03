@@ -260,12 +260,15 @@ function pinScene(shadow: ShadowRoot | null | undefined) {
     const r = first?.getBoundingClientRect();
     // Aim at the chart, which lets clicks through to the card itself.
     if (r) first?.dispatchEvent(new MouseEvent('click', { clientX: r.left + r.width / 2, clientY: r.bottom - 20, bubbles: true, composed: true, detail: 1 }));
-    const textarea = shadow?.querySelector<HTMLTextAreaElement>('textarea');
-    const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
-    if (textarea && setValue) {
-      setValue.call(textarea, 'Give this card more room');
-      textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    }
+    // The composer moves next to the card on the next render; type into it there.
+    requestAnimationFrame(() => {
+      const textarea = shadow?.querySelector<HTMLTextAreaElement>('.isotone-float textarea');
+      const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+      if (textarea && setValue) {
+        setValue.call(textarea, 'Give this card more room');
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
   }, 300);
 }
 

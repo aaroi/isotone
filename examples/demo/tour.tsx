@@ -30,7 +30,7 @@ function readPanel(): PanelState {
     open: root.dataset.open === 'true',
     variants: inPanel('.isotone-variants-panel')?.dataset.open === 'true',
     notes: inPanel('.isotone-notes-panel')?.dataset.open === 'true',
-    picking: Boolean(inPanel('.isotone-hint')),
+    picking: inPanel('[aria-label="Select elements"]')?.getAttribute('aria-pressed') === 'true',
     pinned: Boolean(inPanel('.isotone-context .isotone-chip')),
   };
 }
@@ -214,13 +214,13 @@ function stepContent(step: Step, panel: PanelState, switched: boolean, agent: Ag
       };
       if (panel.picking) return {
         title: 'Leave a note',
-        body: <p>The card is selected. You can pick more, or press <Keys keys={['↵']} /> to stop selecting.</p>,
-        highlight: null,
+        body: <p>The card is selected, and a note field opened next to it. Write what you'd change, like "make this number bigger", and press <Keys keys={['↵']} /> to send it. You can click more cards first.</p>,
+        highlight: one('.isotone-float'),
       };
       if (panel.pinned) return {
         title: 'Leave a note',
         body: <p>Write what you'd change, like "make this number bigger", and press <Keys keys={['↵']} /> to send it.</p>,
-        highlight: one('.isotone-compose'),
+        highlight: inPanel('.isotone-float') ? one('.isotone-float') : one('.isotone-compose'),
       };
       return {
         title: 'Leave a note',

@@ -92,6 +92,7 @@ afterEach(async () => {
   container.remove();
   document.body.style.backgroundColor = '';
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -373,7 +374,7 @@ describe('IterationPanel with variants', () => {
     if (!field) throw new Error('missing composer');
     Object.defineProperty(field, 'scrollHeight', {
       configurable: true,
-      get: () => field.value.split('\n').length * 20 + (field.previousElementSibling?.childElementCount ? 12 : 14),
+      get: () => field.value.split('\n').length * 20 + (field.parentElement?.previousElementSibling?.childElementCount ? 12 : 14),
     });
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
     await act(async () => { setter?.call(field, feedback); field.dispatchEvent(new Event('input', { bubbles: true })); });
@@ -935,47 +936,160 @@ describe('review dock interactions', () => {
     expect(body.element.selector).toBe('#one');
     a.remove(); b.remove();
   });
-  it('finishes selecting on Enter from an empty composer, and leaves select mode after sending', async () => {
+  it('covers the composer while selecting, and Enter, Escape, Done or typing finishes', async () => {
+    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await click(container.querySelector('.isotone-fab'));
+    const textarea = container.querySelector<HTMLTextAreaElement>('textarea');
+    if (!textarea) throw new Error('missing composer');
+    const press = (key: string, target: EventTarget = document.body) => act(async () => {
+      target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true }));
+    });
+    const overlay = () => container.querySelector('.isotone-picking');
+
+    await click(byText('Select elements'));
+    expect(overlay()?.textContent).toContain('Click elements on the page');
+    await press('Enter');
+    expect(overlay()).toBeNull();
+
+    await click(byText('Select elements'));
+    await press('Escape');
+    expect(overlay()).toBeNull();
+
+    await click(byText('Select elements'));
+    await click(byText('Done'));
+    expect(overlay()).toBeNull();
+
+    await click(byText('Select elements'));
+    await press('m');
+    expect(overlay()).toBeNull();
+    expect((textarea.getRootNode() as ShadowRoot | Document).activeElement).toBe(textarea);
+
+    // A focused composer with text is covered too, so Enter finishes instead of sending.
+    await typeFeedback('More room');
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: 'saved' }) })); vi.stubGlobal('fetch', fetchMock);
+    await click(byText('Select elements'));
+    await press('Enter', textarea);
+    expect(overlay()).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'POST' }));
+  });
+  it('starts selecting when feedback is opened with a pointer, and not from the keyboard', async () => {
+    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    // A real pointer over the dock hits the panel, which select mode ignores.
+    Object.defineProperty(document, 'elementFromPoint', { value: () => container.querySelector('.isotone-root'), configurable: true });
+    const pointer = (el: Element | null | undefined) => act(async () => {
+      el?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    });
+    await pointer(container.querySelector('.isotone-fab'));
+    // It opens already covered, so the field never shows through the fade.
+    expect(container.querySelector('.isotone-picking')?.getAttribute('data-still')).toBe('true');
+    expect(byText('Select elements')?.getAttribute('aria-pressed')).toBe('true');
+    await pointer(byText('Feedback'));
+    expect(container.querySelector('.isotone-notes-panel')?.getAttribute('data-open')).toBe('false');
+    expect(container.querySelector('.isotone-picking')).toBeNull();
+    await click(byText('Feedback'));
+    expect(container.querySelector('.isotone-picking')).toBeNull();
+    await act(async () => { await new Promise(r => requestAnimationFrame(r)); });
+    expect(document.activeElement).toBe(container.querySelector('textarea'));
+    await click(byText('Feedback'));
+    await pointer(byText('Feedback'));
+    expect(container.querySelector('.isotone-picking')).not.toBeNull();
+  });
+  it('floats the composer next to a pinned element and brings it back to the dock', async () => {
+    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await click(container.querySelector('.isotone-fab'));
+    const card = document.createElement('section'); card.id = 'card'; card.textContent = 'Card';
+    document.body.append(card);
+    card.getBoundingClientRect = () => new DOMRect(100, 200, 300, 80);
+    Object.defineProperty(document, 'elementFromPoint', { value: () => card, configurable: true });
+    const float = () => container.querySelector<HTMLElement>('.isotone-float');
+    const away = () => container.querySelector('.isotone-away');
+    const frame = () => act(async () => { await new Promise(r => requestAnimationFrame(r)); });
+    const size = (name: 'offsetWidth' | 'offsetHeight', value: number) =>
+      vi.spyOn(HTMLElement.prototype, name, 'get').mockImplementation(function (this: HTMLElement) {
+        return this.classList.contains('isotone-float') ? value : 0;
+      });
+    size('offsetWidth', 300); size('offsetHeight', 100);
+    const pin = () => act(async () => {
+      card.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, clientX: 150, clientY: 230 }));
+    });
+
+    await click(byText('Select elements'));
+    await pin();
+    await frame();
+    // The composer is now beside the click, focused, still selecting; the dock says where it went.
+    expect(float()?.querySelector('.isotone-chip')?.textContent).toContain('Card');
+    expect(float()?.style.left).toBe('162px');
+    expect(float()?.style.top).toBe('242px');
+    expect(container.querySelectorAll('textarea')).toHaveLength(1);
+    expect(document.activeElement).toBe(float()?.querySelector('textarea'));
+    expect(byText('Select elements')?.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('.isotone-picking')).toBeNull();
+    expect(away()?.textContent).toContain('Writing on the page');
+    expect(away()?.textContent).toContain('Next to Card');
+    expect(container.querySelectorAll('.isotone-selected')).toHaveLength(1);
+
+    await typeFeedback('Give this more room');
+    // The draft is written in one place only.
+    expect(away()?.textContent).not.toContain('Give this more room');
+    // Enter finishes selecting and keeps the pin; the element keeps its outline.
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    expect(byText('Select elements')?.getAttribute('aria-pressed')).toBe('false');
+    expect(container.querySelectorAll('.isotone-selected')).toHaveLength(1);
+    // Escape after selecting puts it back in the dock with the draft and the pin.
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    expect(float()).toBeNull();
+    expect(container.querySelectorAll('.isotone-selected')).toHaveLength(0);
+    expect(container.querySelector('.isotone-notes-panel textarea')?.textContent).toBe('Give this more room');
+    expect(container.querySelector('.isotone-notes-panel .isotone-chip')?.textContent).toContain('Card');
+
+    // Pinning near the viewport's corner keeps the composer on screen.
+    card.getBoundingClientRect = () => new DOMRect(innerWidth - 40, innerHeight - 40, 30, 30);
+    await click(byText('Select elements'));
+    await act(async () => {
+      card.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, clientX: innerWidth - 20, clientY: innerHeight - 20 }));
+    });
+    expect(float()).toBeNull(); // Unpinned: the card was already pinned.
+    await act(async () => {
+      card.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, clientX: innerWidth - 20, clientY: innerHeight - 20 }));
+    });
+    const box = float();
+    if (!box) throw new Error('composer did not float');
+    // Too close to the right and bottom edges, so it opens to the left and above.
+    expect(box.style.left).toBe(`${innerWidth - 20 - 12 - 300}px`);
+    expect(box.style.top).toBe('auto');
+    expect(box.style.bottom).toBe('32px');
+
+    // Enter in the floating composer sends, and the composer returns to the dock.
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: 'saved' }) })); vi.stubGlobal('fetch', fetchMock);
+    await act(async () => {
+      box.querySelector('textarea')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+    expect(fetchMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'POST' }));
+    expect(float()).toBeNull();
+    expect(away()).toBeNull();
+    card.remove();
+  });
+  it('cancels the selection on Escape, so selecting again starts fresh', async () => {
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(container.querySelector('.isotone-fab'));
     const card = document.createElement('section'); card.id = 'card'; card.textContent = 'Card';
     document.body.append(card);
     Object.defineProperty(document, 'elementFromPoint', { value: () => card, configurable: true });
-    const textarea = container.querySelector<HTMLTextAreaElement>('textarea');
-    const enter = () => act(async () => { textarea?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true, cancelable: true })); });
-    await click(byText('Select elements'));
-    await click(card);
-    await act(async () => { await new Promise(r => requestAnimationFrame(r)); });
-    expect(container.querySelector('.isotone-hint')).not.toBeNull();
-    await enter();
-    expect(container.querySelector('.isotone-hint')).toBeNull();
-    expect(container.querySelectorAll('.isotone-chip')).toHaveLength(1);
+    const pressEscape = () => act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
 
     await click(byText('Select elements'));
-    await typeFeedback('More room');
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ id: 'saved' }) })));
-    await enter();
-    expect(container.querySelector('.isotone-hint')).toBeNull();
-    card.remove();
-  });
-  it('fades the select hint and lets the page through when the pointer nears it', async () => {
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
-    await click(container.querySelector('.isotone-fab'));
-    Object.defineProperty(document, 'elementFromPoint', { value: () => null, configurable: true });
+    await act(async () => { card.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, clientX: 5, clientY: 5 })); });
+    await typeFeedback('Keep this text');
+    expect(container.querySelector('.isotone-float')).not.toBeNull();
+    await pressEscape();
+    expect(container.querySelector('.isotone-float')).toBeNull();
+    expect(container.querySelectorAll('.isotone-chip')).toHaveLength(0);
+    expect(container.querySelector('textarea')?.value).toBe('Keep this text');
+    // Selecting again starts with nothing pinned.
     await click(byText('Select elements'));
-    const hint = container.querySelector<HTMLElement>('.isotone-hint');
-    if (!hint) throw new Error('hint missing');
-    hint.getBoundingClientRect = () => ({ left: 300, right: 700, top: 16, bottom: 52, width: 400, height: 36, x: 300, y: 16, toJSON: () => ({}) });
-    const move = async (clientX: number, clientY: number) => {
-      await act(async () => {
-        window.dispatchEvent(new MouseEvent('mousemove', { clientX, clientY, bubbles: true }));
-        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
-      });
-    };
-    await move(500, 60);
-    expect(hint.dataset.away).toBe('true');
-    await move(500, 400);
-    expect(hint.dataset.away).toBe('false');
+    expect(container.querySelector('.isotone-picking')?.textContent).toContain('Click elements on the page');
+    card.remove();
   });
   it('surfaces a failed removal request without losing options', async () => {
     const source = createVariantsSource({ axes: AXES });

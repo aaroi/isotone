@@ -68,8 +68,12 @@ required. Coming from the previous package? See the [migration guide](docs/migra
 ## Keys
 
 **Enter** sends a note and **Shift + Enter** adds a newline. Click a saved note
-to edit it. In select mode, click to pin or unpin, hold **Shift** to use the page
-normally, and press **Enter** or **Escape** to finish.
+to edit it. Opening Feedback with the mouse starts select mode; the shortcut
+goes straight to the text field. In select mode, click to pin or unpin, hold
+**Shift** to use the page normally, and press **Enter** to finish or **Escape**
+to clear what you pinned. After a pin, the note field opens next to the element
+you clicked, and you can start typing right away. Once you're done selecting,
+**Escape** moves the field back into the panel.
 
 ## Updates
 

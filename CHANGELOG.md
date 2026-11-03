@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- feat: open feedback in select mode, and write the note next to the pinned element
+
 ## 1.1.0
 
 - Overlay variants switch in the browser in React projects on Vite 6 or later.
