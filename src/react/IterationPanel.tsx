@@ -360,21 +360,21 @@ export function IterationPanel({
       : fabRef.current
     )?.focus();
   }
-  /** A pointer opening feedback starts selecting; a keyboard opening goes straight to the field. */
-  function startFeedback(pointer: boolean) {
+  /** The pointer and the shortcut start selecting; Enter or Space on a focused button goes to the field. */
+  function startFeedback(select: boolean) {
     setNotesOpen(true);
-    if (pointer) {
+    if (select) {
       cancelAnimationFrame(focusFrame.current);
       setPickingWithPanel(!notesOpen);
       setPicking(true);
     } else focusComposer();
   }
-  function openInitial(pointer: boolean) {
+  function openInitial(select: boolean) {
     previousFocus.current = document.activeElement as HTMLElement | null;
     setExpanded(true);
     if ((defaultTab === 'variants' || !notesAvailable) && variantsAvailable)
       setVariantsOpen(true);
-    else startFeedback(pointer);
+    else startFeedback(select);
   }
   /** Put the composer back in the dock, keeping what was written and pinned. */
   function dockComposer() {
@@ -633,21 +633,16 @@ export function IterationPanel({
         return;
       e.preventDefault();
       e.stopImmediatePropagation();
-      if (
-        notesOpen &&
-        textareaRef.current ===
-          (rootRef.current?.getRootNode() as Document | ShadowRoot)
-            ?.activeElement
-      )
-        closeAll();
-      else if (notesAvailable) {
-        if (!open)
-          previousFocus.current = document.activeElement as HTMLElement;
-        setNotesOpen(true);
-        setExpanded(true);
+      if (!notesAvailable) setVariantsOpen((v) => !v);
+      else if (picking) {
         setPicking(false);
         focusComposer();
-      } else setVariantsOpen((v) => !v);
+      } else {
+        if (!open)
+          previousFocus.current = document.activeElement as HTMLElement;
+        setExpanded(true);
+        startFeedback(true);
+      }
     };
     const onPointer = () => {
       rootRef.current?.setAttribute('data-instant', 'false');
@@ -1066,7 +1061,7 @@ export function IterationPanel({
     <div className="isotone-toolbar">
       <button
         type="button"
-        title="Select elements"
+        title={`Select elements${shortcutLabel ? ` · ${shortcutLabel}` : ''}`}
         aria-label="Select elements"
         aria-pressed={picking}
         className="isotone-pick isotone-icon"

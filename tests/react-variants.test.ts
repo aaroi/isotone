@@ -889,15 +889,30 @@ describe('review dock interactions', () => {
       expect(container.querySelectorAll('.isotone-panel[data-open=true]')).toHaveLength(2);
     }
   });
-  it('captures the shortcut inside an input, preserves variants, and disables keyboard motion', async () => {
+  it('captures the shortcut inside an input, starts selecting, preserves variants, and disables keyboard motion', async () => {
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, variants: createVariantsSource({ axes: AXES }), defaultTab: 'variants' }));
     await click(container.querySelector('.isotone-fab'));
     const input = document.createElement('input'); document.body.append(input); input.focus();
     await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { code: 'Period', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true })); await new Promise(r => requestAnimationFrame(r)); });
     expect(container.querySelectorAll('.isotone-panel[data-open=true]')).toHaveLength(2);
-    expect(document.activeElement).toBe(container.querySelector('textarea'));
+    expect(container.querySelector('[aria-label="Select elements"]')?.getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(input);
     expect(container.querySelector('.isotone-root')?.getAttribute('data-instant')).toBe('true');
     input.remove();
+  });
+  it('moves between selecting and the field with the shortcut', async () => {
+    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    const press = () => act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Period', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true })); await new Promise(r => requestAnimationFrame(r)); });
+    const selecting = () => container.querySelector('[aria-label="Select elements"]')?.getAttribute('aria-pressed');
+    await press();
+    expect(container.querySelector('.isotone-notes-panel')?.getAttribute('data-open')).toBe('true');
+    expect(selecting()).toBe('true');
+    await press();
+    expect(selecting()).toBe('false');
+    expect(document.activeElement).toBe(container.querySelector('textarea'));
+    await press();
+    expect(selecting()).toBe('true');
+    expect(container.querySelector('.isotone-notes-panel')?.getAttribute('data-open')).toBe('true');
   });
   it('attaches an option reference and keeps variants visible while writing', async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: 'saved' }) }));
