@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- feat: the shortcut opens feedback in select mode, and toggles select mode once it's open. Escape closes the panel; the shortcut no longer does
+
 ## 1.1.1
 
 - feat: open feedback in select mode, and write the note next to the pinned element
