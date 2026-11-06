@@ -95,6 +95,18 @@ to surface load or update failures in the panel; notify subscribers when that
 error changes, and return `null` after recovery. Feedback stores a `variant` reference with
 selector/option IDs separately from the host's `payload`.
 
+**Keeping copies current.** A copy records the version of the real file it was
+made from, and reads as stale once that file moves on. `variant sync <id>` merges
+the real file's changes into the copy and works on files git does not track yet.
+When both sides changed the same lines, the copy gets conflict markers to resolve,
+and while they are there the copy is a syntax error, which in live mode also breaks
+pages that import the real file. `variant promote <id>` lands a copy over the real
+file. The other variants in its group stay available and stop reading as stale,
+since they are alternatives to what was just promoted.
+
+Two groups that override the same file cannot both be active. The panel names
+them when you pick the second, and `variant add` warns when the overlap is created.
+
 **The loop.** Pin an element and write the ask. The agent starts a variant
 from the note and edits the copy. You switch between Default and the
 alternatives in the panel; the switch applies in place. **Save as
@@ -111,7 +123,7 @@ review; `variants: { ignored: true }` keeps them local. The active pointer,
 
 Some decisions are a number, not an alternative file: how far a fade
 reaches, how dense a dot field is. Declare those in
-`.isotone/knobs.json`, a JSON array of range or colour axes with an
+`.isotone/knobs.json`, a JSON array of range, colour or select axes with an
 optional `route` (a pattern like a variant's, or a list of them):
 
 ```json
@@ -140,7 +152,30 @@ fallback:
 mask-image: radial-gradient(ellipse, black var(--knob-fade-from, 0%), transparent 100%);
 ```
 
-Knob values live in the reviewer's browser, not on the server. "Save as
+A select knob names a style rather than a number, for a choice that one line of
+CSS or a draw call can act on. Give it `options` of `{ "id", "label" }` and a
+`defaultOption`. CSS cannot branch on a custom property, so its value also lands
+as `data-knob-<id>` on `<html>`:
+
+```css
+html[data-knob-tick-style="dots"] .tick { border-radius: 50%; }
+```
+
+When the alternative changes structure, a file variant is still the right tool,
+because a select knob leaves both branches in the source until someone removes one.
+
+Code that draws for itself, such as a canvas chart, reads the custom property and
+redraws on the `isotone:knob` event, which bubbles from `<html>` with
+`{ id, value }` and a `null` value when the knob returns to its default:
+
+```js
+document.addEventListener('isotone:knob', ({ detail }) => {
+  if (detail.id === 'tick-style') chart.setTicks(detail.value ?? 'lines');
+});
+```
+
+The event only fires while the panel is mounted, so keep the committed default in
+the source. Knob values live in the reviewer's browser, not on the server. "Save as
 defaults" files the moved knobs in the same `[set-defaults]` note as the
 variant picks, as `Knobs: Fade starts 40% (fade-from)` with a `knobs`
 payload of `fade-from:40`; the agent writes the number into the source and

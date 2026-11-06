@@ -418,7 +418,7 @@ export interface OverlayVariantStatus extends OverlayVariant {
 }
 
 /**
- * A knob: a range or colour axis the host declares in `.isotone/knobs.json`
+ * A knob: a range, colour or select axis the host declares in `.isotone/knobs.json`
  * next to its overlay variants. The panel renders it as a slider (or a colour
  * pick) on the routes it names, and the value reaches the page as a CSS
  * custom property on `<html>`, `--knob-<id>`, with the axis unit appended
@@ -426,8 +426,12 @@ export interface OverlayVariantStatus extends OverlayVariant {
  * committed default: `var(--knob-fade-from, 0%)`. "Save as defaults" files
  * the moved knobs in the same `[set-defaults]` note as the variant picks, so
  * the agent writes the numbers into the source and the knob file.
+ *
+ * A select knob's value is its option id, which CSS cannot branch on through a
+ * custom property, so it also lands as `data-knob-<id>` on `<html>`. Code that
+ * draws for itself listens for {@link KNOBS_EVENT} on the document.
  */
-export type KnobAxis = (RangeVariantAxis | ColorVariantAxis) & {
+export type KnobAxis = (RangeVariantAxis | ColorVariantAxis | SelectVariantAxis) & {
   /** Route pattern(s) the knob belongs on, like a variant's `route`; absent means every route. */
   route?: string | string[];
 };
@@ -446,7 +450,12 @@ export function knobVar(id: string): string {
   return `--knob-${id}`;
 }
 
-/** The property's value: a range carries its unit, a colour is its hex. */
+/** Fired on `<html>`, bubbling, when a knob's value changes. `detail` is
+ *  `{ id, value }` with the same value the custom property holds, or `null`
+ *  when the knob went back to its default. */
+export const KNOBS_EVENT = 'isotone:knob';
+
+/** The property's value: a range carries its unit, a colour is its hex, a select is the option id. */
 export function knobCssValue(axis: KnobAxis, value: string): string {
   return axis.kind === 'range' ? `${value}${axis.unit ?? ''}` : value;
 }
@@ -463,12 +472,28 @@ export function knobsFor(knobs: KnobAxis[] | undefined, route: string): KnobAxis
 export function applyKnobValues(
   knobs: KnobAxis[],
   values: VariantSelections,
-  root: { style: { setProperty(name: string, value: string): void; removeProperty(name: string): void } },
+  root: {
+    style: { setProperty(name: string, value: string): void; removeProperty(name: string): void };
+    setAttribute?(name: string, value: string): void;
+    removeAttribute?(name: string): void;
+    getAttribute?(name: string): string | null;
+    dispatchEvent?(event: Event): boolean;
+  },
 ): void {
   for (const k of knobs) {
     const v = values[k.id];
-    if (v === undefined || v === axisDefault(k)) root.style.removeProperty(knobVar(k.id));
-    else root.style.setProperty(knobVar(k.id), knobCssValue(k, v));
+    const cleared = v === undefined || v === axisDefault(k);
+    const next = cleared ? null : knobCssValue(k, v);
+    const previous = (root.style as { getPropertyValue?(name: string): string }).getPropertyValue?.(knobVar(k.id)) || null;
+    if (next === null) root.style.removeProperty(knobVar(k.id));
+    else root.style.setProperty(knobVar(k.id), next);
+    if (k.kind !== 'range' && k.kind !== 'color') {
+      if (next === null) root.removeAttribute?.(`data-knob-${k.id}`);
+      else root.setAttribute?.(`data-knob-${k.id}`, next);
+    }
+    if (next !== previous && typeof CustomEvent !== 'undefined') {
+      root.dispatchEvent?.(new CustomEvent(KNOBS_EVENT, { bubbles: true, detail: { id: k.id, value: next } }));
+    }
   }
 }
 
@@ -480,7 +505,9 @@ export function knobDelta(
   return knobs.flatMap((k) => {
     const v = values[k.id];
     if (v === undefined || v === axisDefault(k)) return [];
-    const shown = k.kind === 'range' ? formatRangeValue(k, v) : v;
+    const shown = k.kind === 'range' ? formatRangeValue(k, v)
+      : k.kind === 'color' ? v
+      : k.options.find((option) => option.id === v)?.label ?? v;
     return [{ axis: k, value: v, shown }];
   });
 }
@@ -751,7 +778,11 @@ export function createOverlayVariantsSource(cfg: {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ active }),
         });
-        if (!res.ok) throw new Error(`Activating variants failed (${res.status}). Try again.`);
+        if (!res.ok) {
+          // The server knows which variants and which file are in the way.
+          const reason = await res.json().then((body: { error?: unknown }) => body?.error, () => null);
+          throw new Error(typeof reason === 'string' ? reason : `Activating variants failed (${res.status}). Try again.`);
+        }
         if (list) list = { ...list, active };
         error = null;
       } catch (cause) {

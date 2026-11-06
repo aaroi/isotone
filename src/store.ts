@@ -321,10 +321,8 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
       cleanElement = {
         tag: cap(String((element as { tag?: unknown }).tag ?? ''), 30),
         text: cap(String((element as { text?: unknown }).text ?? ''), 120),
-        selector: cap(
-          String((element as { selector?: unknown }).selector ?? ''),
-          300,
-        ),
+        selector: cap(String((element as { selector?: unknown }).selector ?? ''), MAX_SELECTOR),
+        ...elementContext(element),
       };
     }
     const notes = readNotes(file);
@@ -421,8 +419,49 @@ function elementOf(value: unknown): IterationElement | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const v = value as Partial<IterationElement>;
   if (typeof v.selector !== 'string' || !v.selector) return null;
-  return { tag: cap(String(v.tag ?? ''), 30), text: cap(String(v.text ?? ''), 120), selector: cap(v.selector, 300) };
+  return {
+    tag: cap(String(v.tag ?? ''), 30),
+    text: cap(String(v.text ?? ''), 120),
+    selector: cap(v.selector, MAX_SELECTOR),
+    ...elementContext(v),
+  };
 }
+
+/** A path that climbs to the body in a deep tree runs long, and a cut one
+ *  points at some other element. */
+const MAX_SELECTOR = 2000;
+
+function stringList(value: unknown, count: number, length: number): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item !== '').slice(0, count).map((item) => cap(item, length))
+    : [];
+}
+
+/** The optional identifying fields, each bounded; anything malformed is dropped. */
+function elementContext(value: object): Partial<IterationElement> {
+  const v = value as Record<string, unknown>;
+  const out: Partial<IterationElement> = {};
+  if (v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes)) {
+    const entries = Object.entries(v.attributes)
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && !UNSAFE_KEYS.has(entry[0]))
+      .slice(0, 20)
+      .map(([name, text]): [string, string] => [cap(name, 60), cap(text, 300)]);
+    if (entries.length) out.attributes = Object.fromEntries(entries);
+  }
+  const component = stringList(v.component, 8, 80);
+  if (component.length) out.component = component;
+  const within = stringList(v.within, 6, 120);
+  if (within.length) out.within = within;
+  if (typeof v.source === 'string' && v.source) out.source = cap(v.source, 300);
+  if (typeof v.near === 'string' && v.near) out.near = cap(v.near, 120);
+  const rect = v.rect as Record<string, unknown> | null | undefined;
+  if (rect && typeof rect === 'object' && [rect.x, rect.y, rect.w, rect.h].every((n) => typeof n === 'number' && Number.isFinite(n))) {
+    out.rect = { x: rect.x, y: rect.y, w: rect.w, h: rect.h } as NonNullable<IterationElement['rect']>;
+  }
+  return out;
+}
+
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 function variantOf(value: unknown): VariantReference | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;

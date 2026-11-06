@@ -20,7 +20,8 @@ reviewer's panel until you run `npx isotone --done <id>`.
 Run `npx isotone --json` in the project under review. When several agents share a
 dev server, list only your page's notes with `npx isotone <route> --json`, and run
 `npx isotone --working <id>` on a note when you start it so the reviewer sees it in progress. Each note includes a route,
-viewport, pinned elements, optional variant or host context, and a `doneCommand`
+viewport, pinned elements (a selector matching only that element, plus its React
+components, labelled ancestors, attributes and page position), optional variant or host context, and a `doneCommand`
 for open notes. Reproduce the request at that route and viewport, make the source
 change, verify it, then run the note's `doneCommand`. A unique ID prefix works.
 Use `--all` or `--days 30` when the note is not in the default listing.
@@ -42,6 +43,9 @@ npx isotone variant path <id> <file>
 Edit the copied file. `--new` starts a file the project does not have yet.
 Where you can, copy only files that export components. A copied file that
 exports a hook, helper or constant object makes every switch reload the page.
+Describe a variant with `variant new --description`, not a comment in the copy,
+because `promote` lands the copy as it stands. `variant add` warns when a file
+will reload on every switch or when another group already overrides it.
 Use `--group` for alternatives of the same decision and scope them to the
 note's route. `variant use <id>` previews one; promote it only
 when the reviewer chooses it. See [variants](docs/variants.md) for stale-file

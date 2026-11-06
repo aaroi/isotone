@@ -552,9 +552,16 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
         // per-environment hot updates, so the server render keeps its swap
         // while the browser's dispatchers are left alone.
         live = (variantsOptions.live ?? hasReact) && server.environments !== undefined;
-        const clientGraph = () => server.environments?.client?.moduleGraph ?? server.moduleGraph;
+        // A server render holds modules of its own, so a change to what a
+        // variant covers has to reach those too or the HTML goes stale.
+        const graphs = () => server.environments
+          ? Object.values(server.environments).map((env) => env.moduleGraph as unknown as typeof server.moduleGraph)
+          : [server.moduleGraph];
+        // Files a manifest named before it changed: one that left the variant
+        // has no entry to be found by afterwards.
+        const covered = new Set<string>();
         const signature = () => JSON.stringify(readManifests().map((v) => [v.id, v.group ?? '', Object.keys(v.files).sort()]));
-        let listed = live ? signature() : '';
+        let listed = signature();
         // A dispatcher is written for one set of versions and names. When
         // either changes, the browser needs new dispatchers, which a hot
         // update cannot deliver: drop them and reload the page once.
@@ -562,15 +569,17 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
           if (reloadTimer) clearTimeout(reloadTimer);
           reloadTimer = setTimeout(() => {
             reloadTimer = null;
-            const graph = clientGraph();
             // Files that were dispatchers, and files that have just gained a
             // variant and still hold their plain transform.
-            const paths = new Set([...dispatched.keys(), ...versionsByFile().keys()]);
-            for (const path of paths) {
-              for (const mod of graph.getModulesByFile(path) ?? []) graph.invalidateModule(mod as never);
+            const paths = new Set([...dispatched.keys(), ...versionsByFile().keys(), ...covered]);
+            for (const graph of graphs()) {
+              for (const path of paths) {
+                for (const mod of graph.getModulesByFile(path) ?? []) graph.invalidateModule(mod as never);
+              }
+              const runtime = graph.getModuleById(RESOLVED_LIVE_MODULE);
+              if (runtime) graph.invalidateModule(runtime as never);
             }
-            const runtime = graph.getModuleById(RESOLVED_LIVE_MODULE);
-            if (runtime) graph.invalidateModule(runtime as never);
+            covered.clear();
             dispatched.clear();
             server.ws.send({ type: 'full-reload', path: '*' });
           }, 50);
@@ -713,13 +722,19 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
             void activate(readActive(vopts));
           } else if (isInside(vDir, path)) {
             // Covers adds and unlinks, which handleHotUpdate never sees.
+            for (const variant of manifests ?? []) {
+              for (const key of Object.keys(variant.files)) covered.add(normalizePath(join(vopts.root, key)));
+            }
             forgetManifests();
-            if (live) {
-              const now = signature();
-              if (now !== listed) {
-                listed = now;
-                reloadPage();
-              }
+            // A variant deleted by hand leaves its id in the file. Pages are
+            // told this set, and a pick posts it back, so it has to go here.
+            const stillActive = readActive(vopts);
+            const activeChanged = stillActive.join() !== currentActive().join();
+            if (activeChanged) void activate(stillActive);
+            const now = signature();
+            if (now !== listed) {
+              listed = now;
+              if (live || activeChanged || stillActive.length > 0) reloadPage();
             }
           }
         });
