@@ -30,9 +30,11 @@ import {
   type ColorVariantAxis,
   type KnobAxis,
   OVERLAY_GROUP_ID,
+  overlayGroups,
   type OverlayVariant,
   type OverlayVariantStatus,
   type RangeVariantAxis,
+  type SelectVariantAxis,
 } from './core/variants';
 import { ensureFileIgnored, type NotesRequest, type NotesResponse } from './store';
 import { withFileLock, writeJson } from './file-store';
@@ -379,7 +381,7 @@ export function promoteVariant(
   opts: VariantsStoreOptions,
   id: string,
   { force = false }: { force?: boolean } = {},
-): { files: string[] } {
+): { files: string[]; rebased: string[] } {
   return mutateVariants(opts, () => {
     // Checked before the manifest read so the rmSync below can never be
     // handed a directory the id escaped into.
@@ -415,18 +417,51 @@ export function promoteVariant(
         );
       }
     }
+    const siblings = overlayGroups(readVariants(opts)).find((g) => g.members.some((m) => m.id === id))
+      ?.members.filter((m) => m.id !== id) ?? [];
     const files: string[] = [];
+    const landed = new Map<string, { before: string | null; after: string | null }>();
     for (const key of Object.keys(manifest.files)) {
       const overrideAbs = join(vDir, key);
       const destAbs = join(root, key);
+      const before = existsSync(destAbs) ? currentBlob(destAbs) : null;
       mkdirSync(dirname(destAbs), { recursive: true });
       writeFileSync(destAbs, readFileSync(overrideAbs));
+      landed.set(key, { before, after: blobOf(destAbs) });
       files.push(key);
     }
     rmSync(vDir, { recursive: true, force: true });
     if (active.includes(id)) writeActive(opts, active.filter((a) => a !== id));
-    return { files };
+    return { files, rebased: rebaseSiblings(opts, siblings, landed) };
   });
+}
+
+/**
+ * A sibling is another answer to the decision the promote just settled, so the
+ * promoted file is what it now differs from: reading it as out of date would
+ * only send someone to merge two alternatives into each other. Only a copy made
+ * from the version the promote replaced moves. One that was already behind
+ * stays stale, because the real file changed in ways nobody has looked at.
+ */
+function rebaseSiblings(
+  opts: VariantsStoreOptions,
+  siblings: OverlayVariant[],
+  landed: Map<string, { before: string | null; after: string | null }>,
+): string[] {
+  const rebased: string[] = [];
+  for (const sibling of siblings) {
+    let moved = false;
+    for (const [key, entry] of Object.entries(sibling.files)) {
+      const change = landed.get(key);
+      if (!change?.after || !(entry.added || (entry.base !== null && entry.base === change.before))) continue;
+      sibling.files[key] = { base: change.after };
+      moved = true;
+    }
+    if (!moved) continue;
+    writeVariant(opts, sibling);
+    rebased.push(sibling.id);
+  }
+  return rebased;
 }
 
 export function dropVariant(opts: VariantsStoreOptions, id: string): void {
@@ -442,6 +477,9 @@ export function dropVariant(opts: VariantsStoreOptions, id: string): void {
 
 /* ── git blob hashing ─────────────────────────────────────────────────── */
 
+/** A failed lookup is an answer here (`null`), not something to print. */
+const GIT_QUIET: ['ignore', 'pipe', 'ignore'] = ['ignore', 'pipe', 'ignore'];
+
 /**
  * `git hash-object` looks up the repository from its cwd, not from the
  * path it's hashing, so every call here runs with cwd set to the file's own
@@ -453,6 +491,7 @@ export function blobOf(absPath: string): string | null {
     return execFileSync('git', ['hash-object', '--no-filters', '-w', absPath], {
       cwd: dirname(absPath),
       encoding: 'utf8',
+      stdio: GIT_QUIET,
     }).trim();
   } catch {
     return null;
@@ -464,6 +503,7 @@ export function currentBlob(absPath: string): string | null {
     return execFileSync('git', ['hash-object', '--no-filters', absPath], {
       cwd: dirname(absPath),
       encoding: 'utf8',
+      stdio: GIT_QUIET,
     }).trim();
   } catch {
     return null;
@@ -483,7 +523,7 @@ function hashFile(file: string, base: string | null): string | null {
 
 function catFile(cwd: string, hash: string): string | null {
   try {
-    return execFileSync('git', ['cat-file', '-p', hash], { cwd, encoding: 'utf8' });
+    return execFileSync('git', ['cat-file', '-p', hash], { cwd, encoding: 'utf8', stdio: GIT_QUIET });
   } catch {
     return null; // the blob isn't reachable (gc'd, or never written)
   }
@@ -514,7 +554,7 @@ function mergeFile(overrideAbs: string, baseAbs: string, currentAbs: string): {
         baseAbs,
         currentAbs,
       ],
-      { encoding: 'utf8' },
+      { encoding: 'utf8', stdio: GIT_QUIET },
     );
     return { status: 0, stdout };
   } catch (err) {
@@ -528,6 +568,12 @@ function mergeFile(overrideAbs: string, baseAbs: string, currentAbs: string): {
  *  markers). 128 and up, or no status at all, is git failing outright. */
 function isConflictStatus(status: number | null): boolean {
   return status !== null && status >= 1 && status <= 127;
+}
+
+/** The base a later sync merges from has to be in git's object store. A file
+ *  git does not track yet is in there only if this writes it. */
+function recordBase(absPath: string, hash: string): string {
+  return blobOf(absPath) ?? hash;
 }
 
 export function syncVariant(
@@ -576,7 +622,7 @@ export function syncVariant(
         const result = mergeFile(overrideAbs, baseTmp, currentAbs);
         if (result.status === 0) {
           writeFileSync(overrideAbs, result.stdout);
-          entry.base = currentHash;
+          entry.base = recordBase(currentAbs, currentHash);
           dirty = true;
           merged.push(file);
         } else if (isConflictStatus(result.status)) {
@@ -588,7 +634,7 @@ export function syncVariant(
           // as stale and a second sync would re-conflict the same hunks; the
           // marker check in promoteVariant is the guard that remains.
           writeFileSync(overrideAbs, result.stdout);
-          entry.base = currentHash;
+          entry.base = recordBase(currentAbs, currentHash);
           dirty = true;
           conflicts.push(file);
         } else {
@@ -668,6 +714,19 @@ export function activeConflict(
 }
 
 /**
+ * Variants in another group that override one of this variant's files. Groups
+ * are independent selectors, so picking both of these fails at activation.
+ */
+export function crossGroupOverlaps(opts: VariantsStoreOptions, id: string): { file: string; other: string }[] {
+  const variants = readVariants(opts);
+  const self = variants.find((v) => v.id === id);
+  if (!self) return [];
+  const siblings = overlayGroups(variants).find((g) => g.members.some((m) => m.id === id))?.members ?? [];
+  return variants.flatMap((other) => other.id === id || siblings.includes(other) ? [] :
+    Object.keys(other.files).filter((file) => Object.hasOwn(self.files, file)).map((file) => ({ file, other: other.id })));
+}
+
+/**
  * The active set, cleaned: ids whose variant is gone (dropped or promoted
  * since the file was written) are dropped, and of two variants over one
  * file the later one is dropped, so `load` never has to choose. The file's
@@ -707,6 +766,12 @@ export function readKnobs(opts: VariantsStoreOptions): KnobAxis[] {
       const hex = (value: unknown) => typeof value === 'string' && /^#(?:[a-f0-9]{3}|[a-f0-9]{6})$/i.test(value);
       return hex(c.defaultColor) && Array.isArray(c.swatches) && c.swatches.every((s) =>
         s && typeof s.id === 'string' && typeof s.label === 'string' && hex(s.value));
+    }
+    if (a.kind === 'select') {
+      const s = a as Partial<SelectVariantAxis>;
+      return Array.isArray(s.options) && s.options.length > 0 &&
+        s.options.every((o) => o && typeof o.id === 'string' && typeof o.label === 'string') &&
+        s.options.some((o) => o.id === s.defaultOption);
     }
     return false;
   }).filter((axis) => {
@@ -793,8 +858,13 @@ export function variantsResponse(opts: VariantsStoreOptions, req: NotesRequest):
     const conflict = activeConflict(opts, active);
     if (conflict) {
       const [a, b, file] = conflict;
+      const groups = overlayGroups(readVariants(opts));
+      const named = (id: string) => {
+        const label = groups.find((group) => group.members.some((member) => member.id === id))?.label;
+        return label ? `"${id}" (${label})` : `"${id}"`;
+      };
       return json(409, {
-        error: `"${a}" and "${b}" both override ${file}; only one can be active`,
+        error: `${named(a)} and ${named(b)} both override ${file}; only one can be active`,
         conflict,
       });
     }

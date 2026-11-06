@@ -3,14 +3,16 @@
  * `variants-store.ts`. Every subcommand is synchronous: the store does no
  * I/O beyond the filesystem and `git`, so there is nothing here to await.
  */
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { overlayGroups, variantAppliesTo } from '../core/variants';
+import { isRouteModule, scanExports } from '../vite/exports';
 import { readNotes } from '../store';
 import {
   addVariantFile,
   createVariant,
+  crossGroupOverlaps,
   dropVariant,
   listVariants,
   promoteVariant,
@@ -91,7 +93,7 @@ function printVariantHelp(io: CliIO): void {
   out(io);
   out(io, '  variant list [<route>] [--all-routes]    every variant; * marks the active ones');
   out(io, '  variant new <id> [--note <prefix>] [--route <path>] [--label <text>]');
-  out(io, '                   [--group <id>] [--group-label <text>]');
+  out(io, '                   [--description <text>] [--group <id>] [--group-label <text>]');
   out(io, '                                           start one; --note copies route and element from a note,');
   out(io, '                                           --group makes it one alternative of a shared selector');
   out(io, '  variant add <id> [--new] <file...>       copy real files into it, then edit the copies;');
@@ -208,7 +210,29 @@ function cmdAdd(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
   out(io, create
     ? `created ${files.length} new file(s) in "${id}"`
     : `added ${files.length} file(s) to "${id}"`);
+  if (!create) for (const file of files) warnNoHotSwap(io, file);
+  warnOverlaps(io, opts, id);
   return 0;
+}
+
+/** Say up front what would otherwise look like a page that reloads for no
+ *  reason. Reads the export names only, so a capitalized constant slips by. */
+function warnNoHotSwap(io: CliIO, file: string): void {
+  const names = scanExports(readFileSync(resolve(io.cwd, file), 'utf8'));
+  if (!names || isRouteModule(names)) {
+    errOut(io, `warning: ${file} is served whole, so it follows .isotone/active.json in every tab instead of switching per tab. See "Live switching" in the variants guide.`);
+    return;
+  }
+  const fixed = names.filter((name) => name !== 'default' && !/^[A-Z]/.test(name));
+  if (fixed.length) {
+    errOut(io, `warning: ${file} exports ${fixed.join(', ')}, so switching this variant reloads the page. Move ${fixed.length === 1 ? 'it' : 'them'} to a file the variant leaves alone to switch in place.`);
+  }
+}
+
+function warnOverlaps(io: CliIO, opts: VariantsStoreOptions, id: string): void {
+  for (const { file, other } of crossGroupOverlaps(opts, id)) {
+    errOut(io, `warning: ${file} is also overridden by "${other}" in another group, so picking both fails. Put them in one group with \`variant group\`, or have them override different files.`);
+  }
 }
 
 function cmdRm(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
@@ -294,6 +318,7 @@ function cmdGroup(rest: string[], io: CliIO, opts: VariantsStoreOptions): number
   }
   setVariantGroup(opts, id, groupId, label);
   out(io, `"${id}" is now in group ${groupId}${label !== undefined ? ` ("${label}")` : ''}`);
+  warnOverlaps(io, opts, id);
   return 0;
 }
 
@@ -307,7 +332,16 @@ function cmdSync(rest: string[], io: CliIO, opts: VariantsStoreOptions): number 
   out(io, `merged: ${merged.length ? merged.join(', ') : 'none'}`);
   out(io, `conflicts: ${conflicts.length ? conflicts.join(', ') : 'none'}`);
   out(io, `unchanged: ${unchanged.length ? unchanged.join(', ') : 'none'}`);
+  for (const file of conflicts) out(io, syncAdvice(opts, id, file));
   return 0;
+}
+
+function syncAdvice(opts: VariantsStoreOptions, id: string, file: string): string {
+  const copy = join(variantDir(opts, id), file);
+  if (existsSync(copy) && readFileSync(copy, 'utf8').includes('<<<<<<< variant')) {
+    return `${file}: resolve the conflict markers in ${copy}`;
+  }
+  return `${file}: there is no base version to merge from, so the copy was left as it is. Compare it with the real file by hand, then \`variant promote ${id} --force\` when it should win.`;
 }
 
 function cmdPromote(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
@@ -319,8 +353,9 @@ function cmdPromote(rest: string[], io: CliIO, opts: VariantsStoreOptions): numb
     errOut(io, 'Usage: isotone variant promote <id> [--force]');
     return 1;
   }
-  const { files } = promoteVariant(opts, id, { force });
+  const { files, rebased } = promoteVariant(opts, id, { force });
   out(io, `promoted "${id}": ${files.length ? files.join(', ') : 'no files'}`);
+  if (rebased.length) out(io, `still alternatives, now based on the promoted files: ${rebased.join(', ')}`);
   return 0;
 }
 

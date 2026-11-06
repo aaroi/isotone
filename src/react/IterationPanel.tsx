@@ -180,6 +180,14 @@ export function IterationPanel({
   );
   const [hoverRect, setHoverRect] = useState<Rect | null>(null);
   const [rects, setRects] = useState<(Rect & { selector: string })[]>([]);
+  // The elements clicked, by selector. A re-render can shift a path onto a
+  // different element, and the highlight has to stay on the one that was picked.
+  const pinnedElements = useRef(new Map<string, Element>());
+  const locate = useCallback((selector: string): Element | null => {
+    const pinned = pinnedElements.current.get(selector);
+    if (pinned?.isConnected) return pinned;
+    try { return document.querySelector(selector); } catch { return null; }
+  }, []);
   const [text, setText] = useState('');
   const [notes, setNotes] = useState<IterationNote[]>([]);
   // Which pages' notes the list shows. Unset means this page only.
@@ -689,6 +697,7 @@ export function IterationPanel({
     };
     const toggleTarget = (el: Element) => {
       const target = describeIterationElement(elementAsNode(el));
+      pinnedElements.current.set(target.selector, el);
       const added = !targetsRef.current.some((t) => t.selector === target.selector);
       setTargets((prev) =>
         prev.some((t) => t.selector === target.selector)
@@ -804,14 +813,12 @@ export function IterationPanel({
     const place = () => {
       frame = undefined;
       let { x, y } = anchor;
-      try {
-        const el = document.querySelector(anchor.selector);
-        if (el) {
-          const r = el.getBoundingClientRect();
-          x = r.left + anchor.dx;
-          y = r.top + anchor.dy;
-        }
-      } catch {}
+      const el = locate(anchor.selector);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        x = r.left + anchor.dx;
+        y = r.top + anchor.dy;
+      }
       const vw = document.documentElement.clientWidth || innerWidth;
       const vh = innerHeight;
       const w = float.offsetWidth;
@@ -865,7 +872,7 @@ export function IterationPanel({
       window.removeEventListener('scroll', schedule, true);
       window.removeEventListener('resize', schedule);
     };
-  }, [anchor]);
+  }, [anchor, locate]);
   // Leaving the page, the floating composer fades where it was instead of
   // vanishing in one frame. Keyboard actions and reduced motion stay immediate.
   useLayoutEffect(() => {
@@ -889,6 +896,10 @@ export function IterationPanel({
     fade.onfinish = () => ghost.remove();
     return () => { fade.cancel(); ghost.remove(); };
   }, [floating]);
+  useEffect(() => {
+    const kept = new Set(targets.map((t) => t.selector));
+    for (const selector of pinnedElements.current.keys()) if (!kept.has(selector)) pinnedElements.current.delete(selector);
+  }, [targets]);
   // Pinned elements stay outlined while their note is written next to them.
   useEffect(() => {
     if (!picking && !floating) {
@@ -900,22 +911,18 @@ export function IterationPanel({
       frame = undefined;
       setRects(
         targets.flatMap((t) => {
-          try {
-            const el = document.querySelector(t.selector);
-            if (!el) return [];
-            const r = el.getBoundingClientRect();
-            return [
-              {
-                top: r.top,
-                left: r.left,
-                width: r.width,
-                height: r.height,
-                selector: t.selector,
-              },
-            ];
-          } catch {
-            return [];
-          }
+          const el = locate(t.selector);
+          if (!el) return [];
+          const r = el.getBoundingClientRect();
+          return [
+            {
+              top: r.top,
+              left: r.left,
+              width: r.width,
+              height: r.height,
+              selector: t.selector,
+            },
+          ];
         }),
       );
     };
@@ -928,7 +935,7 @@ export function IterationPanel({
       window.removeEventListener('scroll', schedule, true);
       window.removeEventListener('resize', schedule);
     };
-  }, [targets, picking, floating]);
+  }, [targets, picking, floating, locate]);
 
   const variantsPanel = variants && (
         <section

@@ -260,6 +260,12 @@ function runNotes(argv: string[], io: CliIO): number {
     for (const element of n.elements ?? (n.element ? [n.element] : [])) {
       const label = element.text ? `"${element.text}"` : '(no text)';
       out(io, `  ↳ <${element.tag}> ${label} — ${element.selector}`);
+      if (element.component?.length) out(io, `    component: ${element.component.join(' > ')}`);
+      if (element.source) out(io, `    source: ${element.source}`);
+      if (element.within?.length) out(io, `    within: ${element.within.join(' > ')}`);
+      if (element.near) out(io, `    near: "${element.near}"`);
+      if (element.attributes) out(io, `    attributes: ${Object.entries(element.attributes).map(([name, value]) => `${name}="${value}"`).join(' ')}`);
+      if (element.rect) out(io, `    at: ${element.rect.x},${element.rect.y} ${element.rect.w}×${element.rect.h}`);
     }
     if (n.variant) out(io, `  ◇ ${n.variant.label}${n.variant.optionLabel ? ` → ${n.variant.optionLabel}` : ''} — selector=${n.variant.axisId}${n.variant.optionId ? ` option=${n.variant.optionId}` : ''}${n.variant.value ? ` value=${n.variant.value}` : ''}`);
     const context = n.payload === undefined ? '' : describePayload(n.payload);

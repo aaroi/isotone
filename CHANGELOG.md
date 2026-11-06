@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- fix: a failed variant switch shows the server's reason, naming the variants, their groups and the shared file
+- fix: deleting an active variant's folder by hand no longer makes every later switch fail with a 404
+- fix: `variant sync` keeps working on files git does not track, where a second sync used to fail and leave the file stale
+- fix: `variant promote` leaves the other variants in its group current
+- fix: adding a file to or removing one from a variant now reaches server-rendered modules, which caused stale HTML and hydration mismatches, and reaches whole-file switching too
+- fix: pinning an element could highlight a different one and move the composer to it, because the saved path also matched earlier elements. A path now matches only the pinned element
+- feat: pinned elements carry their React components, labelled or headed ancestors, attributes and page position, so an agent can tell which element a note means
+- feat: select knobs, which also set `data-knob-<id>` on `<html>`, and an `isotone:knob` event for code that draws for itself
+- feat: `variant add` warns about exports that force a reload and about files another group already overrides
+
 ## 1.1.2
 
 - feat: the shortcut opens feedback in select mode, and toggles select mode once it's open. Escape closes the panel; the shortcut no longer does
