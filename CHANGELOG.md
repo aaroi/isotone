@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.1.3
+
 - fix: a failed variant switch shows the server's reason, naming the variants, their groups and the shared file
 - fix: deleting an active variant's folder by hand no longer makes every later switch fail with a 404
 - fix: `variant sync` keeps working on files git does not track, where a second sync used to fail and leave the file stale
