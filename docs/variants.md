@@ -121,6 +121,17 @@ axis default in sync. The interactive demo includes card radius and padding slid
 in a Cards section and the accent colour in a Theme section; its screenshot view
 keeps the original two selectors, without sections, for a compact composition.
 
+Each option, thumbnail and colour swatch has a small chevron in its corner (and a right click)
+that opens the selector dialog for that option alone: feedback on it, keep only
+it, or remove it. The selector's own dialog offers the same per-option actions.
+Opening it does not change the selection.
+
+A `[keep-option]` note means the reviewer picked a winner: make that option the
+default and remove the selector and the other options. Apply it like a promoted
+variant: `variant promote <id>` for the named option (or inline the knob's
+chosen branch), then drop the others. `[keep-default]` is the same for the
+current default, and `[remove-option]` / `[remove-axis]` only remove.
+
 Removal actions in the panel save requests for the agent. Selectors and options
 stay visible and usable until the agent changes the project. Requests open in
 the composer like any note; editing them preserves their structured action and

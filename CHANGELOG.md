@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- feat: every select option, thumbnail and colour swatch has its own actions (from #37). A chevron in its corner, shown on hover or keyboard focus and always on touch screens, or a right click opens the selector dialog scoped to that option: Feedback on this option, Keep only this, Remove this option. Opening it never changes the selection, and it opens below the option when it cannot fit above. Its title reads as one line, the option then the selector ("Compact Spacing")
+- change: Keep default only is back in every selector's dialog. On the Default row, Keep only this files the same `keep-default` request
+- fix: a closing selector action dialog keeps its place until its fade ends, instead of jumping to the panel's top mid-fade
+- change: the selector heading chevron is a touch quieter at rest
+- docs: AGENTS.md, the `init` guidance and the variants guide tell agents what a `[keep-option]` note asks for
+
 ## 1.2.2
 
 - feat: custom colours open a picker in the panel's own popup material instead of the browser's native colour dialog
