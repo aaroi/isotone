@@ -24,6 +24,7 @@ import { readBundle } from '../standalone/bundle';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
 import { autoUpdateNote } from '../node/update/note';
 import { isWithin } from '../node/fs/paths';
+import { isLoopback } from '../node/http';
 import { type OverlayVariant, overlayGroups, VARIANTS_ENDPOINT } from '../core/variants';
 import {
   ACTIVE_FILE,
@@ -437,8 +438,9 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
         void updates.ready.then(() => autoUpdateNote(file, updates.getSnapshot())).catch(() => {});
       }
       const allowedHosts = () => {
-        const hosts = server.config.server?.allowedHosts;
-        return Array.isArray(hosts) ? hosts : [];
+        const { allowedHosts: hosts, host } = server.config.server ?? {};
+        const network = host === true || (typeof host === 'string' && !isLoopback(host));
+        return { names: Array.isArray(hosts) ? hosts : [], network };
       };
       server.middlewares.use(
         UPDATE_ENDPOINT,

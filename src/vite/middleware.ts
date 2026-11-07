@@ -13,18 +13,21 @@ import { type VariantsStoreOptions, variantsResponse } from '../node/variants';
 
 type Middleware = (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
 
-/** The names Vite was told to serve besides local ones (`server.allowedHosts`). */
-export type AllowedHosts = () => readonly string[];
+/** What the dev server was told to accept: the names in `server.allowedHosts`,
+ *  and whether it was exposed to the network (`server.host`, `vite --host`). */
+export type AllowedHosts = () => { names: readonly string[]; network: boolean };
 
 /** Whether the request may use the endpoints; answers 403 when not. Only this
- *  machine may: `vite --host` exposes the app, not the notes file. */
+ *  machine may, unless the dev server was deliberately exposed with `--host`:
+ *  then other devices on that network (a phone reviewing the app) may too. */
 function guard(req: IncomingMessage, res: ServerResponse, allowedHosts: AllowedHosts): boolean {
   try {
+    const policy = allowedHosts();
     checkRequest({
       origin: req.headers.origin,
       host: req.headers.host,
-      remoteAddress: req.socket?.remoteAddress ?? null,
-      allowedHosts: allowedHosts(),
+      remoteAddress: policy.network ? undefined : (req.socket?.remoteAddress ?? null),
+      allowedHosts: policy.names,
     });
     return true;
   } catch (error) {

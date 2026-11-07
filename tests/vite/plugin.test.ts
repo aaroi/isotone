@@ -701,6 +701,20 @@ describe('overlay variants in the dev server', () => {
     expect((await request(server, NOTES_ENDPOINT, 'GET', '/', undefined, {}, '::1')).status).toBe(200);
   });
 
+  it('answers other devices on the network once the dev server is exposed with --host', async () => {
+    const { root } = tempProject();
+    const hooks = plugin(root, 'serve');
+    const server = fakeServer(root);
+    (server.config as { server?: unknown }).server = { host: true };
+    hooks.configureServer(server);
+    const note = { route: '/', feedback: 'From my phone' };
+    const phone = { 'content-type': 'application/json', host: '192.168.1.10:5173', origin: 'http://192.168.1.10:5173' };
+    expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, phone, '192.168.1.20')).status).toBe(201);
+    // Exposure does not relax the Host and Origin checks against rebinding pages.
+    const rebound = { ...phone, host: 'rebind.attacker.example', origin: 'http://rebind.attacker.example' };
+    expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, rebound, '192.168.1.20')).status).toBe(403);
+  });
+
   it('answers 415 to a POST that does not declare a JSON body', async () => {
     const { root } = tempProject();
     const hooks = plugin(root, 'serve');
