@@ -1,3 +1,9 @@
+/**
+ * What a note id may be: it is printed into commands an agent runs
+ * (`npx isotone --done <id>`), so nothing a shell would interpret.
+ */
+export const NOTE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
 let fallbackCounter = 0;
 
 /** IDs must also work on HTTP development hosts, where randomUUID is absent. */

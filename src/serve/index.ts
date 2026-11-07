@@ -23,7 +23,7 @@ import { dirname, resolve } from 'node:path';
 
 import type { RouteGateOptions } from '../core/routes';
 import type { IterationTheme } from '../core/types';
-import { checkOrigin, HttpError, isLoopback, readNodeJson, sendFailure, writeResponse } from '../node/http';
+import { checkRequest, isLoopback, readNodeJson, sendFailure, writeResponse } from '../node/http';
 import { ensureFileIgnored } from '../node/fs/git-exclude';
 import { notesResponse, NOTES_ENDPOINT } from '../node/notes/handler';
 import { VARIANTS_ENDPOINT } from '../core/variants';
@@ -215,8 +215,7 @@ export function serveIteration(opts: ServeIterationOptions): Promise<ServedItera
     const method = req.method ?? 'GET';
     const origin = `http://${host.includes(':') && !host.startsWith('[') ? `[${host}]` : host}:${boundPort}`;
     try {
-      if (!isLoopback(new URL(`http://${req.headers.host ?? ''}`).hostname)) throw new HttpError(403, 'host not allowed');
-      checkOrigin(req.headers.origin, req.headers.host ?? '', true);
+      checkRequest({ origin: req.headers.origin, host: req.headers.host, loopbackOrigins: true });
     } catch (error) {
       sendFailure(res, error);
       return;

@@ -1,6 +1,7 @@
 /** Landing a variant over the real files, and dropping one. */
 
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { overlayGroups, type OverlayVariant } from '../../core/variants';
 import { readActive, writeActive } from './active';
@@ -61,17 +62,10 @@ export function promoteVariant(
       overlayGroups(readVariants(opts))
         .find((g) => g.members.some((m) => m.id === id))
         ?.members.filter((m) => m.id !== id) ?? [];
-    const files: string[] = [];
-    const landed = new Map<string, { before: string | null; after: string | null }>();
-    for (const key of Object.keys(manifest.files)) {
-      const overrideAbs = join(vDir, key);
-      const destAbs = join(root, key);
-      const before = existsSync(destAbs) ? currentBlob(destAbs) : null;
-      mkdirSync(dirname(destAbs), { recursive: true });
-      writeFileSync(destAbs, readFileSync(overrideAbs));
-      landed.set(key, { before, after: blobOf(destAbs) });
-      files.push(key);
-    }
+    const files = Object.keys(manifest.files);
+    const before = new Map(files.map((key) => [key, existsSync(join(root, key)) ? currentBlob(join(root, key)) : null]));
+    landFiles(files.map((key) => ({ from: join(vDir, key), to: join(root, key) })));
+    const landed = new Map(files.map((key) => [key, { before: before.get(key) ?? null, after: blobOf(join(root, key)) }]));
     rmSync(vDir, { recursive: true, force: true });
     if (active.includes(id))
       writeActive(
@@ -80,6 +74,37 @@ export function promoteVariant(
       );
     return { files, rebased: rebaseSiblings(opts, siblings, landed) };
   });
+}
+
+/**
+ * Copy every file or none: each copy is written beside its target first, and
+ * only once all are written do they replace the targets. A failure puts back
+ * what had already been replaced.
+ */
+function landFiles(copies: { from: string; to: string }[]): void {
+  const staged: { to: string; temp: string; original: Buffer | null; replaced: boolean }[] = [];
+  try {
+    for (const { from, to } of copies) {
+      const original = existsSync(to) ? readFileSync(to) : null;
+      mkdirSync(dirname(to), { recursive: true });
+      const temp = `${to}.${randomUUID()}.tmp`;
+      staged.push({ to, temp, original, replaced: false });
+      writeFileSync(temp, readFileSync(from), { flag: 'wx' });
+      if (original) chmodSync(temp, statSync(to).mode);
+    }
+    for (const entry of staged) {
+      renameSync(entry.temp, entry.to);
+      entry.replaced = true;
+    }
+  } catch (error) {
+    for (const entry of staged) {
+      if (entry.replaced) {
+        if (entry.original) writeFileSync(entry.to, entry.original);
+        else rmSync(entry.to, { force: true });
+      } else rmSync(entry.temp, { force: true });
+    }
+    throw error;
+  }
 }
 
 /**

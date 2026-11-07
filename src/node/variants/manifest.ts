@@ -22,6 +22,14 @@ export function isSafeManifestKey(key: string): boolean {
   return !key.split('/').some((segment) => !segment || segment === '.' || segment === '..' || segment === '.git');
 }
 
+/** Env files, private keys and registry credentials: a copy would sit in a
+ *  directory that is committed by default. `.env.example` and the like are fine. */
+function looksSecret(key: string): boolean {
+  const name = key.slice(key.lastIndexOf('/') + 1).toLowerCase();
+  if (/^\.env(\..+)?$/.test(name)) return !/\.(example|sample|template)$/.test(name);
+  return /\.(pem|key|p12|pfx)$/.test(name) || /^id_(rsa|dsa|ecdsa|ed25519)/.test(name) || name === '.npmrc' || name === '.netrc';
+}
+
 function isPlausibleVariant(v: unknown): v is OverlayVariant {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
   const o = v as Record<string, unknown>;
@@ -245,6 +253,7 @@ export function addVariantFile(
       return manifest;
     }
     if (!existsSync(sourceAbs)) throw new Error(`"${file}" does not exist. Use --new for a file the variant adds.`);
+    if (looksSecret(key)) throw new Error(`"${file}" looks like a secret; variants are meant to be committed, so it is not copied.`);
     mkdirSync(dirname(destAbs), { recursive: true });
     writeFileSync(destAbs, readFileSync(sourceAbs));
     manifest.files = { ...manifest.files, [key]: { base: blobOf(sourceAbs) } };

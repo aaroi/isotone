@@ -5,12 +5,13 @@
 import { randomUUID } from 'node:crypto';
 
 import type { IterationElement } from '../../core/types';
-import { MAX_FEEDBACK_LENGTH, MAX_SELECTOR, PAYLOAD_MAX } from '../../core/limits';
+import { NOTE_ID } from '../../core/id';
+import { MAX_FEEDBACK_LENGTH, MAX_NOTES, MAX_ROUTE, MAX_SELECTOR, PAYLOAD_MAX } from '../../core/limits';
 import { updateNoteText } from '../../core/update';
-import { withFileLock } from '../fs/lock';
+import { SERVER_LOCK_WAIT_MS, withFileLock } from '../fs/lock';
 import { type HandlerRequest, type HandlerResponse, jsonResponse } from '../http';
 import { notesProjectRoot, updateRequestOf } from '../update/request';
-import { notesRevision, readNotes, replyView, type StoredNote, writeNotes } from './store';
+import { noteFingerprint, notesRevision, readNotes, replyView, type StoredNote, writeNotes } from './store';
 import { cap, elementContext, elementOf, removalOf, variantOf, viewportOf, withinPayloadCap } from './validate';
 
 /** The endpoint path the client calls. */
@@ -30,7 +31,9 @@ export type NotesRequest = HandlerRequest;
  */
 export function notesResponse(file: string, req: NotesRequest): NotesResponse {
   if (req.method === 'POST' || req.method === 'DELETE') {
-    return withFileLock(file, () => handleNotesRequest(file, req));
+    // A server must not freeze on someone else's lock: past a short wait it
+    // answers 503 and the panel keeps the note to retry.
+    return withFileLock(file, () => handleNotesRequest(file, req), { waitMs: SERVER_LOCK_WAIT_MS });
   }
   return handleNotesRequest(file, req);
 }
@@ -64,7 +67,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
 
   if (method === 'DELETE') {
     const id = String(query.id ?? '');
-    if (!id) return json(400, { error: 'id is required' });
+    if (!NOTE_ID.test(id)) return json(400, { error: 'id must be 1-64 letters, digits, - or _' });
     writeNotes(
       file,
       readNotes(file).filter((n) => n.id !== id),
@@ -89,12 +92,13 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     // from the server's own check, and an update note cannot be edited.
     // Nor is `reply`: only the agent writes one, with `isotone --reply`.
     const { id, route, feedback, element, payload, viewport } = body;
-    if (id !== undefined && id !== null && (typeof id !== 'string' || !id || id.length > 200)) {
-      return json(400, { error: 'id must be a non-empty string of at most 200 characters' });
+    if (id !== undefined && id !== null && (typeof id !== 'string' || !NOTE_ID.test(id))) {
+      return json(400, { error: 'id must be 1-64 letters, digits, - or _' });
     }
     if (typeof route !== 'string' || route === '') {
       return json(400, { error: 'route is required' });
     }
+    if (route.length > MAX_ROUTE) return json(400, { error: `route must be at most ${MAX_ROUTE} characters` });
     const cleanFeedback = typeof feedback === 'string' ? feedback.trim() : '';
     if (cleanFeedback === '') {
       return json(400, { error: 'feedback is required' });
@@ -141,6 +145,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
         return json(409, { error: 'An update note is written by Isotone and cannot be edited. Delete it to cancel the update.' });
       }
       if (existing) {
+        const before = noteFingerprint(existing);
         if (previousDefaults) {
           delete existing.elements;
           delete existing.variant;
@@ -158,6 +163,13 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
         // An omitted payload leaves the stored one alone, so a host that only
         // sends it on the first save does not lose it on the next autosave.
         if (payload !== undefined) existing.payload = payload;
+        // An edit that lands just after the agent closed the note is new
+        // feedback: reopen it, or the agent would never see it.
+        if (existing.done && noteFingerprint(existing) !== before) {
+          existing.done = false;
+          existing.doneAt = null;
+          delete existing.workingAt;
+        }
         if (defaultsRequest && !existing.done) {
           existing.createdAt = new Date().toISOString();
           if (cleanViewport) existing.viewport = cleanViewport;
@@ -172,11 +184,14 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     if (typeof id === 'string' && notes.some((note) => note.id === id)) {
       return json(409, { error: 'This note belongs to a different route' });
     }
+    if (notes.length >= MAX_NOTES) {
+      return json(409, { error: `The notes file holds ${MAX_NOTES} notes, the most it takes. Delete done notes from it to add more.` });
+    }
     const newId = typeof id === 'string' ? id : randomUUID();
-    const createdAt =
-      typeof body.createdAt === 'string' && Number.isFinite(Date.parse(body.createdAt))
-        ? new Date(body.createdAt).toISOString()
-        : new Date().toISOString();
+    // A note saved offline keeps the time it was written, but never one in
+    // the future, which would sort it above everything for good.
+    const sent = typeof body.createdAt === 'string' ? Date.parse(body.createdAt) : Number.NaN;
+    const createdAt = new Date(Number.isFinite(sent) ? Math.min(sent, Date.now()) : Date.now()).toISOString();
     notes.push({
       id: newId,
       route,

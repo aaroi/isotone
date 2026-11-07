@@ -325,11 +325,31 @@ describe('Request adapter boundaries', () => {
       file,
       new Request('http://localhost:3000/api/notes', {
         method: 'POST',
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ feedback: 'x'.repeat(1024 * 1024) }),
       }),
     );
     expect(oversized.status).toBe(413);
     expect(readNotes(file)).toEqual([]);
+  });
+
+  it('refuses a DNS-rebinding host and a body that is not declared JSON', async () => {
+    const file = tempFile();
+    const post = (url: string, headers: Record<string, string>) =>
+      serveNotesRequest(file, new Request(url, { method: 'POST', headers, body: '{"route":"/","feedback":"Hi"}' }));
+    // The page and the API share the attacker's name, so Origin matches Host.
+    const rebound = await post('http://rebind.attacker.example:3000/api/notes', {
+      origin: 'http://rebind.attacker.example:3000',
+      'content-type': 'application/json',
+    });
+    expect(rebound.status).toBe(403);
+    expect((await serveNotesRequest(file, new Request('http://rebind.attacker.example:3000/api/notes'))).status).toBe(403);
+    expect((await post('http://localhost:3000/api/notes', { 'content-type': 'text/plain' })).status).toBe(415);
+    expect(readNotes(file)).toEqual([]);
+    // Local names, IP literals and reserved test domains keep working.
+    for (const url of ['http://127.0.0.1:3000/x', 'http://app.localhost:3000/x', 'http://shop.test/x', 'http://192.168.1.20:3000/x']) {
+      expect((await post(url, { 'content-type': 'application/json' })).status).toBe(201);
+    }
   });
 
   it('returns a JSON failure when the store cannot be read', async () => {

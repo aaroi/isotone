@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { isIP } from 'node:net';
 
 import { MAX_BODY_BYTES } from '../core/limits';
+import { LockBusyError } from './fs/lock';
 
 /** The transport-agnostic result of a request — any runtime (Vite
  *  middleware, Next route handler, Bun serve, Vercel) can render it. */
@@ -41,6 +43,55 @@ export function isLoopback(host: string): boolean {
   return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
 }
 
+/**
+ * Whether a Host header names this machine the way a local browser would: an
+ * IP literal, localhost, a name no public DNS answers (`*.localhost`,
+ * `*.test`), or one the dev server was told to allow (Vite's
+ * `server.allowedHosts`; a leading dot allows subdomains). A DNS-rebinding
+ * page sends its own public domain, which fails.
+ */
+export function isLocalHostHeader(host: string | null | undefined, allowed: readonly string[] = []): boolean {
+  if (!host) return false;
+  let name: string;
+  try {
+    name = new URL(`http://${host}`).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  } catch {
+    return false;
+  }
+  if (isIP(name) || name === 'localhost' || name.endsWith('.localhost') || name.endsWith('.test')) return true;
+  return allowed.some((entry) => {
+    const rule = entry.toLowerCase();
+    return rule.startsWith('.') ? name === rule.slice(1) || name.endsWith(rule) : name === rule;
+  });
+}
+
+/** A socket address on this machine (IPv4, IPv6, or IPv4-mapped IPv6). */
+export function isLoopbackAddress(address: string | undefined): boolean {
+  return !!address && (address === '::1' || /^(::ffff:)?127\./.test(address));
+}
+
+/**
+ * Every endpoint's gate. The Host must be local ({@link isLocalHostHeader}),
+ * a page's Origin must match it (or be any loopback page with
+ * `loopbackOrigins`), and, where the server knows the peer, the request must
+ * come from this machine: a dev server exposed with `--host` does not open
+ * the notes file to the network.
+ */
+export function checkRequest(request: {
+  origin?: string | null;
+  host?: string | null;
+  /** The peer address; omitted where the runtime does not expose it. */
+  remoteAddress?: string | null;
+  allowedHosts?: readonly string[];
+  loopbackOrigins?: boolean;
+}): void {
+  if (request.remoteAddress !== undefined && !isLoopbackAddress(request.remoteAddress ?? undefined)) {
+    throw new HttpError(403, 'isotone answers only requests from this machine');
+  }
+  if (!isLocalHostHeader(request.host, request.allowedHosts)) throw new HttpError(403, 'host not allowed');
+  checkOrigin(request.origin, request.host ?? '', request.loopbackOrigins);
+}
+
 export function checkOrigin(origin: string | null | undefined, host: string, loopbackOnly = false): void {
   if (!origin) return; // CLI and same-origin GET requests need no Origin header.
   try {
@@ -52,7 +103,14 @@ export function checkOrigin(origin: string | null | undefined, host: string, loo
   throw new HttpError(403, 'origin not allowed');
 }
 
+/** A JSON body needs a JSON content type: a cross-site form post cannot send
+ *  one without a preflight, which these endpoints never grant. */
+function requireJson(type: string | null | undefined): void {
+  if (!type?.toLowerCase().includes('application/json')) throw new HttpError(415, 'content-type must be application/json');
+}
+
 export async function readNodeJson(req: IncomingMessage): Promise<unknown> {
+  requireJson(req.headers['content-type']);
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let bytes = 0;
@@ -76,6 +134,7 @@ export async function readNodeJson(req: IncomingMessage): Promise<unknown> {
 }
 
 export async function readWebJson(request: Request): Promise<unknown> {
+  requireJson(request.headers.get('content-type'));
   const reader = request.body?.getReader();
   if (!reader) return undefined;
   const chunks: Uint8Array[] = [];
@@ -102,10 +161,12 @@ export async function readWebJson(request: Request): Promise<unknown> {
 }
 
 export function httpFailure(error: unknown): HandlerResponse {
+  // A busy store is temporary: 503 tells the panel to keep the note and retry.
+  const known = error instanceof HttpError ? error : error instanceof LockBusyError ? new HttpError(503, error.message) : null;
   return {
-    status: error instanceof HttpError ? error.status : 500,
-    headers: { 'content-type': 'application/json; charset=utf-8' },
-    body: { error: error instanceof HttpError ? error.message : 'Could not read or write the local feedback store.' },
+    status: known ? known.status : 500,
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+    body: { error: known ? known.message : 'Could not read or write the local feedback store.' },
   };
 }
 
