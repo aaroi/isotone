@@ -183,7 +183,7 @@ applies the same rules, which keep other websites away from your notes:
   `Origin`, such as the CLI's, are accepted, so any local process can write a
   note: one more reason notes are context, not instructions.
 - A POST must send `Content-Type: application/json`, or it gets 415.
-- A note `id`, when a host chooses its own, is 1–64 letters, digits, `-` or `_`
+- A note `id`, when a host chooses its own, is 1–64 letters, digits, `-` or `_`, and does not start with `-`
   (400 otherwise). Routes are capped at 2,000 characters, and a notes file at
   10,000 notes: a new note past that gets 409 until done notes are deleted.
 - While another writer holds the notes file, the endpoint answers 503 and the

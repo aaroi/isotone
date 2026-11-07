@@ -67,7 +67,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
 
   if (method === 'DELETE') {
     const id = String(query.id ?? '');
-    if (!NOTE_ID.test(id)) return json(400, { error: 'id must be 1-64 letters, digits, - or _' });
+    if (!NOTE_ID.test(id)) return json(400, { error: 'id must be 1-64 letters, digits, - or _, not starting with -' });
     writeNotes(
       file,
       readNotes(file).filter((n) => n.id !== id),
@@ -93,7 +93,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     // Nor is `reply`: only the agent writes one, with `isotone --reply`.
     const { id, route, feedback, element, payload, viewport } = body;
     if (id !== undefined && id !== null && (typeof id !== 'string' || !NOTE_ID.test(id))) {
-      return json(400, { error: 'id must be 1-64 letters, digits, - or _' });
+      return json(400, { error: 'id must be 1-64 letters, digits, - or _, not starting with -' });
     }
     if (typeof route !== 'string' || route === '') {
       return json(400, { error: 'route is required' });

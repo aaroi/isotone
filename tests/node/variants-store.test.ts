@@ -500,7 +500,7 @@ describe('path escape rejected', () => {
       expect(Object.hasOwn(readVariant(opts, 'filenames')?.files ?? {}, file)).toBe(true);
     }
   });
-  it('rejects source and override symlinks outside their owning tree', () => {
+  it.skipIf(process.platform === 'win32')('rejects source and override symlinks outside their owning tree', () => {
     const { root, opts } = tempRepo();
     const outside = mkdtempSync(join(tmpdir(), 'iso-outside-'));
     dirs.push(outside);

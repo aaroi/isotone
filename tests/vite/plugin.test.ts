@@ -561,7 +561,7 @@ describe('overlay variants in load()', () => {
     expect(hooks.load(source)?.code).toContain('variant b');
   });
 
-  it('applies overrides when the Vite root is reached through a symlink', () => {
+  it.skipIf(process.platform === 'win32')('applies overrides when the Vite root is reached through a symlink', () => {
     const { root, source } = tempProject();
     writeActive({ root }, ['b']);
     // Vite keeps `config.root` as configured and realpaths every module id,

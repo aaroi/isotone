@@ -801,7 +801,23 @@ describe('output an agent can trust', () => {
       JSON.stringify(notes.map((n) => ({ route: '/', feedback: 'fix', done: false, createdAt: new Date().toISOString(), ...n }))),
     );
 
-  it('never prints a hostile stored id into doneCommand', async () => {
+  it('closes an exact id even when it is a prefix of another', async () => {
+    const root = tempRepo();
+    write(root, [{ id: 'note-1' }, { id: 'note-10' }]);
+    const list = makeIo(root);
+    expect(await runCli(['--json'], list)).toBe(0);
+    const record = JSON.parse(list.text.out).find((n: { id: string }) => n.id === 'note-1');
+    expect(record.doneCommand).toBe('npx isotone --done note-1');
+    const io = makeIo(root);
+    expect(await runCli(['--done', 'note-1'], io)).toBe(0);
+    const stored = JSON.parse(readFileSync(join(root, '.iteration-feedback.json'), 'utf8'));
+    expect(stored.map((n: { id: string; done: boolean }) => [n.id, n.done])).toEqual([
+      ['note-1', true],
+      ['note-10', false],
+    ]);
+  });
+
+  it.skipIf(process.platform === 'win32')('never prints a hostile stored id into doneCommand', async () => {
     const root = tempRepo();
     write(root, [{ id: "a1b2 ; touch pwned #'" }]);
     const io = makeIo(root);
@@ -818,7 +834,7 @@ describe('output an agent can trust', () => {
     expect(existsSync(join(root, 'pwned'))).toBe(false);
   });
 
-  it('quotes every printed argument so the shell sees it as one', () => {
+  it.skipIf(process.platform === 'win32')('quotes every printed argument so the shell sees it as one', () => {
     const root = tempRepo();
     const hostile = "a1b2 ; touch pwned #'$(id)";
     const argv = execFileSync('sh', ['-c', `printf "%s\\n" ${shellCommand('--done', hostile)}`], { cwd: root, encoding: 'utf8' });

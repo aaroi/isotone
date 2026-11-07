@@ -94,8 +94,11 @@ export function extractBoolFlag(args: string[], flag: string): { present: boolea
 }
 
 /** `--done`/`--undone` and `variant new --note` all resolve an id the same
- *  way: a unique prefix wins, an empty or ambiguous one is a user error. */
+ *  way: an exact id wins, then a unique prefix; an empty or ambiguous one is a
+ *  user error. */
 export function findNoteByPrefix<T extends { id: string }>(notes: T[], prefix: string): T {
+  const exact = notes.find((n) => n.id === prefix);
+  if (exact) return exact;
   const matches = notes.filter((n) => n.id.startsWith(prefix));
   if (matches.length === 0) throw new Error(`No feedback id starting with "${prefix}".`);
   if (matches.length > 1) {

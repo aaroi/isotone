@@ -253,35 +253,38 @@ describe('notes endpoint validation', () => {
     ]);
   });
 
-  it("drops a directory outside the notes file's project, or reached through a symlink out of it", () => {
-    const file = notesFile();
-    const command = 'pnpm add -D --exact isotone@1.2.0';
-    const at = (cwd: string) => updateRequestOf({ from: '1.1.3', to: '1.2.0', command, cwd, manager: 'pnpm' }, { root: project });
-    mkdirSync(join(project, 'apps', 'web'), { recursive: true });
-    expect(at(project)?.cwd).toBe(project);
-    expect(at(join(project, 'apps', 'web'))).not.toBeNull();
-    expect(at(join(project, 'apps', '..', '..'))).toBeNull();
-    expect(at('/')).toBeNull();
-    expect(at(join(project, 'missing'))).toBeNull();
-    expect(at('apps/web')).toBeNull();
-    symlinkSync(tmpdir(), join(project, 'outside'));
-    expect(at(join(project, 'outside'))).toBeNull();
-    // The same file read back: the listing has no request and the old text.
-    writeNotes(file, [
-      {
-        id: 'away',
-        route: '/',
-        feedback: 'Update Isotone 1.1.3 → 1.2.0',
-        element: null,
-        done: false,
-        doneAt: null,
-        createdAt: new Date().toISOString(),
-        update: { from: '1.1.3', to: '1.2.0', command, cwd: '/', manager: 'pnpm' },
-      },
-    ]);
-    const [row] = notesResponse(file, { method: 'GET', url: '/' }).body as { update?: unknown }[];
-    expect(row.update).toBeUndefined();
-  });
+  it.skipIf(process.platform === 'win32')(
+    "drops a directory outside the notes file's project, or reached through a symlink out of it",
+    () => {
+      const file = notesFile();
+      const command = 'pnpm add -D --exact isotone@1.2.0';
+      const at = (cwd: string) => updateRequestOf({ from: '1.1.3', to: '1.2.0', command, cwd, manager: 'pnpm' }, { root: project });
+      mkdirSync(join(project, 'apps', 'web'), { recursive: true });
+      expect(at(project)?.cwd).toBe(project);
+      expect(at(join(project, 'apps', 'web'))).not.toBeNull();
+      expect(at(join(project, 'apps', '..', '..'))).toBeNull();
+      expect(at('/')).toBeNull();
+      expect(at(join(project, 'missing'))).toBeNull();
+      expect(at('apps/web')).toBeNull();
+      symlinkSync(tmpdir(), join(project, 'outside'));
+      expect(at(join(project, 'outside'))).toBeNull();
+      // The same file read back: the listing has no request and the old text.
+      writeNotes(file, [
+        {
+          id: 'away',
+          route: '/',
+          feedback: 'Update Isotone 1.1.3 → 1.2.0',
+          element: null,
+          done: false,
+          doneAt: null,
+          createdAt: new Date().toISOString(),
+          update: { from: '1.1.3', to: '1.2.0', command, cwd: '/', manager: 'pnpm' },
+        },
+      ]);
+      const [row] = notesResponse(file, { method: 'GET', url: '/' }).body as { update?: unknown }[];
+      expect(row.update).toBeUndefined();
+    },
+  );
 });
 
 describe('agents read the update note', () => {
