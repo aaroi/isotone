@@ -69,6 +69,27 @@ describe('create / add / list', () => {
     expect(listed[0].missing).toEqual([]);
   });
 
+  it('records a file under its on-disk spelling when the filesystem ignores case', () => {
+    const { root, opts } = tempRepo();
+    // Only meaningful where `src/button.tsx` opens `src/Button.tsx`.
+    if (!existsSync(join(root, 'SRC', 'button.tsx'))) return;
+    createVariant(opts, { id: 'v1' });
+    expect(Object.keys(addVariantFile(opts, 'v1', 'SRC/button.tsx').files)).toEqual(['src/Button.tsx']);
+    expect(resolveOverride(opts, ['v1'], join(root, 'src', 'Button.tsx'))).toBe(join(variantDir(opts, 'v1'), 'src/Button.tsx'));
+    expect(Object.keys(removeVariantFile(opts, 'v1', 'src/BUTTON.tsx').files)).toEqual([]);
+  });
+
+  it('refuses to copy a file that looks like a secret into a variant', () => {
+    const { root, opts } = tempRepo();
+    createVariant(opts, { id: 'v1' });
+    for (const name of ['.env', '.env.local', 'server.pem', 'id_rsa', '.npmrc']) {
+      writeFileSync(join(root, name), 'SECRET=1\n');
+      expect(() => addVariantFile(opts, 'v1', name)).toThrow(/looks like a secret/);
+    }
+    writeFileSync(join(root, '.env.example'), 'SECRET=\n');
+    expect(Object.keys(addVariantFile(opts, 'v1', '.env.example').files)).toEqual(['.env.example']);
+  });
+
   it('rejects an invalid or duplicate id', () => {
     const { opts } = tempRepo();
     expect(() => createVariant(opts, { id: 'Bad_ID' })).toThrow();
@@ -281,6 +302,21 @@ describe('promote / drop', () => {
     expect(existsSync(variantDir(opts, 'v1'))).toBe(false);
     // Only the promoted one leaves the set.
     expect(readActive(opts)).toEqual(['other']);
+  });
+
+  it('promote changes no real file when one of them cannot be written', () => {
+    const { root, opts } = tempRepo();
+    writeFileSync(join(root, 'src', 'Card.tsx'), 'real card\n');
+    createVariant(opts, { id: 'v1' });
+    addVariantFile(opts, 'v1', 'src/Button.tsx');
+    addVariantFile(opts, 'v1', 'src/Card.tsx');
+    writeFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'override button\n');
+    // The second target is now a directory, so it cannot be replaced.
+    rmSync(join(root, 'src', 'Card.tsx'));
+    mkdirSync(join(root, 'src', 'Card.tsx'));
+    expect(() => promoteVariant(opts, 'v1', { force: true })).toThrow();
+    expect(readFileSync(join(root, 'src', 'Button.tsx'), 'utf8')).toBe('line one\nline two\nline three\n');
+    expect(readVariant(opts, 'v1')).not.toBeNull();
   });
 
   it('drop deletes the variant and takes it out of the active set', () => {

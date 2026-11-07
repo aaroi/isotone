@@ -593,7 +593,9 @@ describe('overlay variants in the dev server', () => {
     expect(server.ws.send).not.toHaveBeenCalled();
     // The hot update for that reported change goes through, where an
     // ordinary edit of an overridden real file would be dropped.
-    expect(hooks.handleHotUpdate({ file: source, server })).toBeUndefined();
+    // Vite reports the change in its own normalized form (forward slashes
+    // on Windows), which has to find the swap all the same.
+    expect(hooks.handleHotUpdate({ file: source.replace('/src/', '/src/./'), server })).toBeUndefined();
     expect(hooks.handleHotUpdate({ file: source, server })).toEqual([]);
     // And load() now serves the override without a restart.
     expect(hooks.load(source)?.code).toContain('variant b');

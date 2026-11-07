@@ -251,12 +251,14 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
       // to be delivered as if the real file changed.
       return [...(modulesOf(source) ?? [])];
     }
-    // A change activate() reported.
-    const seen = swapping.get(changed);
+    // A change activate() reported. Vite hands this hook a forward-slash
+    // path, and the swap is keyed the same way, so Windows paths match too.
+    const path = normalizePath(changed);
+    const seen = swapping.get(path);
     let swap = false;
     if (seen) {
       if (env === null) {
-        swapping.delete(changed);
+        swapping.delete(path);
         swap = true;
       } else if (!seen.has(env)) {
         seen.add(env);
@@ -264,7 +266,6 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
         for (const check of [...swapWaiters]) check();
       }
     }
-    const path = normalizePath(changed);
     if (live && client && dispatched.has(path)) {
       // The dispatcher already holds every version; the tab switched itself.
       if (swap) return [];
@@ -509,16 +510,18 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
           if (changed.length === 0 && removedFiles.length === 0) return Promise.resolve();
           activeIds = next;
           overrides.clear();
-          const sources = new Set<string>(removedFiles.map((file) => join(vopts.root, file)));
+          // Forward-slash paths throughout: the module graph and the hot
+          // update hooks key files that way on every platform.
+          const sources = new Set<string>(removedFiles.map((file) => normalizePath(join(vopts.root, file))));
           for (const id of changed) {
             const manifest = readVariant(vopts, id);
             for (const key of Object.keys(manifest?.files ?? {})) {
-              sources.add(join(vopts.root, key));
+              sources.add(normalizePath(join(vopts.root, key)));
             }
           }
           const emitted: string[] = [];
           for (const source of sources) {
-            const loaded = server.moduleGraph.getModulesByFile(normalizePath(source));
+            const loaded = server.moduleGraph.getModulesByFile(source);
             if (!loaded || loaded.size === 0) continue;
             swapping.set(source, new Set());
             emitted.push(source);
