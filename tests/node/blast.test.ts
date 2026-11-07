@@ -347,6 +347,15 @@ describe(`isotone ${BLAST.command}`, () => {
     ).toEqual(['list', 'one']);
   });
 
+  it('reads a route that starts with a digit as a route, and asks about a bare number', async () => {
+    const p = project();
+    expect(await start(p, '2024-recap')).toBe(0);
+    expect(p.state()?.route).toBe('2024-recap');
+    const q = project();
+    expect(await runBlast(['start', '2024'], q.io, FAST)).toBe(1);
+    expect(q.text.err).toContain('the route /2024');
+  });
+
   it('hands a reopened note out again', async () => {
     const p = project();
     add(p.notes, note('abcd1234', { createdAt: old() }));

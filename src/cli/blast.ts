@@ -21,6 +21,7 @@ import {
   MAX_SESSION_MS,
   blastLoop,
   formatDuration,
+  DURATION,
   parseDuration,
   timeLeft,
 } from '../core/blast';
@@ -120,7 +121,10 @@ export async function runBlast(argv: string[], io: CliIO, timingOverrides: Parti
     if (!waits && (has(rest, '--every') || has(rest, '--stream')))
       throw new Error('--every and --stream apply to the waiting run, `npx isotone blast`.');
     for (const arg of positionals) {
-      const duration = /^\d/.test(arg);
+      // `start 30` could mean minutes or the route /30: say which to write.
+      if (/^\d+$/.test(arg) && command === 'start')
+        throw new Error(`"${arg}" needs a unit, such as ${arg}m, or a leading slash for the route /${arg}.`);
+      const duration = DURATION.test(arg) || /^\d+$/.test(arg);
       if (duration && (command === 'start' || command === 'extend') && durationMs === undefined) durationMs = parseDuration(arg);
       else if (!duration && command === 'start' && !route) route = arg;
       else if (!duration && command === 'wait')
