@@ -211,8 +211,14 @@ function printKnobs(io: CliIO, opts: VariantsStoreOptions, route: string | undef
       return;
     }
     const id = entry && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string'
-      ? ` "${(entry as { id: string }).id}"` : '';
-    skipped.push(`knob ${index + 1}${id}`);
+      ? (entry as { id: string }).id : null;
+    const name = `knob ${index + 1}${id === null ? '' : ` "${id}"`}`;
+    // An earlier knob already took this id; the panel keeps that one.
+    if (id !== null && valid.slice(0, next).some((knob) => knob.id === id)) {
+      skipped.push(`Skipped ${name}: another knob earlier in the file already has this id. Give each knob its own id.`);
+    } else {
+      skipped.push(`Skipped ${name}: not a valid range, color or select knob (see docs/variants.md#knobs).`);
+    }
   });
   const shown = route ? knobsFor(valid, route) : valid;
   out(io);
@@ -226,9 +232,7 @@ function printKnobs(io: CliIO, opts: VariantsStoreOptions, route: string | undef
   } else {
     out(io, route ? `No knobs for "${route}".` : `No valid knobs in ${KNOBS_FILE}.`);
   }
-  for (const entry of skipped) {
-    out(io, `Skipped ${entry}: not a valid range, color or select knob (see docs/variants.md#knobs).`);
-  }
+  for (const line of skipped) out(io, line);
 }
 
 function cmdNew(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {

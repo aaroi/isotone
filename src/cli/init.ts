@@ -287,7 +287,12 @@ function printServe(print: Print, setup: Setup): void {
   if (next) {
     const entry = setup.nextEntry ?? 'app/layout.tsx';
     print(`2. Load the panel in development only. In ${entry}, import Script at the top`);
-    print('   and render the tag inside <body>:');
+    // The Pages Router `_app` renders the page component and has no <body>.
+    if (/(^|\/)pages\/_app\./.test(entry)) {
+      print('   and render the tag alongside <Component {...pageProps} />, in a fragment with it:');
+    } else {
+      print('   and render the tag inside <body>:');
+    }
     print();
     print("     import Script from 'next/script';");
     print('     ...');

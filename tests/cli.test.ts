@@ -128,6 +128,17 @@ describe('variant', () => {
     expect(broken.text.out).toContain('is not valid JSON');
   });
 
+  it('names a duplicate knob id as a duplicate, not as an invalid knob', async () => {
+    const root = tempRepo();
+    mkdirSync(join(root, '.isotone'), { recursive: true });
+    const radius = { kind: 'range', id: 'card-radius', label: 'Card radius', min: 0, max: 24, step: 1, defaultValue: 12, unit: 'px' };
+    writeFileSync(join(root, '.isotone', 'knobs.json'), JSON.stringify([radius, { ...radius, label: 'Radius again' }]));
+    const io = makeIo(root);
+    expect(await runCli(['variant', 'list'], io)).toBe(0);
+    expect(io.text.out).toContain('Skipped knob 2 "card-radius": another knob earlier in the file already has this id');
+    expect(io.text.out).not.toContain('not a valid range');
+  });
+
   it('runs new -> add -> list -> use -> sync (noop) -> path -> promote', async () => {
     const root = tempRepo();
     commit(root, 'src/Hero.tsx', 'export const Hero = () => "hello";\n');
@@ -545,6 +556,19 @@ describe('init', () => {
     expect(io.text.out).toContain('{ allowProduction: true }');
     // No plain, unguarded tag for a Next app.
     expect(io.text.out).not.toContain('<script src=');
+    expect(io.text.out).toContain('render the tag inside <body>');
+  });
+
+  it('places the Next tag beside the page component in a Pages Router _app, which has no <body>', async () => {
+    const root = tempRepo();
+    writeFileSync(join(root, 'next.config.ts'), 'export default {};\n');
+    mkdirSync(join(root, 'pages'), { recursive: true });
+    writeFileSync(join(root, 'pages', '_app.tsx'), 'export default function App() {}\n');
+    const io = makeIo(root);
+    expect(await runCli(['init'], io)).toBe(0);
+    expect(io.text.out).toContain('In pages/_app.tsx');
+    expect(io.text.out).toContain('render the tag alongside <Component {...pageProps} />');
+    expect(io.text.out).not.toContain('<body>');
   });
 
   it('gives a static site the localhost-only loader and no Next route handler', async () => {

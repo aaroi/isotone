@@ -93,8 +93,9 @@ Open the printed setup URL for a copyable tag or a bookmarklet. The bundle has n
 host framework dependencies. This path supports notes and
 [knobs](variants.md#knobs): `.isotone/knobs.json` in the directory where `serve`
 runs is served at `/api/iteration/variants`, and the panel shows its range, colour
-and select knobs. Swapping whole source files needs the Vite plugin, or a
-host-owned `VariantsSource`.
+and select knobs. The panel has a Variants tool only while that file holds valid
+knobs; reload the page after adding the first one. Swapping whole source files
+needs the Vite plugin, or a host-owned `VariantsSource`.
 
 `--port 4124` selects another port; use the same port in the tag, and keep both in
 one place with a script such as `"isotone": "isotone serve --port 4124"`.

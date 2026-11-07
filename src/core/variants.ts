@@ -108,8 +108,6 @@ export interface VariantAction {
 
 /* ── Sections ─────────────────────────────────────────────────────────── */
 
-/** Between a section and a selector name in a label: a slash with whitespace on
- *  both sides, so `"Light/Dark"` and `"Header/Footer"` stay whole labels. */
 /** How a section and its selector are joined for display: `Header › Logo size`. */
 export const SECTION_SEPARATOR = ' › ';
 

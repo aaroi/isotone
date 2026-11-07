@@ -50,6 +50,8 @@ export interface IterationPanelProps {
   rule?: RouteGateOptions;
   getPayload?: () => unknown;
   variants?: VariantsSource;
+  /** What the Variants list says on a page without selectors. */
+  variantsEmptyText?: string;
   /** Initial surface. Kept for compatibility; surfaces can now open together. */
   defaultTab?: 'variants' | 'notes';
   /** Default: Cmd/Ctrl+Shift+Period. false disables the shortcut. */
@@ -151,6 +153,7 @@ export function IterationPanel({
   rule,
   getPayload,
   variants,
+  variantsEmptyText,
   defaultTab = 'notes',
   shortcut = DEFAULT_SHORTCUT,
 }: IterationPanelProps) {
@@ -1004,6 +1007,7 @@ export function IterationPanel({
             onSaved={loadNotes}
             onManage={notesAvailable ? queueRemoval : undefined}
             pendingActions={pendingActions}
+            emptyText={variantsEmptyText}
           />
         </section>
       );
