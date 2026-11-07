@@ -51,8 +51,24 @@ import { runCli } from 'isotone/cli';
 import * as core from 'isotone/core';
 import { readNotes } from 'isotone/server';
 import { serveIteration } from 'isotone/serve';
+import { createRequire } from 'node:module';
 
 assert.equal(existsSync('node_modules/react'), false, 'standalone must not require React');
+// Every subpath resolves for require() too. The package is ESM-only, so a
+// require() either loads it (Node 22 require(esm)) or fails with an ESM error,
+// never with ERR_PACKAGE_PATH_NOT_EXPORTED.
+const require = createRequire(import.meta.url);
+assert.equal(require('isotone/package.json').name, 'isotone');
+assert.equal((await import('isotone/package.json', { with: { type: 'json' } })).default.name, 'isotone');
+for (const entry of ['react', 'core', 'server', 'serve', 'vite', 'cli']) {
+  assert.ok(require.resolve('isotone/' + entry).endsWith('.js'), entry);
+}
+for (const entry of ['core', 'server', 'serve', 'cli']) {
+  try { require('isotone/' + entry); } catch (error) {
+    assert.notEqual(error.code, 'ERR_PACKAGE_PATH_NOT_EXPORTED', entry);
+    assert.match(error.code ?? '', /^ERR_REQUIRE_(ESM|ASYNC_MODULE)$/, entry + ': ' + error.message);
+  }
+}
 assert.equal(existsSync('node_modules/vite'), false, 'standalone must not require Vite');
 assert.equal(typeof core.createIterationStore, 'function');
 let output = '';
