@@ -14,7 +14,5 @@ export function readBundle(): string {
   ]) {
     if (existsSync(candidate)) return readFileSync(candidate, 'utf8');
   }
-  throw new Error(
-    'isotone: the browser bundle is missing from dist/. Run `pnpm build`.',
-  );
+  throw new Error('isotone: the browser bundle is missing from dist/. Run `pnpm build`.');
 }

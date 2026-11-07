@@ -65,11 +65,21 @@ export function runInit(args: string[], io: CliIO): number {
   printSetup((line = '') => instructions.push(line), setup);
 
   if (json) {
-    out(io, JSON.stringify({
-      host, approach, recommended, reason,
-      writes: yes ? ['AGENTS.md', ...(approach === 'overlay' ? ['.isotone/variants/README.md'] : [])] : [],
-      instructions: instructions.map((line) => `${line}\n`).join(''),
-    }, null, 2));
+    out(
+      io,
+      JSON.stringify(
+        {
+          host,
+          approach,
+          recommended,
+          reason,
+          writes: yes ? ['AGENTS.md', ...(approach === 'overlay' ? ['.isotone/variants/README.md'] : [])] : [],
+          instructions: instructions.map((line) => `${line}\n`).join(''),
+        },
+        null,
+        2,
+      ),
+    );
     if (yes) applyApproach(io.cwd, approach);
     return 0;
   }
@@ -81,9 +91,12 @@ export function runInit(args: string[], io: CliIO): number {
   out(io);
   if (yes) {
     const added = applyApproach(io.cwd, approach);
-    out(io, added
-      ? 'AGENTS.md: added the isotone section, so later sessions know the review loop.'
-      : 'AGENTS.md already has an isotone section; left it unchanged.');
+    out(
+      io,
+      added
+        ? 'AGENTS.md: added the isotone section, so later sessions know the review loop.'
+        : 'AGENTS.md already has an isotone section; left it unchanged.',
+    );
   } else {
     out(io, 'Run `npx isotone init --yes` to add this section to AGENTS.md, or paste it there:');
     out(io);
@@ -117,7 +130,9 @@ function detectHost(cwd: string): Host {
     const deps = { ...pkg.dependencies, ...pkg.devDependencies };
     if (deps.next) return 'next';
     if (deps.vite) return 'vite';
-  } catch { /* A manifest is optional for static HTML projects. */ }
+  } catch {
+    /* A manifest is optional for static HTML projects. */
+  }
   return 'other';
 }
 
@@ -200,10 +215,7 @@ function recommend(host: Host, hostOwnedAxes: boolean): [Approach, string] {
   if (host === 'vite') {
     return ['overlay', 'the Vite plugin can swap alternative files in with zero changes to app code.'];
   }
-  return [
-    'serve',
-    'there is no bundler hook to swap files here, so notes and knobs work through a small local server.',
-  ];
+  return ['serve', 'there is no bundler hook to swap files here, so notes and knobs work through a small local server.'];
 }
 
 function printSetup(print: Print, setup: Setup): void {

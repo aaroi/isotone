@@ -21,11 +21,14 @@ function rule(selector: string): CSSStyleDeclaration {
   style.textContent = PANEL_CSS;
   document.head.append(style);
   try {
-    const found = Array.from(style.sheet?.cssRules ?? [])
-      .find((r): r is CSSStyleRule => 'selectorText' in r && (r as CSSStyleRule).selectorText === selector);
+    const found = Array.from(style.sheet?.cssRules ?? []).find(
+      (r): r is CSSStyleRule => 'selectorText' in r && (r as CSSStyleRule).selectorText === selector,
+    );
     if (!found) throw new Error(`Missing rule: ${selector}`);
     return found.style;
-  } finally { style.remove(); }
+  } finally {
+    style.remove();
+  }
 }
 
 describe('hints', () => {

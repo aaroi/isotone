@@ -6,7 +6,9 @@ import type { UpdateInfo } from '../src/core/update';
 import { UpdateNotice, type UpdateNoticeProps } from '../src/react/UpdateNotice';
 
 const available: UpdateInfo = {
-  status: 'available', currentVersion: '0.3.4', latestVersion: '0.4.0',
+  status: 'available',
+  currentVersion: '0.3.4',
+  latestVersion: '0.4.0',
   upgrade: { manager: 'pnpm', command: 'pnpm add -D isotone@0.4.0', cwd: '/workspace/design app' },
 };
 let host: HTMLDivElement;
@@ -16,7 +18,10 @@ let mounted: boolean;
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.useFakeTimers();
-  vi.stubGlobal('fetch', vi.fn(async () => Response.json(available)));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json(available)),
+  );
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -51,7 +56,7 @@ describe('quiet update checks', () => {
     expect(host.textContent).toBe('');
   });
 
-  it.each(['current', 'ahead', 'unavailable', 'disabled'] as const)('stays invisible for %s', async status => {
+  it.each(['current', 'ahead', 'unavailable', 'disabled'] as const)('stays invisible for %s', async (status) => {
     vi.mocked(fetch).mockResolvedValue(Response.json({ ...available, status, upgrade: null }));
     await render();
     expect(host.textContent).toBe('');
@@ -68,7 +73,9 @@ describe('quiet update checks', () => {
   });
 
   it('retries a checking response once, then stops within the deadline', async () => {
-    vi.mocked(fetch).mockImplementation(async () => Response.json({ ...available, status: 'checking', latestVersion: null, upgrade: null }));
+    vi.mocked(fetch).mockImplementation(async () =>
+      Response.json({ ...available, status: 'checking', latestVersion: null, upgrade: null }),
+    );
     await render();
     expect(fetch).toHaveBeenCalledTimes(1);
     await act(async () => vi.advanceTimersByTimeAsync(5500));
@@ -94,7 +101,12 @@ describe('quiet update checks', () => {
 
   it('discards an old endpoint response and clears a previously displayed notice', async () => {
     let resolveOld!: (response: Response) => void;
-    vi.mocked(fetch).mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+    vi.mocked(fetch).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOld = resolve;
+        }),
+    );
     await render('/old-update');
     await render('/new-update');
     expect(host.textContent).toContain('Isotone 0.4.0 is available');
@@ -123,8 +135,9 @@ describe('the update dialog', () => {
 
   it('asks the server for the note with only the page, then shows it as requested', async () => {
     const onRequested = vi.fn();
-    vi.mocked(fetch).mockImplementation(async (_url, init) => init?.method === 'POST'
-      ? Response.json({ id: 'u1', created: true }, { status: 201 }) : Response.json(available));
+    vi.mocked(fetch).mockImplementation(async (_url, init) =>
+      init?.method === 'POST' ? Response.json({ id: 'u1', created: true }, { status: 201 }) : Response.json(available),
+    );
     await render('/local-update', true, { onRequested, route: '/projects' });
     await click('.isotone-update-trigger');
     await click('.isotone-update-ask');
@@ -148,8 +161,9 @@ describe('the update dialog', () => {
   });
 
   it('says so when the request fails, and offers the prompt instead', async () => {
-    vi.mocked(fetch).mockImplementation(async (_url, init) => init?.method === 'POST'
-      ? Response.json({ error: 'busy' }, { status: 500 }) : Response.json(available));
+    vi.mocked(fetch).mockImplementation(async (_url, init) =>
+      init?.method === 'POST' ? Response.json({ error: 'busy' }, { status: 500 }) : Response.json(available),
+    );
     await render('/local-update', true, { onRequested: vi.fn() });
     await click('.isotone-update-trigger');
     await click('.isotone-update-ask');
@@ -170,7 +184,9 @@ describe('the update dialog', () => {
     await render();
     await click('.isotone-update-trigger');
     await click('.isotone-update-actions button');
-    expect(writeText).toHaveBeenCalledExactlyOnceWith('Update Isotone in this project from 0.3.4 to 0.4.0: run `pnpm add -D isotone@0.4.0` in /workspace/design app, restart the dev server if you run it, check the Isotone panel still loads, then tell me what changed (the new CHANGELOG.md).');
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(
+      'Update Isotone in this project from 0.3.4 to 0.4.0: run `pnpm add -D isotone@0.4.0` in /workspace/design app, restart the dev server if you run it, check the Isotone panel still loads, then tell me what changed (the new CHANGELOG.md).',
+    );
     expect(host.querySelector('[role="status"]')?.textContent).toBe('Prompt copied');
     await click('[aria-label="Close update"]');
     await click('.isotone-update-trigger');
@@ -204,14 +220,18 @@ describe('the update dialog', () => {
     const hostKey = vi.fn();
     await act(async () => root.render(h('div', { onKeyDown: hostKey }, h(UpdateNotice, { endpoint: '/local-update', active: true }))));
     await click('.isotone-update-trigger');
-    await act(async () => document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+    await act(async () =>
+      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })),
+    );
     expect(host.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(host.querySelector('.isotone-update-trigger'));
     expect(hostKey).not.toHaveBeenCalled();
   });
 
   it('shows a useful explanation when the package manager could not be identified', async () => {
-    vi.mocked(fetch).mockResolvedValue(Response.json({ ...available, upgrade: null, message: 'Open the app directory and run isotone check-update.' }));
+    vi.mocked(fetch).mockResolvedValue(
+      Response.json({ ...available, upgrade: null, message: 'Open the app directory and run isotone check-update.' }),
+    );
     await render('/local-update', true, { onRequested: vi.fn() });
     await click('.isotone-update-trigger');
     expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Open the app directory and run isotone check-update.');

@@ -12,16 +12,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import {
-  existsSync,
-  mkdirSync,
-  lstatSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, lstatSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
@@ -102,7 +93,10 @@ function staysInside(base: string, file: string): boolean {
   const canonical = (path: string): string => {
     let existing = resolve(path);
     while (dirname(existing) !== existing) {
-      try { lstatSync(existing); break; } catch (error) {
+      try {
+        lstatSync(existing);
+        break;
+      } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
         existing = dirname(existing);
       }
@@ -156,9 +150,15 @@ function isPlausibleVariant(v: unknown): v is OverlayVariant {
     !!o.files &&
     typeof o.files === 'object' &&
     !Array.isArray(o.files) &&
-    Object.entries(o.files).every(([key, entry]) => isSafeManifestKey(key) && entry && typeof entry === 'object' &&
-      ('base' in entry) && (entry.base === null || (typeof entry.base === 'string' && /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(entry.base))) &&
-      (!('added' in entry) || entry.added === true))
+    Object.entries(o.files).every(
+      ([key, entry]) =>
+        isSafeManifestKey(key) &&
+        entry &&
+        typeof entry === 'object' &&
+        'base' in entry &&
+        (entry.base === null || (typeof entry.base === 'string' && /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(entry.base))) &&
+        (!('added' in entry) || entry.added === true),
+    )
   );
 }
 
@@ -172,8 +172,12 @@ export function readVariant(opts: VariantsStoreOptions, id: string): OverlayVari
   try {
     const data = JSON.parse(readFileSync(file, 'utf8'));
     const dir = variantDir(opts, id);
-    return isPlausibleVariant(data) && data.id === id && staysInside(variantsDir(opts), file) &&
-      Object.keys(data.files).every((key) => staysInside(opts.root, join(opts.root, key)) && staysInside(dir, join(dir, key))) ? data : null;
+    return isPlausibleVariant(data) &&
+      data.id === id &&
+      staysInside(variantsDir(opts), file) &&
+      Object.keys(data.files).every((key) => staysInside(opts.root, join(opts.root, key)) && staysInside(dir, join(dir, key)))
+      ? data
+      : null;
   } catch {
     // Junk directory: unreadable or not JSON. listVariants skips it.
     return null;
@@ -294,12 +298,7 @@ function assertGroupId(group: string): void {
 /** Put an existing variant into a group, so two variants made separately
  *  become alternatives of one decision. `groupLabel` is left as it was
  *  unless given. */
-export function setVariantGroup(
-  opts: VariantsStoreOptions,
-  id: string,
-  group: string,
-  groupLabel?: string,
-): OverlayVariant {
+export function setVariantGroup(opts: VariantsStoreOptions, id: string, group: string, groupLabel?: string): OverlayVariant {
   return mutateVariants(opts, () => {
     const manifest = readVariant(opts, id);
     if (!manifest) throw new Error(`No variant "${id}"`);
@@ -316,11 +315,7 @@ export function setVariantGroup(
  * every section with `''`. `undefined` removes the field, so the group label's
  * prefix (`"Header > Logo"`) decides again.
  */
-export function setVariantSection(
-  opts: VariantsStoreOptions,
-  id: string,
-  section: string | undefined,
-): OverlayVariant {
+export function setVariantSection(opts: VariantsStoreOptions, id: string, section: string | undefined): OverlayVariant {
   return mutateVariants(opts, () => {
     const manifest = readVariant(opts, id);
     if (!manifest) throw new Error(`No variant "${id}"`);
@@ -369,11 +364,7 @@ export function addVariantFile(
   });
 }
 
-export function removeVariantFile(
-  opts: VariantsStoreOptions,
-  id: string,
-  file: string,
-): OverlayVariant {
+export function removeVariantFile(opts: VariantsStoreOptions, id: string, file: string): OverlayVariant {
   return mutateVariants(opts, () => {
     const manifest = readVariant(opts, id);
     if (!manifest) throw new Error(`No variant "${id}"`);
@@ -426,22 +417,20 @@ export function promoteVariant(
             ? `no base recorded for ${file} (not a git repo when the override was made)`
             : `${file} changed since the override was made`,
         );
-        throw new Error(
-          `"${id}" is stale (${reasons.join('; ')}). Run \`variant sync ${id}\` first, or promote with --force.`,
-        );
+        throw new Error(`"${id}" is stale (${reasons.join('; ')}). Run \`variant sync ${id}\` first, or promote with --force.`);
       }
       const conflicted = Object.keys(manifest.files).filter((key) => {
         const overrideAbs = join(vDir, key);
         return existsSync(overrideAbs) && readFileSync(overrideAbs, 'utf8').includes(CONFLICT_MARKER);
       });
       if (conflicted.length) {
-        throw new Error(
-          `"${id}" has unresolved conflict markers in ${conflicted.join(', ')}. Resolve them, or promote with --force.`,
-        );
+        throw new Error(`"${id}" has unresolved conflict markers in ${conflicted.join(', ')}. Resolve them, or promote with --force.`);
       }
     }
-    const siblings = overlayGroups(readVariants(opts)).find((g) => g.members.some((m) => m.id === id))
-      ?.members.filter((m) => m.id !== id) ?? [];
+    const siblings =
+      overlayGroups(readVariants(opts))
+        .find((g) => g.members.some((m) => m.id === id))
+        ?.members.filter((m) => m.id !== id) ?? [];
     const files: string[] = [];
     const landed = new Map<string, { before: string | null; after: string | null }>();
     for (const key of Object.keys(manifest.files)) {
@@ -454,7 +443,11 @@ export function promoteVariant(
       files.push(key);
     }
     rmSync(vDir, { recursive: true, force: true });
-    if (active.includes(id)) writeActive(opts, active.filter((a) => a !== id));
+    if (active.includes(id))
+      writeActive(
+        opts,
+        active.filter((a) => a !== id),
+      );
     return { files, rebased: rebaseSiblings(opts, siblings, landed) };
   });
 }
@@ -494,7 +487,11 @@ export function dropVariant(opts: VariantsStoreOptions, id: string): void {
     if (!isValidVariantId(id)) throw new Error(`Invalid variant id "${id}"`);
     const active = readActive(opts);
     rmSync(variantDir(opts, id), { recursive: true, force: true });
-    if (active.includes(id)) writeActive(opts, active.filter((a) => a !== id));
+    if (active.includes(id))
+      writeActive(
+        opts,
+        active.filter((a) => a !== id),
+      );
   });
 }
 
@@ -540,8 +537,12 @@ function hashFile(file: string, base: string | null): string | null {
   try {
     const contents = readFileSync(file);
     return createHash(base.length === 64 ? 'sha256' : 'sha1')
-      .update(`blob ${contents.length}\0`).update(contents).digest('hex');
-  } catch { return null; }
+      .update(`blob ${contents.length}\0`)
+      .update(contents)
+      .digest('hex');
+  } catch {
+    return null;
+  }
 }
 
 function catFile(cwd: string, hash: string): string | null {
@@ -557,26 +558,18 @@ function catFile(cwd: string, hash: string): string | null {
  *  on a nonzero exit, but the thrown error still carries stdout and the exit
  *  status, so both are read from there. `status` is null when git never
  *  ran to completion (killed by a signal, or not found). */
-function mergeFile(overrideAbs: string, baseAbs: string, currentAbs: string): {
+function mergeFile(
+  overrideAbs: string,
+  baseAbs: string,
+  currentAbs: string,
+): {
   status: number | null;
   stdout: string;
 } {
   try {
     const stdout = execFileSync(
       'git',
-      [
-        'merge-file',
-        '-p',
-        '-L',
-        'variant',
-        '-L',
-        'base',
-        '-L',
-        'default',
-        overrideAbs,
-        baseAbs,
-        currentAbs,
-      ],
+      ['merge-file', '-p', '-L', 'variant', '-L', 'base', '-L', 'default', overrideAbs, baseAbs, currentAbs],
       { encoding: 'utf8', stdio: GIT_QUIET },
     );
     return { status: 0, stdout };
@@ -599,10 +592,7 @@ function recordBase(absPath: string, hash: string): string {
   return blobOf(absPath) ?? hash;
 }
 
-export function syncVariant(
-  opts: VariantsStoreOptions,
-  id: string,
-): { merged: string[]; conflicts: string[]; unchanged: string[] } {
+export function syncVariant(opts: VariantsStoreOptions, id: string): { merged: string[]; conflicts: string[]; unchanged: string[] } {
   return mutateVariants(opts, () => {
     const manifest = readVariant(opts, id);
     if (!manifest) throw new Error(`No variant "${id}"`);
@@ -683,11 +673,7 @@ export function syncVariant(
  * names the file wins; `readActive` and the endpoint keep the set free of
  * two variants over one file, so in practice there is only ever one.
  */
-export function resolveOverride(
-  opts: VariantsStoreOptions,
-  active: string[],
-  absSourcePath: string,
-): string | null {
+export function resolveOverride(opts: VariantsStoreOptions, active: string[], absSourcePath: string): string | null {
   if (active.length === 0) return null;
   const root = resolve(opts.root);
   const relToRoot = relative(root, resolve(absSourcePath));
@@ -702,10 +688,7 @@ export function resolveOverride(
   return null;
 }
 
-export function overrideSourcePath(
-  opts: VariantsStoreOptions,
-  absOverridePath: string,
-): { id: string; file: string } | null {
+export function overrideSourcePath(opts: VariantsStoreOptions, absOverridePath: string): { id: string; file: string } | null {
   const rel = relative(variantsDir(opts), resolve(absOverridePath));
   if (!rel || isEscaping(rel)) return null;
   const [id, ...rest] = toPosixPath(rel).split('/');
@@ -720,10 +703,7 @@ export function overrideSourcePath(
  * {@link readActive}. Ids without a manifest are skipped; the callers
  * check existence themselves.
  */
-export function activeConflict(
-  opts: VariantsStoreOptions,
-  ids: string[],
-): [string, string, string] | null {
+export function activeConflict(opts: VariantsStoreOptions, ids: string[]): [string, string, string] | null {
   const owner = new Map<string, string>();
   for (const id of ids) {
     const manifest = readVariant(opts, id);
@@ -745,8 +725,13 @@ export function crossGroupOverlaps(opts: VariantsStoreOptions, id: string): { fi
   const self = variants.find((v) => v.id === id);
   if (!self) return [];
   const siblings = overlayGroups(variants).find((g) => g.members.some((m) => m.id === id))?.members ?? [];
-  return variants.flatMap((other) => other.id === id || siblings.includes(other) ? [] :
-    Object.keys(other.files).filter((file) => Object.hasOwn(self.files, file)).map((file) => ({ file, other: other.id })));
+  return variants.flatMap((other) =>
+    other.id === id || siblings.includes(other)
+      ? []
+      : Object.keys(other.files)
+          .filter((file) => Object.hasOwn(self.files, file))
+          .map((file) => ({ file, other: other.id })),
+  );
 }
 
 /**
@@ -767,41 +752,64 @@ export function readKnobs(opts: VariantsStoreOptions): KnobAxis[] {
   }
   if (!Array.isArray(parsed)) return [];
   const seen = new Set<string>();
-  return parsed.filter((k): k is KnobAxis => {
-    if (!k || typeof k !== 'object') return false;
-    const a = k as Partial<KnobAxis>;
-    if (typeof a.id !== 'string' || !isValidVariantId(a.id) || typeof a.label !== 'string') return false;
-    if (a.route !== undefined && typeof a.route !== 'string' &&
-      (!Array.isArray(a.route) || !a.route.every((route) => typeof route === 'string'))) return false;
-    if (a.showWhen !== undefined && (!a.showWhen || typeof a.showWhen.axis !== 'string' ||
-      (a.showWhen.equals !== undefined && typeof a.showWhen.equals !== 'string') ||
-      (a.showWhen.not !== undefined && typeof a.showWhen.not !== 'string'))) return false;
-    if (a.section !== undefined && typeof a.section !== 'string') return false;
-    if (a.kind === 'range') {
-      const { min, max, step, defaultValue } = a as Partial<RangeVariantAxis>;
-      if (typeof min !== 'number' || typeof max !== 'number' || typeof step !== 'number' || typeof defaultValue !== 'number') return false;
-      return [min, max, step, defaultValue, max - min].every(Number.isFinite) &&
-        min < max && step > 0 && defaultValue >= min && defaultValue <= max &&
-        (a.unit === undefined || typeof a.unit === 'string');
-    }
-    if (a.kind === 'color') {
-      const c = a as Partial<ColorVariantAxis>;
-      const hex = (value: unknown) => typeof value === 'string' && /^#(?:[a-f0-9]{3}|[a-f0-9]{6})$/i.test(value);
-      return hex(c.defaultColor) && Array.isArray(c.swatches) && c.swatches.every((s) =>
-        s && typeof s.id === 'string' && typeof s.label === 'string' && hex(s.value));
-    }
-    if (a.kind === 'select') {
-      const s = a as Partial<SelectVariantAxis>;
-      return Array.isArray(s.options) && s.options.length > 0 &&
-        s.options.every((o) => o && typeof o.id === 'string' && typeof o.label === 'string') &&
-        s.options.some((o) => o.id === s.defaultOption);
-    }
-    return false;
-  }).filter((axis) => {
-    if (seen.has(axis.id)) return false;
-    seen.add(axis.id);
-    return true;
-  });
+  return parsed
+    .filter((k): k is KnobAxis => {
+      if (!k || typeof k !== 'object') return false;
+      const a = k as Partial<KnobAxis>;
+      if (typeof a.id !== 'string' || !isValidVariantId(a.id) || typeof a.label !== 'string') return false;
+      if (
+        a.route !== undefined &&
+        typeof a.route !== 'string' &&
+        (!Array.isArray(a.route) || !a.route.every((route) => typeof route === 'string'))
+      )
+        return false;
+      if (
+        a.showWhen !== undefined &&
+        (!a.showWhen ||
+          typeof a.showWhen.axis !== 'string' ||
+          (a.showWhen.equals !== undefined && typeof a.showWhen.equals !== 'string') ||
+          (a.showWhen.not !== undefined && typeof a.showWhen.not !== 'string'))
+      )
+        return false;
+      if (a.section !== undefined && typeof a.section !== 'string') return false;
+      if (a.kind === 'range') {
+        const { min, max, step, defaultValue } = a as Partial<RangeVariantAxis>;
+        if (typeof min !== 'number' || typeof max !== 'number' || typeof step !== 'number' || typeof defaultValue !== 'number')
+          return false;
+        return (
+          [min, max, step, defaultValue, max - min].every(Number.isFinite) &&
+          min < max &&
+          step > 0 &&
+          defaultValue >= min &&
+          defaultValue <= max &&
+          (a.unit === undefined || typeof a.unit === 'string')
+        );
+      }
+      if (a.kind === 'color') {
+        const c = a as Partial<ColorVariantAxis>;
+        const hex = (value: unknown) => typeof value === 'string' && /^#(?:[a-f0-9]{3}|[a-f0-9]{6})$/i.test(value);
+        return (
+          hex(c.defaultColor) &&
+          Array.isArray(c.swatches) &&
+          c.swatches.every((s) => s && typeof s.id === 'string' && typeof s.label === 'string' && hex(s.value))
+        );
+      }
+      if (a.kind === 'select') {
+        const s = a as Partial<SelectVariantAxis>;
+        return (
+          Array.isArray(s.options) &&
+          s.options.length > 0 &&
+          s.options.every((o) => o && typeof o.id === 'string' && typeof o.label === 'string') &&
+          s.options.some((o) => o.id === s.defaultOption)
+        );
+      }
+      return false;
+    })
+    .filter((axis) => {
+      if (seen.has(axis.id)) return false;
+      seen.add(axis.id);
+      return true;
+    });
 }
 
 export function readActive(opts: VariantsStoreOptions): string[] {

@@ -13,16 +13,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
@@ -33,14 +24,7 @@ import { iteration, withNativeFetch, type IterationViteOptions } from '../src/vi
 import { NOTES_ENDPOINT } from '../src/store';
 import { VARIANTS_ENDPOINT } from '../src/core/variants';
 import { UPDATE_ENDPOINT } from '../src/update';
-import {
-  ACTIVE_FILE,
-  addVariantFile,
-  createVariant,
-  readActive,
-  variantDir,
-  writeActive,
-} from '../src/variants-store';
+import { ACTIVE_FILE, addVariantFile, createVariant, readActive, variantDir, writeActive } from '../src/variants-store';
 
 let server: ViteDevServer;
 let root: string;
@@ -49,10 +33,7 @@ let origin: string;
 
 beforeAll(async () => {
   root = mkdtempSync(resolve(import.meta.dirname, '..', '.tmp-vite-'));
-  writeFileSync(
-    join(root, 'index.html'),
-    '<!doctype html><html><head><title>host</title></head><body><div id="app"></div></body></html>',
-  );
+  writeFileSync(join(root, 'index.html'), '<!doctype html><html><head><title>host</title></head><body><div id="app"></div></body></html>');
   notesFile = join(root, 'notes.json');
 
   server = await createServer({
@@ -115,17 +96,12 @@ describe('the Vite adapter, served', () => {
   it('injects the mount script into the host HTML without a source edit', async () => {
     // A browser navigation asks for text/html; injection is gated on that so
     // module and asset responses are never buffered.
-    const html = await (
-      await fetch(`${origin}/`, { headers: { accept: 'text/html' } })
-    ).text();
+    const html = await (await fetch(`${origin}/`, { headers: { accept: 'text/html' } })).text();
     // The host's own markup survives...
     expect(html).toContain('<div id="app"></div>');
     // ...and the injected loader carries the mount options.
     expect(html).toContain('data-isotone-inject');
-    const script = html.slice(
-      html.indexOf('data-isotone-inject'),
-      html.indexOf('</head>'),
-    );
+    const script = html.slice(html.indexOf('data-isotone-inject'), html.indexOf('</head>'));
     expect(script).toContain('__isotone.mount');
     expect(script).toContain('"theme":"system"');
     expect(script).toContain(UPDATE_ENDPOINT);
@@ -137,9 +113,7 @@ describe('the Vite adapter, served', () => {
   });
 
   it('injects into <head>, never into the body a react tree owns', async () => {
-    const html = await (
-      await fetch(`${origin}/`, { headers: { accept: 'text/html' } })
-    ).text();
+    const html = await (await fetch(`${origin}/`, { headers: { accept: 'text/html' } })).text();
     expect(html).toContain('data-isotone-inject');
     // The loader script sits inside <head> (right after the opening tag,
     // sharing it with the native-fetch capture it must run after, and ahead
@@ -191,9 +165,17 @@ describe('the Vite adapter, served', () => {
   it('rejects foreign-origin writes and oversized bodies before changing notes', async () => {
     const before = await (await fetch(`${origin}${NOTES_ENDPOINT}`)).json();
     for (const endpoint of [NOTES_ENDPOINT, VARIANTS_ENDPOINT]) {
-      const blocked = await fetch(`${origin}${endpoint}`, { method: 'POST', headers: { origin: 'https://outside.example', 'content-type': 'application/json' }, body: '{}' });
+      const blocked = await fetch(`${origin}${endpoint}`, {
+        method: 'POST',
+        headers: { origin: 'https://outside.example', 'content-type': 'application/json' },
+        body: '{}',
+      });
       expect(blocked.status).toBe(403);
-      const oversized = await fetch(`${origin}${endpoint}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ feedback: 'x'.repeat(1024 * 1024) }) });
+      const oversized = await fetch(`${origin}${endpoint}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ feedback: 'x'.repeat(1024 * 1024) }),
+      });
       expect(oversized.status).toBe(413);
     }
     expect(await (await fetch(`${origin}${NOTES_ENDPOINT}`)).json()).toEqual(before);
@@ -231,10 +213,8 @@ describe('the Vite adapter, served', () => {
     expect(await res.text()).toContain('data-isotone-inject');
   });
 
-  it('keeps the browser\'s own fetch for the store, ahead of any app stub', async () => {
-    const html = await (
-      await fetch(`${origin}/`, { headers: { accept: 'text/html' } })
-    ).text();
+  it("keeps the browser's own fetch for the store, ahead of any app stub", async () => {
+    const html = await (await fetch(`${origin}/`, { headers: { accept: 'text/html' } })).text();
     const capture = html.indexOf('data-isotone-native');
     expect(capture).toBeGreaterThan(-1);
     // Before anything the app loads: directly inside <head>.
@@ -275,7 +255,9 @@ describe('the Vite adapter, served', () => {
     const other = mkdtempSync(resolve(import.meta.dirname, '..', '.tmp-vite-manual-'));
     writeFileSync(join(other, 'index.html'), '<html><head></head><body>Manual mount</body></html>');
     const manual = await createServer({
-      root: other, configFile: false, logLevel: 'silent',
+      root: other,
+      configFile: false,
+      logLevel: 'silent',
       server: { port: 0, host: '127.0.0.1', watch: null },
       optimizeDeps: { noDiscovery: true, include: [] },
       plugins: [iteration({ panel: false, checkForUpdates: false })],
@@ -294,8 +276,18 @@ describe('the Vite adapter, served', () => {
       expect(await update.json()).toMatchObject({ status: 'disabled', upgrade: null });
       expect((await fetch(`${url}${UPDATE_ENDPOINT}`, { method: 'PUT' })).status).toBe(405);
       // With no update to request, asking for the note changes nothing.
-      expect((await fetch(`${url}${UPDATE_ENDPOINT}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ route: '/', to: '9.9.9', command: 'rm -rf /' }) })).status).toBe(409);
-      expect((await fetch(`${url}${UPDATE_ENDPOINT}`, { method: 'POST', headers: { origin: 'https://outside.example' } })).status).toBe(403);
+      expect(
+        (
+          await fetch(`${url}${UPDATE_ENDPOINT}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ route: '/', to: '9.9.9', command: 'rm -rf /' }),
+          })
+        ).status,
+      ).toBe(409);
+      expect((await fetch(`${url}${UPDATE_ENDPOINT}`, { method: 'POST', headers: { origin: 'https://outside.example' } })).status).toBe(
+        403,
+      );
       expect(await (await fetch(`${url}${NOTES_ENDPOINT}`)).json()).toEqual([]);
       expect((await fetch(`${url}${UPDATE_ENDPOINT}`, { headers: { origin: 'https://outside.example' } })).status).toBe(403);
     } finally {
@@ -307,7 +299,7 @@ describe('the Vite adapter, served', () => {
 
   it('leaves non-HTML requests alone', async () => {
     const res = await fetch(`${origin}/`, { headers: { accept: '*/*' } });
-    expect((await res.text())).not.toContain('data-isotone-inject');
+    expect(await res.text()).not.toContain('data-isotone-inject');
   });
 
   it('serves the notes endpoint against the configured file', async () => {
@@ -333,9 +325,10 @@ describe('the Vite adapter, served', () => {
     expect(onDisk[0].route).toBe('/projects');
     expect(onDisk[0].payload).toEqual({ fixture: 'console' });
 
-    const listed = (await (
-      await fetch(`${origin}${NOTES_ENDPOINT}?route=/projects`)
-    ).json()) as Array<{ id: string; element: { text: string } | null }>;
+    const listed = (await (await fetch(`${origin}${NOTES_ENDPOINT}?route=/projects`)).json()) as Array<{
+      id: string;
+      element: { text: string } | null;
+    }>;
     expect(listed[0].id).toBe(id);
     expect(listed[0].element?.text).toBe('platform-api');
 
@@ -352,9 +345,7 @@ describe('withNativeFetch', () => {
     expect(withNativeFetch('<html><head lang="en"><title>x</title></head><body></body></html>')).toMatch(
       /<head lang="en"><script data-isotone-native>/,
     );
-    expect(withNativeFetch('<html><body class="a"><p>x</p></body></html>')).toMatch(
-      /<body class="a"><script data-isotone-native>/,
-    );
+    expect(withNativeFetch('<html><body class="a"><p>x</p></body></html>')).toMatch(/<body class="a"><script data-isotone-native>/);
   });
 
   it('is idempotent and leaves a document with neither alone', () => {
@@ -372,11 +363,7 @@ describe('withNativeFetch', () => {
  * the hooks through a cast rather than vite's `Plugin` type.
  */
 interface Hooks {
-  configResolved(config: {
-    root: string;
-    command: 'serve' | 'build';
-    assetsInclude: (file: string) => boolean;
-  }): void;
+  configResolved(config: { root: string; command: 'serve' | 'build'; assetsInclude: (file: string) => boolean }): void;
   load(id: string): { code: string } | null;
   configureServer(server: FakeServer): void;
   handleHotUpdate(ctx: { file: string; server: FakeServer }): unknown[] | undefined;
@@ -513,7 +500,7 @@ describe('overlay variants in load()', () => {
     expect(hooks.load('\0virtual:something')).toBeNull();
   });
 
-  it('leaves asset and worker style imports to vite\'s own loaders', () => {
+  it("leaves asset and worker style imports to vite's own loaders", () => {
     const { root, source } = tempProject();
     writeActive({ root }, ['b']);
     const hooks = plugin(root, 'serve');
@@ -588,9 +575,7 @@ describe('overlay variants in the dev server', () => {
     const hooks = plugin(root, 'serve');
     const server = fakeServer(root);
     const mod = { id: '/src/Button.tsx' };
-    server.moduleGraph.getModulesByFile.mockImplementation((f: string) =>
-      f === source ? new Set([mod]) : undefined,
-    );
+    server.moduleGraph.getModulesByFile.mockImplementation((f: string) => (f === source ? new Set([mod]) : undefined));
     hooks.configureServer(server);
 
     // The active file's pattern lands in the project's own exclude, so the
@@ -632,9 +617,7 @@ describe('overlay variants in the dev server', () => {
     const { root, source, table } = tempProject();
     const hooks = plugin(root, 'serve');
     const server = fakeServer(root);
-    server.moduleGraph.getModulesByFile.mockImplementation((f: string) =>
-      f === source || f === table ? new Set([{ id: f }]) : undefined,
-    );
+    server.moduleGraph.getModulesByFile.mockImplementation((f: string) => (f === source || f === table ? new Set([{ id: f }]) : undefined));
     hooks.configureServer(server);
 
     const both = await request(server, VARIANTS_ENDPOINT, 'POST', '/active', {
@@ -699,22 +682,43 @@ describe('overlay variants in the dev server', () => {
     // text/plain or form content type and no preflight; a JSON content type
     // would need one. So the header is the gate, and it must be checked
     // before the body is parsed.
-    const plain = await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] }, {
-      'content-type': 'text/plain',
-    });
+    const plain = await request(
+      server,
+      VARIANTS_ENDPOINT,
+      'POST',
+      '/active',
+      { active: ['b'] },
+      {
+        'content-type': 'text/plain',
+      },
+    );
     expect(plain.status).toBe(415);
-    const form = await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] }, {
-      'content-type': 'application/x-www-form-urlencoded',
-    });
+    const form = await request(
+      server,
+      VARIANTS_ENDPOINT,
+      'POST',
+      '/active',
+      { active: ['b'] },
+      {
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+    );
     expect(form.status).toBe(415);
     const missing = await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] }, {});
     expect(missing.status).toBe(415);
     expect(readActive({ root })).toEqual([]);
     expect(server.ws.send).not.toHaveBeenCalled();
     // A charset parameter is still JSON.
-    const ok = await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] }, {
-      'content-type': 'application/json; charset=utf-8',
-    });
+    const ok = await request(
+      server,
+      VARIANTS_ENDPOINT,
+      'POST',
+      '/active',
+      { active: ['b'] },
+      {
+        'content-type': 'application/json; charset=utf-8',
+      },
+    );
     expect(ok.status).toBe(200);
     expect(readActive({ root })).toEqual(['b']);
   });
@@ -732,10 +736,7 @@ describe('overlay variants in the dev server', () => {
     const activeFile = join(root, ACTIVE_FILE);
     expect(server.watcher.add).toHaveBeenCalledWith(dirname(activeFile));
     expect(server.watcher.add).toHaveBeenCalledWith(join(root, '.isotone', 'variants'));
-    const onAll = server.watcher.on.mock.calls.find((c) => c[0] === 'all')?.[1] as (
-      event: string,
-      file: string,
-    ) => void;
+    const onAll = server.watcher.on.mock.calls.find((c) => c[0] === 'all')?.[1] as (event: string, file: string) => void;
     expect(onAll).toBeTypeOf('function');
 
     expect(hooks.load(source)).toBeNull();
@@ -761,22 +762,18 @@ describe('overlay variants in the dev server', () => {
 });
 
 describe('overlay variants in handleHotUpdate()', () => {
-  it('maps an override edit to the real source\'s modules while active', () => {
+  it("maps an override edit to the real source's modules while active", () => {
     const { root, source, override } = tempProject();
     writeActive({ root }, ['b']);
     const hooks = plugin(root, 'serve');
     const server = fakeServer(root);
     const mod = { id: '/src/Button.tsx' };
-    server.moduleGraph.getModulesByFile.mockImplementation((f: string) =>
-      f === source ? new Set([mod]) : undefined,
-    );
+    server.moduleGraph.getModulesByFile.mockImplementation((f: string) => (f === source ? new Set([mod]) : undefined));
     expect(hooks.handleHotUpdate({ file: override, server })).toEqual([mod]);
     // The real file's edit is invisible: the browser is showing the override.
     expect(hooks.handleHotUpdate({ file: source, server })).toEqual([]);
     // The manifest is not a module anywhere.
-    expect(
-      hooks.handleHotUpdate({ file: join(variantDir({ root }, 'b'), 'variant.json'), server }),
-    ).toEqual([]);
+    expect(hooks.handleHotUpdate({ file: join(variantDir({ root }, 'b'), 'variant.json'), server })).toEqual([]);
     // Files the variant does not touch go through vite's default handling.
     expect(hooks.handleHotUpdate({ file: join(root, 'src', 'Other.tsx'), server })).toBeUndefined();
   });
@@ -795,11 +792,16 @@ describe('selector removal requests', () => {
     const { root, source } = tempProject();
     const hooks = plugin(root, 'serve');
     const server = fakeServer(root);
-    server.moduleGraph.getModulesByFile.mockImplementation((file: string) => file === source ? new Set([{ id: file }]) : undefined);
+    server.moduleGraph.getModulesByFile.mockImplementation((file: string) => (file === source ? new Set([{ id: file }]) : undefined));
     hooks.configureServer(server);
     await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b', 't'] });
     server.watcher.emit.mockClear();
-    const removed = await request(server, VARIANTS_ENDPOINT, 'POST', '/manage', { axisId: 'b', action: 'remove-option', optionId: 'b', route: '/' });
+    const removed = await request(server, VARIANTS_ENDPOINT, 'POST', '/manage', {
+      axisId: 'b',
+      action: 'remove-option',
+      optionId: 'b',
+      route: '/',
+    });
     expect(removed.status).toBe(405);
     expect(readActive({ root })).toEqual(['b', 't']);
     expect(server.watcher.emit).not.toHaveBeenCalled();
@@ -812,14 +814,20 @@ describe('selector removal requests', () => {
 interface LiveHooks extends Hooks {
   resolveId(source: string, importer?: string): Promise<string | null>;
   load(id: string, opts?: { ssr?: boolean }): { code: string } | null;
-  hotUpdate(this: { environment: { name: string; moduleGraph: { getModulesByFile: (f: string) => Set<{ id: string }> | undefined } } }, ctx: { file: string }): unknown[] | undefined;
+  hotUpdate(
+    this: { environment: { name: string; moduleGraph: { getModulesByFile: (f: string) => Set<{ id: string }> | undefined } } },
+    ctx: { file: string },
+  ): unknown[] | undefined;
 }
 
 /** A React project on Vite 6+: live switching turns itself on. */
 function livePlugin(root: string): { hooks: LiveHooks; server: FakeServer & { environments: unknown } } {
   const hooks = iteration({}) as unknown as LiveHooks;
   (hooks.configResolved as (c: unknown) => void)({
-    root, command: 'serve', assetsInclude: () => false, appType: 'spa',
+    root,
+    command: 'serve',
+    assetsInclude: () => false,
+    appType: 'spa',
     plugins: [{ name: 'vite:react-babel' }],
   });
   const server = Object.assign(fakeServer(root), {
@@ -877,8 +885,7 @@ describe('live variants', () => {
     expect(await resolveId('./parts/NewThing', importer)).toBe(added);
     expect(await resolveId('@/parts/NewThing', importer)).toBe(added);
     expect(await resolveId('./parts/Missing', importer)).toBeNull();
-    expect(await resolveId('./NewThing.tsx?isotone=n', join(root, 'src', 'parts', 'NewThing.tsx')))
-      .toBe(`${added}?isotone=n`);
+    expect(await resolveId('./NewThing.tsx?isotone=n', join(root, 'src', 'parts', 'NewThing.tsx'))).toBe(`${added}?isotone=n`);
     // Its dispatcher has no real version to import.
     expect(hooks.load(added)?.code).not.toContain('_base');
   });
@@ -909,7 +916,10 @@ describe('live variants', () => {
     (server.environments as Record<string, unknown>).ssr = { moduleGraph: {} };
     server.moduleGraph.getModulesByFile.mockImplementation((f: string) => (f === source ? new Set([{ id: f }]) : undefined));
     let answered = false;
-    const pending = request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] }).then((r) => { answered = true; return r; });
+    const pending = request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] }).then((r) => {
+      answered = true;
+      return r;
+    });
     await new Promise((r) => setTimeout(r, 60));
     expect(answered).toBe(false);
     const ssr = { name: 'ssr', moduleGraph: { getModulesByFile: () => new Set([{ id: source }]) } };
@@ -938,7 +948,10 @@ describe('live variants', () => {
     const entry = join(root, 'src', 'main.tsx');
     const tabs = join(root, 'src', 'Tabs.tsx');
     writeFileSync(entry, 'render();\n');
-    writeFileSync(tabs, 'export function Tab() {}\nexport function Tabs({ children }) { return children.filter((c) => c.type === Tab); }\n');
+    writeFileSync(
+      tabs,
+      'export function Tab() {}\nexport function Tabs({ children }) { return children.filter((c) => c.type === Tab); }\n',
+    );
     createVariant({ root }, { id: 'e' });
     addVariantFile({ root }, 'e', 'src/main.tsx');
     addVariantFile({ root }, 'e', 'src/Tabs.tsx');
@@ -953,8 +966,9 @@ describe('live variants', () => {
     addVariantFile({ root }, 'n', 'src/NewThing.tsx', { create: true });
     const hooks = plugin(root, 'build') as unknown as LiveHooks;
     (hooks as unknown as { resolve: unknown }).resolve = async () => null;
-    expect(await hooks.resolveId.call(hooks as never, './NewThing', join(root, 'src', 'Button.tsx')))
-      .toBe(join(root, 'src', 'NewThing.tsx'));
+    expect(await hooks.resolveId.call(hooks as never, './NewThing', join(root, 'src', 'Button.tsx'))).toBe(
+      join(root, 'src', 'NewThing.tsx'),
+    );
   });
 
   it('drops the plain transform of a file that just gained a variant', () => {
@@ -963,7 +977,11 @@ describe('live variants', () => {
       const { root, table } = tempProject();
       const { server } = livePlugin(root);
       const onAll = server.watcher.on.mock.calls.find((c) => c[0] === 'all')?.[1] as (e: string, f: string) => void;
-      const graph = (server.environments as { client: { moduleGraph: { getModulesByFile: ReturnType<typeof vi.fn>; invalidateModule: ReturnType<typeof vi.fn> } } }).client.moduleGraph;
+      const graph = (
+        server.environments as {
+          client: { moduleGraph: { getModulesByFile: ReturnType<typeof vi.fn>; invalidateModule: ReturnType<typeof vi.fn> } };
+        }
+      ).client.moduleGraph;
       const mod = { id: table };
       graph.getModulesByFile.mockImplementation((f: string) => (f === table ? new Set([mod]) : undefined));
       createVariant({ root }, { id: 't2' });
@@ -977,4 +995,3 @@ describe('live variants', () => {
     }
   });
 });
-

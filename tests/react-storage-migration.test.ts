@@ -14,13 +14,20 @@ beforeEach(() => {
   vi.useFakeTimers();
   values = new Map();
   storage = {
-    getItem: key => values.get(key) ?? null,
-    setItem: vi.fn((key, value) => { values.set(key, value); }),
-    removeItem: vi.fn(key => { values.delete(key); }),
+    getItem: (key) => values.get(key) ?? null,
+    setItem: vi.fn((key, value) => {
+      values.set(key, value);
+    }),
+    removeItem: vi.fn((key) => {
+      values.delete(key);
+    }),
   };
   vi.stubGlobal('localStorage', storage);
   vi.stubGlobal('matchMedia', () => Object.assign(new EventTarget(), { matches: false }));
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => [] })));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({ ok: true, json: async () => [] })),
+  );
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -40,7 +47,9 @@ function render(route = '/project', key?: string) {
 }
 
 async function open() {
-  await act(async () => { container.querySelector<HTMLButtonElement>('.isotone-fab')?.click(); });
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>('.isotone-fab')?.click();
+  });
   const field = container.querySelector('textarea');
   if (!field) throw new Error('Missing feedback composer');
   return field;
@@ -76,7 +85,9 @@ it('keeps the current draft when both namespaces have a draft for the route', as
 
 it('retains and restores the legacy draft when the new namespace cannot be written', async () => {
   values.set(oldKey, 'Legacy plain text draft');
-  storage.setItem = vi.fn(() => { throw new Error('Storage full'); });
+  storage.setItem = vi.fn(() => {
+    throw new Error('Storage full');
+  });
   await render();
   expect((await open()).value).toBe('Legacy plain text draft');
   expect(values.get(oldKey)).toBe('Legacy plain text draft');

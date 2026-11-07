@@ -1,14 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -97,12 +88,8 @@ describe('create / add / list', () => {
     writeFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'hand-edited override\n');
     const second = addVariantFile(opts, 'v1', 'src/Button.tsx');
     expect(second.files['src/Button.tsx'].base).toBe(baseFirst);
-    expect(readFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'utf8')).toBe(
-      'hand-edited override\n',
-    );
-    expect(readFileSync(join(root, 'src', 'Button.tsx'), 'utf8')).not.toBe(
-      'hand-edited override\n',
-    );
+    expect(readFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'utf8')).toBe('hand-edited override\n');
+    expect(readFileSync(join(root, 'src', 'Button.tsx'), 'utf8')).not.toBe('hand-edited override\n');
   });
 
   it('tolerates junk directories: no manifest, and invalid JSON', () => {
@@ -121,9 +108,7 @@ describe('create / add / list', () => {
     const grouped = createVariant(opts, { id: 'tabs', group: 'settings', groupLabel: 'Settings' });
     expect(grouped.group).toBe('settings');
     expect(grouped.groupLabel).toBe('Settings');
-    expect(() => createVariant(opts, { id: 'bad', group: 'Not An Id' })).toThrow(
-      /Invalid group id/,
-    );
+    expect(() => createVariant(opts, { id: 'bad', group: 'Not An Id' })).toThrow(/Invalid group id/);
     expect(readVariant(opts, 'bad')).toBeNull();
 
     createVariant(opts, { id: 'accordion' });
@@ -143,10 +128,7 @@ describe('create / add / list', () => {
     const a = readVariant(opts, 'first');
     if (a) {
       a.createdAt = '2020-01-01T00:00:00.000Z';
-      writeFileSync(
-        join(variantDir(opts, 'first'), 'variant.json'),
-        `${JSON.stringify(a, null, 2)}\n`,
-      );
+      writeFileSync(join(variantDir(opts, 'first'), 'variant.json'), `${JSON.stringify(a, null, 2)}\n`);
     }
     createVariant(opts, { id: 'second' });
     expect(listVariants(opts).map((v) => v.id)).toEqual(['first', 'second']);
@@ -195,10 +177,7 @@ describe('sync', () => {
 
     // The override changes line three; the real file (independently) moves
     // line one. A clean three-way merge keeps both.
-    writeFileSync(
-      join(variantDir(opts, 'v1'), 'src/Button.tsx'),
-      'line one\nline two\nOVERRIDE THREE\n',
-    );
+    writeFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'line one\nline two\nOVERRIDE THREE\n');
     writeFileSync(join(root, 'src', 'Button.tsx'), 'REAL ONE\nline two\nline three\n');
 
     const result = syncVariant(opts, 'v1');
@@ -217,10 +196,7 @@ describe('sync', () => {
     createVariant(opts, { id: 'v1' });
     addVariantFile(opts, 'v1', 'src/Button.tsx');
 
-    writeFileSync(
-      join(variantDir(opts, 'v1'), 'src/Button.tsx'),
-      'line one\nVARIANT TWO\nline three\n',
-    );
+    writeFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'line one\nVARIANT TWO\nline three\n');
     writeFileSync(join(root, 'src', 'Button.tsx'), 'line one\nREAL TWO\nline three\n');
 
     const result = syncVariant(opts, 'v1');
@@ -258,10 +234,7 @@ describe('sync', () => {
       join(variantDir(opts, 'v1'), 'src/Long.tsx'),
       original.replace('line one', 'VARIANT ONE').replace('line last', 'VARIANT LAST'),
     );
-    writeFileSync(
-      join(root, 'src', 'Long.tsx'),
-      original.replace('line one', 'REAL ONE').replace('line last', 'REAL LAST'),
-    );
+    writeFileSync(join(root, 'src', 'Long.tsx'), original.replace('line one', 'REAL ONE').replace('line last', 'REAL LAST'));
 
     const result = syncVariant(opts, 'v1');
     expect(result.conflicts).toEqual(['src/Long.tsx']);
@@ -286,10 +259,7 @@ describe('sync', () => {
     const manifest = readVariant(opts, 'v1');
     if (!manifest) throw new Error('expected manifest');
     manifest.files['src/Button.tsx'].base = null;
-    writeFileSync(
-      join(variantDir(opts, 'v1'), 'variant.json'),
-      `${JSON.stringify(manifest, null, 2)}\n`,
-    );
+    writeFileSync(join(variantDir(opts, 'v1'), 'variant.json'), `${JSON.stringify(manifest, null, 2)}\n`);
     const before = readFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'utf8');
     writeFileSync(join(root, 'src', 'Button.tsx'), 'line one\nline two\nline three CHANGED\n');
 
@@ -304,10 +274,7 @@ describe('promote / drop', () => {
     const { root, opts } = tempRepo();
     createVariant(opts, { id: 'v1' });
     addVariantFile(opts, 'v1', 'src/Button.tsx');
-    writeFileSync(
-      join(variantDir(opts, 'v1'), 'src/Button.tsx'),
-      'promoted content\n',
-    );
+    writeFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'promoted content\n');
     createVariant(opts, { id: 'other' });
     writeActive(opts, ['other', 'v1']);
 
@@ -402,12 +369,8 @@ describe('resolveOverride over a set', () => {
     addVariantFile(opts, 'table-b', 'src/Table.tsx');
 
     const both = ['button-b', 'table-b'];
-    expect(resolveOverride(opts, both, join(root, 'src', 'Button.tsx'))).toBe(
-      join(variantDir(opts, 'button-b'), 'src/Button.tsx'),
-    );
-    expect(resolveOverride(opts, both, join(root, 'src', 'Table.tsx'))).toBe(
-      join(variantDir(opts, 'table-b'), 'src/Table.tsx'),
-    );
+    expect(resolveOverride(opts, both, join(root, 'src', 'Button.tsx'))).toBe(join(variantDir(opts, 'button-b'), 'src/Button.tsx'));
+    expect(resolveOverride(opts, both, join(root, 'src', 'Table.tsx'))).toBe(join(variantDir(opts, 'table-b'), 'src/Table.tsx'));
     expect(resolveOverride(opts, ['table-b'], join(root, 'src', 'Button.tsx'))).toBeNull();
     expect(resolveOverride(opts, [], join(root, 'src', 'Button.tsx'))).toBeNull();
   });
@@ -551,9 +514,7 @@ describe('path escape rejected', () => {
     addVariantFile(opts, 'v1', 'src/Button.tsx');
     writeActive(opts, ['v1']);
     expect(resolveOverride(opts, ['v1'], join(root, '..', 'elsewhere.tsx'))).toBeNull();
-    expect(resolveOverride(opts, ['v1'], join(root, 'src', 'Button.tsx'))).toBe(
-      join(variantDir(opts, 'v1'), 'src/Button.tsx'),
-    );
+    expect(resolveOverride(opts, ['v1'], join(root, 'src', 'Button.tsx'))).toBe(join(variantDir(opts, 'v1'), 'src/Button.tsx'));
   });
 
   it('removeVariantFile also rejects an escaping path', () => {
@@ -611,10 +572,7 @@ describe('promoteVariant guards', () => {
     // The real file back where the override started from: only the markers
     // block promotion now.
     writeFileSync(join(root, 'src', 'Button.tsx'), original);
-    writeFileSync(
-      join(variantDir(opts, 'g'), 'src', 'Button.tsx'),
-      '<<<<<<< variant\nx\n=======\ny\n>>>>>>> default\n',
-    );
+    writeFileSync(join(variantDir(opts, 'g'), 'src', 'Button.tsx'), '<<<<<<< variant\nx\n=======\ny\n>>>>>>> default\n');
     expect(() => promoteVariant(opts, 'g')).toThrow(/conflict markers/);
     expect(promoteVariant(opts, 'g', { force: true }).files).toEqual(['src/Button.tsx']);
   });
@@ -627,13 +585,8 @@ describe('promoteVariant guards', () => {
     const manifest = readVariant(opts, 'nb');
     if (!manifest) throw new Error('expected manifest');
     manifest.files['src/Button.tsx'].base = null;
-    writeFileSync(
-      join(variantDir(opts, 'nb'), 'variant.json'),
-      `${JSON.stringify(manifest, null, 2)}\n`,
-    );
-    expect(() => promoteVariant(opts, 'nb')).toThrow(
-      /no base recorded for src\/Button\.tsx \(not a git repo when the override was made\)/,
-    );
+    writeFileSync(join(variantDir(opts, 'nb'), 'variant.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+    expect(() => promoteVariant(opts, 'nb')).toThrow(/no base recorded for src\/Button\.tsx \(not a git repo when the override was made\)/);
     expect(() => promoteVariant(opts, 'nb')).not.toThrow(/changed since/);
   });
 });
@@ -670,7 +623,7 @@ describe('selector requests', () => {
     createVariant(opts, { id: 'one', group: 'button' });
     const response = variantsResponse(opts, { method: 'POST', url: '/manage', body: { axisId: 'button', action: 'remove-axis' } });
     expect(response.status).toBe(405);
-    expect(listVariants(opts).map(v => v.id)).toEqual(['one']);
+    expect(listVariants(opts).map((v) => v.id)).toEqual(['one']);
   });
 });
 

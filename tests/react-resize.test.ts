@@ -9,16 +9,28 @@ let container: HTMLDivElement;
 let hostRoot: Root;
 let panelRoot: Root;
 let shadow: ShadowRoot;
-const source = createVariantsSource({ axes: [{
-  id: 'spacing', label: 'Spacing', defaultOption: 'compact',
-  options: [{ id: 'compact', label: 'Compact' }, { id: 'comfy', label: 'Comfy' }],
-}] });
+const source = createVariantsSource({
+  axes: [
+    {
+      id: 'spacing',
+      label: 'Spacing',
+      defaultOption: 'compact',
+      options: [
+        { id: 'compact', label: 'Compact' },
+        { id: 'comfy', label: 'Comfy' },
+      ],
+    },
+  ],
+});
 
 beforeEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.useFakeTimers();
   vi.stubGlobal('matchMedia', () => Object.assign(new EventTarget(), { matches: false }));
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => [] })));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({ ok: true, json: async () => [] })),
+  );
   container = document.createElement('div');
   document.body.append(container);
   hostRoot = createRoot(container);
@@ -35,15 +47,22 @@ beforeEach(async () => {
   const data = new Map<string, string>();
   vi.stubGlobal('localStorage', {
     getItem: (k: string) => data.get(k) ?? null,
-    setItem: (k: string, v: string) => { data.set(k, v); },
-    removeItem: (k: string) => { data.delete(k); },
+    setItem: (k: string, v: string) => {
+      data.set(k, v);
+    },
+    removeItem: (k: string) => {
+      data.delete(k);
+    },
   });
   Object.assign(HTMLElement.prototype, { setPointerCapture: vi.fn(), releasePointerCapture: vi.fn() });
   await render();
 });
 
 afterEach(async () => {
-  await act(async () => { panelRoot.unmount(); hostRoot.unmount(); });
+  await act(async () => {
+    panelRoot.unmount();
+    hostRoot.unmount();
+  });
   container.remove();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -87,17 +106,23 @@ function size(name: 'variants' | 'notes', height: number, content = height) {
 }
 
 async function remount() {
-  await act(async () => { panelRoot.unmount(); });
+  await act(async () => {
+    panelRoot.unmount();
+  });
   panelRoot = createRoot(shadow.firstElementChild as HTMLElement);
   await render();
 }
 
 const toggle = (name: 'Variants' | 'Feedback') =>
-  act(async () => { element(dock(), `.isotone-rail-button[aria-label="${name}"]`).click(); });
+  act(async () => {
+    element(dock(), `.isotone-rail-button[aria-label="${name}"]`).click();
+  });
 
 function pointer(target: Element, type: string, clientX = 0, clientY = 0) {
   const event = new PointerEvent(type, { clientX, clientY, button: 0, bubbles: true, pointerId: 1 });
-  return act(async () => { target.dispatchEvent(event); });
+  return act(async () => {
+    target.dispatchEvent(event);
+  });
 }
 
 async function drag(target: Element, from: number, to: number, axis: 'x' | 'y' = 'y') {
@@ -108,7 +133,9 @@ async function drag(target: Element, from: number, to: number, axis: 'x' | 'y' =
 }
 
 function key(target: Element, name: string, shiftKey = false) {
-  return act(async () => { target.dispatchEvent(new KeyboardEvent('keydown', { key: name, shiftKey, bubbles: true })); });
+  return act(async () => {
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: name, shiftKey, bubbles: true }));
+  });
 }
 
 it('shows only the handles that apply to the open panels', async () => {
@@ -207,7 +234,9 @@ it('clears the resizing state when the panel closes mid-drag', async () => {
   await pointer(variantsTop(), 'pointerdown', 0, 400);
   await pointer(variantsTop(), 'pointermove', 0, 380);
   expect(dock().dataset.resizing).toBe('true');
-  await act(async () => { document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+  await act(async () => {
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
   expect(dock().dataset.open).toBe('false');
   expect(dock().dataset.resizing).toBeUndefined();
   expect(stored()).toEqual({ variants: 320 });
@@ -218,7 +247,9 @@ it('clears the resizing state when the pointer capture is lost', async () => {
   size('variants', 300, 500);
   await pointer(variantsTop(), 'pointerdown', 0, 400);
   expect(dock().dataset.resizing).toBe('true');
-  await act(async () => { variantsTop().dispatchEvent(new PointerEvent('lostpointercapture', { bubbles: true, pointerId: 1 })); });
+  await act(async () => {
+    variantsTop().dispatchEvent(new PointerEvent('lostpointercapture', { bubbles: true, pointerId: 1 }));
+  });
   expect(dock().dataset.resizing).toBeUndefined();
 });
 
@@ -252,7 +283,9 @@ it('resizes by keyboard and resets with Home or a double-click', async () => {
   await key(variantsTop(), 'ArrowUp');
   await key(variantsTop(), 'ArrowDown');
   expect(stored()).toEqual({ variants: 284 });
-  await act(async () => { variantsTop().dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); });
+  await act(async () => {
+    variantsTop().dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  });
   expect(stored()).toEqual({});
 });
 

@@ -18,10 +18,13 @@ describe('note IDs on HTTP development hosts', () => {
     expect(first).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(second).not.toBe(first);
 
-    vi.stubGlobal('fetch', vi.fn(async (_url, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body));
-      return Response.json({ id: body.id });
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body));
+        return Response.json({ id: body.id });
+      }),
+    );
     const store = createIterationStore({ endpoint: '/notes' });
     const id = await store.saveNote('/', 'Review this layout', null, null);
     expect(id).toMatch(/^[0-9a-f-]{36}$/);

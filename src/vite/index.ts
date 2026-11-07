@@ -439,8 +439,7 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
       if (added.size === 0 || source.startsWith('\0')) return null;
       const bare = source.replace(/[?#].*$/, '');
       const leaf = bare.slice(bare.lastIndexOf('/') + 1).replace(/\.[cm]?[jt]sx?$/, '');
-      const candidates = [...added.entries()].filter(([stem]) =>
-        stem.endsWith(`/${leaf}`) || stem.endsWith(`/${leaf}/index`));
+      const candidates = [...added.entries()].filter(([stem]) => stem.endsWith(`/${leaf}`) || stem.endsWith(`/${leaf}/index`));
       if (candidates.length === 0) return null;
       const resolved = await this.resolve(source, importer, { ...opts, skipSelf: true });
       if (resolved) return resolved;
@@ -448,10 +447,16 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
       const target = bare.startsWith('.') ? normalizePath(resolve(dirname(importerPath), bare)).replace(/\.[cm]?[jt]sx?$/, '') : null;
       // A relative import names the file exactly; an aliased one (`@/x/y`)
       // is matched on everything after its first segment.
-      const tail = bare.split('/').slice(1).join('/').replace(/\.[cm]?[jt]sx?$/, '');
-      const hits = candidates.filter(([stem]) => target
-        ? stem === target || stem === `${target}/index`
-        : tail !== '' && (stem.endsWith(`/${tail}`) || stem.endsWith(`/${tail}/index`)));
+      const tail = bare
+        .split('/')
+        .slice(1)
+        .join('/')
+        .replace(/\.[cm]?[jt]sx?$/, '');
+      const hits = candidates.filter(([stem]) =>
+        target
+          ? stem === target || stem === `${target}/index`
+          : tail !== '' && (stem.endsWith(`/${tail}`) || stem.endsWith(`/${tail}/index`)),
+      );
       if (hits.length !== 1) return null;
       const paths = hits[0]?.[1] ?? [];
       return paths.length === 1 ? paths[0] : null;
@@ -503,21 +508,22 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
       // notes and the agent looks in the wrong directory.
       server.httpServer?.once('listening', () => {
         const shown = relative(server.config.root, file) || file;
-        server.config.logger.info(
-          `  isotone  notes → ${shown}  (${NOTES_ENDPOINT})`,
-        );
+        server.config.logger.info(`  isotone  notes → ${shown}  (${NOTES_ENDPOINT})`);
         if (variantsOptions && existsSync(vDir)) {
           const shownDir = relative(server.config.root, vDir) || vDir;
           const n = listVariants(vopts).length;
-          server.config.logger.info(
-            `  isotone  variants → ${shownDir}  (${n} variant${n === 1 ? '' : 's'})`,
-          );
+          server.config.logger.info(`  isotone  variants → ${shownDir}  (${n} variant${n === 1 ? '' : 's'})`);
         }
       });
 
       const guardOrigin = (req: IncomingMessage, res: ServerResponse): boolean => {
-        try { checkOrigin(req.headers.origin, req.headers.host ?? ''); return true; }
-        catch (error) { sendFailure(res, error); return false; }
+        try {
+          checkOrigin(req.headers.origin, req.headers.host ?? '');
+          return true;
+        } catch (error) {
+          sendFailure(res, error);
+          return false;
+        }
       };
 
       const updates = startUpdateCheck(server.config.root, options.checkForUpdates !== false);
@@ -530,9 +536,11 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
       server.middlewares.use(UPDATE_ENDPOINT, (req, res) => {
         if (!guardOrigin(req, res)) return;
         const method = req.method ?? '';
-        (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined)).then((body) => {
-          answer(res, () => updateResponse(file, updates.getSnapshot(), { method, body }));
-        }).catch((error) => sendFailure(res, error));
+        (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined))
+          .then((body) => {
+            answer(res, () => updateResponse(file, updates.getSnapshot(), { method, body }));
+          })
+          .catch((error) => sendFailure(res, error));
       });
 
       // Notes endpoint → local file.
@@ -543,9 +551,11 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
           next();
           return;
         }
-        (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined)).then((body) => {
-          answer(res, () => notesResponse(file, { method, url: req.url, body }));
-        }).catch((error) => sendFailure(res, error));
+        (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined))
+          .then((body) => {
+            answer(res, () => notesResponse(file, { method, url: req.url, body }));
+          })
+          .catch((error) => sendFailure(res, error));
       });
 
       if (variantsOptions) {
@@ -561,9 +571,10 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
         live = (variantsOptions.live ?? hasReact) && server.environments !== undefined;
         // A server render holds modules of its own, so a change to what a
         // variant covers has to reach those too or the HTML goes stale.
-        const graphs = () => server.environments
-          ? Object.values(server.environments).map((env) => env.moduleGraph as unknown as typeof server.moduleGraph)
-          : [server.moduleGraph];
+        const graphs = () =>
+          server.environments
+            ? Object.values(server.environments).map((env) => env.moduleGraph as unknown as typeof server.moduleGraph)
+            : [server.moduleGraph];
         // Files a manifest named before it changed: one that left the variant
         // has no entry to be found by afterwards.
         const covered = new Set<string>();
@@ -608,10 +619,7 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
          */
         const activate = (next: string[], removedFiles: string[] = []): Promise<void> => {
           const prev = currentActive();
-          const changed = [
-            ...prev.filter((id) => !next.includes(id)),
-            ...next.filter((id) => !prev.includes(id)),
-          ];
+          const changed = [...prev.filter((id) => !next.includes(id)), ...next.filter((id) => !prev.includes(id))];
           if (changed.length === 0 && removedFiles.length === 0) return Promise.resolve();
           activeIds = next;
           overrides.clear();
@@ -695,26 +703,30 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
             res.end(JSON.stringify({ error: 'content-type must be application/json' }));
             return;
           }
-          (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined)).then((body) => {
-            // connect strips the mount from `req.url`, which is the shape
-            // variantsResponse routes on ("/", "/active?...").
-            let result: ReturnType<typeof variantsResponse>;
-            try {
-              result = variantsResponse(vopts, { method, url: req.url, body });
-            } catch (error) {
-              sendFailure(res, error);
-              return;
-            }
-            const send = () => { answer(res, () => result); };
-            if (result.status === 200 && method === 'POST') {
-              const updated = result.body as { active: string[]; changedFiles?: string[] };
-              // Answer once the switch is in place, so the panel can reload
-              // straight into it.
-              activate(updated.active, updated.changedFiles).then(send, send);
-            } else {
-              send();
-            }
-          }).catch((error) => sendFailure(res, error));
+          (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined))
+            .then((body) => {
+              // connect strips the mount from `req.url`, which is the shape
+              // variantsResponse routes on ("/", "/active?...").
+              let result: ReturnType<typeof variantsResponse>;
+              try {
+                result = variantsResponse(vopts, { method, url: req.url, body });
+              } catch (error) {
+                sendFailure(res, error);
+                return;
+              }
+              const send = () => {
+                answer(res, () => result);
+              };
+              if (result.status === 200 && method === 'POST') {
+                const updated = result.body as { active: string[]; changedFiles?: string[] };
+                // Answer once the switch is in place, so the panel can reload
+                // straight into it.
+                activate(updated.active, updated.changedFiles).then(send, send);
+              } else {
+                send();
+              }
+            })
+            .catch((error) => sendFailure(res, error));
         });
 
         // The CLI's `variant use` writes the active file with no request to
@@ -835,8 +847,22 @@ function answer(
 }
 
 /** Load after the host has mounted, without importing its React or HMR runtime. */
-function mountModuleSource(rule: RouteGateOptions, key: string, variants: boolean, shortcut?: IterationShortcut | false, theme?: IterationTheme): string {
-  const config = JSON.stringify({ endpoint: NOTES_ENDPOINT, updateEndpoint: UPDATE_ENDPOINT, key, shortcut, theme, rule, ...(variants ? { variants: 'overlay' } : {}) }).replace(/</g, '\\u003c');
+function mountModuleSource(
+  rule: RouteGateOptions,
+  key: string,
+  variants: boolean,
+  shortcut?: IterationShortcut | false,
+  theme?: IterationTheme,
+): string {
+  const config = JSON.stringify({
+    endpoint: NOTES_ENDPOINT,
+    updateEndpoint: UPDATE_ENDPOINT,
+    key,
+    shortcut,
+    theme,
+    rule,
+    ...(variants ? { variants: 'overlay' } : {}),
+  }).replace(/</g, '\\u003c');
   return `
     const start = () => {
       const mount = () => window.__isotone.mount(${config});
@@ -972,8 +998,7 @@ function injectIntoHead(html: string, script: string): string {
  */
 export function withNativeFetch(html: string): string {
   if (html.includes('__isotoneFetch')) return html;
-  const capture =
-    '<script data-isotone-native>window.__isotoneFetch=window.fetch.bind(window)</script>';
+  const capture = '<script data-isotone-native>window.__isotoneFetch=window.fetch.bind(window)</script>';
   const head = html.match(/<head[^>]*>/i);
   if (head?.index !== undefined) {
     const at = head.index + head[0].length;

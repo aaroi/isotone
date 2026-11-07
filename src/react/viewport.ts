@@ -59,7 +59,9 @@ export function useKeyboardInset(ref: RefObject<HTMLElement | null>, active: boo
       node.style.setProperty('--iso-keyboard', `${Math.max(0, Math.round(innerHeight - band.bottom))}px`);
       node.style.setProperty('--iso-viewport', `${Math.round(band.bottom - band.top)}px`);
     };
-    const schedule = () => { frame ||= requestAnimationFrame(apply); };
+    const schedule = () => {
+      frame ||= requestAnimationFrame(apply);
+    };
     apply();
     viewport.addEventListener('resize', schedule);
     viewport.addEventListener('scroll', schedule);

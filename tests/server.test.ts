@@ -39,10 +39,12 @@ describe('notesResponse (transport-agnostic)', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].feedback).toBe('hi');
 
-    expect(notesResponse(file, {
-      method: 'DELETE',
-      url: `/api/notes?id=${id.id}`,
-    }).status).toBe(200);
+    expect(
+      notesResponse(file, {
+        method: 'DELETE',
+        url: `/api/notes?id=${id.id}`,
+      }).status,
+    ).toBe(200);
     expect(readNotes(file)).toHaveLength(0);
   });
 
@@ -58,9 +60,7 @@ describe('notesResponse (transport-agnostic)', () => {
 
   it('holds a 200 with an empty note list', () => {
     const file = tempFile();
-    expect(notesResponse(file, { method: 'GET', url: '/api/notes' }).status).toBe(
-      200,
-    );
+    expect(notesResponse(file, { method: 'GET', url: '/api/notes' }).status).toBe(200);
   });
 });
 
@@ -80,10 +80,7 @@ describe('serveNotesRequest (fetch/gitworker adapter)', () => {
     expect(res.status).toBe(201);
     expect((res.body as { id: string }).id).toMatch(/^[0-9a-f-]+$/);
 
-    const listed = await serveNotesRequest(
-      file,
-      new Request('http://localhost:3000/api/notes?route=/'),
-    );
+    const listed = await serveNotesRequest(file, new Request('http://localhost:3000/api/notes?route=/'));
     const rows = listed.body as Array<{ element: { selector: string } | null }>;
     expect(rows[0].element?.selector).toBe('button:first-child');
   });
@@ -139,12 +136,15 @@ describe('serveNotesRequest origins', () => {
 });
 
 describe('Request adapters in a production runtime', () => {
-  const post = () => new Request('http://localhost:3000/api/iteration/notes', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ route: '/', feedback: 'from a deployed app' }),
+  const post = () =>
+    new Request('http://localhost:3000/api/iteration/notes', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ route: '/', feedback: 'from a deployed app' }),
+    });
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
-  afterEach(() => { vi.unstubAllEnvs(); });
 
   it('answer 404 and leave the notes file alone when NODE_ENV is production', async () => {
     vi.stubEnv('NODE_ENV', 'production');
@@ -215,19 +215,22 @@ describe('the opaque payload', () => {
     expect(created.status).toBe(201);
 
     expect(readNotes(file)[0].payload).toEqual({ variants });
-    const rows = notesResponse(file, { method: 'GET', url: '/api/notes?route=buttons' })
-      .body as Array<{ payload?: { variants: Record<string, string> } }>;
+    const rows = notesResponse(file, { method: 'GET', url: '/api/notes?route=buttons' }).body as Array<{
+      payload?: { variants: Record<string, string> };
+    }>;
     expect(rows[0].payload).toEqual({ variants });
   });
 
   it('keeps a stored payload when a later autosave omits it', () => {
     const file = tempFile();
-    const id = (create(file, {
-      route: '/x',
-      feedback: 'v1',
-      element: null,
-      payload: { variants },
-    }).body as { id: string }).id;
+    const id = (
+      create(file, {
+        route: '/x',
+        feedback: 'v1',
+        element: null,
+        payload: { variants },
+      }).body as { id: string }
+    ).id;
 
     create(file, { id, route: '/x', feedback: 'v2', element: null });
 
@@ -240,8 +243,7 @@ describe('the opaque payload', () => {
     const file = tempFile();
     create(file, { route: '/x', feedback: 'plain', element: null });
     expect('payload' in readNotes(file)[0]).toBe(false);
-    const rows = notesResponse(file, { method: 'GET', url: '/api/notes?route=/x' })
-      .body as Array<Record<string, unknown>>;
+    const rows = notesResponse(file, { method: 'GET', url: '/api/notes?route=/x' }).body as Array<Record<string, unknown>>;
     expect('payload' in rows[0]).toBe(false);
   });
 
@@ -257,10 +259,7 @@ describe('the opaque payload', () => {
 
     const circular: Record<string, unknown> = {};
     circular.self = circular;
-    expect(
-      create(file, { route: '/x', feedback: 'loop', element: null, payload: circular })
-        .status,
-    ).toBe(400);
+    expect(create(file, { route: '/x', feedback: 'loop', element: null, payload: circular }).status).toBe(400);
 
     expect(readNotes(file)).toHaveLength(0);
   });
@@ -280,19 +279,20 @@ describe('the viewport', () => {
       viewport: { w: 900, h: 620 },
     });
     expect(readNotes(file)[0].viewport).toEqual({ w: 900, h: 620 });
-    const rows = notesResponse(file, { method: 'GET', url: '/api/notes?route=/x' })
-      .body as Array<{ viewport?: { w: number; h: number } }>;
+    const rows = notesResponse(file, { method: 'GET', url: '/api/notes?route=/x' }).body as Array<{ viewport?: { w: number; h: number } }>;
     expect(rows[0].viewport).toEqual({ w: 900, h: 620 });
   });
 
   it('survives an edit and stays absent when never sent', () => {
     const file = tempFile();
-    const id = (create(file, {
-      route: '/x',
-      feedback: 'v1',
-      element: null,
-      viewport: { w: 375, h: 812 },
-    }).body as { id: string }).id;
+    const id = (
+      create(file, {
+        route: '/x',
+        feedback: 'v1',
+        element: null,
+        viewport: { w: 375, h: 812 },
+      }).body as { id: string }
+    ).id;
     create(file, { id, route: '/x', feedback: 'v2', element: null });
     expect(readNotes(file)[0].viewport).toEqual({ w: 375, h: 812 });
 
@@ -313,13 +313,22 @@ describe('the viewport', () => {
 describe('Request adapter boundaries', () => {
   it('rejects foreign origins and oversized streamed JSON without creating notes', async () => {
     const file = tempFile();
-    const foreign = await serveNotesRequest(file, new Request('http://localhost:3000/api/notes', {
-      method: 'POST', headers: { origin: 'https://outside.example' }, body: '{"route":"/","feedback":"unwanted"}',
-    }));
+    const foreign = await serveNotesRequest(
+      file,
+      new Request('http://localhost:3000/api/notes', {
+        method: 'POST',
+        headers: { origin: 'https://outside.example' },
+        body: '{"route":"/","feedback":"unwanted"}',
+      }),
+    );
     expect(foreign.status).toBe(403);
-    const oversized = await serveNotesRequest(file, new Request('http://localhost:3000/api/notes', {
-      method: 'POST', body: JSON.stringify({ feedback: 'x'.repeat(1024 * 1024) }),
-    }));
+    const oversized = await serveNotesRequest(
+      file,
+      new Request('http://localhost:3000/api/notes', {
+        method: 'POST',
+        body: JSON.stringify({ feedback: 'x'.repeat(1024 * 1024) }),
+      }),
+    );
     expect(oversized.status).toBe(413);
     expect(readNotes(file)).toEqual([]);
   });

@@ -17,9 +17,20 @@
  *  transformed by the framework's own plugin, which a dispatcher would hide
  *  the real exports from. */
 const ROUTE_EXPORTS = new Set([
-  'loader', 'action', 'clientLoader', 'clientAction', 'headers', 'links',
-  'meta', 'handle', 'shouldRevalidate', 'middleware', 'clientMiddleware',
-  'unstable_middleware', 'unstable_clientMiddleware', 'HydrateFallback',
+  'loader',
+  'action',
+  'clientLoader',
+  'clientAction',
+  'headers',
+  'links',
+  'meta',
+  'handle',
+  'shouldRevalidate',
+  'middleware',
+  'clientMiddleware',
+  'unstable_middleware',
+  'unstable_clientMiddleware',
+  'HydrateFallback',
 ]);
 
 const IDENT = /^[A-Za-z_$][\w$]*$/;
@@ -56,10 +67,16 @@ export function scanExports(code: string): string[] | null {
     // `export * as ns from '…'` names one binding; a bare `export *`
     // re-exports names this file cannot see.
     const star = body.match(/^\*\s+as\s+([A-Za-z_$][\w$]*)/);
-    if (star?.[1]) { names.add(star[1]); continue; }
+    if (star?.[1]) {
+      names.add(star[1]);
+      continue;
+    }
     if (body.startsWith('*')) return null;
 
-    if (/^default\b/.test(body)) { names.add('default'); continue; }
+    if (/^default\b/.test(body)) {
+      names.add('default');
+      continue;
+    }
     if (/^(?:declare\s|type\s|interface\s)/.test(body)) continue;
     if (/^(?:=|import\s|namespace\s|module\s|as\s)/.test(body)) return null;
 
@@ -67,7 +84,10 @@ export function scanExports(code: string): string[] | null {
       /^(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)|^(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)|^(?:const\s+)?enum\s+([A-Za-z_$][\w$]*)/,
     );
     const declared = decl?.[1] ?? decl?.[2] ?? decl?.[3];
-    if (declared) { names.add(declared); continue; }
+    if (declared) {
+      names.add(declared);
+      continue;
+    }
 
     const variable = body.match(/^(?:const|let|var)\s+(.*)$/);
     if (variable) {
@@ -99,9 +119,7 @@ export function isRouteModule(names: string[]): boolean {
  * are blanked first so a comma inside one does not count.
  */
 function hasSecondDeclarator(declaration: string): boolean {
-  const text = declaration
-    .replace(/\/\/.*$/, '')
-    .replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`/g, '""');
+  const text = declaration.replace(/\/\/.*$/, '').replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`/g, '""');
   let depth = 0;
   let initialized = false;
   for (let i = 0; i < text.length; i++) {

@@ -8,19 +8,42 @@ import { fileURLToPath } from 'node:url';
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const run = (args, cwd) => execFileSync(npm, args, {
-  cwd, encoding: 'utf8', env: { ...process.env, npm_config_cache: join(scratch, 'cache') },
-});
+const run = (args, cwd) =>
+  execFileSync(npm, args, {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env, npm_config_cache: join(scratch, 'cache') },
+  });
 
 try {
   const [packed] = JSON.parse(run(['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], root));
-  assert.ok(packed.files.some(({ path }) => path === 'dist/isotone.global.js'), 'build before checking the package');
-  assert.ok(packed.files.some(({ path }) => path === 'docs/blast.md'), 'the Blast guide ships with the package');
+  assert.ok(
+    packed.files.some(({ path }) => path === 'dist/isotone.global.js'),
+    'build before checking the package',
+  );
+  assert.ok(
+    packed.files.some(({ path }) => path === 'docs/blast.md'),
+    'the Blast guide ships with the package',
+  );
   const consumer = join(scratch, 'consumer');
   mkdirSync(consumer);
   writeFileSync(join(consumer, 'package.json'), '{"private":true,"type":"module"}\n');
-  run(['install', '--offline', '--ignore-scripts', '--omit=peer', '--no-audit', '--no-fund', '--package-lock=false', join(scratch, packed.filename)], consumer);
-  writeFileSync(join(consumer, 'check.mjs'), `
+  run(
+    [
+      'install',
+      '--offline',
+      '--ignore-scripts',
+      '--omit=peer',
+      '--no-audit',
+      '--no-fund',
+      '--package-lock=false',
+      join(scratch, packed.filename),
+    ],
+    consumer,
+  );
+  writeFileSync(
+    join(consumer, 'check.mjs'),
+    `
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -51,7 +74,8 @@ try {
   assert.equal((await fetch(app.url + '/api/iteration/blast')).status, 404);
 } finally { await app.close(); }
 console.log('Packed package: isolated install, public imports, CLI, bundle and notes endpoint passed.');
-`);
+`,
+  );
   execFileSync(process.execPath, ['check.mjs'], { cwd: consumer, stdio: 'inherit' });
 } finally {
   rmSync(scratch, { recursive: true, force: true });

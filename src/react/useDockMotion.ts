@@ -21,7 +21,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
     const measure = () => {
       const instant = root.dataset.instant === 'true' || root.dataset.resizing === 'true' || reduced?.matches;
       // Finish all reads before cancelling animations or adding exit snapshots.
-      const panels = Array.from(root.querySelectorAll<HTMLElement>('.isotone-panel:not(.isotone-exit)'), element => {
+      const panels = Array.from(root.querySelectorAll<HTMLElement>('.isotone-panel:not(.isotone-exit)'), (element) => {
         const open = element.dataset.open === 'true';
         const transform = open ? getComputedStyle(element).transform : 'none';
         const matrix = transform !== 'none' && typeof DOMMatrix !== 'undefined' ? new DOMMatrix(transform) : undefined;
@@ -40,7 +40,11 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
           if (!old) continue;
           old.animation?.cancel();
           removeExit(element);
-          if (!instant && typeof element.animate === 'function' && element.querySelectorAll('[data-motion-key]').length <= MAX_ANIMATED_ITEMS) {
+          if (
+            !instant &&
+            typeof element.animate === 'function' &&
+            element.querySelectorAll('[data-motion-key]').length <= MAX_ANIMATED_ITEMS
+          ) {
             const ghost = element.cloneNode(true) as HTMLElement;
             ghost.classList.add('isotone-exit');
             ghost.dataset.open = 'true';
@@ -48,10 +52,20 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
             ghost.setAttribute('aria-hidden', 'true');
             ghost.removeAttribute('id');
             for (const node of ghost.querySelectorAll('[id]')) node.removeAttribute('id');
-            Object.assign(ghost.style, { position: 'fixed', left: `${old.x}px`, top: `${old.y}px`, width: `${old.width}px`, height: `${old.height}px`, pointerEvents: 'none' });
+            Object.assign(ghost.style, {
+              position: 'fixed',
+              left: `${old.x}px`,
+              top: `${old.y}px`,
+              width: `${old.width}px`,
+              height: `${old.height}px`,
+              pointerEvents: 'none',
+            });
             root.appendChild(ghost);
             const animation = ghost.animate(
-              [{ opacity: 1, transform: 'translateY(0)' }, { opacity: 0, transform: 'translateY(4px)' }],
+              [
+                { opacity: 1, transform: 'translateY(0)' },
+                { opacity: 0, transform: 'translateY(4px)' },
+              ],
               { duration: MOTION.exit, easing: MOTION.easeOut, fill: 'forwards' },
             );
             exits.set(element, { ghost, animation });
@@ -70,10 +84,16 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
           continue;
         }
         old?.animation?.cancel();
-        const animation = !instant && typeof element.animate === 'function' ? element.animate(
-          [{ transform: `translate(${old ? old.x + dx - x : 0}px, ${old ? old.y + dy - y : 6}px)`, opacity: old ? 1 : 0 }, { transform: 'translate(0, 0)', opacity: 1 }],
-          { duration: MOTION.enter, easing: MOTION.easeOut },
-        ) : undefined;
+        const animation =
+          !instant && typeof element.animate === 'function'
+            ? element.animate(
+                [
+                  { transform: `translate(${old ? old.x + dx - x : 0}px, ${old ? old.y + dy - y : 6}px)`, opacity: old ? 1 : 0 },
+                  { transform: 'translate(0, 0)', opacity: 1 },
+                ],
+                { duration: MOTION.enter, easing: MOTION.easeOut },
+              )
+            : undefined;
         previous.set(element, { x, y, width: rect.width, height: rect.height, animation });
       }
       if (instant) for (const element of exits.keys()) removeExit(element);
@@ -81,16 +101,22 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
     measure();
     const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : undefined;
     observer?.observe(root);
-    const mutations = new MutationObserver(records => {
-      const changed = records.some(record => {
-        if (record.type === 'attributes') return record.target === root ||
-          (record.target instanceof Element && record.target.matches('.isotone-panel:not(.isotone-exit)'));
-        return [...record.addedNodes, ...record.removedNodes].some(node =>
-          node instanceof Element && node.matches('.isotone-panel:not(.isotone-exit)'));
+    const mutations = new MutationObserver((records) => {
+      const changed = records.some((record) => {
+        if (record.type === 'attributes')
+          return record.target === root || (record.target instanceof Element && record.target.matches('.isotone-panel:not(.isotone-exit)'));
+        return [...record.addedNodes, ...record.removedNodes].some(
+          (node) => node instanceof Element && node.matches('.isotone-panel:not(.isotone-exit)'),
+        );
       });
       if (changed) measure();
     });
-    mutations.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-open', 'data-instant', 'data-resizing'] });
+    mutations.observe(root, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['data-open', 'data-instant', 'data-resizing'],
+    });
     // An on-screen keyboard lifts the dock through the root's own style (viewport.ts).
     const lifted = new MutationObserver(measure);
     lifted.observe(root, { attributes: true, attributeFilter: ['style'] });

@@ -27,15 +27,37 @@ function project() {
   const text = { out: '', err: '' };
   const io = {
     cwd,
-    stdout: { write: (s: string) => { text.out += s; } },
-    stderr: { write: (s: string) => { text.err += s; } },
+    stdout: {
+      write: (s: string) => {
+        text.out += s;
+      },
+    },
+    stderr: {
+      write: (s: string) => {
+        text.err += s;
+      },
+    },
   };
-  const take = () => { const value = text.out; text.out = ''; text.err = ''; return value; };
+  const take = () => {
+    const value = text.out;
+    text.out = '';
+    text.err = '';
+    return value;
+  };
   return { cwd, notes, io, text, take, state: () => readSession(blastFile(notes)) };
 }
 
 function note(id: string, extra: Partial<StoredNote> = {}): StoredNote {
-  return { id, route: '/', feedback: `Note ${id}`, element: null, done: false, doneAt: null, createdAt: new Date().toISOString(), ...extra };
+  return {
+    id,
+    route: '/',
+    feedback: `Note ${id}`,
+    element: null,
+    done: false,
+    doneAt: null,
+    createdAt: new Date().toISOString(),
+    ...extra,
+  };
 }
 
 function add(file: string, ...items: StoredNote[]) {
@@ -48,7 +70,8 @@ function other(cwd: string) {
 }
 
 /** The ready-to-paste prompt in docs/blast.md, which is how users start a session. */
-const DOC_PROMPT = /## Starting a session[\s\S]*?```text\n([\s\S]*?)```/.exec(readFileSync(new URL('../docs/blast.md', import.meta.url), 'utf8'))?.[1] ?? '';
+const DOC_PROMPT =
+  /## Starting a session[\s\S]*?```text\n([\s\S]*?)```/.exec(readFileSync(new URL('../docs/blast.md', import.meta.url), 'utf8'))?.[1] ?? '';
 
 /** `start`, quietly. */
 async function start(p: ReturnType<typeof project>, ...args: string[]) {
@@ -59,7 +82,13 @@ async function start(p: ReturnType<typeof project>, ...args: string[]) {
 
 const old = () => new Date(Date.now() - 5_000).toISOString();
 
-const later = (ms: number, work: () => void) => new Promise<void>((done) => setTimeout(() => { work(); done(); }, ms));
+const later = (ms: number, work: () => void) =>
+  new Promise<void>((done) =>
+    setTimeout(() => {
+      work();
+      done();
+    }, ms),
+  );
 
 describe('durations and copy', () => {
   it('parses 30s, 5m, 1h and combinations, and rejects bare numbers', () => {
@@ -131,7 +160,9 @@ describe(`isotone ${BLAST.command} start`, () => {
     await runBlast(['stop'], p.io, FAST);
     expect(await start(p, '10m')).toBe(0);
     expect(p.state()?.stoppedAt).toBeUndefined();
-    await later(10, () => writeFileSync(blastFile(p.notes), JSON.stringify({ ...p.state(), endsAt: new Date(Date.now() - 1).toISOString() })));
+    await later(10, () =>
+      writeFileSync(blastFile(p.notes), JSON.stringify({ ...p.state(), endsAt: new Date(Date.now() - 1).toISOString() })),
+    );
     expect(await start(p, '10m')).toBe(0);
     expect(Date.parse(p.state()?.endsAt ?? '') - Date.now()).toBeGreaterThan(9 * 60_000);
   });
@@ -140,7 +171,11 @@ describe(`isotone ${BLAST.command} start`, () => {
     const p = project();
     add(p.notes, note('legacy', { createdAt: old() }));
     expect(await runBlast(['--for', '10m', '--new', '--every', '300ms', '--json'], p.io, FAST)).toBe(0);
-    const [started, batch] = p.take().trim().split('\n').map((line) => JSON.parse(line));
+    const [started, batch] = p
+      .take()
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
     expect(started.type).toBe('started');
     expect(batch).toMatchObject({ type: 'batch', notes: [{ id: 'legacy' }] });
     expect(await runBlast(['--status'], p.io, FAST)).toBe(0);
@@ -235,7 +270,12 @@ describe(`isotone ${BLAST.command}`, () => {
     expect(p.take()).toContain('The note stays open');
     expect(readNotes(p.notes)[0].reply?.text).toBe('Which of the two buttons?');
     const waiting = runBlast(['--json'], p.io, FAST);
-    await later(100, () => updateNotes(p.notes, (notes) => { notes[0].feedback = 'Note ask. The primary one.'; return notes; }));
+    await later(100, () =>
+      updateNotes(p.notes, (notes) => {
+        notes[0].feedback = 'Note ask. The primary one.';
+        return notes;
+      }),
+    );
     expect(await waiting).toBe(0);
     const batch = JSON.parse(p.take());
     expect(batch.type).toBe('batch');
@@ -282,8 +322,15 @@ describe(`isotone ${BLAST.command}`, () => {
 
   it('only hands out its route, plus update notes', async () => {
     const p = project();
-    add(p.notes, note('home', { createdAt: old() }), note('pricing', { route: '/pricing', createdAt: old() }),
-      note('upgrade', { createdAt: old(), update: { from: '1.0.0', to: '1.1.0', command: 'pnpm add -D --exact isotone@1.1.0', cwd: '/app', manager: 'pnpm' } }));
+    add(
+      p.notes,
+      note('home', { createdAt: old() }),
+      note('pricing', { route: '/pricing', createdAt: old() }),
+      note('upgrade', {
+        createdAt: old(),
+        update: { from: '1.0.0', to: '1.1.0', command: 'pnpm add -D --exact isotone@1.1.0', cwd: '/app', manager: 'pnpm' },
+      }),
+    );
     expect(await start(p, '10s', '/pricing')).toBe(0);
     expect(p.state()?.route).toBe('/pricing');
     expect(await runBlast(['--every', '300ms', '--json'], p.io, FAST)).toBe(0);
@@ -351,7 +398,11 @@ describe(`isotone ${BLAST.command}`, () => {
     await later(150, () => add(p.notes, note('s1')));
     await later(400, () => add(p.notes, note('s2'), note('s3')));
     expect(await running).toBe(ENDED_EXIT);
-    const lines = p.take().trim().split('\n').map((line) => JSON.parse(line));
+    const lines = p
+      .take()
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
     expect(lines.map((line) => line.type)).toEqual(['batch', 'batch', 'ended']);
     expect(lines[0].notes.map((n: StoredNote) => n.id)).toEqual(['s1']);
     expect(lines[1].notes.map((n: StoredNote) => n.id)).toEqual(['s2', 's3']);
@@ -371,7 +422,15 @@ describe(`isotone ${BLAST.command}`, () => {
 
   it('rejects bad input before touching files', async () => {
     const p = project();
-    for (const args of [['start', '30'], ['--every', 'soon'], ['pricing'], ['start', '9h'], ['start', '--every', '1m'], ['extend'], ['stop', '/x']]) {
+    for (const args of [
+      ['start', '30'],
+      ['--every', 'soon'],
+      ['pricing'],
+      ['start', '9h'],
+      ['start', '--every', '1m'],
+      ['extend'],
+      ['stop', '/x'],
+    ]) {
       expect(await runBlast(args, p.io, FAST)).toBe(1);
     }
     expect(p.state()).toBeNull();
@@ -418,7 +477,18 @@ describe('the session state', () => {
   it('caps an extension at eight hours ahead', async () => {
     const p = project();
     const now = Date.now();
-    writeFileSync(blastFile(p.notes), JSON.stringify({ version: 1, startedAt: new Date(now).toISOString(), endsAt: new Date(now + 7.9 * 3_600_000).toISOString(), route: null, heartbeatAt: new Date(now).toISOString(), waiting: true, seen: {} }));
+    writeFileSync(
+      blastFile(p.notes),
+      JSON.stringify({
+        version: 1,
+        startedAt: new Date(now).toISOString(),
+        endsAt: new Date(now + 7.9 * 3_600_000).toISOString(),
+        route: null,
+        heartbeatAt: new Date(now).toISOString(),
+        waiting: true,
+        seen: {},
+      }),
+    );
     expect(await runBlast(['extend', '1h'], p.io, FAST)).toBe(0);
     const endsAt = Date.parse(readSession(blastFile(p.notes))?.endsAt ?? '');
     expect(endsAt).toBeLessThanOrEqual(Date.now() + 8 * 3_600_000);
@@ -428,7 +498,20 @@ describe('the session state', () => {
   it('reads a 1.2.0 session file, which also stored every and stoppedBy', async () => {
     const p = project();
     const now = Date.now();
-    writeFileSync(blastFile(p.notes), JSON.stringify({ version: 1, startedAt: new Date(now).toISOString(), endsAt: new Date(now + 60_000).toISOString(), every: 300_000, route: null, heartbeatAt: new Date(now).toISOString(), waiting: false, stoppedBy: 'cli', seen: {} }));
+    writeFileSync(
+      blastFile(p.notes),
+      JSON.stringify({
+        version: 1,
+        startedAt: new Date(now).toISOString(),
+        endsAt: new Date(now + 60_000).toISOString(),
+        every: 300_000,
+        route: null,
+        heartbeatAt: new Date(now).toISOString(),
+        waiting: false,
+        stoppedBy: 'cli',
+        seen: {},
+      }),
+    );
     expect(readSession(blastFile(p.notes))).toMatchObject({ route: null, seen: {} });
   });
 });

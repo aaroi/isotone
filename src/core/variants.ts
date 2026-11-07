@@ -189,10 +189,16 @@ export function sectionAxes<T extends VariantAxis>(axes: T[]): VariantSection<T>
     let result: string | null = null;
     while (current) {
       const known = resolved.get(current.id);
-      if (known !== undefined) { result = known; break; }
+      if (known !== undefined) {
+        result = known;
+        break;
+      }
       const own = labels.get(current.id)?.section ?? null;
       trail.add(current.id);
-      if (own !== null || current.section !== undefined || !current.showWhen) { result = own; break; }
+      if (own !== null || current.section !== undefined || !current.showWhen) {
+        result = own;
+        break;
+      }
       const parent = byId.get(current.showWhen.axis);
       if (!parent || trail.has(parent.id)) break;
       current = parent;
@@ -206,7 +212,10 @@ export function sectionAxes<T extends VariantAxis>(axes: T[]): VariantSection<T>
     const label = labels.get(axis.id) as SectionedLabel;
     const name = sectionOf(axis);
     const entry = { ...label, axis };
-    if (name === null) { loose.axes.push(entry); continue; }
+    if (name === null) {
+      loose.axes.push(entry);
+      continue;
+    }
     // An inherited section still prints the child's own label in full.
     if (label.section === null) entry.fullLabel = `${name}${SECTION_SEPARATOR}${label.label}`;
     const key = name.toLowerCase();
@@ -265,10 +274,7 @@ export function parseVariantParam(axes: VariantAxis[], raw: string): VariantSele
 }
 
 /** Non-default selections only, `""` when everything is at its default. */
-export function serializeVariantParam(
-  axes: VariantAxis[],
-  selections: VariantSelections,
-): string {
+export function serializeVariantParam(axes: VariantAxis[], selections: VariantSelections): string {
   return axes
     .filter((a) => selections[a.id] !== undefined && selections[a.id] !== axisDefault(a))
     .map((a) => `${a.id}:${selections[a.id]}`)
@@ -285,12 +291,7 @@ export function isDirty(axes: VariantAxis[], selections: VariantSelections): boo
  * A hidden parent hides its children. Cycles are hidden, and long chains
  * are evaluated iteratively rather than consuming the call stack.
  */
-export function isAxisVisible(
-  axis: VariantAxis,
-  axes: VariantAxis[],
-  selections: VariantSelections,
-  _depth = 0,
-): boolean {
+export function isAxisVisible(axis: VariantAxis, axes: VariantAxis[], selections: VariantSelections, _depth = 0): boolean {
   return visibilityById(axes.includes(axis) ? axes : [...axes, axis], selections).get(axis.id) ?? false;
 }
 
@@ -308,15 +309,23 @@ function visibilityById(axes: VariantAxis[], selections: VariantSelections): Map
     let result = true;
     while (current) {
       const known = visible.get(current.id);
-      if (known !== undefined) { result = known; break; }
-      if (trail.has(current.id)) { result = false; break; }
+      if (known !== undefined) {
+        result = known;
+        break;
+      }
+      if (trail.has(current.id)) {
+        result = false;
+        break;
+      }
       trail.add(current.id);
       const condition: VariantAxisCondition | undefined = current.showWhen;
       if (!condition) break;
       const parent = byId.get(condition.axis);
       const value = selections[condition.axis] ?? (parent ? axisDefault(parent) : undefined);
-      if ((condition.equals !== undefined && value !== condition.equals) ||
-        (condition.not !== undefined && value === condition.not)) { result = false; break; }
+      if ((condition.equals !== undefined && value !== condition.equals) || (condition.not !== undefined && value === condition.not)) {
+        result = false;
+        break;
+      }
       current = parent;
     }
     for (const id of trail) visible.set(id, result);
@@ -414,17 +423,18 @@ export function createVariantsSource(init: {
       if (action.action === 'remove-option') {
         if (axis.kind === 'range') throw new Error('This selector has no removable options.');
         if (axis.kind === 'color') {
-          const swatch = axis.swatches.find(s => s.id === action.optionId);
-          if (!swatch || swatch.value.toLowerCase() === axis.defaultColor.toLowerCase()) throw new Error('Keep the default colour, or remove the whole selector.');
-          const swatches = axis.swatches.filter(s => s.id !== action.optionId);
+          const swatch = axis.swatches.find((s) => s.id === action.optionId);
+          if (!swatch || swatch.value.toLowerCase() === axis.defaultColor.toLowerCase())
+            throw new Error('Keep the default colour, or remove the whole selector.');
+          const swatches = axis.swatches.filter((s) => s.id !== action.optionId);
           if (picks[axis.id]?.toLowerCase() === swatch.value.toLowerCase()) picks[axis.id] = axis.defaultColor;
-          next = next.map(a => a.id === axis.id ? { ...axis, swatches } : a);
+          next = next.map((a) => (a.id === axis.id ? { ...axis, swatches } : a));
         } else {
           if (action.optionId === axis.defaultOption) throw new Error('Keep the default option, or remove the whole selector.');
           if (!axis.options.some((o) => o.id === action.optionId)) throw new Error('This option is no longer available.');
           const options = axis.options.filter((o) => o.id !== action.optionId);
           if (picks[axis.id] === action.optionId) picks[axis.id] = axis.defaultOption;
-          next = next.map((a) => a.id === axis.id ? { ...axis, options } : a);
+          next = next.map((a) => (a.id === axis.id ? { ...axis, options } : a));
           if (options.length === 1) next = next.filter((a) => a.id !== axis.id);
         }
       } else {
@@ -626,16 +636,12 @@ export function applyKnobValues(
 }
 
 /** The knobs that sit off their default, with the value the panel showed. */
-export function knobDelta(
-  knobs: KnobAxis[],
-  values: VariantSelections,
-): { axis: KnobAxis; value: string; shown: string }[] {
+export function knobDelta(knobs: KnobAxis[], values: VariantSelections): { axis: KnobAxis; value: string; shown: string }[] {
   return knobs.flatMap((k) => {
     const v = values[k.id];
     if (v === undefined || v === axisDefault(k)) return [];
-    const shown = k.kind === 'range' ? formatRangeValue(k, v)
-      : k.kind === 'color' ? v
-      : k.options.find((option) => option.id === v)?.label ?? v;
+    const shown =
+      k.kind === 'range' ? formatRangeValue(k, v) : k.kind === 'color' ? v : (k.options.find((option) => option.id === v)?.label ?? v);
     return [{ axis: k, value: v, shown }];
   });
 }
@@ -722,7 +728,12 @@ export function overlayGroups<T extends OverlayVariant>(variants: T[]): OverlayG
     if (!members) continue;
     if (seen.has(members)) continue;
     seen.add(members);
-    const id = v.group ?? members.map((m) => m.id).sort().join('+');
+    const id =
+      v.group ??
+      members
+        .map((m) => m.id)
+        .sort()
+        .join('+');
     groups.push({ id, label: groupLabel(id, members), members });
   }
   return groups;
@@ -732,9 +743,7 @@ function groupLabel(id: string, members: OverlayVariant[]): string {
   const named = members.find((m) => m.groupLabel);
   if (named?.groupLabel) return named.groupLabel;
   const [first, ...rest] = members;
-  const shared = Object.keys(first?.files ?? {}).find((file) =>
-    rest.every((m) => Object.hasOwn(m.files, file)),
-  );
+  const shared = Object.keys(first?.files ?? {}).find((file) => rest.every((m) => Object.hasOwn(m.files, file)));
   if (shared) return shared.slice(shared.lastIndexOf('/') + 1);
   if (members.length === 1 && first) return first.label || first.id;
   return id;
@@ -862,26 +871,32 @@ export function createOverlayVariantsSource(cfg: {
   // the server: a slider is a look, not a file swap.
   const storage = (() => {
     if (cfg.storage !== undefined) return cfg.storage;
-    try { return typeof localStorage === 'undefined' ? null : localStorage; }
-    catch { return null; }
+    try {
+      return typeof localStorage === 'undefined' ? null : localStorage;
+    } catch {
+      return null;
+    }
   })();
-  const knobRoot =
-    cfg.knobRoot === undefined
-      ? typeof document === 'undefined'
-        ? null
-        : document.documentElement
-      : cfg.knobRoot;
+  const knobRoot = cfg.knobRoot === undefined ? (typeof document === 'undefined' ? null : document.documentElement) : cfg.knobRoot;
   let knobValues: VariantSelections = (() => {
     const parse = (raw: string | null): VariantSelections => {
       try {
         const parsed = raw ? (JSON.parse(raw) as unknown) : null;
         return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-          ? Object.fromEntries(Object.entries(parsed).filter((entry) => typeof entry[1] === 'string')) : {};
-      } catch { return {}; }
+          ? Object.fromEntries(Object.entries(parsed).filter((entry) => typeof entry[1] === 'string'))
+          : {};
+      } catch {
+        return {};
+      }
     };
     try {
-      return storage ? parse(readBrowserStorage(storage, KNOBS_STORAGE_KEY, (current, previous) =>
-        JSON.stringify({ ...parse(previous), ...parse(current) }))) : {};
+      return storage
+        ? parse(
+            readBrowserStorage(storage, KNOBS_STORAGE_KEY, (current, previous) =>
+              JSON.stringify({ ...parse(previous), ...parse(current) }),
+            ),
+          )
+        : {};
     } catch {
       return {};
     }
@@ -910,7 +925,10 @@ export function createOverlayVariantsSource(cfg: {
         });
         if (!res.ok) {
           // The server knows which variants and which file are in the way.
-          const reason = await res.json().then((body: { error?: unknown }) => body?.error, () => null);
+          const reason = await res.json().then(
+            (body: { error?: unknown }) => body?.error,
+            () => null,
+          );
           throw new Error(typeof reason === 'string' ? reason : `Activating variants failed (${res.status}). Try again.`);
         }
         if (list) list = { ...list, active };
@@ -940,10 +958,12 @@ export function createOverlayVariantsSource(cfg: {
   }
   function scheduleActivation(): void {
     if (activation) return;
-    activation = Promise.resolve().then(drainActivations).finally(() => {
-      activation = null;
-      if (intended !== null) scheduleActivation();
-    });
+    activation = Promise.resolve()
+      .then(drainActivations)
+      .finally(() => {
+        activation = null;
+        if (intended !== null) scheduleActivation();
+      });
   }
   return {
     title: 'Variants',
@@ -960,20 +980,21 @@ export function createOverlayVariantsSource(cfg: {
       const wasActivating = activation !== null;
       const next = await request(cfg.endpoint, undefined, async (res) => {
         if (!res.ok) throw new Error(`Loading variants failed (${res.status})`);
-        return await res.json() as OverlayVariantsList;
+        return (await res.json()) as OverlayVariantsList;
       });
       if (refreshId !== refreshRevision) return;
       // An older GET must not roll back a successful POST that finished while
       // the listing was loading. Definitions can still refresh independently.
       const previousKnobs = list?.knobs ?? [];
-      list = list && (wasActivating || activation !== null || startedRevision !== revision)
-        ? { ...next, active: list.active } : next;
+      list = list && (wasActivating || activation !== null || startedRevision !== revision) ? { ...next, active: list.active } : next;
       if (knobRoot) applyKnobValues(previousKnobs, {}, knobRoot);
       const valid = new Map((list.knobs ?? []).map((knob) => [knob.id, knob]));
-      knobValues = Object.fromEntries(Object.entries(knobValues).filter(([id, value]) => {
-        const knob = valid.get(id);
-        return knob && isValidSelection(knob, value);
-      }));
+      knobValues = Object.fromEntries(
+        Object.entries(knobValues).filter(([id, value]) => {
+          const knob = valid.get(id);
+          return knob && isValidSelection(knob, value);
+        }),
+      );
       applyKnobs();
       emit();
     },
@@ -981,10 +1002,7 @@ export function createOverlayVariantsSource(cfg: {
     getSelections() {
       const active = new Set(current());
       const picks = Object.fromEntries(
-        selects().map((axis) => [
-          axis.id,
-          axis.options.find((o) => active.has(o.id))?.id ?? OVERLAY_DEFAULT_OPTION,
-        ]),
+        selects().map((axis) => [axis.id, axis.options.find((o) => active.has(o.id))?.id ?? OVERLAY_DEFAULT_OPTION]),
       );
       for (const k of knobAxes()) picks[k.id] = knobValues[k.id] ?? axisDefault(k);
       return picks;

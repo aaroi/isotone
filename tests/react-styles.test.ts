@@ -31,7 +31,9 @@ function themeViolations(css: string): string[] {
     }
     visit(style.sheet.cssRules);
     return violations;
-  } finally { style.remove(); }
+  } finally {
+    style.remove();
+  }
 }
 
 describe('theme boundary', () => {
@@ -40,12 +42,25 @@ describe('theme boundary', () => {
   });
 
   it('catches direct, token-based and responsive layout drift and separate control states', () => {
-    expect(themeViolations(`
+    expect(
+      themeViolations(`
       .isotone-root[data-appearance='retired'] { padding: 8px; --iso-rail-gap: 12px; }
       @media (max-width: 600px) { .isotone-root[data-theme='light'] { width: 90px; --iso-swatch-radius: 50%; } }
       .isotone-root[data-appearance='retired'] button:hover { background: red; }
       .isotone-root[data-theme='light'] .isotone-seg[aria-pressed='true'] { box-shadow: none; }
-    `)).toEqual(expect.arrayContaining(['padding', '--iso-rail-gap', '--iso-swatch-radius', 'width', 'background', 'box-shadow', 'separate component or state rule', 'retired appearance override']));
+    `),
+    ).toEqual(
+      expect.arrayContaining([
+        'padding',
+        '--iso-rail-gap',
+        '--iso-swatch-radius',
+        'width',
+        'background',
+        'box-shadow',
+        'separate component or state rule',
+        'retired appearance override',
+      ]),
+    );
   });
 
   it('requires complete contracts with resolvable, non-circular paint tokens in both themes', () => {

@@ -8,12 +8,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { VariantAction, VariantAxis } from '../src/core/variants';
-import {
-  createVariantsSource,
-  IterationPanel,
-  mountIteration,
-  VariantsView,
-} from '../src/react/index';
+import { createVariantsSource, IterationPanel, mountIteration, VariantsView } from '../src/react/index';
 import { PANEL_CSS } from '../src/react/styles';
 
 const AXES: VariantAxis[] = [
@@ -123,9 +118,7 @@ function byText(text: string, selector = 'button'): HTMLElement | undefined {
 }
 
 function labels(): string[] {
-  return Array.from(container.querySelectorAll('.isotone-axis-label')).map(
-    (el) => el.textContent ?? '',
-  );
+  return Array.from(container.querySelectorAll('.isotone-axis-label')).map((el) => el.textContent ?? '');
 }
 
 describe('VariantsView', () => {
@@ -186,13 +179,19 @@ describe('VariantsView', () => {
 
   it('keep-option removes the selector and makes the option the pick, colours by swatch value', async () => {
     const colour: VariantAxis = {
-      kind: 'color', id: 'accent', label: 'Accent', defaultColor: '#111111',
-      swatches: [{ id: 'ink', label: 'Ink', value: '#111111' }, { id: 'sky', label: 'Sky', value: '#3b82f6' }],
+      kind: 'color',
+      id: 'accent',
+      label: 'Accent',
+      defaultColor: '#111111',
+      swatches: [
+        { id: 'ink', label: 'Ink', value: '#111111' },
+        { id: 'sky', label: 'Sky', value: '#3b82f6' },
+      ],
     };
     const source = createVariantsSource({ axes: [...AXES, colour] });
     await source.manage?.({ axisId: 'headline', action: 'keep-option', optionId: 'b' });
     await source.manage?.({ axisId: 'accent', action: 'keep-option', optionId: 'sky' });
-    expect(source.getAxes().map(a => a.id)).toEqual(['haze']);
+    expect(source.getAxes().map((a) => a.id)).toEqual(['haze']);
     expect(source.getSelections()).toMatchObject({ headline: 'b', accent: '#3b82f6' });
     await expect(source.manage?.({ axisId: 'haze', action: 'keep-option', optionId: 'x' })).rejects.toThrow();
     const again = createVariantsSource({ axes: AXES });
@@ -203,15 +202,22 @@ describe('VariantsView', () => {
     const source = createVariantsSource({ axes: AXES });
     await render(createElement(VariantsView, { source }));
     await click(byText('Headline actions'));
-    await act(async () => { await source.manage?.({ action: 'remove-axis', axisId: 'headline' }); });
+    await act(async () => {
+      await source.manage?.({ action: 'remove-axis', axisId: 'headline' });
+    });
     expect(container.querySelector('[role=dialog]')).toBeNull();
     expect(container.querySelector('.isotone-vars-body')?.hasAttribute('inert')).toBe(false);
   });
 
   it('renders a large selector set without truncating the available choices', async () => {
     const axes: VariantAxis[] = Array.from({ length: 500 }, (_, i) => ({
-      id: `axis-${i}`, label: `Selector ${i} ${'long label '.repeat(20)}`,
-      defaultOption: 'a', options: [{ id: 'a', label: 'Default' }, { id: 'b', label: 'Alternative' }],
+      id: `axis-${i}`,
+      label: `Selector ${i} ${'long label '.repeat(20)}`,
+      defaultOption: 'a',
+      options: [
+        { id: 'a', label: 'Default' },
+        { id: 'b', label: 'Alternative' },
+      ],
     }));
     const source = createVariantsSource({ axes });
     await render(createElement(VariantsView, { source }));
@@ -387,8 +393,18 @@ describe('VariantsView', () => {
 
   it('picks a custom colour in the panel, not the native popup', async () => {
     const source = createVariantsSource({
-      axes: [{ kind: 'color', id: 'accent', label: 'Accent', defaultColor: '#ea382e',
-        swatches: [{ id: 'red', label: 'Red', value: '#ea382e' }, { id: 'blue', label: 'Blue', value: '#3b82f6' }] }],
+      axes: [
+        {
+          kind: 'color',
+          id: 'accent',
+          label: 'Accent',
+          defaultColor: '#ea382e',
+          swatches: [
+            { id: 'red', label: 'Red', value: '#ea382e' },
+            { id: 'blue', label: 'Blue', value: '#3b82f6' },
+          ],
+        },
+      ],
     });
     await render(createElement(VariantsView, { source }));
     const picker = container.querySelector<HTMLButtonElement>('.isotone-picker');
@@ -397,14 +413,23 @@ describe('VariantsView', () => {
     const hex = container.querySelector<HTMLInputElement>('.isotone-colour-hex');
     if (!hex) throw new Error('no hex field');
     const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-    await act(async () => { set?.call(hex, '12ab34'); hex.dispatchEvent(new Event('input', { bubbles: true })); });
-    await act(async () => { hex.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    await act(async () => {
+      set?.call(hex, '12ab34');
+      hex.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      hex.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
     expect(source.getSelections().accent).toBe('#12ab34');
     expect(picker?.getAttribute('data-custom')).toBe('true');
     const handle = container.querySelector<HTMLElement>('.isotone-colour-handle');
-    await act(async () => { handle?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', shiftKey: true, bubbles: true })); });
+    await act(async () => {
+      handle?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', shiftKey: true, bubbles: true }));
+    });
     expect(source.getSelections().accent).not.toBe('#12ab34');
-    await act(async () => { handle?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    await act(async () => {
+      handle?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
     expect(container.querySelector('.isotone-colour')).toBeNull();
     expect(picker?.getAttribute('aria-expanded')).toBe('false');
   });
@@ -422,9 +447,7 @@ describe('IterationPanel with variants', () => {
     expect(tabs()).toHaveLength(0);
     expect(container.querySelector('.isotone-vars')).not.toBeNull();
     expect(container.querySelector('.isotone-textarea')).toBeNull();
-    expect(container.querySelector('[role=dialog]')?.getAttribute('aria-label')).toBe(
-      'Iteration variants',
-    );
+    expect(container.querySelector('[role=dialog]')?.getAttribute('aria-label')).toBe('Iteration variants');
   });
 
   it('opens both surfaces independently and keeps the draft while switching variants', async () => {
@@ -437,7 +460,10 @@ describe('IterationPanel with variants', () => {
     const textarea = container.querySelector('textarea');
     if (!textarea) throw new Error('missing composer');
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
-    await act(async () => { setter?.call(textarea, 'Try another direction'); textarea.dispatchEvent(new Event('input', { bubbles: true })); });
+    await act(async () => {
+      setter?.call(textarea, 'Try another direction');
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
     await click(byText('Bold'));
     expect(textarea.value).toBe('Try another direction');
     await click(byText('Close variants'));
@@ -453,10 +479,11 @@ describe('IterationPanel with variants', () => {
     expect(field.style.height).toBe('22px');
     Object.defineProperty(field, 'scrollHeight', { configurable: true, get: () => field.value.split('\n').length * 20 + 2 });
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
-    const type = async (value: string) => act(async () => {
-      setter?.call(field, value);
-      field.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    const type = async (value: string) =>
+      act(async () => {
+        setter?.call(field, value);
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+      });
     await type('One\nTwo\nThree');
     expect(field.style.height).toBe('62px');
     await type('');
@@ -465,9 +492,22 @@ describe('IterationPanel with variants', () => {
 
   it('remeasures the scroll-through inset when context changes without changing the text', async () => {
     const feedback = 'One\nTwo';
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => [{
-      id: 'existing', feedback, route: '/', element: null, done: false, createdAt: '2026-01-01T00:00:00.000Z',
-    }] })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => [
+          {
+            id: 'existing',
+            feedback,
+            route: '/',
+            element: null,
+            done: false,
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      })),
+    );
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(fab());
     const field = container.querySelector('textarea');
@@ -477,7 +517,10 @@ describe('IterationPanel with variants', () => {
       get: () => field.value.split('\n').length * 20 + (field.parentElement?.previousElementSibling?.childElementCount ? 12 : 14),
     });
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
-    await act(async () => { setter?.call(field, feedback); field.dispatchEvent(new Event('input', { bubbles: true })); });
+    await act(async () => {
+      setter?.call(field, feedback);
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
     expect(field.style.height).toBe('54px');
     await click(container.querySelector('.isotone-note-hit'));
     expect(field.value).toBe(feedback);
@@ -485,14 +528,35 @@ describe('IterationPanel with variants', () => {
   });
 
   it('keeps overflow labels hit-testable and adds titles only while truncated', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => [{
-      id: 'existing', feedback: 'Review this section', route: '/', done: false, createdAt: '2026-01-01T00:00:00.000Z',
-      element: { selector: '#section', tag: 'section', text: 'A long pinned section label', rect: { x: 0, y: 0, width: 100, height: 100 } },
-    }] })));
-    await render(createElement(IterationPanel, { route: '/', variants: createVariantsSource({ axes: AXES }), store: { endpoint: '/notes' } }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => [
+          {
+            id: 'existing',
+            feedback: 'Review this section',
+            route: '/',
+            done: false,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            element: {
+              selector: '#section',
+              tag: 'section',
+              text: 'A long pinned section label',
+              rect: { x: 0, y: 0, width: 100, height: 100 },
+            },
+          },
+        ],
+      })),
+    );
+    await render(
+      createElement(IterationPanel, { route: '/', variants: createVariantsSource({ axes: AXES }), store: { endpoint: '/notes' } }),
+    );
     await click(fab());
     await click(byText('Variants'));
-    const labels = Array.from(container.querySelectorAll<HTMLElement>('.isotone-axis-label > span, .isotone-seg > span, .isotone-meta .isotone-chip > span'));
+    const labels = Array.from(
+      container.querySelectorAll<HTMLElement>('.isotone-axis-label > span, .isotone-seg > span, .isotone-meta .isotone-chip > span'),
+    );
     expect(labels.length).toBeGreaterThan(3);
     expect(container.querySelector('.isotone-meta .isotone-chip > span')).not.toBeNull();
     for (const label of labels) {
@@ -502,10 +566,14 @@ describe('IterationPanel with variants', () => {
         scrollWidth: { configurable: true, value: 120 },
         clientWidth: { configurable: true, get: () => availableWidth },
       });
-      await act(async () => { label.dispatchEvent(new MouseEvent('pointerover', { bubbles: true })); });
+      await act(async () => {
+        label.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
+      });
       expect(label.title).toBe(label.textContent?.trim());
       availableWidth = 160;
-      await act(async () => { label.dispatchEvent(new MouseEvent('pointerover', { bubbles: true })); });
+      await act(async () => {
+        label.dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
+      });
       expect(label.hasAttribute('title')).toBe(false);
     }
   });
@@ -686,8 +754,7 @@ describe('mountIteration variants options', () => {
 
     // An untouched overlay has nothing to promote; the save action stays hidden.
     await act(async () => {
-      shadow.querySelector('.isotone-rail-button[aria-label=Variants]')
-        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      shadow.querySelector('.isotone-rail-button[aria-label=Variants]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(shadow.querySelector('.isotone-save')).toBeNull();
 
@@ -781,14 +848,12 @@ describe('mountIteration variants options', () => {
         el?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         await new Promise((r) => setTimeout(r, 0));
       });
-    const button = (text: string) =>
-      Array.from(shadow.querySelectorAll('button')).find((b) => b.textContent?.trim() === text);
+    const button = (text: string) => Array.from(shadow.querySelectorAll('button')).find((b) => b.textContent?.trim() === text);
 
     await clickIn(shadow.querySelector('.isotone-fab'));
     await tick();
     await clickIn(shadow.querySelector('.isotone-rail-button[aria-label=Variants]'));
-    const axisLabels = () =>
-      Array.from(shadow.querySelectorAll('.isotone-axis-label')).map((el) => el.textContent);
+    const axisLabels = () => Array.from(shadow.querySelectorAll('.isotone-axis-label')).map((el) => el.textContent);
     expect(axisLabels()).toEqual(['table.tsx', 'Settings']);
     // A member's section puts the group's selector under that header.
     expect(Array.from(shadow.querySelectorAll('.isotone-section-toggle span')).map((el) => el.textContent)).toEqual(['Account']);
@@ -813,9 +878,7 @@ describe('mountIteration variants options', () => {
     // Make default names every pick, in panel order, and pins the first.
     await clickIn(button('Make default'));
     const calls = fetchMock.mock.calls as unknown as [RequestInfo | URL, RequestInit?][];
-    const note = calls.find(
-      (c) => String(c[0]) === '/api/iteration/notes' && c[1]?.method === 'POST',
-    );
+    const note = calls.find((c) => String(c[0]) === '/api/iteration/notes' && c[1]?.method === 'POST');
     const body = JSON.parse(String(note?.[1]?.body));
     expect(body.feedback).toBe(
       '[set-defaults] Make the default: "table.tsx: Striped" (table-striped); "Account › Settings: Tabs" (settings-tabs).',
@@ -823,11 +886,8 @@ describe('mountIteration variants options', () => {
     expect(body.payload).toEqual({ variants: 'table-striped, settings-tabs' });
     expect(body.route).toBe('/projects');
 
-
     // Default in one selector drops that group and leaves the other.
-    const defaults = Array.from(shadow.querySelectorAll('button')).filter(
-      (b) => b.textContent?.trim() === 'Default',
-    );
+    const defaults = Array.from(shadow.querySelectorAll('button')).filter((b) => b.textContent?.trim() === 'Default');
     await clickIn(defaults[0]);
     expect(posts().at(-1)).toEqual({ active: ['settings-tabs'] });
 
@@ -837,9 +897,11 @@ describe('mountIteration variants options', () => {
 });
 
 describe('review dock interactions', () => {
-  it.each(['mouse', 'pen'])('expands on %s hover, stays open across the pill and collapses on exit', async pointerType => {
+  it.each(['mouse', 'pen'])('expands on %s hover, stays open across the pill and collapses on exit', async (pointerType) => {
     vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, variants: createVariantsSource({ axes: AXES }) }));
+    await render(
+      createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, variants: createVariantsSource({ axes: AXES }) }),
+    );
     const dock = container.querySelector('.isotone-root');
     const launcher = container.querySelector('.isotone-fab');
     const track = container.querySelector('.isotone-rail-track');
@@ -847,7 +909,9 @@ describe('review dock interactions', () => {
     async function pointer(type: string, target: Element | null, relatedTarget: EventTarget | null, device = pointerType) {
       const event = new MouseEvent(type, { bubbles: true, relatedTarget });
       Object.defineProperty(event, 'pointerType', { value: device });
-      await act(async () => { target?.dispatchEvent(event); });
+      await act(async () => {
+        target?.dispatchEvent(event);
+      });
     }
     await pointer('pointerenter', dock, null, 'touch');
     expect(dock?.getAttribute('data-expanded')).toBe('false');
@@ -870,15 +934,24 @@ describe('review dock interactions', () => {
   });
 
   it('replaces the launcher with two tools and collapses after both surfaces close', async () => {
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, variants: createVariantsSource({ axes: AXES }), defaultTab: 'variants' }));
+    await render(
+      createElement(IterationPanel, {
+        route: '/',
+        store: { endpoint: '/notes' },
+        variants: createVariantsSource({ axes: AXES }),
+        defaultTab: 'variants',
+      }),
+    );
     const rail = container.querySelector('.isotone-rail');
     const launcher = container.querySelector('.isotone-fab');
     expect(rail?.getAttribute('data-expanded')).toBe('false');
-    await click(launcher); await click(byText('Feedback'));
+    await click(launcher);
+    await click(byText('Feedback'));
     expect(launcher?.getAttribute('aria-hidden')).toBe('true');
     expect(launcher?.getAttribute('tabindex')).toBe('-1');
     expect(rail?.getAttribute('data-tools')).toBe('2');
-    await click(byText('Close variants')); await click(byText('Close feedback'));
+    await click(byText('Close variants'));
+    await click(byText('Close feedback'));
     expect(rail?.getAttribute('data-expanded')).toBe('false');
     expect(launcher?.getAttribute('aria-hidden')).toBe('false');
   });
@@ -900,7 +973,8 @@ describe('review dock interactions', () => {
     const props = { route: '/', store: { endpoint: '/notes' }, variants: source, defaultTab: 'variants' as const };
     await render(createElement(IterationPanel, props));
     await click(container.querySelector('.isotone-fab'));
-    await click(byText('Headline actions')); await click(byText('Remove Bold'));
+    await click(byText('Headline actions'));
+    await click(byText('Remove Bold'));
     expect(saved[0].variantAction).toEqual({ axisId: 'headline', action: 'remove-option', optionId: 'b' });
     expect(manage).not.toHaveBeenCalled();
     expect(labels()).toEqual(['Headline', 'Tagline', 'Haze']);
@@ -916,7 +990,8 @@ describe('review dock interactions', () => {
     expect(byText('Remove Bold')?.hasAttribute('disabled')).toBe(true);
     await click(byText('Close selector actions'));
     // Persisted requests never hide or mutate the source controls, even on remount.
-    await act(async () => root?.unmount()); root = null;
+    await act(async () => root?.unmount());
+    root = null;
     await render(createElement(IterationPanel, props));
     await click(container.querySelector('.isotone-fab'));
     expect(labels()).toEqual(['Headline', 'Tagline', 'Haze']);
@@ -929,15 +1004,20 @@ describe('review dock interactions', () => {
 
   it('saves a keep-only request from any option row, keeping the default action for the default', async () => {
     const saved: Record<string, unknown>[] = [];
-    vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => {
-      if (init?.method === 'POST') {
-        saved.push({ ...JSON.parse(String(init.body)), id: `keep-${saved.length}`, done: false, createdAt: new Date().toISOString() });
-        return { ok: true, json: async () => ({ id: `keep-${saved.length - 1}` }) };
-      }
-      return { ok: true, json: async () => saved };
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: unknown, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          saved.push({ ...JSON.parse(String(init.body)), id: `keep-${saved.length}`, done: false, createdAt: new Date().toISOString() });
+          return { ok: true, json: async () => ({ id: `keep-${saved.length - 1}` }) };
+        }
+        return { ok: true, json: async () => saved };
+      }),
+    );
     const source = createVariantsSource({ axes: AXES });
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, variants: source, defaultTab: 'variants' as const }));
+    await render(
+      createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, variants: source, defaultTab: 'variants' as const }),
+    );
     await click(container.querySelector('.isotone-fab'));
     await click(byText('Headline actions'));
     expect(byText('Keep default only')).toBeDefined();
@@ -946,7 +1026,7 @@ describe('review dock interactions', () => {
     expect(saved[0].feedback).toContain('Keep only “Bold” for Headline; make it the default');
     await click(byText('Headline actions'));
     expect(byText('Keep only Bold')?.hasAttribute('disabled')).toBe(true);
-    const defaultRow = [...container.querySelectorAll('.isotone-option-row')].find(row => row.querySelector('small'));
+    const defaultRow = [...container.querySelectorAll('.isotone-option-row')].find((row) => row.querySelector('small'));
     await click(defaultRow?.querySelector('[aria-label^="Keep only"]') ?? null);
     expect(saved[1].variantAction).toEqual({ axisId: 'headline', action: 'keep-default' });
     expect(source.getAxes()).toHaveLength(3);
@@ -956,13 +1036,18 @@ describe('review dock interactions', () => {
     const input = container.querySelector('textarea');
     if (!input) throw new Error('no composer');
     const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
-    await act(async () => { set?.call(input, text); input.dispatchEvent(new Event('input', { bubbles: true })); });
+    await act(async () => {
+      set?.call(input, text);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
   }
   it.each(['dark', 'light'] as const)('focuses the full %s composer without hijacking its controls', async (theme) => {
     document.body.style.backgroundColor = theme === 'dark' ? 'black' : 'white';
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(container.querySelector('.isotone-fab'));
-    await act(async () => { await new Promise(resolve => requestAnimationFrame(resolve)); });
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
     const field = container.querySelector('textarea');
     expect(container.querySelector('.isotone-root')?.getAttribute('data-theme')).toBe(theme);
     if (!field) throw new Error('no composer');
@@ -999,7 +1084,7 @@ describe('review dock interactions', () => {
       await act(async () => {
         document.body.style.backgroundColor = theme === 'dark' ? 'black' : 'white';
         root?.render(createElement(IterationPanel, props));
-        await new Promise(resolve => requestAnimationFrame(resolve));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
       });
       expect(container.querySelector('.isotone-root')?.getAttribute('data-theme')).toBe(theme);
       expect(container.querySelectorAll('.isotone-panel[data-open=true]')).toHaveLength(2);
@@ -1013,16 +1098,32 @@ describe('review dock interactions', () => {
       expect(container.querySelector('.isotone-axis-menu')?.getAttribute('data-open')).toBe('true');
       expect(byText('Remove Plain')?.hasAttribute('disabled')).toBe(true);
       // Escape dismisses only the action sheet, preserving both surfaces and draft.
-      await act(async () => container.querySelector('.isotone-axis-menu button')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+      await act(async () =>
+        container
+          .querySelector('.isotone-axis-menu button')
+          ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })),
+      );
       expect(container.querySelector('.isotone-axis-menu')?.getAttribute('data-open')).not.toBe('true');
       expect(container.querySelectorAll('.isotone-panel[data-open=true]')).toHaveLength(2);
     }
   });
   it('captures the shortcut inside an input, starts selecting, preserves variants, and disables keyboard motion', async () => {
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, variants: createVariantsSource({ axes: AXES }), defaultTab: 'variants' }));
+    await render(
+      createElement(IterationPanel, {
+        route: '/',
+        store: { endpoint: '/notes' },
+        variants: createVariantsSource({ axes: AXES }),
+        defaultTab: 'variants',
+      }),
+    );
     await click(container.querySelector('.isotone-fab'));
-    const input = document.createElement('input'); document.body.append(input); input.focus();
-    await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { code: 'Period', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true })); await new Promise(r => requestAnimationFrame(r)); });
+    const input = document.createElement('input');
+    document.body.append(input);
+    input.focus();
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { code: 'Period', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
+      await new Promise((r) => requestAnimationFrame(r));
+    });
     expect(container.querySelectorAll('.isotone-panel[data-open=true]')).toHaveLength(2);
     expect(container.querySelector('[aria-label="Select elements"]')?.getAttribute('aria-pressed')).toBe('true');
     expect(document.activeElement).toBe(input);
@@ -1031,7 +1132,13 @@ describe('review dock interactions', () => {
   });
   it('moves between selecting and the field with the shortcut', async () => {
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
-    const press = () => act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Period', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true })); await new Promise(r => requestAnimationFrame(r)); });
+    const press = () =>
+      act(async () => {
+        window.dispatchEvent(
+          new KeyboardEvent('keydown', { code: 'Period', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }),
+        );
+        await new Promise((r) => requestAnimationFrame(r));
+      });
     const selecting = () => container.querySelector('[aria-label="Select elements"]')?.getAttribute('aria-pressed');
     await press();
     expect(container.querySelector('.isotone-notes-panel')?.getAttribute('data-open')).toBe('true');
@@ -1045,7 +1152,14 @@ describe('review dock interactions', () => {
   });
   it('attaches an option reference and keeps variants visible while writing', async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: 'saved' }) }));
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, variants: createVariantsSource({ axes: AXES }), defaultTab: 'variants' }));
+    await render(
+      createElement(IterationPanel, {
+        route: '/',
+        store: { endpoint: '/notes' },
+        variants: createVariantsSource({ axes: AXES }),
+        defaultTab: 'variants',
+      }),
+    );
     await click(container.querySelector('.isotone-fab'));
     await click(byText('Headline actions'));
     await click(byText('Feedback on Bold'));
@@ -1055,39 +1169,55 @@ describe('review dock interactions', () => {
     vi.stubGlobal('fetch', fetchMock);
     await click(byText('Send note'));
     const call = (fetchMock.mock.calls as unknown as [string, RequestInit][]).find(([, init]) => init?.method === 'POST');
-    expect(JSON.parse(String(call?.[1].body)).variant).toEqual({ axisId: 'headline', label: 'Headline', optionId: 'b', optionLabel: 'Bold', value: 'a' });
+    expect(JSON.parse(String(call?.[1].body)).variant).toEqual({
+      axisId: 'headline',
+      label: 'Headline',
+      optionId: 'b',
+      optionLabel: 'Bold',
+      value: 'a',
+    });
   });
   it('pins several elements in one session, toggles a duplicate off, and saves every target', async () => {
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(container.querySelector('.isotone-fab'));
-    const a = document.createElement('button'); a.id = 'one'; a.textContent = 'One';
-    const b = document.createElement('button'); b.id = 'two'; b.textContent = 'Two';
+    const a = document.createElement('button');
+    a.id = 'one';
+    a.textContent = 'One';
+    const b = document.createElement('button');
+    b.id = 'two';
+    b.textContent = 'Two';
     document.body.append(a, b);
     const hit = vi.fn(() => a);
     Object.defineProperty(document, 'elementFromPoint', { value: hit, configurable: true });
     await click(byText('Select elements'));
-    await click(a); hit.mockReturnValue(b); await click(b);
+    await click(a);
+    hit.mockReturnValue(b);
+    await click(b);
     expect(container.querySelectorAll('.isotone-chip')).toHaveLength(2);
-    await click(b); expect(container.querySelectorAll('.isotone-chip')).toHaveLength(1);
+    await click(b);
+    expect(container.querySelectorAll('.isotone-chip')).toHaveLength(1);
     await click(b);
     await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
     await typeFeedback('Align these two');
-    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: 'saved' }) })); vi.stubGlobal('fetch', fetchMock);
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: 'saved' }) }));
+    vi.stubGlobal('fetch', fetchMock);
     await click(byText('Send note'));
     const call = (fetchMock.mock.calls as unknown as [string, RequestInit][]).find(([, init]) => init?.method === 'POST');
     const body = JSON.parse(String(call?.[1].body));
     expect(body.elements.map((el: { selector: string }) => el.selector)).toEqual(['#one', '#two']);
     expect(body.element.selector).toBe('#one');
-    a.remove(); b.remove();
+    a.remove();
+    b.remove();
   });
   it('covers the composer while selecting, and Enter, Escape, Done or typing finishes', async () => {
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(container.querySelector('.isotone-fab'));
     const textarea = container.querySelector<HTMLTextAreaElement>('textarea');
     if (!textarea) throw new Error('missing composer');
-    const press = (key: string, target: EventTarget = document.body) => act(async () => {
-      target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true }));
-    });
+    const press = (key: string, target: EventTarget = document.body) =>
+      act(async () => {
+        target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true }));
+      });
     const overlay = () => container.querySelector('.isotone-picking');
 
     await click(byText('Select elements'));
@@ -1110,7 +1240,8 @@ describe('review dock interactions', () => {
 
     // A focused composer with text is covered too, so Enter finishes instead of sending.
     await typeFeedback('More room');
-    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: 'saved' }) })); vi.stubGlobal('fetch', fetchMock);
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: 'saved' }) }));
+    vi.stubGlobal('fetch', fetchMock);
     await click(byText('Select elements'));
     await press('Enter', textarea);
     expect(overlay()).toBeNull();
@@ -1120,9 +1251,10 @@ describe('review dock interactions', () => {
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
     // A real pointer over the dock hits the panel, which select mode ignores.
     Object.defineProperty(document, 'elementFromPoint', { value: () => container.querySelector('.isotone-root'), configurable: true });
-    const pointer = (el: Element | null | undefined) => act(async () => {
-      el?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
-    });
+    const pointer = (el: Element | null | undefined) =>
+      act(async () => {
+        el?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+      });
     await pointer(container.querySelector('.isotone-fab'));
     // It opens already covered, so the field never shows through the fade.
     expect(container.querySelector('.isotone-picking')?.getAttribute('data-still')).toBe('true');
@@ -1132,7 +1264,9 @@ describe('review dock interactions', () => {
     expect(container.querySelector('.isotone-picking')).toBeNull();
     await click(byText('Feedback'));
     expect(container.querySelector('.isotone-picking')).toBeNull();
-    await act(async () => { await new Promise(r => requestAnimationFrame(r)); });
+    await act(async () => {
+      await new Promise((r) => requestAnimationFrame(r));
+    });
     expect(document.activeElement).toBe(container.querySelector('textarea'));
     await click(byText('Feedback'));
     await pointer(byText('Feedback'));
@@ -1141,21 +1275,28 @@ describe('review dock interactions', () => {
   it('floats the composer next to a pinned element and brings it back to the dock', async () => {
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(container.querySelector('.isotone-fab'));
-    const card = document.createElement('section'); card.id = 'card'; card.textContent = 'Card';
+    const card = document.createElement('section');
+    card.id = 'card';
+    card.textContent = 'Card';
     document.body.append(card);
     card.getBoundingClientRect = () => new DOMRect(100, 200, 300, 80);
     Object.defineProperty(document, 'elementFromPoint', { value: () => card, configurable: true });
     const float = () => container.querySelector<HTMLElement>('.isotone-float');
     const away = () => container.querySelector('.isotone-away');
-    const frame = () => act(async () => { await new Promise(r => requestAnimationFrame(r)); });
+    const frame = () =>
+      act(async () => {
+        await new Promise((r) => requestAnimationFrame(r));
+      });
     const size = (name: 'offsetWidth' | 'offsetHeight', value: number) =>
       vi.spyOn(HTMLElement.prototype, name, 'get').mockImplementation(function (this: HTMLElement) {
         return this.classList.contains('isotone-float') ? value : 0;
       });
-    size('offsetWidth', 300); size('offsetHeight', 100);
-    const pin = () => act(async () => {
-      card.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, clientX: 150, clientY: 230 }));
-    });
+    size('offsetWidth', 300);
+    size('offsetHeight', 100);
+    const pin = () =>
+      act(async () => {
+        card.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, clientX: 150, clientY: 230 }));
+      });
 
     await click(byText('Select elements'));
     await pin();
@@ -1176,11 +1317,15 @@ describe('review dock interactions', () => {
     // The draft is written in one place only.
     expect(away()?.textContent).not.toContain('Give this more room');
     // Enter finishes selecting and keeps the pin; the element keeps its outline.
-    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
     expect(byText('Select elements')?.getAttribute('aria-pressed')).toBe('false');
     expect(container.querySelectorAll('.isotone-selected')).toHaveLength(1);
     // Escape after selecting puts it back in the dock with the draft and the pin.
-    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
     expect(float()).toBeNull();
     expect(container.querySelectorAll('.isotone-selected')).toHaveLength(0);
     expect(container.querySelector('.isotone-notes-panel textarea')?.textContent).toBe('Give this more room');
@@ -1204,8 +1349,11 @@ describe('review dock interactions', () => {
     expect(box.style.bottom).toBe('32px');
 
     // Enter in the floating composer sends, and the composer returns to the dock.
-    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
-    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: 'saved' }) })); vi.stubGlobal('fetch', fetchMock);
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: 'saved' }) }));
+    vi.stubGlobal('fetch', fetchMock);
     await act(async () => {
       box.querySelector('textarea')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     });
@@ -1217,13 +1365,20 @@ describe('review dock interactions', () => {
   it('cancels the selection on Escape, so selecting again starts fresh', async () => {
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(container.querySelector('.isotone-fab'));
-    const card = document.createElement('section'); card.id = 'card'; card.textContent = 'Card';
+    const card = document.createElement('section');
+    card.id = 'card';
+    card.textContent = 'Card';
     document.body.append(card);
     Object.defineProperty(document, 'elementFromPoint', { value: () => card, configurable: true });
-    const pressEscape = () => act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    const pressEscape = () =>
+      act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      });
 
     await click(byText('Select elements'));
-    await act(async () => { card.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, clientX: 5, clientY: 5 })); });
+    await act(async () => {
+      card.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, clientX: 5, clientY: 5 }));
+    });
     await typeFeedback('Keep this text');
     expect(container.querySelector('.isotone-float')).not.toBeNull();
     await pressEscape();
@@ -1237,8 +1392,16 @@ describe('review dock interactions', () => {
   });
   it('surfaces a failed removal request without losing options', async () => {
     const source = createVariantsSource({ axes: AXES });
-    await render(createElement(VariantsView, { source, onManage: async () => { throw new Error('Disk unavailable'); } }));
-    await click(byText('Headline actions')); await click(byText('Remove Bold'));
+    await render(
+      createElement(VariantsView, {
+        source,
+        onManage: async () => {
+          throw new Error('Disk unavailable');
+        },
+      }),
+    );
+    await click(byText('Headline actions'));
+    await click(byText('Remove Bold'));
     expect(source.getAxes()).toHaveLength(3);
     expect(container.textContent).toContain('Disk unavailable');
     expect(source.getAxes()).toHaveLength(3);
@@ -1249,22 +1412,58 @@ describe('review dock interactions', () => {
   describe('sections', () => {
     const SECTIONED: VariantAxis[] = [
       { id: 'logo', label: 'Header > Logo size', kind: 'range', min: 16, max: 48, step: 2, defaultValue: 24, unit: 'px' },
-      { id: 'layout', label: 'Layout', defaultOption: 'row', options: [{ id: 'row', label: 'Row' }, { id: 'grid', label: 'Grid' }] },
-      { id: 'ink', label: 'Ink', kind: 'color', defaultColor: '#111111', section: 'Header', swatches: [
-        { id: 'black', label: 'Black', value: '#111111' }, { id: 'blue', label: 'Blue', value: '#2255ff' },
-      ] },
-      { id: 'links', label: 'Footer > Links', defaultOption: 'a', options: [{ id: 'a', label: 'Plain' }, { id: 'b', label: 'Bold' }] },
-      { id: 'theme', label: 'Before > After', section: '', defaultOption: 'l', options: [{ id: 'l', label: 'Light' }, { id: 'd', label: 'Dark' }] },
+      {
+        id: 'layout',
+        label: 'Layout',
+        defaultOption: 'row',
+        options: [
+          { id: 'row', label: 'Row' },
+          { id: 'grid', label: 'Grid' },
+        ],
+      },
+      {
+        id: 'ink',
+        label: 'Ink',
+        kind: 'color',
+        defaultColor: '#111111',
+        section: 'Header',
+        swatches: [
+          { id: 'black', label: 'Black', value: '#111111' },
+          { id: 'blue', label: 'Blue', value: '#2255ff' },
+        ],
+      },
+      {
+        id: 'links',
+        label: 'Footer > Links',
+        defaultOption: 'a',
+        options: [
+          { id: 'a', label: 'Plain' },
+          { id: 'b', label: 'Bold' },
+        ],
+      },
+      {
+        id: 'theme',
+        label: 'Before > After',
+        section: '',
+        defaultOption: 'l',
+        options: [
+          { id: 'l', label: 'Light' },
+          { id: 'd', label: 'Dark' },
+        ],
+      },
     ];
-    const headers = () => Array.from(container.querySelectorAll('.isotone-section-toggle span')).map(el => el.textContent);
+    const headers = () => Array.from(container.querySelectorAll('.isotone-section-toggle span')).map((el) => el.textContent);
 
     it('renders loose selectors first, then a sticky header per section with its count', async () => {
       await render(createElement(VariantsView, { source: createVariantsSource({ axes: SECTIONED }) }));
       expect(labels()).toEqual(['Layout', 'Before > After', 'Logo size', 'Ink', 'Links']);
       expect(headers()).toEqual(['Header', 'Footer']);
       const body = container.querySelector('.isotone-vars-body');
-      expect(Array.from(body?.children ?? []).map(el => el.className)).toEqual([
-        'isotone-axis', 'isotone-axis', 'isotone-section', 'isotone-section',
+      expect(Array.from(body?.children ?? []).map((el) => el.className)).toEqual([
+        'isotone-axis',
+        'isotone-axis',
+        'isotone-section',
+        'isotone-section',
       ]);
       const header = container.querySelector('.isotone-section');
       expect(header?.querySelector('.isotone-section-toggle small')?.textContent).toBe('2');
@@ -1277,7 +1476,7 @@ describe('review dock interactions', () => {
     });
 
     it('shows no headers when nothing is sectioned', async () => {
-      await render(createElement(VariantsView, { source: createVariantsSource({ axes: AXES.filter(axis => !axis.section) }) }));
+      await render(createElement(VariantsView, { source: createVariantsSource({ axes: AXES.filter((axis) => !axis.section) }) }));
       expect(container.querySelector('.isotone-section')).toBeNull();
     });
 
@@ -1321,8 +1520,13 @@ describe('review dock interactions', () => {
 
     it('renders 500 sectioned selectors with every choice available', async () => {
       const axes: VariantAxis[] = Array.from({ length: 500 }, (_, i) => ({
-        id: `axis-${i}`, label: `Area ${Math.floor(i / 12)} > Selector ${i} ${'long label '.repeat(i % 50 === 0 ? 20 : 0)}`,
-        defaultOption: 'a', options: [{ id: 'a', label: 'Default' }, { id: 'b', label: 'Alternative' }],
+        id: `axis-${i}`,
+        label: `Area ${Math.floor(i / 12)} > Selector ${i} ${'long label '.repeat(i % 50 === 0 ? 20 : 0)}`,
+        defaultOption: 'a',
+        options: [
+          { id: 'a', label: 'Default' },
+          { id: 'b', label: 'Alternative' },
+        ],
       }));
       const source = createVariantsSource({ axes });
       await render(createElement(VariantsView, { source }));
@@ -1334,17 +1538,25 @@ describe('review dock interactions', () => {
     });
   });
   describe('selector action dialog', () => {
-    const SIZES: VariantAxis[] = [{
-      id: 'size', label: 'Size', defaultOption: 's',
-      options: ['s', 'm', 'l', 'xl'].map(id => ({ id, label: id.toUpperCase() })),
-    }];
+    const SIZES: VariantAxis[] = [
+      {
+        id: 'size',
+        label: 'Size',
+        defaultOption: 's',
+        options: ['s', 'm', 'l', 'xl'].map((id) => ({ id, label: id.toUpperCase() })),
+      },
+    ];
     /** A host that records requests the way the panel does: as pending actions. */
     function Host({ onFeedback = () => {}, axes = SIZES }: { onFeedback?: () => void; axes?: VariantAxis[] }) {
       const [source] = useState(() => createVariantsSource({ axes }));
       const [pending, setPending] = useState<VariantAction[]>([]);
       return createElement(VariantsView, {
-        source, pendingActions: pending, onFeedback,
-        onManage: async (action: VariantAction) => { setPending(list => [...list, action]); },
+        source,
+        pendingActions: pending,
+        onFeedback,
+        onManage: async (action: VariantAction) => {
+          setPending((list) => [...list, action]);
+        },
       });
     }
     const dialog = () => container.querySelector('.isotone-axis-menu');
@@ -1365,16 +1577,23 @@ describe('review dock interactions', () => {
       await click(byText('Remove XL'));
       expect(dialog()?.getAttribute('data-open')).toBe('true');
       expect(document.activeElement).toBe(byText('Reset to default'));
-      expect(['m', 'l', 'xl'].every(id => row(id)?.textContent?.includes('Removal requested'))).toBe(true);
+      expect(['m', 'l', 'xl'].every((id) => row(id)?.textContent?.includes('Removal requested'))).toBe(true);
       expect(row('s')?.textContent).not.toContain('Removal requested');
     });
 
     it('truncates only a long option label, never its Default or Removal requested tag', async () => {
       const long = 'An option label long enough to fill the whole dialog width and then some more';
-      const axes: VariantAxis[] = [{
-        id: 'size', label: 'Size', defaultOption: 's',
-        options: [{ id: 's', label: long }, { id: 'm', label: long }],
-      }];
+      const axes: VariantAxis[] = [
+        {
+          id: 'size',
+          label: 'Size',
+          defaultOption: 's',
+          options: [
+            { id: 's', label: long },
+            { id: 'm', label: long },
+          ],
+        },
+      ];
       const style = document.createElement('style');
       style.textContent = PANEL_CSS;
       document.head.append(style);
@@ -1382,7 +1601,10 @@ describe('review dock interactions', () => {
         await render(createElement(Host, { axes }));
         await click(byText('Size actions'));
         await click(container.querySelector(`[aria-label="Remove ${long}"]:not(:disabled)`));
-        for (const [id, tag] of [['s', 'Default'], ['m', 'Removal requested']]) {
+        for (const [id, tag] of [
+          ['s', 'Default'],
+          ['m', 'Removal requested'],
+        ]) {
           const label = row(id)?.querySelector<HTMLElement>('.isotone-option-label');
           const tags = row(id)?.querySelector<HTMLElement>('.isotone-option-tags');
           // The ellipsized element holds the label alone; the tag is its sibling.
@@ -1393,7 +1615,9 @@ describe('review dock interactions', () => {
           expect(tags?.parentElement).toBe(label?.parentElement);
           expect(getComputedStyle(tags as HTMLElement).flexShrink).toBe('0');
         }
-      } finally { style.remove(); }
+      } finally {
+        style.remove();
+      }
     });
 
     it('moves focus back up the list after removing the last removable option', async () => {
@@ -1435,33 +1659,68 @@ describe('review dock interactions', () => {
     expect(mutate).not.toHaveBeenCalled();
   });
   it('saves edits to their original route and retains the original host payload', async () => {
-    const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => ({ ok: true, json: async () => init?.method === 'POST' ? { id: 'old' } : [{ id: 'old', route: '/other', feedback: 'Old note', element: null, done: false, createdAt: new Date().toISOString(), payload: { old: true } }, { id: 'here', route: '/', feedback: 'Note here', element: null, done: false, createdAt: new Date().toISOString() }] }));
+    const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => ({
+      ok: true,
+      json: async () =>
+        init?.method === 'POST'
+          ? { id: 'old' }
+          : [
+              {
+                id: 'old',
+                route: '/other',
+                feedback: 'Old note',
+                element: null,
+                done: false,
+                createdAt: new Date().toISOString(),
+                payload: { old: true },
+              },
+              { id: 'here', route: '/', feedback: 'Note here', element: null, done: false, createdAt: new Date().toISOString() },
+            ],
+    }));
     vi.stubGlobal('fetch', fetchMock);
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, getPayload: () => ({ new: true }) }));
     await click(container.querySelector('.isotone-fab'));
     await click(container.querySelector('.isotone-page[title="/other"]'));
     await click(Array.from(container.querySelectorAll('.isotone-note-hit')).find((hit) => hit.textContent?.includes('Old note')) ?? null);
-    await typeFeedback('Updated note'); await click(byText('Save edit'));
+    await typeFeedback('Updated note');
+    await click(byText('Save edit'));
     const call = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST');
     const body = JSON.parse(String(call?.[1]?.body));
-    expect(body.route).toBe('/other'); expect(body.payload).toBeUndefined();
+    expect(body.route).toBe('/other');
+    expect(body.payload).toBeUndefined();
   });
 });
 
-
 describe('live notes', () => {
-  const note = (id: string, extra: object = {}) => ({ id, route: '/', feedback: `Note ${id}`, element: null, done: false, createdAt: '2026-01-01T00:00:00.000Z', ...extra });
-  const flush = () => act(async () => { await vi.advanceTimersByTimeAsync(0); });
-  const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+  const note = (id: string, extra: object = {}) => ({
+    id,
+    route: '/',
+    feedback: `Note ${id}`,
+    element: null,
+    done: false,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    ...extra,
+  });
+  const flush = () =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  const advance = (ms: number) =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
   type Answer = { rev: string; unchanged?: true; notes?: object[] } | 'down';
   function server(answers: Answer[]) {
     const urls: string[] = [];
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      urls.push(String(url));
-      const next = answers.length > 1 ? answers.shift() as Answer : answers[0];
-      if (next === 'down') throw new TypeError('Failed to fetch');
-      return { ok: true, status: 200, json: async () => next };
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        urls.push(String(url));
+        const next = answers.length > 1 ? (answers.shift() as Answer) : answers[0];
+        if (next === 'down') throw new TypeError('Failed to fetch');
+        return { ok: true, status: 200, json: async () => next };
+      }),
+    );
     return urls;
   }
   beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] }));
@@ -1470,11 +1729,14 @@ describe('live notes', () => {
     // A server with real revisions: unchanged polls get no rows.
     let state = { rev: 'a', notes: [note('one'), note('two')] };
     const urls: string[] = [];
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      urls.push(String(url));
-      const asked = new URL(String(url), 'http://x').searchParams.get('rev');
-      return { ok: true, status: 200, json: async () => asked === state.rev ? { rev: state.rev, unchanged: true } : state };
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        urls.push(String(url));
+        const asked = new URL(String(url), 'http://x').searchParams.get('rev');
+        return { ok: true, status: 200, json: async () => (asked === state.rev ? { rev: state.rev, unchanged: true } : state) };
+      }),
+    );
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
     await flush();
     await click(container.querySelector('.isotone-fab'));
@@ -1490,7 +1752,10 @@ describe('live notes', () => {
   });
 
   it('keeps the same list when the server says nothing changed', async () => {
-    server([{ rev: 'a', notes: [note('one')] }, { rev: 'a', unchanged: true }]);
+    server([
+      { rev: 'a', notes: [note('one')] },
+      { rev: 'a', unchanged: true },
+    ]);
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
     await flush();
     await click(container.querySelector('.isotone-fab'));
@@ -1511,18 +1776,25 @@ describe('live notes', () => {
   });
 
   it('does not poll a hidden tab, and catches up when it is shown', async () => {
-    const urls = server([{ rev: 'a', notes: [] }, { rev: 'a', unchanged: true }]);
+    const urls = server([
+      { rev: 'a', notes: [] },
+      { rev: 'a', unchanged: true },
+    ]);
     await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
     await flush();
     let hidden = true;
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
-    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
     await advance(2600);
     const asleep = urls.length;
     await advance(30_000);
     expect(urls.length).toBe(asleep);
     hidden = false;
-    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
     await flush();
     expect(urls.length).toBe(asleep + 1);
     Reflect.deleteProperty(document, 'hidden');
@@ -1530,8 +1802,20 @@ describe('live notes', () => {
 });
 
 describe('page scope and agent progress', () => {
-  const note = (id: string, route: string, extra: object = {}) => ({ id, route, feedback: `Note ${id}`, element: null, done: false, createdAt: new Date().toISOString(), ...extra });
-  const serve = (notes: object[]) => vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => notes })));
+  const note = (id: string, route: string, extra: object = {}) => ({
+    id,
+    route,
+    feedback: `Note ${id}`,
+    element: null,
+    done: false,
+    createdAt: new Date().toISOString(),
+    ...extra,
+  });
+  const serve = (notes: object[]) =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => notes })),
+    );
 
   it('lists this page first and reveals other pages from a row of chips', async () => {
     serve([note('a', '/'), note('b', '/pricing'), note('c', '/pricing')]);
@@ -1570,21 +1854,29 @@ it('pins a focused host control with Space without activating it', async () => {
   await click(container.querySelector('.isotone-fab'));
   await click(byText('Select elements'));
   const target = document.createElement('button');
-  target.id = 'keyboard-target'; target.textContent = 'Project actions';
+  target.id = 'keyboard-target';
+  target.textContent = 'Project actions';
   document.body.append(target);
   target.focus();
   const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
-  await act(async () => { target.dispatchEvent(event); });
+  await act(async () => {
+    target.dispatchEvent(event);
+  });
   expect(event.defaultPrevented).toBe(true);
   expect(container.querySelector('.isotone-chip')?.textContent).toContain('Project actions');
-  await act(async () => { target.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', repeat: true, bubbles: true })); });
+  await act(async () => {
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', repeat: true, bubbles: true }));
+  });
   expect(container.querySelectorAll('.isotone-chip')).toHaveLength(1);
-  await act(async () => { target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
-  await act(async () => { await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); });
+  await act(async () => {
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+  await act(async () => {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  });
   expect(container.querySelector('textarea')).toBe(document.activeElement);
   target.remove();
 });
-
 
 it('fades the composer top only after its text has scrolled', async () => {
   await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
@@ -1592,8 +1884,14 @@ it('fades the composer top only after its text has scrolled', async () => {
   const field = container.querySelector('textarea');
   if (!field) throw new Error('Missing composer');
   expect(field.dataset.scrolled).toBe('false');
-  await act(async () => { field.scrollTop = 36; field.dispatchEvent(new Event('scroll')); });
+  await act(async () => {
+    field.scrollTop = 36;
+    field.dispatchEvent(new Event('scroll'));
+  });
   expect(field.dataset.scrolled).toBe('true');
-  await act(async () => { field.scrollTop = 0; field.dispatchEvent(new Event('scroll')); });
+  await act(async () => {
+    field.scrollTop = 0;
+    field.dispatchEvent(new Event('scroll'));
+  });
   expect(field.dataset.scrolled).toBe('false');
 });

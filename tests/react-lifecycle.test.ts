@@ -21,7 +21,10 @@ beforeEach(() => {
     setItem: () => {},
     removeItem: () => {},
   });
-  vi.stubGlobal('fetch', vi.fn(async () => response([])));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => response([])),
+  );
 });
 
 afterEach(async () => {
@@ -51,13 +54,19 @@ async function click(selector: string) {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>(done => { resolve = done; });
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 }
 
 const note: IterationNote = {
-  id: 'existing', route: '/', feedback: 'Original note', element: null,
-  done: false, createdAt: '2026-01-01T12:00:00.000Z',
+  id: 'existing',
+  route: '/',
+  feedback: 'Original note',
+  element: null,
+  done: false,
+  createdAt: '2026-01-01T12:00:00.000Z',
 };
 
 it('applies theme prop changes and follows system changes while mounted', async () => {
@@ -82,7 +91,9 @@ it('applies theme prop changes and follows system changes while mounted', async 
 it('passes an explicit theme through the standalone React mount', async () => {
   document.body.style.backgroundColor = 'black';
   const off = mountIteration({ endpoint: '/notes', theme: 'light' });
-  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
   const host = document.querySelector('[data-isotone="root"]');
   expect(host?.shadowRoot?.querySelector('.isotone-root')?.getAttribute('data-theme')).toBe('light');
   await act(async () => {
@@ -95,10 +106,13 @@ it('passes an explicit theme through the standalone React mount', async () => {
 it('does not restore a deleted note when an older refresh finishes', async () => {
   const refresh = deferred<ReturnType<typeof response>>();
   let reads = 0;
-  vi.stubGlobal('fetch', vi.fn((_url: unknown, init?: RequestInit) => {
-    if (init?.method === 'DELETE') return Promise.resolve(response({ ok: true }));
-    return ++reads === 1 ? Promise.resolve(response([note])) : refresh.promise;
-  }));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((_url: unknown, init?: RequestInit) => {
+      if (init?.method === 'DELETE') return Promise.resolve(response({ ok: true }));
+      return ++reads === 1 ? Promise.resolve(response([note])) : refresh.promise;
+    }),
+  );
   await render();
   await click('.isotone-fab');
   expect(container.querySelector('.isotone-note-hit')?.textContent).toContain('Original note');
@@ -111,10 +125,13 @@ it('does not restore a deleted note when an older refresh finishes', async () =>
 it('does not replace an edited note with a stale refresh', async () => {
   const refresh = deferred<ReturnType<typeof response>>();
   let reads = 0;
-  vi.stubGlobal('fetch', vi.fn((_url: unknown, init?: RequestInit) => {
-    if (init?.method === 'POST') return Promise.resolve(response({ id: note.id }));
-    return ++reads === 1 ? Promise.resolve(response([note])) : refresh.promise;
-  }));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((_url: unknown, init?: RequestInit) => {
+      if (init?.method === 'POST') return Promise.resolve(response({ id: note.id }));
+      return ++reads === 1 ? Promise.resolve(response([note])) : refresh.promise;
+    }),
+  );
   await render();
   await click('.isotone-fab');
   await click('.isotone-note-hit');
@@ -132,7 +149,10 @@ it('accepts only the newest refresh when requests finish out of order', async ()
   const first = deferred<ReturnType<typeof response>>();
   const second = deferred<ReturnType<typeof response>>();
   let reads = 0;
-  vi.stubGlobal('fetch', vi.fn(() => ++reads === 1 ? first.promise : second.promise));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => (++reads === 1 ? first.promise : second.promise)),
+  );
   await render();
   await click('.isotone-fab');
   await act(async () => second.resolve(response([{ ...note, feedback: 'Newer note' }])));

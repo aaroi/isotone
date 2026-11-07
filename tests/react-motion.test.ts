@@ -24,11 +24,16 @@ beforeEach(() => {
   media = Object.assign(new EventTarget(), { matches: false });
   vi.stubGlobal('matchMedia', () => media);
   disconnect = vi.fn();
-  vi.stubGlobal('ResizeObserver', class {
-    constructor(callback: () => void) { resize = callback; }
-    observe() {}
-    disconnect = disconnect;
-  });
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(callback: () => void) {
+        resize = callback;
+      }
+      observe() {}
+      disconnect = disconnect;
+    },
+  );
   animations = [];
   animate = vi.fn(() => {
     const animation = { cancel: vi.fn(), onfinish: null };
@@ -40,7 +45,17 @@ beforeEach(() => {
     return Number(this.dataset.top ?? 0);
   });
   rects = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-    return { x: 10, y: Number(this.dataset.top ?? 20), width: 320, height: 200, top: 20, left: 10, right: 330, bottom: 220, toJSON: () => ({}) };
+    return {
+      x: 10,
+      y: Number(this.dataset.top ?? 20),
+      width: 320,
+      height: 200,
+      top: 20,
+      left: 10,
+      right: 330,
+      bottom: 220,
+      toJSON: () => ({}),
+    };
   });
 });
 
@@ -55,7 +70,9 @@ afterEach(async () => {
 function List({ count = 3, revision = 0, noise = '', active = true, instant = false }) {
   const ref = useRef<HTMLDivElement>(null);
   useLayoutMotion(ref, revision, active);
-  return h('div', { ref, 'data-instant': instant },
+  return h(
+    'div',
+    { ref, 'data-instant': instant },
     h('span', null, noise),
     ...Array.from({ length: count }, (_, i) => h('div', { key: i, 'data-motion-key': i, 'data-top': i * 24 + revision }, String(i))),
   );
@@ -64,11 +81,18 @@ function List({ count = 3, revision = 0, noise = '', active = true, instant = fa
 function Dock({ open = true, count = 3, noise = '', visible = true, instant = false, mounted = true }) {
   const ref = useRef<HTMLDivElement>(null);
   useDockMotion(ref, visible);
-  return h('div', { ref, 'data-instant': instant },
-    mounted && h('section', { className: 'isotone-panel', 'data-open': open, id: 'panel' },
-      h('span', null, noise),
-      ...Array.from({ length: count }, (_, i) => h('button', { type: 'button', key: i, id: `item-${i}`, 'data-motion-key': i }, String(i))),
-    ),
+  return h(
+    'div',
+    { ref, 'data-instant': instant },
+    mounted &&
+      h(
+        'section',
+        { className: 'isotone-panel', 'data-open': open, id: 'panel' },
+        h('span', null, noise),
+        ...Array.from({ length: count }, (_, i) =>
+          h('button', { type: 'button', key: i, id: `item-${i}`, 'data-motion-key': i }, String(i)),
+        ),
+      ),
   );
 }
 
@@ -102,7 +126,10 @@ describe('list motion', () => {
     media.matches = false;
     await act(async () => root.render(h(List, { revision: 1 })));
     expect(animations).toHaveLength(3);
-    await act(async () => { media.matches = true; media.dispatchEvent(new Event('change')); });
+    await act(async () => {
+      media.matches = true;
+      media.dispatchEvent(new Event('change'));
+    });
     expect(animations.every((animation) => animation.cancel.mock.calls.length === 1)).toBe(true);
   });
 });
@@ -156,7 +183,10 @@ describe('dock motion', () => {
     expect(animate).not.toHaveBeenCalled();
     await act(async () => root.render(h(Dock, { instant: false, open: false })));
     expect(host.querySelector('.isotone-exit')).not.toBeNull();
-    await act(async () => { media.matches = true; media.dispatchEvent(new Event('change')); });
+    await act(async () => {
+      media.matches = true;
+      media.dispatchEvent(new Event('change'));
+    });
     expect(host.querySelector('.isotone-exit')).toBeNull();
     const calls = animate.mock.calls.length;
     await act(async () => root.render(h(Dock, {})));

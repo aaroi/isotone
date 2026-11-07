@@ -9,7 +9,10 @@ const originalElementsFromPoint = Object.getOwnPropertyDescriptor(document, 'ele
 beforeEach(() => {
   vi.useFakeTimers();
   media = Object.assign(new EventTarget(), { matches: false });
-  vi.stubGlobal('matchMedia', vi.fn(() => media));
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => media),
+  );
   elementsAtDock = [];
   Object.defineProperty(document, 'elementsFromPoint', {
     configurable: true,

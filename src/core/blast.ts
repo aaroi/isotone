@@ -77,7 +77,8 @@ export function parseDuration(text: string): number {
 export function formatDuration(ms: number): string {
   if (ms < 60_000) return `${Math.max(1, Math.round(ms / 1000))}s`;
   const minutes = Math.round(ms / 60_000);
-  const h = Math.floor(minutes / 60), m = minutes % 60;
+  const h = Math.floor(minutes / 60),
+    m = minutes % 60;
   return h ? `${h}h${m ? ` ${m}m` : ''}` : `${m}m`;
 }
 
@@ -85,7 +86,8 @@ export function formatDuration(ms: number): string {
 export function timeLeft(ms: number): string {
   if (ms < 60_000) return 'under a minute left';
   const minutes = Math.ceil(ms / 60_000);
-  const h = Math.floor(minutes / 60), m = minutes % 60;
+  const h = Math.floor(minutes / 60),
+    m = minutes % 60;
   return h ? `${h} h${m ? ` ${m} min` : ''} left` : `${m} min left`;
 }
 

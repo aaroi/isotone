@@ -49,9 +49,18 @@ export function readNotes(file: string): StoredNote[] {
     const raw = readFileSync(file, 'utf8').trim();
     if (!raw) return [];
     const data = JSON.parse(raw);
-    if (!Array.isArray(data) || !data.every((note) => note && typeof note === 'object' &&
-      typeof note.id === 'string' && typeof note.route === 'string' &&
-      typeof note.feedback === 'string' && typeof note.createdAt === 'string')) {
+    if (
+      !Array.isArray(data) ||
+      !data.every(
+        (note) =>
+          note &&
+          typeof note === 'object' &&
+          typeof note.id === 'string' &&
+          typeof note.route === 'string' &&
+          typeof note.feedback === 'string' &&
+          typeof note.createdAt === 'string',
+      )
+    ) {
       throw new Error('expected an array of notes');
     }
     return data as StoredNote[];
@@ -127,10 +136,7 @@ export function ensureDirIgnored(dir: string): void {
     if (hasExcludePattern(existing, pattern) || hasExcludePattern(existing, base)) return;
     const marker = existing && !existing.endsWith('\n') ? '\n' : '';
     mkdirSync(dirname(infoExclude), { recursive: true });
-    writeFileSync(
-      infoExclude,
-      `${existing}${marker}# isotone (local overlay variants)\n${pattern}\n`,
-    );
+    writeFileSync(infoExclude, `${existing}${marker}# isotone (local overlay variants)\n${pattern}\n`);
   } catch {
     // Non-fatal, as above.
   }
@@ -172,9 +178,7 @@ export function excludePattern(gitRoot: string, absolute: string): string | null
  *  with a slash inside it is root-relative either way), so it counts. */
 export function hasExcludePattern(exclude: string, pattern: string): boolean {
   const bare = pattern.replace(/^\//, '');
-  return exclude
-    .split(/\r?\n/)
-    .some((line) => line.trim() === pattern || line.trim() === bare);
+  return exclude.split(/\r?\n/).some((line) => line.trim() === pattern || line.trim() === bare);
 }
 
 function toItem(n: StoredNote, root: string) {
@@ -203,14 +207,17 @@ function toItem(n: StoredNote, root: string) {
   if (n.workingAt && !n.done) item.workingAt = n.workingAt;
   if (n.viewport !== undefined) item.viewport = n.viewport;
   if (n.payload !== undefined) item.payload = n.payload;
-  return { ...item, ...(n.elements !== undefined ? { elements: n.elements } : {}),
+  return {
+    ...item,
+    ...(n.elements !== undefined ? { elements: n.elements } : {}),
     ...(n.variant !== undefined ? { variant: n.variant } : {}),
     ...(n.variantAction !== undefined ? { variantAction: n.variantAction } : {}),
     // Only the server writes an update request; a malformed one, or one whose
     // directory is outside the project, is not shown.
     ...(update ? { update } : {}),
     // Only the CLI writes a reply; a hand-edited, malformed one is not shown.
-    ...(replyView(n) ? { reply: replyView(n) } : {}) };
+    ...(replyView(n) ? { reply: replyView(n) } : {}),
+  };
 }
 
 /** The transport-agnostic result of a notes request — any runtime (Vite
@@ -244,9 +251,7 @@ export function notesResponse(file: string, req: NotesRequest): NotesResponse {
 
 function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
   const method = req.method ?? '';
-  const query = Object.fromEntries(
-    new URL(req.url ?? '/', 'http://localhost').searchParams,
-  );
+  const query = Object.fromEntries(new URL(req.url ?? '/', 'http://localhost').searchParams);
   const json = (status: number, body: unknown): NotesResponse => ({
     status,
     headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
@@ -269,13 +274,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     // `?all=1` lists every note on every route, done ones included. `?route=`
     // scopes to a page; neither means the open backlog, which is what the
     // panel shows and polls.
-    const rows = (
-      all
-        ? [...notes]
-        : route
-          ? notes.filter((n) => n.route === route)
-          : notes.filter((n) => !n.done)
-    )
+    const rows = (all ? [...notes] : route ? notes.filter((n) => n.route === route) : notes.filter((n) => !n.done))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((note) => toItem(note, root));
     return json(200, polled ? { rev, notes: rows } : rows);
@@ -284,7 +283,10 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
   if (method === 'DELETE') {
     const id = String(query.id ?? '');
     if (!id) return json(400, { error: 'id is required' });
-    writeNotes(file, readNotes(file).filter((n) => n.id !== id));
+    writeNotes(
+      file,
+      readNotes(file).filter((n) => n.id !== id),
+    );
     return json(200, { ok: true });
   }
 
@@ -315,7 +317,8 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     if (cleanFeedback === '') {
       return json(400, { error: 'feedback is required' });
     }
-    if (cleanFeedback.length > MAX_FEEDBACK_LENGTH) return json(400, { error: `feedback must be at most ${MAX_FEEDBACK_LENGTH} characters` });
+    if (cleanFeedback.length > MAX_FEEDBACK_LENGTH)
+      return json(400, { error: `feedback must be at most ${MAX_FEEDBACK_LENGTH} characters` });
     if (payload !== undefined && !withinPayloadCap(payload)) {
       return json(400, {
         error: `payload exceeds ${PAYLOAD_MAX} bytes or is not serializable`,
@@ -325,7 +328,10 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     if (body.elements !== undefined && (!Array.isArray(body.elements) || body.elements.length > 50)) {
       return json(400, { error: 'elements must be an array of at most 50 elements' });
     }
-    const elements = body.elements === undefined ? undefined : (body.elements as unknown[]).map(elementOf).filter((el): el is IterationElement => el !== null);
+    const elements =
+      body.elements === undefined
+        ? undefined
+        : (body.elements as unknown[]).map(elementOf).filter((el): el is IterationElement => el !== null);
     const variant = body.variant === undefined ? undefined : variantOf(body.variant);
     const variantAction = removalOf(body.variantAction);
     if (body.variantAction !== undefined && !variantAction) return json(400, { error: 'Invalid variant action' });
@@ -340,9 +346,12 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     }
     const notes = readNotes(file);
     const defaultsRequest = cleanFeedback.startsWith('[set-defaults]');
-    const previousDefaults = defaultsRequest && !notes.some((note) => note.id === id)
-      ? notes.filter(n => !n.done && n.route === route && n.feedback.startsWith('[set-defaults]')).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
-      : undefined;
+    const previousDefaults =
+      defaultsRequest && !notes.some((note) => note.id === id)
+        ? notes
+            .filter((n) => !n.done && n.route === route && n.feedback.startsWith('[set-defaults]'))
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+        : undefined;
     const updateId = previousDefaults?.id ?? id;
     if (typeof updateId === 'string' && updateId !== '') {
       const existing = notes.find((n) => n.id === updateId && n.route === route);
@@ -370,7 +379,10 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
         if (defaultsRequest && !existing.done) {
           existing.createdAt = new Date().toISOString();
           if (cleanViewport) existing.viewport = cleanViewport;
-          writeNotes(file, notes.filter(n => n.id === existing.id || n.done || n.route !== route || !n.feedback.startsWith('[set-defaults]')));
+          writeNotes(
+            file,
+            notes.filter((n) => n.id === existing.id || n.done || n.route !== route || !n.feedback.startsWith('[set-defaults]')),
+          );
         } else writeNotes(file, notes);
         return json(200, { id: existing.id });
       }
@@ -379,8 +391,10 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
       return json(409, { error: 'This note belongs to a different route' });
     }
     const newId = typeof id === 'string' ? id : randomUUID();
-    const createdAt = typeof body.createdAt === 'string' && Number.isFinite(Date.parse(body.createdAt))
-      ? new Date(body.createdAt).toISOString() : new Date().toISOString();
+    const createdAt =
+      typeof body.createdAt === 'string' && Number.isFinite(Date.parse(body.createdAt))
+        ? new Date(body.createdAt).toISOString()
+        : new Date().toISOString();
     notes.push({
       id: newId,
       route,
@@ -435,7 +449,11 @@ export function replyOf(value: unknown): NoteReply | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const v = value as Partial<NoteReply>;
   if (typeof v.text !== 'string' || !v.text.trim() || typeof v.at !== 'string' || !Number.isFinite(Date.parse(v.at))) return null;
-  return { text: v.text.slice(0, MAX_REPLY_LENGTH), at: v.at, ...(typeof v.about === 'string' && v.about.length <= 64 ? { about: v.about } : {}) };
+  return {
+    text: v.text.slice(0, MAX_REPLY_LENGTH),
+    at: v.at,
+    ...(typeof v.about === 'string' && v.about.length <= 64 ? { about: v.about } : {}),
+  };
 }
 
 /**
@@ -446,9 +464,12 @@ export function replyOf(value: unknown): NoteReply | null {
 export function noteFingerprint(note: StoredNote): string {
   const update = updateRequestOf(note.update);
   const content = JSON.stringify([
-    note.feedback, note.route,
+    note.feedback,
+    note.route,
     (note.elements ?? (note.element ? [note.element] : [])).map((element) => element.selector),
-    note.variant ?? null, note.variantAction ?? null, update?.to ?? null,
+    note.variant ?? null,
+    note.variantAction ?? null,
+    update?.to ?? null,
   ]);
   return createHash('sha256').update(content).digest('base64url').slice(0, 16);
 }
@@ -486,7 +507,10 @@ const MAX_SELECTOR = 2000;
 
 function stringList(value: unknown, count: number, length: number): string[] {
   return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string' && item !== '').slice(0, count).map((item) => cap(item, length))
+    ? value
+        .filter((item): item is string => typeof item === 'string' && item !== '')
+        .slice(0, count)
+        .map((item) => cap(item, length))
     : [];
 }
 
@@ -520,10 +544,13 @@ function variantOf(value: unknown): VariantReference | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const v = value as Partial<VariantReference>;
   if (typeof v.axisId !== 'string' || typeof v.label !== 'string') return null;
-  return { axisId: cap(v.axisId, 200), label: cap(v.label, 200),
+  return {
+    axisId: cap(v.axisId, 200),
+    label: cap(v.label, 200),
     ...(typeof v.optionId === 'string' ? { optionId: cap(v.optionId, 200) } : {}),
     ...(typeof v.optionLabel === 'string' ? { optionLabel: cap(v.optionLabel, 200) } : {}),
-    ...(typeof v.value === 'string' ? { value: cap(v.value, 200) } : {}) };
+    ...(typeof v.value === 'string' ? { value: cap(v.value, 200) } : {}),
+  };
 }
 
 /** A sane `{ w, h }` from an untrusted viewport value, else null. */
@@ -551,7 +578,21 @@ export const NOTES_ENDPOINT = '/api/iteration/notes';
 function removalOf(value: unknown): VariantRemoval | undefined {
   if (!value || typeof value !== 'object') return;
   const v = value as Partial<VariantRemoval>;
-  if (typeof v.axisId !== 'string' || !v.axisId || v.axisId.length > 200 || !['remove-option', 'remove-axis', 'keep-default', 'keep-option'].includes(v.action ?? '')) return;
-  if ((v.action === 'remove-option' || v.action === 'keep-option') && (typeof v.optionId !== 'string' || !v.optionId || v.optionId.length > 200)) return;
-  return { axisId: v.axisId, action: v.action as VariantRemoval['action'], ...(typeof v.optionId === 'string' ? { optionId: v.optionId.slice(0, 200) } : {}) };
+  if (
+    typeof v.axisId !== 'string' ||
+    !v.axisId ||
+    v.axisId.length > 200 ||
+    !['remove-option', 'remove-axis', 'keep-default', 'keep-option'].includes(v.action ?? '')
+  )
+    return;
+  if (
+    (v.action === 'remove-option' || v.action === 'keep-option') &&
+    (typeof v.optionId !== 'string' || !v.optionId || v.optionId.length > 200)
+  )
+    return;
+  return {
+    axisId: v.axisId,
+    action: v.action as VariantRemoval['action'],
+    ...(typeof v.optionId === 'string' ? { optionId: v.optionId.slice(0, 200) } : {}),
+  };
 }

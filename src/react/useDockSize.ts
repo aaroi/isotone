@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type RefObject } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type PointerEvent,
+  type RefObject,
+} from 'react';
 import { readBrowserStorage, writeBrowserStorage } from '../core/browser-storage';
 
 type Panel = 'variants' | 'notes';
@@ -6,9 +16,21 @@ type Handle = 'width' | Panel;
 /** Panel heights are max-heights in px; the width is the dock's. */
 type DockSize = { width?: number; variants?: number; notes?: number };
 type Open = Record<Panel, boolean>;
-interface Extent { now: number; min: number; max: number }
-interface Measured { height: number; content: number; min: number }
-interface Frame { room: number; gap: number; panels: Partial<Record<Panel, Measured>> }
+interface Extent {
+  now: number;
+  min: number;
+  max: number;
+}
+interface Measured {
+  height: number;
+  content: number;
+  min: number;
+}
+interface Frame {
+  room: number;
+  gap: number;
+  panels: Partial<Record<Panel, Measured>>;
+}
 
 const MIN_WIDTH = 280;
 /** The least of a panel's scrolling body worth showing, on top of its own header and composer. */
@@ -21,7 +43,10 @@ const LABEL: Record<Handle, string> = { width: 'Resize panel width', variants: '
 
 const maxWidth = () => window.innerWidth - INSET;
 const clamp = (value: number, min: number, max: number) => Math.round(Math.min(Math.max(value, min), max));
-const px = (value: string, fallback = 0) => { const n = parseFloat(value); return Number.isFinite(n) ? n : fallback; };
+const px = (value: string, fallback = 0) => {
+  const n = parseFloat(value);
+  return Number.isFinite(n) ? n : fallback;
+};
 
 function load(key: string): DockSize {
   try {
@@ -30,13 +55,18 @@ function load(key: string): DockSize {
     const valid = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
     const record = parsed as Record<string, unknown>;
     // The first release stored one dock-wide `height`; it has no per-panel meaning and is dropped on the next save.
-    return Object.fromEntries((['width', ...PANELS] as const).filter(name => valid(record[name])).map(name => [name, record[name]]));
-  } catch { return {}; }
+    return Object.fromEntries((['width', ...PANELS] as const).filter((name) => valid(record[name])).map((name) => [name, record[name]]));
+  } catch {
+    return {};
+  }
 }
 
 function save(key: string, size: DockSize) {
-  try { writeBrowserStorage(localStorage, key, JSON.stringify(size)); }
-  catch { /* Quota or access restrictions only cost persistence. */ }
+  try {
+    writeBrowserStorage(localStorage, key, JSON.stringify(size));
+  } catch {
+    /* Quota or access restrictions only cost persistence. */
+  }
 }
 
 /** What each open panel is now, and how tall it would be with nothing scrolling. */
@@ -95,11 +125,14 @@ export function useDockSize(rootRef: RefObject<HTMLElement | null>, key: string,
   const drag = useRef<{ handle: Handle; origin: number; frame: Frame } | null>(null);
   const split = open.variants && open.notes;
 
-  const apply = useCallback((next: DockSize, persist: boolean) => {
-    latest.current = next;
-    setSize(next);
-    if (persist) save(key, next);
-  }, [key]);
+  const apply = useCallback(
+    (next: DockSize, persist: boolean) => {
+      latest.current = next;
+      setSize(next);
+      if (persist) save(key, next);
+    },
+    [key],
+  );
   const reset = (handle: Handle) => {
     const next = { ...latest.current };
     for (const name of handle === 'notes' && split ? PANELS : [handle]) delete next[name];
@@ -112,7 +145,9 @@ export function useDockSize(rootRef: RefObject<HTMLElement | null>, key: string,
     save(key, latest.current);
   }, [key, rootRef]);
 
-  useEffect(() => { apply(load(key), false); }, [key, apply]);
+  useEffect(() => {
+    apply(load(key), false);
+  }, [key, apply]);
   // A handle that unmounts or changes role mid-drag never sees pointerup.
   const was = useRef(open);
   useEffect(() => {
@@ -124,8 +159,8 @@ export function useDockSize(rootRef: RefObject<HTMLElement | null>, key: string,
     const root = rootRef.current;
     if (!root) return;
     const frame = measure(root, open);
-    const next = Object.fromEntries(PANELS.filter(name => frame.panels[name]).map(name => [name, extent(name, frame)]));
-    setExtents(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
+    const next = Object.fromEntries(PANELS.filter((name) => frame.panels[name]).map((name) => [name, extent(name, frame)]));
+    setExtents((previous) => (JSON.stringify(previous) === JSON.stringify(next) ? previous : next));
   });
 
   const vars: Record<string, string> = {};
@@ -139,14 +174,19 @@ export function useDockSize(rootRef: RefObject<HTMLElement | null>, key: string,
   const handle = (name: Handle) => {
     const horizontal = name !== 'width';
     const range: Extent = horizontal
-      ? extents[name] ?? { now: 0, min: 0, max: 0 }
+      ? (extents[name] ?? { now: 0, min: 0, max: 0 })
       : { now: size.width ?? Math.min(DEFAULT_WIDTH, maxWidth()), min: MIN_WIDTH, max: maxWidth() };
     const edit = (target: number, frame: Frame | null, persist: boolean) => {
-      apply({ ...latest.current, ...(horizontal ? resize(name, target, frame as Frame) : { width: clamp(target, MIN_WIDTH, maxWidth()) }) }, persist);
+      apply(
+        { ...latest.current, ...(horizontal ? resize(name, target, frame as Frame) : { width: clamp(target, MIN_WIDTH, maxWidth()) }) },
+        persist,
+      );
     };
     return {
-      className: name === 'width' ? 'isotone-resize isotone-resize-w'
-        : `isotone-resize isotone-resize-h${name === 'notes' && split ? ' isotone-resize-split' : ''}`,
+      className:
+        name === 'width'
+          ? 'isotone-resize isotone-resize-w'
+          : `isotone-resize isotone-resize-h${name === 'notes' && split ? ' isotone-resize-split' : ''}`,
       role: 'separator' as const,
       'aria-orientation': horizontal ? ('horizontal' as const) : ('vertical' as const),
       'aria-label': name === 'notes' && split ? 'Resize variants and feedback split' : LABEL[name],
@@ -176,7 +216,11 @@ export function useDockSize(rootRef: RefObject<HTMLElement | null>, key: string,
       onPointerCancel: stop,
       onLostPointerCapture: stop,
       onKeyDown(event: KeyboardEvent<HTMLElement>) {
-        if (event.key === 'Home') { event.preventDefault(); reset(name); return; }
+        if (event.key === 'Home') {
+          event.preventDefault();
+          reset(name);
+          return;
+        }
         const grow = horizontal ? 'ArrowUp' : 'ArrowLeft';
         const shrink = horizontal ? 'ArrowDown' : 'ArrowRight';
         if (event.key !== grow && event.key !== shrink) return;
@@ -185,7 +229,9 @@ export function useDockSize(rootRef: RefObject<HTMLElement | null>, key: string,
         const now = horizontal && frame ? extent(name, frame).now : range.now;
         edit(now + STEP * (event.shiftKey ? 4 : 1) * (event.key === grow ? 1 : -1), frame, true);
       },
-      onDoubleClick() { reset(name); },
+      onDoubleClick() {
+        reset(name);
+      },
     };
   };
 

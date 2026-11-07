@@ -16,10 +16,11 @@ import { applyKnobValues, knobDelta } from '../src/core/variants';
 import { notesResponse, readNotes } from '../src/store';
 
 const dirs: string[] = [];
-afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
+afterEach(() => {
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
 
-const nest = (inner: string, depth: number): string =>
-  depth === 0 ? inner : `<div>${nest(inner, depth - 1)}</div>`;
+const nest = (inner: string, depth: number): string => (depth === 0 ? inner : `<div>${nest(inner, depth - 1)}</div>`);
 
 it('does not resolve to an earlier element with the same shape', () => {
   // The toolbar's first button and the tab's first button end the same way.
@@ -74,7 +75,7 @@ it('names the React components around it, skipping internal names', () => {
   function TabButton() {}
   function UsageTabs() {}
   Object.assign(button, {
-    '__reactFiber$abc': {
+    __reactFiber$abc: {
       type: 'button',
       _debugSource: { fileName: 'src/tabs.tsx', lineNumber: 12 },
       return: { type: TabButton, return: { type: { name: 'minified_x' }, return: { type: UsageTabs, return: null } } },
@@ -90,20 +91,40 @@ it('keeps the context through the store and prints it for the agent', async () =
   dirs.push(root);
   const file = join(root, '.iteration-feedback.json');
   const element = {
-    tag: 'button', text: 'Changes', selector: `body > ${'div:nth-child(1) > '.repeat(40)}button:nth-child(1)`,
-    component: ['UsageTabs', 'TabButton'], source: 'src/tabs.tsx:12', within: ['<section> labelled "Usage"'],
-    attributes: { role: 'tab', ['__proto__']: 'x' }, rect: { x: 934, y: 292, w: 83, h: 35 }, near: 'x',
+    tag: 'button',
+    text: 'Changes',
+    selector: `body > ${'div:nth-child(1) > '.repeat(40)}button:nth-child(1)`,
+    component: ['UsageTabs', 'TabButton'],
+    source: 'src/tabs.tsx:12',
+    within: ['<section> labelled "Usage"'],
+    attributes: { role: 'tab', ['__proto__']: 'x' },
+    rect: { x: 934, y: 292, w: 83, h: 35 },
+    near: 'x',
   };
-  const res = notesResponse(file, { method: 'POST', url: '/', body: { id: 'n1', route: '/', feedback: 'hi', element, elements: [element] } });
+  const res = notesResponse(file, {
+    method: 'POST',
+    url: '/',
+    body: { id: 'n1', route: '/', feedback: 'hi', element, elements: [element] },
+  });
   expect(res.status).toBeLessThan(300);
   const [note] = readNotes(file);
   expect(note?.element?.selector).toBe(element.selector);
   expect(note?.elements?.[0]?.rect).toEqual(element.rect);
 
   let text = '';
-  const stream = { write: (chunk: string) => { text += chunk; } };
+  const stream = {
+    write: (chunk: string) => {
+      text += chunk;
+    },
+  };
   await runCli(['--all'], { cwd: root, stdout: stream, stderr: stream });
-  for (const part of ['component: UsageTabs > TabButton', 'source: src/tabs.tsx:12', 'labelled "Usage"', 'role="tab"', 'at: 934,292 83×35']) {
+  for (const part of [
+    'component: UsageTabs > TabButton',
+    'source: src/tabs.tsx:12',
+    'labelled "Usage"',
+    'role="tab"',
+    'at: 934,292 83×35',
+  ]) {
     expect(text).toContain(part);
   }
 });
@@ -111,8 +132,14 @@ it('keeps the context through the store and prints it for the agent', async () =
 describe('select knobs on the page', () => {
   it('writes the attribute and property, and tells the page once per change', () => {
     const axis = {
-      kind: 'select' as const, id: 'ticks', label: 'Ticks', defaultOption: 'lines',
-      options: [{ id: 'lines', label: 'Lines' }, { id: 'dots', label: 'Dots' }],
+      kind: 'select' as const,
+      id: 'ticks',
+      label: 'Ticks',
+      defaultOption: 'lines',
+      options: [
+        { id: 'lines', label: 'Lines' },
+        { id: 'dots', label: 'Dots' },
+      ],
     };
     const root = document.createElement('html');
     const seen: unknown[] = [];
@@ -124,7 +151,10 @@ describe('select knobs on the page', () => {
     expect(seen).toEqual([{ id: 'ticks', value: 'dots' }]);
     applyKnobValues([axis], {}, root);
     expect(root.hasAttribute('data-knob-ticks')).toBe(false);
-    expect(seen).toEqual([{ id: 'ticks', value: 'dots' }, { id: 'ticks', value: null }]);
+    expect(seen).toEqual([
+      { id: 'ticks', value: 'dots' },
+      { id: 'ticks', value: null },
+    ]);
     expect(knobDelta([axis], { ticks: 'dots' })[0]?.shown).toBe('Dots');
   });
 });

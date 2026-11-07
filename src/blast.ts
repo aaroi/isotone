@@ -6,9 +6,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 
-import {
-  HEARTBEAT_MS, LIVE_HEARTBEAT_MS, BLAST, type BlastState,
-} from './core/blast';
+import { HEARTBEAT_MS, LIVE_HEARTBEAT_MS, BLAST, type BlastState } from './core/blast';
 import { withFileLock, writeJson } from './file-store';
 import { ensureFileIgnored, noteFingerprint, type StoredNote } from './store';
 import { updateRequestOf } from './update-request';
@@ -42,18 +40,23 @@ export function readSession(file: string): BlastSession | null {
   try {
     const v = JSON.parse(readFileSync(file, 'utf8')) as Partial<BlastSession>;
     if (!v || typeof v !== 'object' || !iso(v.startedAt) || !iso(v.endsAt)) return null;
-    const seen = v.seen && typeof v.seen === 'object' && !Array.isArray(v.seen)
-      ? Object.fromEntries(Object.entries(v.seen).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
-      : {};
+    const seen =
+      v.seen && typeof v.seen === 'object' && !Array.isArray(v.seen)
+        ? Object.fromEntries(Object.entries(v.seen).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
+        : {};
     return {
-      version: 1, startedAt: v.startedAt, endsAt: v.endsAt,
+      version: 1,
+      startedAt: v.startedAt,
+      endsAt: v.endsAt,
       route: typeof v.route === 'string' && v.route ? v.route : null,
       heartbeatAt: iso(v.heartbeatAt) ? v.heartbeatAt : null,
       waiting: v.waiting === true,
       ...(iso(v.stoppedAt) ? { stoppedAt: v.stoppedAt } : {}),
       seen,
     };
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 export function writeSession(file: string, session: BlastSession): void {
@@ -89,24 +92,30 @@ export function isLive(session: BlastSession, now = Date.now()): boolean {
 export function publicState(session: BlastSession, now = Date.now()): BlastState {
   const ended = isEnded(session, now);
   return {
-    startedAt: session.startedAt, endsAt: session.endsAt, route: session.route,
+    startedAt: session.startedAt,
+    endsAt: session.endsAt,
+    route: session.route,
     heartbeatAt: session.heartbeatAt,
     // A killed command never clears its flag; a missed heartbeat does.
     waiting: !ended && session.waiting && session.heartbeatAt !== null && now - Date.parse(session.heartbeatAt) < HEARTBEAT_MS * 2.5,
     ...(session.stoppedAt ? { stoppedAt: session.stoppedAt } : {}),
-    live: isLive(session, now), ended, now: new Date(now).toISOString(),
+    live: isLive(session, now),
+    ended,
+    now: new Date(now).toISOString(),
   };
 }
 
 /** Open notes in the session's scope that have not been handed out as they are now. */
 export function unseenNotes(notes: StoredNote[], session: BlastSession): StoredNote[] {
-  return notes
-    .filter((note) => !note.done)
-    // An update request concerns the whole project, as in `npx isotone <route>`.
-    .filter((note) => !session.route || note.route === session.route || Boolean(updateRequestOf(note.update)))
-    // A question the reviewer has not answered yet (by editing the note) waits for them.
-    .filter((note) => session.seen[note.id] !== noteFingerprint(note) && !isAwaitingAnswer(note))
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return (
+    notes
+      .filter((note) => !note.done)
+      // An update request concerns the whole project, as in `npx isotone <route>`.
+      .filter((note) => !session.route || note.route === session.route || Boolean(updateRequestOf(note.update)))
+      // A question the reviewer has not answered yet (by editing the note) waits for them.
+      .filter((note) => session.seen[note.id] !== noteFingerprint(note) && !isAwaitingAnswer(note))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  );
 }
 
 /** Notes handed out earlier, or waiting on an answer to the agent's question, that are still open. */
@@ -132,5 +141,7 @@ export function touchSession(notesFile: string, now = Date.now()): void {
       session: session && !isEnded(session, now) ? { ...session, heartbeatAt: new Date(now).toISOString() } : null,
       result: undefined,
     }));
-  } catch { /* A busy or unreadable session file never fails a note command. */ }
+  } catch {
+    /* A busy or unreadable session file never fails a note command. */
+  }
 }

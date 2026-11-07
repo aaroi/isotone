@@ -10,5 +10,7 @@ export type { CliIO } from './run';
 let isMain = false;
 try {
   isMain = !!process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
-} catch { /* Imported by a runtime without an on-disk entry point. */ }
+} catch {
+  /* Imported by a runtime without an on-disk entry point. */
+}
 if (isMain) process.exitCode = await runCli(process.argv.slice(2));

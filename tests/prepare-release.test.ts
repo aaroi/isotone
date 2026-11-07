@@ -14,7 +14,18 @@ function fixture(version: string, changelog: string) {
   writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'isotone', version }));
   writeFileSync(join(root, 'CHANGELOG.md'), changelog);
   execFileSync('git', ['init', '-q', root]);
-  execFileSync('git', ['-C', root, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '--allow-empty', '-qm', 'Describe the merged change']);
+  execFileSync('git', [
+    '-C',
+    root,
+    '-c',
+    'user.name=Test',
+    '-c',
+    'user.email=test@example.invalid',
+    'commit',
+    '--allow-empty',
+    '-qm',
+    'Describe the merged change',
+  ]);
   return root;
 }
 

@@ -120,16 +120,13 @@ export interface NodeLike {
  * DOM the walk goes on past `maxDepth` until the path matches this element
  * alone. Kept framework-free so it is unit-testable.
  */
-export function describeIterationElement(
-  el: NodeLike,
-  maxDepth = 4,
-): IterationElement {
+export function describeIterationElement(el: NodeLike, maxDepth = 4): IterationElement {
   const parts: string[] = [];
   let node: NodeLike | null | undefined = el;
   let depth = 0;
-  const only = el.isOnlyMatch ? (path: string[]) => el.isOnlyMatch?.(path.join(" > ")) === true : null;
+  const only = el.isOnlyMatch ? (path: string[]) => el.isOnlyMatch?.(path.join(' > ')) === true : null;
   let settled = false;
-  while (node && node.tagName !== "BODY" && (only || depth < maxDepth)) {
+  while (node && node.tagName !== 'BODY' && (only || depth < maxDepth)) {
     if (node.id) {
       // Escape every code point: valid for leading digits, punctuation and
       // framework-generated ids without depending on the host's CSS global.
@@ -160,11 +157,11 @@ export function describeIterationElement(
   }
   // A path can reach the body and still match elsewhere when it starts lower
   // down, as `div > button` does. Rooting it leaves one match.
-  if (only && !settled && !only(parts)) parts.unshift("body");
+  if (only && !settled && !only(parts)) parts.unshift('body');
   return {
     tag: el.tagName.toLowerCase(),
-    text: (el.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 80),
-    selector: parts.join(" > "),
+    text: (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 80),
+    selector: parts.join(' > '),
     ...el.context?.(),
   };
 }
@@ -206,7 +203,9 @@ function elementContext(el: Element): Partial<IterationElement> {
     const value = el.getAttribute(name);
     if (value) attributes[name] = value;
   }
-  for (const { name, value } of Array.from(el.attributes).filter((a) => a.name.startsWith('data-')).slice(0, 6)) {
+  for (const { name, value } of Array.from(el.attributes)
+    .filter((a) => a.name.startsWith('data-'))
+    .slice(0, 6)) {
     if (value) attributes[name] = value;
   }
   const className = el.getAttribute('class');
@@ -227,12 +226,15 @@ function elementContext(el: Element): Partial<IterationElement> {
     // Only a heading above the element titles it; a later one names the next section.
     let heading: Element | null = null;
     try {
-      heading = Array.from(up.querySelectorAll(':scope > :is(h1,h2,h3,h4,h5,h6), :scope > * > :is(h1,h2,h3,h4,h5,h6)'))
-        .filter((candidate) => candidate.compareDocumentPosition(el) & 4).pop() ?? null;
+      heading =
+        Array.from(up.querySelectorAll(':scope > :is(h1,h2,h3,h4,h5,h6), :scope > * > :is(h1,h2,h3,h4,h5,h6)'))
+          .filter((candidate) => candidate.compareDocumentPosition(el) & 4)
+          .pop() ?? null;
     } catch {}
     if (label) within.unshift(`<${tag}> labelled "${label}"`);
     else if (test) within.unshift(`<${tag} data-testid="${test}">`);
-    else if (heading && heading !== el) within.unshift(`<${tag}> headed "${(heading.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 60)}"`);
+    else if (heading && heading !== el)
+      within.unshift(`<${tag}> headed "${(heading.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 60)}"`);
   }
   const box = el.getBoundingClientRect();
   const view = el.ownerDocument?.defaultView;
@@ -241,14 +243,16 @@ function elementContext(el: Element): Partial<IterationElement> {
     ...reactContext(el),
     ...(within.length ? { within } : {}),
     ...(near ? { near } : {}),
-    ...(box.width || box.height ? {
-      rect: {
-        x: Math.round(box.left + (view?.scrollX ?? 0)),
-        y: Math.round(box.top + (view?.scrollY ?? 0)),
-        w: Math.round(box.width),
-        h: Math.round(box.height),
-      },
-    } : {}),
+    ...(box.width || box.height
+      ? {
+          rect: {
+            x: Math.round(box.left + (view?.scrollX ?? 0)),
+            y: Math.round(box.top + (view?.scrollY ?? 0)),
+            w: Math.round(box.width),
+            h: Math.round(box.height),
+          },
+        }
+      : {}),
   };
 }
 
@@ -282,9 +286,15 @@ export function elementAsNode(el: Element): NodeLike {
     const created: NodeLike = {
       tagName: n.tagName,
       id: n.id || null,
-      get textContent() { return renderedText(n); },
-      get parentElement() { return view(n.parentElement); },
-      get children() { return Array.from(n.children, (child) => view(child) as NodeLike); },
+      get textContent() {
+        return renderedText(n);
+      },
+      get parentElement() {
+        return view(n.parentElement);
+      },
+      get children() {
+        return Array.from(n.children, (child) => view(child) as NodeLike);
+      },
       get indexInParent() {
         let index = 1;
         for (let sibling = n.previousElementSibling; sibling; sibling = sibling.previousElementSibling) index++;
@@ -323,18 +333,18 @@ export interface RouteGateOptions {
   alwaysHidden?: string[];
 }
 
-const DEFAULT_HIDDEN = ["/login", "/logout", "/register", "/error", "/_error"];
+const DEFAULT_HIDDEN = ['/login', '/logout', '/register', '/error', '/_error'];
 
 function matchRoutePattern(route: string, pattern: string): boolean {
   if (pattern.endsWith('*')) return route.startsWith(pattern.slice(0, -1));
-  if (pattern.endsWith("/")) return route.startsWith(pattern);
+  if (pattern.endsWith('/')) return route.startsWith(pattern);
   return route === pattern || route.startsWith(`${pattern}/`);
 }
 
 /** Whether the panel may mount on the given route. Pure and unit-testable. */
 export function isRouteVisible(route: string, rule: RouteGateOptions = {}): boolean {
   const hidden = rule.hidden ?? DEFAULT_HIDDEN;
-  const alwaysHidden = rule.alwaysHidden ?? ["/api", "/auth", "/login"];
+  const alwaysHidden = rule.alwaysHidden ?? ['/api', '/auth', '/login'];
   // A prefix match on the "always" list is unconditionally hidden — the panel
   // must never appear on auth or API surfaces regardless of allow-list.
   for (const p of alwaysHidden) {
@@ -364,7 +374,7 @@ export interface IterationStoreConfig {
 }
 
 /** Where the last `saveNote` landed; `null` before the first one. */
-export type SaveLocation = "server" | "local";
+export type SaveLocation = 'server' | 'local';
 
 export function createIterationStore(cfg: IterationStoreConfig = {}) {
   const endpoint = cfg.endpoint ?? null;
@@ -375,12 +385,24 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
   function parseLocal(raw: string | null): IterationNote[] {
     try {
       const items = JSON.parse(raw ?? '[]') as IterationNote[];
-      if (!Array.isArray(items) || !items.every((note) => note && typeof note.id === 'string' &&
-        typeof note.route === 'string' && typeof note.feedback === 'string' && typeof note.createdAt === 'string')) throw new Error('Invalid notes');
-      return items.map((i) => ({ ...i, done: i.done ?? false })).map((i) => ({
-        ...i,
-        element: i.element ?? null,
-      }));
+      if (
+        !Array.isArray(items) ||
+        !items.every(
+          (note) =>
+            note &&
+            typeof note.id === 'string' &&
+            typeof note.route === 'string' &&
+            typeof note.feedback === 'string' &&
+            typeof note.createdAt === 'string',
+        )
+      )
+        throw new Error('Invalid notes');
+      return items
+        .map((i) => ({ ...i, done: i.done ?? false }))
+        .map((i) => ({
+          ...i,
+          element: i.element ?? null,
+        }));
     } catch (cause) {
       throw new Error('Could not read local feedback. Browser storage has been left untouched.', { cause });
     }
@@ -388,11 +410,17 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
 
   function localAll(): IterationNote[] {
     let storage: Storage;
-    try { storage = window.localStorage; } catch { return []; }
-    return parseLocal(readBrowserStorage(storage, key, (current, previous) => {
-      const merged = new Map([...parseLocal(previous), ...parseLocal(current)].map(note => [note.id, note]));
-      return JSON.stringify([...merged.values()]);
-    }));
+    try {
+      storage = window.localStorage;
+    } catch {
+      return [];
+    }
+    return parseLocal(
+      readBrowserStorage(storage, key, (current, previous) => {
+        const merged = new Map([...parseLocal(previous), ...parseLocal(current)].map((note) => [note.id, note]));
+        return JSON.stringify([...merged.values()]);
+      }),
+    );
   }
 
   function localWrite(items: IterationNote[]) {
@@ -415,28 +443,32 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
       // Keep them in the browser, but let valid notes behind them sync.
       if (item.feedback.trim().length > MAX_FEEDBACK_LENGTH) continue;
       let rejected = false;
-      const saved = await request(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: item.id,
-          createdAt: item.createdAt,
-          route: item.route,
-          feedback: item.feedback,
-          element: item.element ?? null,
-          ...(item.elements !== undefined ? { elements: item.elements } : {}),
-          ...(item.variant !== undefined ? { variant: item.variant } : {}),
-          ...(item.variantAction !== undefined ? { variantAction: item.variantAction } : {}),
-          ...(item.payload !== undefined ? { payload: item.payload } : {}),
-          ...(item.viewport ? { viewport: item.viewport } : {}),
-        }),
-      }, async (res) => {
-        if (!res.ok) {
-          rejected = res.status >= 400 && res.status < 500;
-          return null;
-        }
-        return await res.json() as { id?: unknown };
-      });
+      const saved = await request(
+        endpoint,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: item.id,
+            createdAt: item.createdAt,
+            route: item.route,
+            feedback: item.feedback,
+            element: item.element ?? null,
+            ...(item.elements !== undefined ? { elements: item.elements } : {}),
+            ...(item.variant !== undefined ? { variant: item.variant } : {}),
+            ...(item.variantAction !== undefined ? { variantAction: item.variantAction } : {}),
+            ...(item.payload !== undefined ? { payload: item.payload } : {}),
+            ...(item.viewport ? { viewport: item.viewport } : {}),
+          }),
+        },
+        async (res) => {
+          if (!res.ok) {
+            rejected = res.status >= 400 && res.status < 500;
+            return null;
+          }
+          return (await res.json()) as { id?: unknown };
+        },
+      );
       if (!saved || typeof saved.id !== 'string' || !saved.id) {
         if (rejected) continue;
         return; // A transient failure or missing acknowledgement stops the retry.
@@ -448,7 +480,9 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
   }
 
   function migrateLocalBacklog(): Promise<void> {
-    migration ??= flushLocalBacklog().finally(() => { migration = null; });
+    migration ??= flushLocalBacklog().finally(() => {
+      migration = null;
+    });
     return migration;
   }
 
@@ -458,7 +492,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     try {
       const remote = await request(url, undefined, async (res) => {
         if (!res.ok) throw new Error(`Loading iteration notes failed (${res.status})`);
-        return await res.json() as IterationNote[];
+        return (await res.json()) as IterationNote[];
       });
       const pendingIds = new Set(local.map((note) => note.id));
       return [...remote.filter((note) => !pendingIds.has(note.id)), ...local];
@@ -475,9 +509,8 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
         .filter((i) => route === undefined || i.route === route)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     }
-    return (await readRemote(
-      route === undefined ? `${endpoint}?all=1` : `${endpoint}?route=${encodeURIComponent(route)}`,
-    )).filter((note) => route === undefined || note.route === route)
+    return (await readRemote(route === undefined ? `${endpoint}?all=1` : `${endpoint}?route=${encodeURIComponent(route)}`))
+      .filter((note) => route === undefined || note.route === route)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
@@ -495,7 +528,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     const local = localAll();
     const data = await request(`${endpoint}?rev=${encodeURIComponent(rev ?? '')}`, undefined, async (res) => {
       if (!res.ok) throw new Error(`Loading iteration notes failed (${res.status})`);
-      return await res.json() as IterationNote[] | { rev?: unknown; unchanged?: unknown; notes?: unknown };
+      return (await res.json()) as IterationNote[] | { rev?: unknown; unchanged?: unknown; notes?: unknown };
     });
     if (Array.isArray(data)) return { rev: null, notes: merge(data, local) };
     const next = typeof data?.rev === 'string' ? data.rev : null;
@@ -518,8 +551,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
         .filter((i) => !i.done)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     }
-    return (await readRemote(endpoint)).filter((note) => !note.done)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return (await readRemote(endpoint)).filter((note) => !note.done).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   function saveLocal(
@@ -534,7 +566,13 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     const all = localAll();
     let savedId: string;
     const defaultsRequest = feedback.startsWith('[set-defaults]');
-    const existing = id ? all.find((f) => f.id === id && f.route === route) : defaultsRequest ? all.filter(n => !n.done && n.route === route && n.feedback.startsWith('[set-defaults]')).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] : undefined;
+    const existing = id
+      ? all.find((f) => f.id === id && f.route === route)
+      : defaultsRequest
+        ? all
+            .filter((n) => !n.done && n.route === route && n.feedback.startsWith('[set-defaults]'))
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+        : undefined;
     if (existing) {
       if (defaultsRequest && !id) {
         delete existing.elements;
@@ -567,7 +605,11 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
         ...(context?.elements ? { element: context.elements[0] ?? null } : {}),
       });
     }
-    localWrite(defaultsRequest ? all.filter(n => n.id === savedId || n.done || n.route !== route || !n.feedback.startsWith('[set-defaults]')) : all);
+    localWrite(
+      defaultsRequest
+        ? all.filter((n) => n.id === savedId || n.done || n.route !== route || !n.feedback.startsWith('[set-defaults]'))
+        : all,
+    );
     return savedId;
   }
 
@@ -587,7 +629,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     }
     if (!endpoint) {
       const savedId = saveLocal(route, feedback, element, id, payload, viewport, context);
-      lastSave = "local";
+      lastSave = 'local';
       return savedId;
     }
     // Stable across a lost response and its retry: the server treats this as
@@ -602,26 +644,30 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     let res: Response | undefined;
     let result: { id?: unknown; error?: unknown } | null;
     try {
-      result = await request(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: savedId,
-          route,
-          feedback,
-          element,
-          ...context,
-          ...(payload !== undefined ? { payload } : {}),
-          ...(viewport ? { viewport } : {}),
-        }),
-      }, async (response) => {
-        res = response;
-        if (!response.ok && response.status >= 500) throw new Error(`Saving iteration note failed (${response.status})`);
-        return await response.json().catch((error) => {
-          if (response.ok) throw error;
-          return null;
-        }) as { id?: unknown; error?: unknown } | null;
-      });
+      result = await request(
+        endpoint,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: savedId,
+            route,
+            feedback,
+            element,
+            ...context,
+            ...(payload !== undefined ? { payload } : {}),
+            ...(viewport ? { viewport } : {}),
+          }),
+        },
+        async (response) => {
+          res = response;
+          if (!response.ok && response.status >= 500) throw new Error(`Saving iteration note failed (${response.status})`);
+          return (await response.json().catch((error) => {
+            if (response.ok) throw error;
+            return null;
+          })) as { id?: unknown; error?: unknown } | null;
+        },
+      );
     } catch {
       if (res && !res.ok && res.status < 500) throw new Error(`Saving iteration note failed (${res.status})`);
       return saveOffline();
@@ -642,7 +688,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
       return;
     }
     const res = await request(`${endpoint}?id=${encodeURIComponent(id)}`, {
-      method: "DELETE",
+      method: 'DELETE',
     });
     if (!res.ok) throw new Error(`Deleting iteration note failed (${res.status})`);
     const local = localAll();

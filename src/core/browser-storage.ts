@@ -16,17 +16,26 @@ export function readBrowserStorage(
   merge: (current: string | null, previous: string) => string = (current, previous) => current ?? previous,
 ): string | null {
   let current: string | null = null;
-  try { current = storage.getItem(key); }
-  catch { return null; }
+  try {
+    current = storage.getItem(key);
+  } catch {
+    return null;
+  }
   const previousKey = legacyKey(key);
   if (!previousKey) return current;
   let previous: string | null;
-  try { previous = storage.getItem(previousKey); }
-  catch { return current; }
+  try {
+    previous = storage.getItem(previousKey);
+  } catch {
+    return current;
+  }
   if (previous === null) return current;
   const next = merge(current, previous);
-  try { writeBrowserStorage(storage, key, next); }
-  catch { /* Quota or access restrictions must not hide the previous value. */ }
+  try {
+    writeBrowserStorage(storage, key, next);
+  } catch {
+    /* Quota or access restrictions must not hide the previous value. */
+  }
   return next;
 }
 
@@ -36,7 +45,9 @@ export function writeBrowserStorage(storage: BrowserStorage, key: string, value:
   if (!previousKey) return;
   try {
     if (storage.getItem(key) === value) storage.removeItem(previousKey);
-  } catch { /* Keep the old value unless its replacement was verified. */ }
+  } catch {
+    /* Keep the old value unless its replacement was verified. */
+  }
 }
 
 /** Explicitly clearing a value also clears its legacy fallback. */

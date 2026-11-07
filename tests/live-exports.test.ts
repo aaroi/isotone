@@ -31,8 +31,20 @@ describe('scanExports', () => {
       `export { c } from './c';`,
     ].join('\n');
     expect(scanExports(code)?.sort()).toEqual([
-      'Base', 'Flag', 'Kind', 'PAGE', 'Picker', 'Store', 'a', 'bee', 'c', 'count',
-      'default', 'helpers', 'load', 'useProjects',
+      'Base',
+      'Flag',
+      'Kind',
+      'PAGE',
+      'Picker',
+      'Store',
+      'a',
+      'bee',
+      'c',
+      'count',
+      'default',
+      'helpers',
+      'load',
+      'useProjects',
     ]);
   });
 

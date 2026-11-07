@@ -3,12 +3,20 @@ import { Icon } from './icons';
 
 /* ── Colour maths ─────────────────────────────────────────────────────── */
 
-export interface Hsv { h: number; s: number; v: number }
+export interface Hsv {
+  h: number;
+  s: number;
+  v: number;
+}
 
 /** `#rgb` or `#rrggbb` to lower-case `#rrggbb`, or null. */
 export function normalizeHex(input: string): string | null {
   const raw = input.trim().replace(/^#/, '').toLowerCase();
-  if (/^[0-9a-f]{3}$/.test(raw)) return `#${raw.split('').map((c) => c + c).join('')}`;
+  if (/^[0-9a-f]{3}$/.test(raw))
+    return `#${raw
+      .split('')
+      .map((c) => c + c)
+      .join('')}`;
   if (/^[0-9a-f]{6}$/.test(raw)) return `#${raw}`;
   return null;
 }
@@ -32,7 +40,9 @@ export function hsvToHex({ h, s, v }: Hsv): string {
   const f = (n: number) => {
     const k = (n + h / 60) % 6;
     const c = v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
-    return Math.round(c * 255).toString(16).padStart(2, '0');
+    return Math.round(c * 255)
+      .toString(16)
+      .padStart(2, '0');
   };
   return `#${f(5)}${f(3)}${f(1)}`;
 }
@@ -41,7 +51,9 @@ const clamp = (n: number) => Math.min(1, Math.max(0, n));
 
 /* ── Picker ───────────────────────────────────────────────────────────── */
 
-interface EyeDropperLike { open(): Promise<{ sRGBHex: string }> }
+interface EyeDropperLike {
+  open(): Promise<{ sRGBHex: string }>;
+}
 
 /**
  * The custom colour control, drawn in the panel's own materials instead of
@@ -80,7 +92,9 @@ export function ColorPicker({
     }
   }, [value]);
 
-  useEffect(() => { handle.current?.focus({ preventScroll: true }); }, []);
+  useEffect(() => {
+    handle.current?.focus({ preventScroll: true });
+  }, []);
 
   const apply = (next: Hsv) => {
     setHsv(next);
@@ -99,7 +113,10 @@ export function ColorPicker({
   const onFieldKey = (e: KeyboardEvent<HTMLDivElement>) => {
     const step = e.shiftKey ? 0.1 : 0.01;
     const moves: Record<string, [number, number]> = {
-      ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, step], ArrowDown: [0, -step],
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+      ArrowUp: [0, step],
+      ArrowDown: [0, -step],
     };
     const move = moves[e.key];
     if (!move) return;
@@ -109,14 +126,15 @@ export function ColorPicker({
 
   const commitDraft = () => {
     const hex = normalizeHex(draft);
-    if (!hex) { setDraft((last.current ?? value).toUpperCase()); return; }
+    if (!hex) {
+      setDraft((last.current ?? value).toUpperCase());
+      return;
+    }
     if (hex !== last.current) apply(hexToHsv(hex));
     else setDraft(hex.toUpperCase());
   };
 
-  const dropper = typeof window !== 'undefined'
-    ? (window as unknown as { EyeDropper?: new () => EyeDropperLike }).EyeDropper
-    : undefined;
+  const dropper = typeof window !== 'undefined' ? (window as unknown as { EyeDropper?: new () => EyeDropperLike }).EyeDropper : undefined;
 
   const hue = hsvToHex({ h: hsv.h, s: 1, v: 1 });
   const percent = (n: number) => `${Math.round(n * 100)}%`;
@@ -144,7 +162,9 @@ export function ColorPicker({
           handle.current?.focus({ preventScroll: true });
           fromPointer(e);
         }}
-        onPointerMove={(e) => { if (e.buttons & 1) fromPointer(e); }}
+        onPointerMove={(e) => {
+          if (e.buttons & 1) fromPointer(e);
+        }}
       >
         <div
           ref={handle}
@@ -171,7 +191,9 @@ export function ColorPicker({
         onChange={(e) => apply({ ...hsv, h: Number(e.target.value) })}
       />
       <div className="isotone-colour-row">
-        <span className="isotone-colour-hash" aria-hidden="true">#</span>
+        <span className="isotone-colour-hash" aria-hidden="true">
+          #
+        </span>
         <input
           type="text"
           className="isotone-colour-hex"
@@ -182,7 +204,12 @@ export function ColorPicker({
           value={draft.replace(/^#/, '')}
           onChange={(e) => setDraft(`#${e.target.value.replace(/^#/, '')}`)}
           onBlur={commitDraft}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitDraft(); } }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              commitDraft();
+            }
+          }}
         />
         {dropper && (
           <button
@@ -191,10 +218,13 @@ export function ColorPicker({
             aria-label="Pick a colour from the page"
             title="Pick from the page"
             onClick={() => {
-              void new dropper().open().then((r) => {
-                const hex = normalizeHex(r.sRGBHex);
-                if (hex) apply(hexToHsv(hex));
-              }).catch(() => {});
+              void new dropper()
+                .open()
+                .then((r) => {
+                  const hex = normalizeHex(r.sRGBHex);
+                  if (hex) apply(hexToHsv(hex));
+                })
+                .catch(() => {});
             }}
           >
             <Icon name="pipette" />

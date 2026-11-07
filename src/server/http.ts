@@ -3,7 +3,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 const MAX_BODY_BYTES = 1024 * 1024;
 
 export class HttpError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
     super(message);
   }
 }
@@ -16,9 +19,10 @@ export function checkOrigin(origin: string | null | undefined, host: string, loo
   if (!origin) return; // CLI and same-origin GET requests need no Origin header.
   try {
     const url = new URL(origin);
-    if ((url.protocol === 'http:' || url.protocol === 'https:') &&
-      (loopbackOnly ? isLoopback(url.hostname) : url.host === host)) return;
-  } catch { /* An invalid or opaque origin is not a local review page. */ }
+    if ((url.protocol === 'http:' || url.protocol === 'https:') && (loopbackOnly ? isLoopback(url.hostname) : url.host === host)) return;
+  } catch {
+    /* An invalid or opaque origin is not a local review page. */
+  }
   throw new HttpError(403, 'origin not allowed');
 }
 
@@ -34,8 +38,11 @@ export async function readNodeJson(req: IncomingMessage): Promise<unknown> {
       } else chunks.push(chunk);
     });
     req.on('end', () => {
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
-      catch { resolve(undefined); }
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      } catch {
+        resolve(undefined);
+      }
     });
     req.on('error', reject);
     req.on('aborted', () => reject(new HttpError(400, 'request aborted')));
@@ -58,9 +65,14 @@ export async function readWebJson(request: Request): Promise<unknown> {
       }
       chunks.push(value);
     }
-    try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
-    catch { return undefined; }
-  } finally { reader.releaseLock(); }
+    try {
+      return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    } catch {
+      return undefined;
+    }
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 export function httpFailure(error: unknown): { status: number; headers: Record<string, string>; body: unknown } {

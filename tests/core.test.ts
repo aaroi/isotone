@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  describeIterationElement,
-  isRouteVisible,
-  type NodeLike,
-} from '../src/core/index';
+import { describeIterationElement, isRouteVisible, type NodeLike } from '../src/core/index';
 
 function node(tagName: string, overrides: Partial<NodeLike> = {}) {
   return { tagName, children: [], ...overrides } as NodeLike;
@@ -26,9 +22,7 @@ describe('describeIterationElement', () => {
     table.children = [node('thead'), row, node('caption')];
     row.children = [node('td'), cell];
     const desc = describeIterationElement(cell);
-    expect(desc.selector).toBe(
-      'table:nth-child(1) > tr:nth-child(2) > td:nth-child(2)',
-    );
+    expect(desc.selector).toBe('table:nth-child(1) > tr:nth-child(2) > td:nth-child(2)');
     expect(desc.text).toBe('platform-api');
   });
 

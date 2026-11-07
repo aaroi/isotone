@@ -407,8 +407,7 @@ ${UPDATE_NOTICE_CSS}
 export function ensurePanelStyles(target: Document | ShadowRoot): void {
   const parent = target instanceof Document ? target.head : target;
   if (!parent || parent.querySelector(`[${MARKER}]`)) return;
-  const style = (target instanceof Document ? target : target.ownerDocument)
-    .createElement('style');
+  const style = (target instanceof Document ? target : target.ownerDocument).createElement('style');
   style.setAttribute(MARKER, '');
   style.textContent = PANEL_CSS;
   // Prepend inside a shadow root so host-passed styles could still win, and

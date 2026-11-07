@@ -28,15 +28,7 @@ import {
   writeActive,
   type VariantsStoreOptions,
 } from '../variants-store';
-import {
-  type CliIO,
-  errOut,
-  extractBoolFlag,
-  extractFlag,
-  findNoteByPrefix,
-  out,
-  printTable,
-} from './util';
+import { type CliIO, errOut, extractBoolFlag, extractFlag, findNoteByPrefix, out, printTable } from './util';
 
 export function runVariant(args: string[], io: CliIO): number {
   // `--dir` applies to the whole command group, so it is stripped before the
@@ -78,10 +70,7 @@ export function runVariant(args: string[], io: CliIO): number {
       case 'path':
         return cmdPath(rest, io, opts);
       default:
-        errOut(
-          io,
-          `Unknown "variant" subcommand "${sub}". Run \`isotone variant --help\` for the list.`,
-        );
+        errOut(io, `Unknown "variant" subcommand "${sub}". Run \`isotone variant --help\` for the list.`);
         return 1;
     }
   } catch (err) {
@@ -132,8 +121,7 @@ function cmdList(rest: string[], io: CliIO, opts: VariantsStoreOptions): number 
   const route = r1[0];
   const variants = listVariants(opts);
   const active = readActive(opts);
-  const rows =
-    route && !allRoutes ? variants.filter((v) => variantAppliesTo(v.route, route)) : variants;
+  const rows = route && !allRoutes ? variants.filter((v) => variantAppliesTo(v.route, route)) : variants;
 
   if (rows.length === 0) {
     // A knobs-only project (any dev server without the Vite plugin) has no
@@ -210,8 +198,8 @@ function printKnobs(io: CliIO, opts: VariantsStoreOptions, route: string | undef
       next++;
       return;
     }
-    const id = entry && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string'
-      ? (entry as { id: string }).id : null;
+    const id =
+      entry && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string' ? (entry as { id: string }).id : null;
     const name = `knob ${index + 1}${id === null ? '' : ` "${id}"`}`;
     // An earlier knob already took this id; the panel keeps that one.
     if (id !== null && valid.slice(0, next).some((knob) => knob.id === id)) {
@@ -223,12 +211,11 @@ function printKnobs(io: CliIO, opts: VariantsStoreOptions, route: string | undef
   const shown = route ? knobsFor(valid, route) : valid;
   out(io);
   if (shown.length) {
-    printTable(io, ['KNOB', 'KIND', 'LABEL', 'ROUTE'], shown.map((k) => [
-      k.id,
-      k.kind ?? 'select',
-      k.label,
-      k.route === undefined ? '-' : ([] as string[]).concat(k.route).join(', '),
-    ]));
+    printTable(
+      io,
+      ['KNOB', 'KIND', 'LABEL', 'ROUTE'],
+      shown.map((k) => [k.id, k.kind ?? 'select', k.label, k.route === undefined ? '-' : ([] as string[]).concat(k.route).join(', ')]),
+    );
   } else {
     out(io, route ? `No knobs for "${route}".` : `No valid knobs in ${KNOBS_FILE}.`);
   }
@@ -292,9 +279,7 @@ function cmdAdd(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
     return 1;
   }
   for (const file of files) addVariantFile(opts, id, file, { create });
-  out(io, create
-    ? `created ${files.length} new file(s) in "${id}"`
-    : `added ${files.length} file(s) to "${id}"`);
+  out(io, create ? `created ${files.length} new file(s) in "${id}"` : `added ${files.length} file(s) to "${id}"`);
   if (!create) for (const file of files) warnNoHotSwap(io, file);
   warnOverlaps(io, opts, id);
   return 0;
@@ -305,18 +290,27 @@ function cmdAdd(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
 function warnNoHotSwap(io: CliIO, file: string): void {
   const names = scanExports(readFileSync(resolve(io.cwd, file), 'utf8'));
   if (!names || isRouteModule(names)) {
-    errOut(io, `warning: ${file} is served whole, so it follows .isotone/active.json in every tab instead of switching per tab. See "Live switching" in the variants guide.`);
+    errOut(
+      io,
+      `warning: ${file} is served whole, so it follows .isotone/active.json in every tab instead of switching per tab. See "Live switching" in the variants guide.`,
+    );
     return;
   }
   const fixed = names.filter((name) => name !== 'default' && !/^[A-Z]/.test(name));
   if (fixed.length) {
-    errOut(io, `warning: ${file} exports ${fixed.join(', ')}, so switching this variant reloads the page. Move ${fixed.length === 1 ? 'it' : 'them'} to a file the variant leaves alone to switch in place.`);
+    errOut(
+      io,
+      `warning: ${file} exports ${fixed.join(', ')}, so switching this variant reloads the page. Move ${fixed.length === 1 ? 'it' : 'them'} to a file the variant leaves alone to switch in place.`,
+    );
   }
 }
 
 function warnOverlaps(io: CliIO, opts: VariantsStoreOptions, id: string): void {
   for (const { file, other } of crossGroupOverlaps(opts, id)) {
-    errOut(io, `warning: ${file} is also overridden by "${other}" in another group, so picking both fails. Put them in one group with \`variant group\`, or have them override different files.`);
+    errOut(
+      io,
+      `warning: ${file} is also overridden by "${other}" in another group, so picking both fails. Put them in one group with \`variant group\`, or have them override different files.`,
+    );
   }
 }
 
@@ -350,7 +344,10 @@ function cmdUse(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
       return 1;
     }
     const members = new Set(group.members.map((m) => m.id));
-    writeActive(opts, active.filter((a) => !members.has(a)));
+    writeActive(
+      opts,
+      active.filter((a) => !members.has(a)),
+    );
     out(io, `active: default for ${groupId}${describeActive(readActive(opts))}`);
     return 0;
   }
@@ -382,7 +379,10 @@ function cmdOff(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
     return 1;
   }
   const active = readActive(opts);
-  writeActive(opts, active.filter((a) => a !== id));
+  writeActive(
+    opts,
+    active.filter((a) => a !== id),
+  );
   out(io, `off: "${id}"${describeActive(readActive(opts))}`);
   return 0;
 }
@@ -420,14 +420,27 @@ function cmdSection(rest: string[], io: CliIO, opts: VariantsStoreOptions): numb
     return 1;
   }
   const text = words.join(' ').replace(/\s+/g, ' ').trim();
-  const members = overlayGroups(listVariants(opts)).find((g) => g.members.some((m) => m.id === id))?.members
-    .map((m) => m.id) ?? [id];
+  const members = overlayGroups(listVariants(opts))
+    .find((g) => g.members.some((m) => m.id === id))
+    ?.members.map((m) => m.id) ?? [id];
   // No text hands the decision back to the label prefix; --none keeps the
   // selector out of every section even when its label has a " > ".
   for (const member of members) setVariantSection(opts, member, none ? '' : text || undefined);
-  const others = members.length > 1 ? ` (with ${members.filter((m) => m !== id).map((m) => `"${m}"`).join(', ')})` : '';
-  out(io, text ? `"${id}"${others} is now in section "${text}"`
-    : none ? `"${id}"${others} is in no section` : `"${id}"${others} takes its section from its label`);
+  const others =
+    members.length > 1
+      ? ` (with ${members
+          .filter((m) => m !== id)
+          .map((m) => `"${m}"`)
+          .join(', ')})`
+      : '';
+  out(
+    io,
+    text
+      ? `"${id}"${others} is now in section "${text}"`
+      : none
+        ? `"${id}"${others} is in no section`
+        : `"${id}"${others} takes its section from its label`,
+  );
   return 0;
 }
 

@@ -50,8 +50,16 @@ function sink(cwd: string) {
   return {
     text,
     cwd,
-    stdout: { write: (chunk: string) => { text.out += chunk; } },
-    stderr: { write: (chunk: string) => { text.err += chunk; } },
+    stdout: {
+      write: (chunk: string) => {
+        text.out += chunk;
+      },
+    },
+    stderr: {
+      write: (chunk: string) => {
+        text.err += chunk;
+      },
+    },
   };
 }
 
@@ -194,12 +202,17 @@ describe('`variant sync` output', () => {
 describe('the panel, when activation fails', () => {
   it("shows the server's reason", async () => {
     const reason = '"a" (A) and "b" (B) both override src/x.ts; only one can be active';
-    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'POST'
-      ? Response.json({ error: reason }, { status: 409 })
-      : Response.json({
-        active: [],
-        variants: [{ id: 'a', label: 'a', createdAt: '', files: {}, stale: [], missing: [] }],
-      })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) =>
+        init?.method === 'POST'
+          ? Response.json({ error: reason }, { status: 409 })
+          : Response.json({
+              active: [],
+              variants: [{ id: 'a', label: 'a', createdAt: '', files: {}, stale: [], missing: [] }],
+            }),
+      ),
+    );
     const source = createOverlayVariantsSource({ endpoint: '/v', getRoute: () => '/', live: null, storage: null, knobRoot: null });
     await source.refresh();
     const axis = source.getAxes()[0];
@@ -226,14 +239,19 @@ describe('select knobs', () => {
   it('reads them from the knob file and drops one without a usable default', () => {
     const root = tempRepo();
     mkdirSync(join(root, '.isotone'), { recursive: true });
-    const options = [{ id: 'lines', label: 'Lines' }, { id: 'dots', label: 'Dots' }];
-    writeFileSync(join(root, '.isotone/knobs.json'), JSON.stringify([
-      { kind: 'select', id: 'ticks', label: 'Ticks', options, defaultOption: 'lines' },
-      { kind: 'select', id: 'bad', label: 'Bad', options, defaultOption: 'nope' },
-    ]));
+    const options = [
+      { id: 'lines', label: 'Lines' },
+      { id: 'dots', label: 'Dots' },
+    ];
+    writeFileSync(
+      join(root, '.isotone/knobs.json'),
+      JSON.stringify([
+        { kind: 'select', id: 'ticks', label: 'Ticks', options, defaultOption: 'lines' },
+        { kind: 'select', id: 'bad', label: 'Bad', options, defaultOption: 'nope' },
+      ]),
+    );
     expect(readKnobs({ root }).map((knob) => knob.id)).toEqual(['ticks']);
   });
-
 });
 
 describe('the dev server', () => {
@@ -244,17 +262,13 @@ describe('the dev server', () => {
       logLevel: 'silent',
       appType: 'custom',
       server: { middlewareMode: true, hmr: false, watch: { usePolling: true, interval: 20 } },
-      plugins: [
-        iteration({ panel: false, variants: { live } }) as never,
-        ...(live ? [{ name: 'react-fixture' }] : []),
-      ],
+      plugins: [iteration({ panel: false, variants: { live } }) as never, ...(live ? [{ name: 'react-fixture' }] : [])],
     });
     servers.push(server);
     return server;
   }
 
-  const load = async (server: ViteDevServer, file: string) =>
-    (await server.ssrLoadModule(file)) as { value: string };
+  const load = async (server: ViteDevServer, file: string) => (await server.ssrLoadModule(file)) as { value: string };
 
   it.each([[true], [false]])('renders a copy added to an active variant, live=%s', async (live) => {
     const root = tempRepo();
@@ -272,9 +286,12 @@ describe('the dev server', () => {
 
     addVariantFile(opts, 'v', 'src/b.ts');
     writeFileSync(join(variantDir(opts, 'v'), 'src/b.ts'), "export const value = 'copy';\n");
-    await vi.waitFor(async () => {
-      expect((await load(server, '/src/b.ts')).value).toBe('copy');
-    }, { timeout: 3000, interval: 100 });
+    await vi.waitFor(
+      async () => {
+        expect((await load(server, '/src/b.ts')).value).toBe('copy');
+      },
+      { timeout: 3000, interval: 100 },
+    );
   });
 
   it('forgets a variant whose folder was deleted by hand', async () => {
@@ -291,9 +308,12 @@ describe('the dev server', () => {
     expect((await load(server, '/src/a.ts')).value).toBe('copy');
 
     rmSync(variantDir(opts, 'gone'), { recursive: true });
-    await vi.waitFor(async () => {
-      expect((await load(server, '/src/a.ts')).value).toBe('real');
-    }, { timeout: 3000, interval: 100 });
+    await vi.waitFor(
+      async () => {
+        expect((await load(server, '/src/a.ts')).value).toBe('real');
+      },
+      { timeout: 3000, interval: 100 },
+    );
     // What a new page is told is active, which every later pick builds on.
     const config = await server.pluginContainer.load('\0isotone-live');
     expect(JSON.stringify(config)).not.toContain('gone');

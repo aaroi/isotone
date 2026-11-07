@@ -9,7 +9,10 @@
     "includes": ["**", "!dist", "!node_modules"]
   },
   "formatter": {
-    "enabled": false
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 140
   },
   "linter": {
     "enabled": true,
@@ -19,5 +22,19 @@
   },
   "assist": {
     "enabled": false
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always"
+    }
+  },
+  "css": {
+    "formatter": {
+      "enabled": false
+    }
   }
 }

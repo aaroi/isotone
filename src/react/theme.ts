@@ -8,11 +8,8 @@ function parseColor(value: string): Color | null {
   const rgb = value.match(/^rgba?\(([^)]+)\)$/);
   if (rgb) {
     const parts = rgb[1].split(/[,\s/]+/).filter(Boolean);
-    const values = parts.map((part, i) =>
-      Number.parseFloat(part) * (part.endsWith('%') ? (i === 3 ? 0.01 : 2.55) : 1),
-    );
-    if (values.length >= 3 && values.every(Number.isFinite))
-      return { r: values[0], g: values[1], b: values[2], a: values[3] ?? 1 };
+    const values = parts.map((part, i) => Number.parseFloat(part) * (part.endsWith('%') ? (i === 3 ? 0.01 : 2.55) : 1));
+    if (values.length >= 3 && values.every(Number.isFinite)) return { r: values[0], g: values[1], b: values[2], a: values[3] ?? 1 };
   }
   if (value === 'transparent') return { r: 0, g: 0, b: 0, a: 0 };
   if (!value || !globalThis.CSS?.supports('color', value)) return null;
@@ -65,9 +62,7 @@ function paintStack(shadows?: Set<ShadowRoot>): Element[] {
 }
 
 function systemTheme(): ResolvedTheme {
-  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches
-    ? 'dark'
-    : 'light';
+  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
 /**
@@ -75,16 +70,15 @@ function systemTheme(): ResolvedTheme {
  * browser canvas. Background images and closed shadow roots cannot be sampled;
  * hosts using those can set an explicit theme or choose system.
  */
-export function detectTheme(
-  preference: IterationTheme = 'auto',
-  shadows?: Set<ShadowRoot>,
-): ResolvedTheme {
+export function detectTheme(preference: IterationTheme = 'auto', shadows?: Set<ShadowRoot>): ResolvedTheme {
   if (preference === 'light' || preference === 'dark') return preference;
   if (preference === 'system') return systemTheme();
   if (typeof document === 'undefined') return 'light';
   try {
     let remaining = 1;
-    let r = 0, g = 0, b = 0;
+    let r = 0,
+      g = 0,
+      b = 0;
     for (const element of paintStack(shadows)) {
       const parsed = parseColor(getComputedStyle(element).backgroundColor);
       if (!parsed || parsed.a <= 0) continue;
@@ -96,8 +90,7 @@ export function detectTheme(
       if (remaining < 0.001) break;
     }
     const schemes = getComputedStyle(document.documentElement).colorScheme.split(/\s+/);
-    const darkCanvas = schemes.includes('dark') &&
-      (!schemes.includes('light') || systemTheme() === 'dark');
+    const darkCanvas = schemes.includes('dark') && (!schemes.includes('light') || systemTheme() === 'dark');
     const canvas = darkCanvas ? 0 : 255;
     const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b + canvas * remaining) / 255;
     return luminance > 0.55 ? 'light' : 'dark';
@@ -107,17 +100,17 @@ export function detectTheme(
 }
 
 /** Observe only the signals needed by the chosen mode, coalescing page changes per frame. */
-export function observeTheme(
-  onTheme: (theme: ResolvedTheme) => void,
-  preference: IterationTheme = 'auto',
-): () => void {
+export function observeTheme(onTheme: (theme: ResolvedTheme) => void, preference: IterationTheme = 'auto'): () => void {
   let current: ResolvedTheme | undefined;
   let frame: number | undefined;
   let disposed = false;
   const shadows = new Set<ShadowRoot>();
-  const observer = preference === 'auto' ? new MutationObserver(records => {
-    if (records.some(record => !isPanel(record.target))) schedule();
-  }) : undefined;
+  const observer =
+    preference === 'auto'
+      ? new MutationObserver((records) => {
+          if (records.some((record) => !isPanel(record.target))) schedule();
+        })
+      : undefined;
   const observe = () => {
     if (!observer) return;
     observer.disconnect();
@@ -136,7 +129,9 @@ export function observeTheme(
       onTheme(next);
     }
   };
-  const schedule = () => { frame ??= window.requestAnimationFrame(sample); };
+  const schedule = () => {
+    frame ??= window.requestAnimationFrame(sample);
+  };
   sample();
   if (preference === 'light' || preference === 'dark') return () => {};
 

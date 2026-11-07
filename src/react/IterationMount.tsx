@@ -103,7 +103,8 @@ function withDocumentUntouched<T>(create: () => T): T {
  * new body, shadow root and all, instead of a fresh mount losing panel state.
  */
 /** `isotone serve` cannot swap files, so its empty list asks for knobs. */
-const KNOBS_EMPTY_TEXT = 'No knobs on this page yet. Ask your agent to add knobs for this page to .isotone/knobs.json and they will appear here.';
+const KNOBS_EMPTY_TEXT =
+  'No knobs on this page yet. Ask your agent to add knobs for this page to .isotone/knobs.json and they will appear here.';
 
 export function mountIteration(opts: MountIterationOptions): () => void {
   const getRoute = opts.getRoute ?? (() => window.location.pathname);
@@ -118,12 +119,7 @@ export function mountIteration(opts: MountIterationOptions): () => void {
   // get some later (no `refresh`) would mount an empty shadow root on every
   // such page. A hosted preview site is exactly that on axis-less
   // experiments, so skip the mount rather than leave a hollow host div.
-  if (
-    !opts.endpoint &&
-    variants &&
-    variants.getAxes().length === 0 &&
-    typeof (variants as { refresh?: unknown }).refresh !== 'function'
-  ) {
+  if (!opts.endpoint && variants && variants.getAxes().length === 0 && typeof (variants as { refresh?: unknown }).refresh !== 'function') {
     return () => {};
   }
 
@@ -276,9 +272,7 @@ function overlaySourceWithSave(
     if (moved.length) {
       parts.push(`Knobs: ${moved.map((m) => `${axisSection(m.axis).fullLabel} ${m.shown} (${m.axis.id})`).join('; ')}.`);
     }
-    const feedback = parts.length
-      ? `[set-defaults] ${parts.join(' ')}`
-      : '[set-defaults] The current defaults stay on this route.';
+    const feedback = parts.length ? `[set-defaults] ${parts.join(' ')}` : '[set-defaults] The current defaults stay on this route.';
     await notes.saveNote(
       getRoute(),
       feedback,
@@ -286,9 +280,7 @@ function overlaySourceWithSave(
       null,
       {
         variants: picked.length ? picked.map((p) => p.id).join(', ') : OVERLAY_DEFAULT_OPTION,
-        ...(moved.length
-          ? { knobs: moved.map((m) => `${m.axis.id}:${m.value}`).join(', ') }
-          : {}),
+        ...(moved.length ? { knobs: moved.map((m) => `${m.axis.id}:${m.value}`).join(', ') } : {}),
       },
       { w: window.innerWidth, h: window.innerHeight },
     );

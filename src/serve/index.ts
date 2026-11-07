@@ -78,8 +78,7 @@ function allowedOrigin(origin: string | undefined): string | null {
   if (!origin) return null;
   try {
     const { hostname, protocol } = new URL(origin);
-    const loopback =
-      hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1';
+    const loopback = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1';
     return loopback && (protocol === 'http:' || protocol === 'https:') ? origin : null;
   } catch {
     return null;
@@ -110,11 +109,7 @@ function bookmarklet(origin: string): string {
 }
 
 function escapeHtml(v: string): string {
-  return v
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function indexPage(origin: string, file: string): string {
@@ -198,9 +193,7 @@ function indexPage(origin: string, file: string): string {
 }
 
 /** Start the server. Resolves once it is listening. */
-export function serveIteration(
-  opts: ServeIterationOptions,
-): Promise<ServedIteration> {
+export function serveIteration(opts: ServeIterationOptions): Promise<ServedIteration> {
   const file = resolve(opts.file);
   const projectRoot = resolve(opts.projectRoot ?? dirname(file));
   const port = opts.port ?? DEFAULT_PORT;
@@ -223,7 +216,10 @@ export function serveIteration(
     try {
       if (!isLoopback(new URL(`http://${req.headers.host ?? ''}`).hostname)) throw new HttpError(403, 'host not allowed');
       checkOrigin(req.headers.origin, req.headers.host ?? '', true);
-    } catch (error) { sendFailure(res, error); return; }
+    } catch (error) {
+      sendFailure(res, error);
+      return;
+    }
 
     if (method === 'OPTIONS') {
       res.statusCode = 204;
@@ -233,12 +229,14 @@ export function serveIteration(
 
     if (path === UPDATE_ENDPOINT) {
       // POST asks for the update note, built from this server's own check.
-      (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined)).then((body) => {
-        const out = updateResponse(file, updates.getSnapshot(), { method, body });
-        res.statusCode = out.status;
-        for (const [key, value] of Object.entries(out.headers)) res.setHeader(key, value);
-        res.end(JSON.stringify(out.body));
-      }).catch((error) => sendFailure(res, error));
+      (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined))
+        .then((body) => {
+          const out = updateResponse(file, updates.getSnapshot(), { method, body });
+          res.statusCode = out.status;
+          for (const [key, value] of Object.entries(out.headers)) res.setHeader(key, value);
+          res.end(JSON.stringify(out.body));
+        })
+        .catch((error) => sendFailure(res, error));
       return;
     }
 
@@ -279,12 +277,14 @@ export function serveIteration(
         res.end(JSON.stringify({ error: 'method not allowed' }));
         return;
       }
-      (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined)).then((body) => {
-        const out = notesResponse(file, { method, url: req.url, body });
-        res.statusCode = out.status;
-        for (const [key, value] of Object.entries(out.headers)) res.setHeader(key, value);
-        res.end(JSON.stringify(out.body));
-      }).catch((error) => sendFailure(res, error));
+      (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined))
+        .then((body) => {
+          const out = notesResponse(file, { method, url: req.url, body });
+          res.statusCode = out.status;
+          for (const [key, value] of Object.entries(out.headers)) res.setHeader(key, value);
+          res.end(JSON.stringify(out.body));
+        })
+        .catch((error) => sendFailure(res, error));
       return;
     }
 
@@ -302,7 +302,10 @@ export function serveIteration(
 
   server.once('close', updates.dispose);
   return new Promise((ok, fail) => {
-    server.once('error', (error) => { updates.dispose(); fail(error); });
+    server.once('error', (error) => {
+      updates.dispose();
+      fail(error);
+    });
     server.listen(port, host, () => {
       const actual = server.address();
       boundPort = typeof actual === 'object' && actual ? actual.port : port;

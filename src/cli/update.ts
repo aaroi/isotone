@@ -9,7 +9,8 @@ export async function runCheckUpdate(args: string[], io: CliIO): Promise<number>
   }
   if (parseArgs(args, ['--manager'], ['--json']).length) throw new Error('check-update does not take positional arguments.');
   const manager = valueFor(args, '--manager');
-  if (manager !== undefined && manager !== 'npm' && manager !== 'pnpm' && manager !== 'yarn') throw new Error('--manager must be npm, pnpm or yarn.');
+  if (manager !== undefined && manager !== 'npm' && manager !== 'pnpm' && manager !== 'yarn')
+    throw new Error('--manager must be npm, pnpm or yarn.');
   const result = await checkUpdate(io.cwd, manager);
   if (args.includes('--json')) out(io, JSON.stringify(result, null, 2));
   else {

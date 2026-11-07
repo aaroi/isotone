@@ -23,11 +23,17 @@ export { updateNoteText } from './core/update';
  */
 export function updateRequestFrom(info: UpdateInfo, file?: string): UpdateRequest | null {
   if (info.status !== 'available' || !info.latestVersion || !info.upgrade) return null;
-  return updateRequestOf({
-    from: info.currentVersion, to: info.latestVersion,
-    command: info.upgrade.command, cwd: info.upgrade.cwd, manager: info.upgrade.manager,
-    changelog: changelogUrl(info.latestVersion),
-  }, file === undefined ? {} : { root: notesProjectRoot(file) });
+  return updateRequestOf(
+    {
+      from: info.currentVersion,
+      to: info.latestVersion,
+      command: info.upgrade.command,
+      cwd: info.upgrade.cwd,
+      manager: info.upgrade.manager,
+      changelog: changelogUrl(info.latestVersion),
+    },
+    file === undefined ? {} : { root: notesProjectRoot(file) },
+  );
 }
 
 const MAX_ROUTE = 2000;
@@ -50,8 +56,14 @@ export function requestUpdateNote(file: string, info: UpdateInfo, route = '/'): 
     if (!current) {
       const id = randomUUID();
       notes.push({
-        id, route: where, feedback: updateNoteText(update), element: null,
-        done: false, doneAt: null, createdAt: new Date().toISOString(), update,
+        id,
+        route: where,
+        feedback: updateNoteText(update),
+        element: null,
+        done: false,
+        doneAt: null,
+        createdAt: new Date().toISOString(),
+        update,
       });
       writeNotes(file, notes);
       return { id, created: true };
@@ -67,7 +79,11 @@ export function requestUpdateNote(file: string, info: UpdateInfo, route = '/'): 
       delete current.workingAt;
       changed = true;
     }
-    if (changed) writeNotes(file, notes.filter((note) => note === current || !open.includes(note)));
+    if (changed)
+      writeNotes(
+        file,
+        notes.filter((note) => note === current || !open.includes(note)),
+      );
     return { id: current.id, created: false };
   });
 }
@@ -100,7 +116,9 @@ async function readNoted(file: string): Promise<Record<string, string>> {
     if ((await stat(file)).size > 64 * 1024) return {};
     const data = JSON.parse(await readFile(file, 'utf8'));
     return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
-  } catch { return {}; }
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -116,7 +134,11 @@ export async function autoUpdateNote(file: string, info: UpdateInfo, options: { 
   const key = resolve(file);
   const noted = await readNoted(stateFile);
   const seen = noted[key];
-  try { if (typeof seen === 'string' && compareVersions(seen, update.to) >= 0) return null; } catch { /* Malformed: ask again. */ }
+  try {
+    if (typeof seen === 'string' && compareVersions(seen, update.to) >= 0) return null;
+  } catch {
+    /* Malformed: ask again. */
+  }
   const result = requestUpdateNote(file, info, '/');
   delete noted[key];
   const entries = [...Object.entries(noted).filter(([, value]) => typeof value === 'string'), [key, update.to]].slice(-NOTED_LIMIT);
@@ -125,6 +147,8 @@ export async function autoUpdateNote(file: string, info: UpdateInfo, options: { 
     await mkdir(dirname(stateFile), { recursive: true });
     await writeFile(temporary, JSON.stringify(Object.fromEntries(entries)), { mode: 0o600, flag: 'wx' });
     await rename(temporary, stateFile);
-  } finally { await rm(temporary, { force: true }); }
+  } finally {
+    await rm(temporary, { force: true });
+  }
   return result?.id ?? null;
 }

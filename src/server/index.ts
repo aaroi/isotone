@@ -118,9 +118,7 @@ export async function serveVariantsRequest(
     const url = new URL(request.url);
     checkOrigin(request.headers.get('origin'), url.host, options.loopbackOrigins);
     const body = request.method === 'POST' ? await readWebJson(request) : undefined;
-    const mounted = url.pathname.startsWith(VARIANTS_ENDPOINT)
-      ? url.pathname.slice(VARIANTS_ENDPOINT.length)
-      : url.pathname;
+    const mounted = url.pathname.startsWith(VARIANTS_ENDPOINT) ? url.pathname.slice(VARIANTS_ENDPOINT.length) : url.pathname;
     return variantsResponse(opts, {
       method: request.method,
       url: `${mounted || '/'}?${url.searchParams.toString()}`,

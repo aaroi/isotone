@@ -19,10 +19,7 @@ import {
   type VariantAxis,
 } from '../src/core/variants';
 
-function variant(
-  id: string,
-  extra: Partial<Omit<OverlayVariantStatus, 'files'>> & { files?: string[] } = {},
-): OverlayVariantStatus {
+function variant(id: string, extra: Partial<Omit<OverlayVariantStatus, 'files'>> & { files?: string[] } = {}): OverlayVariantStatus {
   const { files, ...rest } = extra;
   return {
     id,
@@ -95,14 +92,8 @@ describe('overlayGroups', () => {
   });
 
   it('keeps the id stable whatever order the members arrive in', () => {
-    const forward = overlayGroups([
-      variant('b', { files: ['src/x.tsx'] }),
-      variant('a', { files: ['src/x.tsx'] }),
-    ]);
-    const reverse = overlayGroups([
-      variant('a', { files: ['src/x.tsx'] }),
-      variant('b', { files: ['src/x.tsx'] }),
-    ]);
+    const forward = overlayGroups([variant('b', { files: ['src/x.tsx'] }), variant('a', { files: ['src/x.tsx'] })]);
+    const reverse = overlayGroups([variant('a', { files: ['src/x.tsx'] }), variant('b', { files: ['src/x.tsx'] })]);
     expect(forward[0].id).toBe('a+b');
     expect(reverse[0].id).toBe('a+b');
   });
@@ -128,11 +119,7 @@ describe('overlayAxes', () => {
     );
     expect(axes.map((a) => a.id)).toEqual(['table-dense+table-striped', 'any']);
     expect(axes[0].label).toBe('table.tsx');
-    expect(axes[0].options.map((o) => o.id)).toEqual([
-      OVERLAY_DEFAULT_OPTION,
-      'table-dense',
-      'table-striped',
-    ]);
+    expect(axes[0].options.map((o) => o.id)).toEqual([OVERLAY_DEFAULT_OPTION, 'table-dense', 'table-striped']);
     expect(axes[0].defaultOption).toBe(OVERLAY_DEFAULT_OPTION);
   });
 
@@ -144,19 +131,13 @@ describe('overlayAxes', () => {
       active: ['pricing-b'],
     };
     expect(overlayAxes(list, '/about')).toEqual([]);
-    expect(overlayAxes(list, '/pricing')[0].options.map((o) => o.id)).toEqual([
-      OVERLAY_DEFAULT_OPTION,
-      'pricing-b',
-    ]);
+    expect(overlayAxes(list, '/pricing')[0].options.map((o) => o.id)).toEqual([OVERLAY_DEFAULT_OPTION, 'pricing-b']);
   });
 
   it('shows only the members that belong to the route', () => {
     const [axis] = overlayAxes(
       {
-        variants: [
-          variant('a', { group: 'g', route: '/here' }),
-          variant('b', { group: 'g', route: '/there' }),
-        ],
+        variants: [variant('a', { group: 'g', route: '/here' }), variant('b', { group: 'g', route: '/there' })],
         active: [],
       },
       '/here',
@@ -196,10 +177,7 @@ describe('knobs', () => {
   };
 
   it('belongs on the routes it names, and everywhere when it names none', () => {
-    expect(knobsFor([fade, dots, ink], '/computers/cmp_1').map((k) => k.id)).toEqual([
-      'fade-from',
-      'dot-alpha',
-    ]);
+    expect(knobsFor([fade, dots, ink], '/computers/cmp_1').map((k) => k.id)).toEqual(['fade-from', 'dot-alpha']);
     expect(knobsFor([fade, dots, ink], '/settings').map((k) => k.id)).toEqual(['dot-alpha', 'ink']);
     expect(knobsFor(undefined, '/')).toEqual([]);
   });
@@ -230,8 +208,25 @@ describe('createVariantsSource manage', () => {
     const onManage = vi.fn();
     const source = createVariantsSource({
       axes: [
-        { id: 'layout', label: 'Layout', options: [{ id: 'grid', label: 'Grid' }, { id: 'stack', label: 'Stack' }], defaultOption: 'grid' },
-        { kind: 'color', id: 'accent', label: 'Accent', swatches: [{ id: 'blue', label: 'Blue', value: '#0000ff' }, { id: 'red', label: 'Red', value: '#ff0000' }], defaultColor: '#0000ff' },
+        {
+          id: 'layout',
+          label: 'Layout',
+          options: [
+            { id: 'grid', label: 'Grid' },
+            { id: 'stack', label: 'Stack' },
+          ],
+          defaultOption: 'grid',
+        },
+        {
+          kind: 'color',
+          id: 'accent',
+          label: 'Accent',
+          swatches: [
+            { id: 'blue', label: 'Blue', value: '#0000ff' },
+            { id: 'red', label: 'Red', value: '#ff0000' },
+          ],
+          defaultColor: '#0000ff',
+        },
       ],
       onManage,
     });
@@ -239,8 +234,13 @@ describe('createVariantsSource manage', () => {
     await source.manage?.({ axisId: 'accent', action: 'keep-option', optionId: 'red' });
     expect(source.getAxes()).toEqual([]);
     expect(source.getSelections()).toEqual({ layout: 'stack', accent: '#ff0000' });
-    await expect(createVariantsSource({ axes: [{ id: 'x', label: 'X', options: [{ id: 'a', label: 'A' }], defaultOption: 'a' }] })
-      .manage?.({ axisId: 'x', action: 'keep-option', optionId: 'gone' })).rejects.toThrow('no longer available');
+    await expect(
+      createVariantsSource({ axes: [{ id: 'x', label: 'X', options: [{ id: 'a', label: 'A' }], defaultOption: 'a' }] }).manage?.({
+        axisId: 'x',
+        action: 'keep-option',
+        optionId: 'gone',
+      }),
+    ).rejects.toThrow('no longer available');
   });
 });
 
@@ -256,7 +256,11 @@ describe('colour picker maths', async () => {
 describe('sections', () => {
   it('reads a spaced > (or ›) as the section separator, and nothing else', () => {
     expect(splitSectionLabel('Header > Logo size')).toEqual({ section: 'Header', label: 'Logo size', fullLabel: 'Header › Logo size' });
-    expect(splitSectionLabel('  Header   ›   Logo  size ')).toEqual({ section: 'Header', label: 'Logo size', fullLabel: 'Header › Logo size' });
+    expect(splitSectionLabel('  Header   ›   Logo  size ')).toEqual({
+      section: 'Header',
+      label: 'Logo size',
+      fullLabel: 'Header › Logo size',
+    });
     // Only the first separator splits; the rest belongs to the name.
     expect(splitSectionLabel('Header > Nav > Gap')).toMatchObject({ section: 'Header', label: 'Nav > Gap' });
     // A slash never makes a section: binary selectors are named this way.
@@ -267,7 +271,11 @@ describe('sections', () => {
   });
 
   it('lets an explicit section override the prefix', () => {
-    expect(splitSectionLabel('Light / Dark', 'Theme')).toEqual({ section: 'Theme', label: 'Light / Dark', fullLabel: 'Theme › Light / Dark' });
+    expect(splitSectionLabel('Light / Dark', 'Theme')).toEqual({
+      section: 'Theme',
+      label: 'Light / Dark',
+      fullLabel: 'Theme › Light / Dark',
+    });
     // A prefix that repeats the section is not printed twice.
     expect(splitSectionLabel('header > Logo', 'Header')).toMatchObject({ section: 'Header', label: 'Logo' });
     // An empty section opts out of the prefix entirely.
@@ -275,9 +283,17 @@ describe('sections', () => {
     expect(splitSectionLabel('Logo', '  ')).toMatchObject({ section: null, label: 'Logo' });
   });
 
-  const select = (id: string, label: string, extra: Partial<VariantAxis> = {}): VariantAxis => ({
-    id, label, defaultOption: 'a', options: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], ...extra,
-  } as VariantAxis);
+  const select = (id: string, label: string, extra: Partial<VariantAxis> = {}): VariantAxis =>
+    ({
+      id,
+      label,
+      defaultOption: 'a',
+      options: [
+        { id: 'a', label: 'A' },
+        { id: 'b', label: 'B' },
+      ],
+      ...extra,
+    }) as VariantAxis;
 
   it('puts loose selectors first, then sections in order of first appearance', () => {
     const sections = sectionAxes([

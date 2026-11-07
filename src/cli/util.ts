@@ -43,11 +43,7 @@ export function has(args: string[], name: string): boolean {
 }
 
 /** Validate a command before it reads or writes files. Returns its positionals. */
-export function parseArgs(
-  args: string[],
-  values: readonly string[],
-  booleans: readonly string[] = [],
-): string[] {
+export function parseArgs(args: string[], values: readonly string[], booleans: readonly string[] = []): string[] {
   const positionals: string[] = [];
   const seen = new Set<string>();
   for (let i = 0; i < args.length; i++) {
@@ -68,10 +64,7 @@ export function parseArgs(
 
 /** Pulls a `--flag value` pair out of an argv slice, wherever it sits, so a
  *  subcommand's own positional parsing never has to skip over it by index. */
-export function extractFlag(
-  args: string[],
-  flag: string,
-): { value: string | undefined; rest: string[] } {
+export function extractFlag(args: string[], flag: string): { value: string | undefined; rest: string[] } {
   const idx = args.indexOf(flag);
   if (idx < 0) return { value: undefined, rest: args };
   const rest = args.filter((_, i) => i !== idx && i !== idx + 1);
@@ -79,10 +72,7 @@ export function extractFlag(
 }
 
 /** Same idea as {@link extractFlag}, for a flag with no value of its own. */
-export function extractBoolFlag(
-  args: string[],
-  flag: string,
-): { present: boolean; rest: string[] } {
+export function extractBoolFlag(args: string[], flag: string): { present: boolean; rest: string[] } {
   const idx = args.indexOf(flag);
   if (idx < 0) return { present: false, rest: args };
   return { present: true, rest: args.filter((_, i) => i !== idx) };
@@ -94,9 +84,7 @@ export function findNoteByPrefix<T extends { id: string }>(notes: T[], prefix: s
   const matches = notes.filter((n) => n.id.startsWith(prefix));
   if (matches.length === 0) throw new Error(`No feedback id starting with "${prefix}".`);
   if (matches.length > 1) {
-    throw new Error(
-      `Ambiguous prefix "${prefix}" (${matches.length} matches) — use more characters.`,
-    );
+    throw new Error(`Ambiguous prefix "${prefix}" (${matches.length} matches) — use more characters.`);
   }
   return matches[0];
 }
@@ -106,7 +94,10 @@ export function findNoteByPrefix<T extends { id: string }>(notes: T[], prefix: s
 export function printTable(io: CliIO, header: string[], rows: string[][]): void {
   const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => (r[i] ?? '').length)));
   const line = (cells: string[]) =>
-    cells.map((c, i) => (c ?? '').padEnd(widths[i])).join('  ').trimEnd();
+    cells
+      .map((c, i) => (c ?? '').padEnd(widths[i]))
+      .join('  ')
+      .trimEnd();
   out(io, line(header));
   for (const row of rows) out(io, line(row));
 }

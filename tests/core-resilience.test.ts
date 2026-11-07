@@ -2,25 +2,39 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createIterationStore, type IterationNote } from '../src/core';
 import { FEEDBACK_STORAGE_KEY } from '../src/core/browser-storage';
 import { MAX_FEEDBACK_LENGTH } from '../src/core/limits';
-import { createOverlayVariantsSource, createVariantsSource, visibleAxes, type OverlayVariantsList, type SelectVariantAxis } from '../src/core/variants';
+import {
+  createOverlayVariantsSource,
+  createVariantsSource,
+  visibleAxes,
+  type OverlayVariantsList,
+  type SelectVariantAxis,
+} from '../src/core/variants';
 import { request } from '../src/core/request';
 
-afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 function storage() {
   const values = new Map<string, string>();
-  vi.stubGlobal('window', { localStorage: {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => values.set(key, value),
-    removeItem: (key: string) => values.delete(key),
-  } });
+  vi.stubGlobal('window', {
+    localStorage: {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    },
+  });
   return values;
 }
 
 describe('offline recovery', () => {
   it('does not discard a note when a successful HTTP response has no acknowledgement', async () => {
     storage();
-    vi.stubGlobal('fetch', vi.fn(async (_url, init?: RequestInit) => Response.json(init?.method === 'POST' ? {} : [])));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, init?: RequestInit) => Response.json(init?.method === 'POST' ? {} : [])),
+    );
     const store = createIterationStore({ endpoint: '/notes' });
     const id = await store.saveNote('/', 'Keep until acknowledged', null, null);
     expect(store.lastSave).toBe('local');
@@ -31,15 +45,21 @@ describe('offline recovery', () => {
     storage();
     const saved = new Map<string, IterationNote>();
     let fail = true;
-    vi.stubGlobal('fetch', vi.fn(async (_url, init?: RequestInit) => {
-      if (init?.method === 'POST') {
-        const item = JSON.parse(String(init.body));
-        saved.set(item.id, { ...item, createdAt: new Date().toISOString(), done: false });
-        if (fail) { fail = false; throw new Error('Connection lost after commit'); }
-        return Response.json({ id: item.id });
-      }
-      return Response.json([...saved.values()]);
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          const item = JSON.parse(String(init.body));
+          saved.set(item.id, { ...item, createdAt: new Date().toISOString(), done: false });
+          if (fail) {
+            fail = false;
+            throw new Error('Connection lost after commit');
+          }
+          return Response.json({ id: item.id });
+        }
+        return Response.json([...saved.values()]);
+      }),
+    );
     const store = createIterationStore({ endpoint: '/notes' });
     const id = await store.saveNote('/', 'Keep me exactly once', null, null);
     expect(store.lastSave).toBe('local');
@@ -55,12 +75,15 @@ describe('offline recovery', () => {
     const first = await local.saveNote('/', 'First', null, null);
     const second = await local.saveNote('/', 'Second', null, null);
     const posted: string[] = [];
-    vi.stubGlobal('fetch', vi.fn(async (_url, init?: RequestInit) => {
-      if (!init?.method) return Response.json([]);
-      const item = JSON.parse(String(init.body));
-      posted.push(item.id);
-      return item.id === first ? Response.json({ id: first }) : new Response(null, { status: 503 });
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, init?: RequestInit) => {
+        if (!init?.method) return Response.json([]);
+        const item = JSON.parse(String(init.body));
+        posted.push(item.id);
+        return item.id === first ? Response.json({ id: first }) : new Response(null, { status: 503 });
+      }),
+    );
     const remote = createIterationStore({ endpoint: '/notes' });
     await remote.listNotes();
     await remote.listNotes();
@@ -70,40 +93,52 @@ describe('offline recovery', () => {
 
   it('rejects overlong feedback before an offline save can block the queue', async () => {
     storage();
-    const fetcher = vi.fn(async () => { throw new Error('Offline'); });
+    const fetcher = vi.fn(async () => {
+      throw new Error('Offline');
+    });
     vi.stubGlobal('fetch', fetcher);
     const store = createIterationStore({ endpoint: '/notes' });
-    await expect(store.saveNote('/', 'x'.repeat(MAX_FEEDBACK_LENGTH + 1), null, null))
-      .rejects.toThrow(`at most ${MAX_FEEDBACK_LENGTH} characters`);
+    await expect(store.saveNote('/', 'x'.repeat(MAX_FEEDBACK_LENGTH + 1), null, null)).rejects.toThrow(
+      `at most ${MAX_FEEDBACK_LENGTH} characters`,
+    );
     expect(await createIterationStore().listNotes()).toEqual([]);
     expect(fetcher).not.toHaveBeenCalled();
   });
 
   it('keeps old or rejected notes locally while syncing later valid notes', async () => {
     const values = storage();
-    const old = { id: 'old-long', route: '/', feedback: 'x'.repeat(MAX_FEEDBACK_LENGTH + 1),
-      element: null, done: false, createdAt: '2026-01-01T00:00:00Z' };
+    const old = {
+      id: 'old-long',
+      route: '/',
+      feedback: 'x'.repeat(MAX_FEEDBACK_LENGTH + 1),
+      element: null,
+      done: false,
+      createdAt: '2026-01-01T00:00:00Z',
+    };
     const rejected = { ...old, id: 'rejected', feedback: 'Server rejects this', createdAt: '2026-01-01T00:00:01Z' };
     const later = { ...old, id: 'later', feedback: 'Sync this', createdAt: '2026-01-01T00:00:02Z' };
     values.set(FEEDBACK_STORAGE_KEY, JSON.stringify([old, rejected, later]));
     const posted: string[] = [];
     const remote: IterationNote[] = [];
-    vi.stubGlobal('fetch', vi.fn(async (_url, init?: RequestInit) => {
-      if (init?.method === 'POST') {
-        const item = JSON.parse(String(init.body)) as IterationNote;
-        posted.push(item.id);
-        if (item.id === rejected.id) return Response.json({ error: 'invalid' }, { status: 400 });
-        remote.push(item);
-        return Response.json({ id: item.id });
-      }
-      return Response.json(remote);
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          const item = JSON.parse(String(init.body)) as IterationNote;
+          posted.push(item.id);
+          if (item.id === rejected.id) return Response.json({ error: 'invalid' }, { status: 400 });
+          remote.push(item);
+          return Response.json({ id: item.id });
+        }
+        return Response.json(remote);
+      }),
+    );
     const store = createIterationStore({ endpoint: '/notes' });
-    expect((await store.listNotes()).map(note => note.id)).toEqual(['later', 'rejected', 'old-long']);
+    expect((await store.listNotes()).map((note) => note.id)).toEqual(['later', 'rejected', 'old-long']);
     expect(posted).toEqual(['rejected', 'later']);
-    expect(remote.map(note => note.id)).toEqual(['later']);
+    expect(remote.map((note) => note.id)).toEqual(['later']);
     expect(store.hasUnsyncedNotes).toBe(true);
-    expect((await createIterationStore().listNotes()).map(note => note.id)).toEqual(['rejected', 'old-long']);
+    expect((await createIterationStore().listNotes()).map((note) => note.id)).toEqual(['rejected', 'old-long']);
     await store.saveNote('/', 'New successful note', null, null);
     expect(store.lastSave).toBe('server');
   });
@@ -113,11 +148,19 @@ describe('offline recovery', () => {
     const local = createIterationStore();
     const id = await local.saveNote('/', 'Before', null, null);
     let release!: () => void;
-    const paused = new Promise<void>((resolve) => { release = resolve; });
-    vi.stubGlobal('fetch', vi.fn(async (_url, init?: RequestInit) => {
-      if (init?.method === 'POST') { await paused; return Response.json({ id }); }
-      return Response.json([]);
-    }));
+    const paused = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, init?: RequestInit) => {
+        if (init?.method === 'POST') {
+          await paused;
+          return Response.json({ id });
+        }
+        return Response.json([]);
+      }),
+    );
     const remote = createIterationStore({ endpoint: '/notes' });
     const firstRead = remote.listNotes();
     const concurrentRead = remote.pendingNotes();
@@ -141,8 +184,15 @@ describe('offline recovery', () => {
   });
 
   it('can save to the server when browser storage is blocked', async () => {
-    vi.stubGlobal('window', { get localStorage() { throw new Error('Storage blocked'); } });
-    vi.stubGlobal('fetch', vi.fn(async (_url, init?: RequestInit) => Response.json({ id: JSON.parse(String(init?.body)).id })));
+    vi.stubGlobal('window', {
+      get localStorage() {
+        throw new Error('Storage blocked');
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, init?: RequestInit) => Response.json({ id: JSON.parse(String(init?.body)).id })),
+    );
     const store = createIterationStore({ endpoint: '/notes' });
     await expect(store.saveNote('/', 'Server persisted', null, null)).resolves.toBeTypeOf('string');
     expect(store.lastSave).toBe('server');
@@ -153,13 +203,16 @@ describe('bounded local transport', () => {
   function stalledBody(status = 200) {
     const response = new Response(null, { status });
     vi.spyOn(response, 'json').mockImplementation(() => new Promise(() => {}));
-    vi.stubGlobal('fetch', vi.fn(async () => response));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response),
+    );
   }
 
   it('times out a JSON body even after its headers arrived', async () => {
     vi.useFakeTimers();
     stalledBody();
-    const reading = request('/notes', undefined, response => response.json());
+    const reading = request('/notes', undefined, (response) => response.json());
     const rejected = expect(reading).rejects.toThrow('did not respond in time');
     await vi.advanceTimersByTimeAsync(5000);
     await rejected;
@@ -204,7 +257,7 @@ describe('bounded local transport', () => {
     vi.useFakeTimers();
     stalledBody();
     const controller = new AbortController();
-    const reading = request('/notes', { signal: controller.signal }, response => response.json());
+    const reading = request('/notes', { signal: controller.signal }, (response) => response.json());
     const rejected = expect(reading).rejects.toThrow('Stop reading');
     await Promise.resolve();
     controller.abort(new Error('Stop reading'));
@@ -214,10 +267,19 @@ describe('bounded local transport', () => {
 });
 
 describe('large selector graphs', () => {
-  const axis = (id: string): SelectVariantAxis => ({ id, label: id, defaultOption: 'on', options: [{ id: 'on', label: 'On' }, { id: 'off', label: 'Off' }] });
+  const axis = (id: string): SelectVariantAxis => ({
+    id,
+    label: id,
+    defaultOption: 'on',
+    options: [
+      { id: 'on', label: 'On' },
+      { id: 'off', label: 'Off' },
+    ],
+  });
 
   it('evaluates 10,000 dependent axes without recursion or leaking hidden descendants', () => {
-    const axes = Array.from({ length: 10_000 }, (_, i) => ({ ...axis(String(i)),
+    const axes = Array.from({ length: 10_000 }, (_, i) => ({
+      ...axis(String(i)),
       ...(i ? { showWhen: { axis: String(i - 1), equals: 'on' } } : {}),
     })).reverse();
     expect(visibleAxes(axes, {})).toHaveLength(10_000);
@@ -242,14 +304,19 @@ describe('overlay activation races', () => {
 
   it('serializes rapid picks and keeps both groups when an earlier activation fails', async () => {
     let release!: (response: Response) => void;
-    const first = new Promise<Response>((resolve) => { release = resolve; });
+    const first = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
     const posts: string[][] = [];
-    vi.stubGlobal('fetch', vi.fn(async (_url, init?: RequestInit) => {
-      if (init?.method !== 'POST') return Response.json(listing);
-      const { active } = JSON.parse(String(init.body));
-      posts.push(active);
-      return posts.length === 1 ? first : Response.json({ active });
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, init?: RequestInit) => {
+        if (init?.method !== 'POST') return Response.json(listing);
+        const { active } = JSON.parse(String(init.body));
+        posts.push(active);
+        return posts.length === 1 ? first : Response.json({ active });
+      }),
+    );
     const store = source();
     await store.refresh();
     store.setSelection('a', 'a');
@@ -266,10 +333,13 @@ describe('overlay activation races', () => {
 
   it('reports failure, rolls back to confirmed selections and can retry', async () => {
     let failing = true;
-    vi.stubGlobal('fetch', vi.fn(async (_url, init?: RequestInit) => {
-      if (init?.method !== 'POST') return Response.json(listing);
-      return failing ? new Response(null, { status: 409 }) : Response.json({ active: ['a'] });
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, init?: RequestInit) => {
+        if (init?.method !== 'POST') return Response.json(listing);
+        return failing ? new Response(null, { status: 409 }) : Response.json({ active: ['a'] });
+      }),
+    );
     const store = source();
     await store.refresh();
     store.setSelection('a', 'a');
@@ -286,11 +356,16 @@ describe('overlay activation races', () => {
   it('does not let an older listing undo an activation completed during refresh', async () => {
     let release!: (response: Response) => void;
     let getCount = 0;
-    vi.stubGlobal('fetch', vi.fn(async (_url, init?: RequestInit) => {
-      if (init?.method === 'POST') return Response.json({ active: ['a'] });
-      if (++getCount === 1) return Response.json(listing);
-      return new Promise<Response>((resolve) => { release = resolve; });
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, init?: RequestInit) => {
+        if (init?.method === 'POST') return Response.json({ active: ['a'] });
+        if (++getCount === 1) return Response.json(listing);
+        return new Promise<Response>((resolve) => {
+          release = resolve;
+        });
+      }),
+    );
     const store = source();
     await store.refresh();
     const refresh = store.refresh();
@@ -318,7 +393,10 @@ describe('overlay source over a live tab', () => {
         for (const l of listeners) l();
         return false;
       }),
-      subscribe: (l: () => void) => { listeners.add(l); return () => listeners.delete(l); },
+      subscribe: (l: () => void) => {
+        listeners.add(l);
+        return () => listeners.delete(l);
+      },
       reload: vi.fn(),
     };
     return live;
@@ -326,11 +404,14 @@ describe('overlay source over a live tab', () => {
 
   it('shows the tab selection at once and still tells the server', async () => {
     const posts: string[][] = [];
-    vi.stubGlobal('fetch', vi.fn(async (_url, init?: RequestInit) => {
-      if (init?.method !== 'POST') return Response.json({ ...listing, active: ['b'] });
-      posts.push(JSON.parse(String(init.body)).active);
-      return Response.json({ active: posts.at(-1) });
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, init?: RequestInit) => {
+        if (init?.method !== 'POST') return Response.json({ ...listing, active: ['b'] });
+        posts.push(JSON.parse(String(init.body)).active);
+        return Response.json({ active: posts.at(-1) });
+      }),
+    );
     const live = fakeLive();
     const source = createOverlayVariantsSource({ endpoint: '/variants', getRoute: () => '/', storage: null, knobRoot: null, live });
     await source.refresh();
@@ -346,10 +427,15 @@ describe('overlay source over a live tab', () => {
 
   it('reloads once the server has the set, when the tab cannot switch in place', async () => {
     let release!: (response: Response) => void;
-    vi.stubGlobal('fetch', vi.fn(async (_url, init?: RequestInit) => {
-      if (init?.method !== 'POST') return Response.json(listing);
-      return new Promise<Response>((resolve) => { release = resolve; });
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, init?: RequestInit) => {
+        if (init?.method !== 'POST') return Response.json(listing);
+        return new Promise<Response>((resolve) => {
+          release = resolve;
+        });
+      }),
+    );
     const live = fakeLive(['b']);
     const source = createOverlayVariantsSource({ endpoint: '/variants', getRoute: () => '/', storage: null, knobRoot: null, live });
     await source.refresh();

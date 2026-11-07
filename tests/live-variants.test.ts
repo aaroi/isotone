@@ -11,14 +11,7 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  dispatcherModule,
-  type LiveConfig,
-  type LiveStore,
-  liveBinder,
-  liveStore,
-  liveStoreScript,
-} from '../src/vite/live';
+import { dispatcherModule, type LiveConfig, type LiveStore, liveBinder, liveStore, liveStoreScript } from '../src/vite/live';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -144,7 +137,10 @@ describe('the live store', () => {
     (window as { __isotoneFetch?: unknown }).__isotoneFetch = fetch;
     const reload = vi.fn();
     const location = window.location;
-    Object.defineProperty(window, 'location', { configurable: true, value: { ...location, reload, pathname: '/', search: '?v=hooks:hook-x', hash: '' } });
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...location, reload, pathname: '/', search: '?v=hooks:hook-x', hash: '' },
+    });
     const ready = vi.spyOn(document, 'readyState', 'get').mockReturnValue('loading');
     try {
       sessionStorage.clear();
@@ -152,9 +148,13 @@ describe('the live store', () => {
       const store = liveStore(window as LiveWindow, { ...CONFIG, ssr: true });
       store.register('src/use-label.ts', [null, 'hook-x'], true);
       await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
-      expect(fetch).toHaveBeenCalledWith('/api/iteration/variants/active', expect.objectContaining({
-        method: 'POST', body: JSON.stringify({ active: ['hook-x'] }),
-      }));
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/iteration/variants/active',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ active: ['hook-x'] }),
+        }),
+      );
       // A second load that still disagrees does not loop.
       delete (window as LiveWindow).__isotoneLive;
       const again = liveStore(window as LiveWindow, { ...CONFIG, ssr: true });
@@ -255,7 +255,9 @@ describe('the live binder', () => {
     act(() => host.querySelector('button')?.click());
     expect(host.textContent).toBe('1base');
     const before = renders;
-    act(() => { store.select(['picker-a']); });
+    act(() => {
+      store.select(['picker-a']);
+    });
     expect(host.textContent).toBe('1A');
     expect(renders).toBe(before);
   });
@@ -264,10 +266,15 @@ describe('the live binder', () => {
     const store = makeStore('/?v=nav:picker-a');
     const register = vi.spyOn(store, 'register');
     const shared = { size: 20 };
-    const out = bind(store, [null, 'picker-a'], [
-      { PAGE: 20, config: shared, useLabel: () => 'base' },
-      { PAGE: 20, config: shared, useLabel: () => 'a' },
-    ], ['PAGE', 'config', 'useLabel']);
+    const out = bind(
+      store,
+      [null, 'picker-a'],
+      [
+        { PAGE: 20, config: shared, useLabel: () => 'base' },
+        { PAGE: 20, config: shared, useLabel: () => 'a' },
+      ],
+      ['PAGE', 'config', 'useLabel'],
+    );
     expect(out.PAGE).toBe(20);
     expect(out.config).toBe(shared);
     expect((out.useLabel as () => string)()).toBe('a');
@@ -288,7 +295,9 @@ describe('the live binder', () => {
     expect(register).toHaveBeenLastCalledWith('src/Picker.tsx', [null, 'picker-a'], false);
     act(() => root.render(createElement(out.Card as React.FC)));
     expect(host.textContent).toBe('memo base');
-    act(() => { store.select(['picker-a']); });
+    act(() => {
+      store.select(['picker-a']);
+    });
     expect(host.textContent).toBe('memo a');
   });
 
@@ -296,15 +305,21 @@ describe('the live binder', () => {
     const store = makeStore('/');
     const Header = () => createElement('h1', null, 'base header');
     const AHeader = () => createElement('h1', null, 'a header');
-    const Card = Object.assign((props: { ref?: React.Ref<HTMLElement> }) => createElement('section', { ref: props.ref }, 'base'), { Header });
-    const ACard = Object.assign((props: { ref?: React.Ref<HTMLElement> }) => createElement('section', { ref: props.ref }, 'a'), { Header: AHeader });
+    const Card = Object.assign((props: { ref?: React.Ref<HTMLElement> }) => createElement('section', { ref: props.ref }, 'base'), {
+      Header,
+    });
+    const ACard = Object.assign((props: { ref?: React.Ref<HTMLElement> }) => createElement('section', { ref: props.ref }, 'a'), {
+      Header: AHeader,
+    });
     const out = bind(store, [null, 'picker-a'], [{ Card }, { Card: ACard }], ['Card']);
     const Wrapped = out.Card as React.FC<{ ref?: React.Ref<HTMLElement> }> & { Header: React.FC };
     const ref = React.createRef<HTMLElement>();
     act(() => root.render(createElement(Wrapped, { ref })));
     expect(ref.current?.tagName).toBe('SECTION');
     expect(Wrapped.Header).toBe(Header);
-    act(() => { store.select(['picker-a']); });
+    act(() => {
+      store.select(['picker-a']);
+    });
     expect(Wrapped.Header).toBe(AHeader);
   });
 
@@ -313,7 +328,9 @@ describe('the live binder', () => {
     const out = bind(store, [null, 'picker-a'], [{ Badge: () => createElement('i', null, 'badge') }, {}], ['Badge']);
     act(() => root.render(createElement(out.Badge as React.FC)));
     expect(host.textContent).toBe('badge');
-    act(() => { store.select(['picker-a']); });
+    act(() => {
+      store.select(['picker-a']);
+    });
     expect(host.textContent).toBe('');
   });
 });
@@ -343,10 +360,12 @@ describe('dispatcherModule', () => {
     g.__v0 = { Picker: () => createElement('b', null, 'base'), PAGE: 20 };
     g.__v1 = { Picker: () => createElement('b', null, 'A'), PAGE: 20 };
     const url = `data:text/javascript,${encodeURIComponent(code)}`;
-    const mod = await import(/* @vite-ignore */ url) as { Picker: React.FC; PAGE: number };
+    const mod = (await import(/* @vite-ignore */ url)) as { Picker: React.FC; PAGE: number };
     expect(mod.PAGE).toBe(20);
     expect((mod.Picker as { displayName?: string }).displayName).toBe('Picker');
-    delete g.__liveBinder; delete g.__v0; delete g.__v1;
+    delete g.__liveBinder;
+    delete g.__v0;
+    delete g.__v1;
   });
 });
 
@@ -368,15 +387,22 @@ describe('the binder after the review', () => {
 
   it('renders through the stand-in a cycle captured early', () => {
     const store = makeStore('/');
-    const out = bindAs('src/Picker.tsx', store, [null, 'picker-a'], [
-      { Picker: () => createElement('b', null, 'base') },
-      { Picker: () => createElement('b', null, 'A') },
-    ], ['Picker']);
+    const out = bindAs(
+      'src/Picker.tsx',
+      store,
+      [null, 'picker-a'],
+      [{ Picker: () => createElement('b', null, 'base') }, { Picker: () => createElement('b', null, 'A') }],
+      ['Picker'],
+    );
     const render = (out as unknown as { __isotoneRender: (n: string, p: object) => unknown }).__isotoneRender;
-    function StandIn(props: object) { return render('Picker', props) as React.ReactElement; }
+    function StandIn(props: object) {
+      return render('Picker', props) as React.ReactElement;
+    }
     act(() => root.render(createElement(StandIn)));
     expect(host.textContent).toBe('base');
-    act(() => { store.select(['picker-a']); });
+    act(() => {
+      store.select(['picker-a']);
+    });
     expect(host.textContent).toBe('A');
   });
 
@@ -391,13 +417,21 @@ describe('the binder after the review', () => {
 
   it('picks by the order of the active set, as the server does', () => {
     const store = makeStore('/?v=nav:picker-b,hooks:hook-x');
-    const out = bindAs('src/shared.ts', store, [null, 'hook-x', 'picker-b'], [{ v: 0 }, { v: 1 }, { v: 2 }].map((m) => ({ value: m })), ['value']);
+    const out = bindAs(
+      'src/shared.ts',
+      store,
+      [null, 'hook-x', 'picker-b'],
+      [{ v: 0 }, { v: 1 }, { v: 2 }].map((m) => ({ value: m })),
+      ['value'],
+    );
     expect((out.value as { v: number }).v).toBe(2);
   });
 });
 
 describe('the store with a malformed query', () => {
-  afterEach(() => { delete (window as LiveWindow).__isotoneLive; });
+  afterEach(() => {
+    delete (window as LiveWindow).__isotoneLive;
+  });
   it('ignores escapes it cannot decode', () => {
     const store = makeStore('/?%E0=1&v=nav:picker-a');
     expect(store.active).toEqual(['picker-a']);

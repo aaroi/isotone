@@ -1,26 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import {
-  ensureDirIgnored,
-  ensureFileIgnored,
-  excludePattern,
-  hasExcludePattern,
-  notesResponse,
-  readNotes,
-  writeNotes,
-} from '../src/store';
+import { ensureDirIgnored, ensureFileIgnored, excludePattern, hasExcludePattern, notesResponse, readNotes, writeNotes } from '../src/store';
 
 const dirs: string[] = [];
 
@@ -127,11 +112,11 @@ describe('notesResponse', () => {
     post(file, { route: '/a', feedback: 'Ordinary feedback' });
     const saved = post(file, { route: '/a', feedback: '[set-defaults] new', payload: { variants: 'new' }, viewport: { w: 800, h: 600 } });
     expect(saved.status).toBe(200);
-    const pending = readNotes(file).filter(n => !n.done && n.route === '/a' && n.feedback.startsWith('[set-defaults]'));
+    const pending = readNotes(file).filter((n) => !n.done && n.route === '/a' && n.feedback.startsWith('[set-defaults]'));
     expect(pending).toHaveLength(1);
     expect(pending[0]).toMatchObject({ feedback: '[set-defaults] new', payload: { variants: 'new' }, viewport: { w: 800, h: 600 } });
     expect(readNotes(file)).toHaveLength(4);
-    expect(readNotes(file).find(n => n.id === 'history')?.feedback).toBe('[set-defaults] old');
+    expect(readNotes(file).find((n) => n.id === 'history')?.feedback).toBe('[set-defaults] old');
     expect(pending[0].id).toBe(id);
   });
 
@@ -145,9 +130,7 @@ describe('notesResponse', () => {
     if (first) first.done = true;
     writeNotes(file, all);
     const pending = get(file, '/api/iteration/notes');
-    expect(
-      (pending.body as Array<{ route: string }>).map((r) => r.route),
-    ).toEqual(['/b']);
+    expect((pending.body as Array<{ route: string }>).map((r) => r.route)).toEqual(['/b']);
   });
 
   it('rejects a POST without feedback and a DELETE without an id', () => {
@@ -274,7 +257,7 @@ describe('feedback references', () => {
     expect(post(file, { route: '/', feedback: 'Invalid', variantAction: { axisId: 'layout', action: 'keep-option' } }).status).toBe(400);
     const keep = { axisId: 'layout', action: 'keep-option', optionId: 'stack' };
     const kept = post(file, { route: '/', feedback: '[keep-option] Stack', variantAction: keep });
-    expect(readNotes(file).find(n => n.id === (kept.body as { id: string }).id)).toMatchObject({ variantAction: keep });
+    expect(readNotes(file).find((n) => n.id === (kept.body as { id: string }).id)).toMatchObject({ variantAction: keep });
     del(file, (kept.body as { id: string }).id);
     del(file, id);
     expect(readNotes(file)).toEqual([]);
@@ -282,7 +265,10 @@ describe('feedback references', () => {
 
   it('round-trips multiple pins and an option reference, and preserves them on legacy edits', () => {
     const file = tempFile();
-    const elements = [{ tag: 'button', text: 'One', selector: '#one' }, { tag: 'h1', text: 'Two', selector: '#two' }];
+    const elements = [
+      { tag: 'button', text: 'One', selector: '#one' },
+      { tag: 'h1', text: 'Two', selector: '#two' },
+    ];
     const variant = { axisId: 'spacing', label: 'Spacing', optionId: 'compact', optionLabel: 'Compact', value: 'compact' };
     const created = post(file, { route: '/', feedback: 'Align', elements, variant, payload: { host: true } });
     const id = (created.body as { id: string }).id;
@@ -293,6 +279,8 @@ describe('feedback references', () => {
     expect(readNotes(file)[0]).toMatchObject({ elements: [], variant: null, element: null });
   });
   it('limits the number of pinned elements at the server boundary', () => {
-    expect(post(tempFile(), { route: '/', feedback: 'Too many', elements: Array(51).fill({ tag: 'p', text: '', selector: 'p' }) }).status).toBe(400);
+    expect(
+      post(tempFile(), { route: '/', feedback: 'Too many', elements: Array(51).fill({ tag: 'p', text: '', selector: 'p' }) }).status,
+    ).toBe(400);
   });
 });

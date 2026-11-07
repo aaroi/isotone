@@ -27,7 +27,7 @@ export default defineConfig([
     // not be a bundled app at all. `isotone serve` serves this file.
     // tsup suffixes an iife build with `.global`, so this emits
     // dist/isotone.global.js.
-    entry: { 'isotone': 'src/standalone/index.ts' },
+    entry: { isotone: 'src/standalone/index.ts' },
     format: ['iife'],
     target: 'es2020',
     dts: false,

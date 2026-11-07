@@ -120,7 +120,10 @@ describe('mountIteration with a cross-origin variants endpoint', () => {
       return { ok: true, status: 200, json: async () => [] };
     });
     vi.stubGlobal('fetch', fetchMock);
-    const tick = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    const tick = () =>
+      act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
 
     const off = mountIteration({
       endpoint: 'http://127.0.0.1:4123/api/iteration/notes',
@@ -147,24 +150,43 @@ describe('mountIteration with a cross-origin variants endpoint', () => {
 describe('the panel isotone serve mounts', () => {
   const origin = 'http://127.0.0.1:4123';
   let root: string;
-  beforeEach(() => { root = mkdtempSync(join(tmpdir(), 'iso-serve-mount-')); });
-  afterEach(() => { rmSync(root, { recursive: true, force: true }); vi.unstubAllGlobals(); });
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'iso-serve-mount-'));
+  });
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+    vi.unstubAllGlobals();
+  });
 
   /** Mount what serve's bundle would mount for `root`, answering knobs with `knobs`. */
   async function mountServe(knobs: unknown[]) {
     vi.useRealTimers();
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => ({
-      ok: true,
-      status: 200,
-      json: async () => (String(input).includes('/api/iteration/variants') ? { variants: [], active: [], knobs } : []),
-    })));
-    const tick = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => ({
+        ok: true,
+        status: 200,
+        json: async () => (String(input).includes('/api/iteration/variants') ? { variants: [], active: [], knobs } : []),
+      })),
+    );
+    const tick = () =>
+      act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
     const off = mountIteration(serveMountOptions(origin, root, {}));
     await tick();
     const shadow = document.querySelector('[data-isotone="root"]')?.shadowRoot;
     if (!shadow) throw new Error('no shadow root');
     const tools = () => Array.from(shadow.querySelectorAll('.isotone-rail-button')).map((b) => b.getAttribute('aria-label'));
-    return { shadow, tools, tick, off: async () => { off(); await tick(); } };
+    return {
+      shadow,
+      tools,
+      tick,
+      off: async () => {
+        off();
+        await tick();
+      },
+    };
   }
 
   it('has a single tool, Feedback, when the project has no knobs', async () => {
@@ -175,7 +197,17 @@ describe('the panel isotone serve mounts', () => {
 
   it('adds Variants for knobs, and its empty list asks for knobs rather than file variants', async () => {
     // A knob for another page leaves this page's list empty.
-    const knob = { kind: 'range', id: 'card-radius', label: 'Card radius', route: '/elsewhere', min: 0, max: 24, step: 1, defaultValue: 12, unit: 'px' };
+    const knob = {
+      kind: 'range',
+      id: 'card-radius',
+      label: 'Card radius',
+      route: '/elsewhere',
+      min: 0,
+      max: 24,
+      step: 1,
+      defaultValue: 12,
+      unit: 'px',
+    };
     mkdirSync(join(root, '.isotone'));
     writeFileSync(join(root, '.isotone', 'knobs.json'), JSON.stringify([knob]));
     const panel = await mountServe([knob]);

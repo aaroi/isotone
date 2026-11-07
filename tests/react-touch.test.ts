@@ -9,17 +9,28 @@ let container: HTMLDivElement;
 let root: Root | null = null;
 /** Which media queries match; everything else does not. */
 let matching: string[] = [];
-const source = createVariantsSource({ axes: [{
-  id: 'spacing', label: 'Spacing', defaultOption: 'compact',
-  options: [{ id: 'compact', label: 'Compact' }, { id: 'comfy', label: 'Comfy' }],
-}] });
+const source = createVariantsSource({
+  axes: [
+    {
+      id: 'spacing',
+      label: 'Spacing',
+      defaultOption: 'compact',
+      options: [
+        { id: 'compact', label: 'Compact' },
+        { id: 'comfy', label: 'Comfy' },
+      ],
+    },
+  ],
+});
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   matching = [];
-  vi.stubGlobal('matchMedia', (query: string) =>
-    Object.assign(new EventTarget(), { matches: matching.includes(query) }));
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => [] })));
+  vi.stubGlobal('matchMedia', (query: string) => Object.assign(new EventTarget(), { matches: matching.includes(query) }));
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({ ok: true, status: 200, json: async () => [] })),
+  );
   container = document.createElement('div');
   document.body.append(container);
 });
@@ -36,18 +47,29 @@ afterEach(async () => {
 async function render() {
   root = createRoot(container);
   const mounted = root;
-  await act(async () => mounted.render(createElement(IterationPanel, {
-    route: '/', theme: 'light', variants: source, store: { endpoint: '/notes' }, defaultTab: 'variants',
-  })));
+  await act(async () =>
+    mounted.render(
+      createElement(IterationPanel, {
+        route: '/',
+        theme: 'light',
+        variants: source,
+        store: { endpoint: '/notes' },
+        defaultTab: 'variants',
+      }),
+    ),
+  );
 }
 function button(label: string) {
-  const found = [...container.querySelectorAll<HTMLButtonElement>('button')]
-    .find(el => el.getAttribute('aria-label') === label || el.textContent?.trim() === label);
+  const found = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
+    (el) => el.getAttribute('aria-label') === label || el.textContent?.trim() === label,
+  );
   if (!found) throw new Error(`Missing button: ${label}`);
   return found;
 }
 function click(el: Element, detail = 0) {
-  return act(async () => { el.dispatchEvent(new MouseEvent('click', { bubbles: true, detail })); });
+  return act(async () => {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, detail }));
+  });
 }
 /** A press from a given kind of pointer, as the browser reports it before the click. */
 function press(target: EventTarget, pointerType: string) {
@@ -57,8 +79,7 @@ function press(target: EventTarget, pointerType: string) {
     target.dispatchEvent(event);
   });
 }
-const panelOpen = (name: 'variants' | 'notes') =>
-  container.querySelector<HTMLElement>(`.isotone-${name}-panel`)?.dataset.open === 'true';
+const panelOpen = (name: 'variants' | 'notes') => container.querySelector<HTMLElement>(`.isotone-${name}-panel`)?.dataset.open === 'true';
 
 describe('touch', () => {
   it('describes select mode in touch terms after a finger press, and in keyboard terms after a mouse press', async () => {
