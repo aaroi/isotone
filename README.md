@@ -44,7 +44,9 @@ npx isotone init --yes
 section to `AGENTS.md` that teaches your agent the loop. Your agent can apply
 the change for you. Nothing is added to production builds.
 
-On **Vite**, the change is one plugin, and it works with any framework:
+On **Vite**, the change is one plugin, and it works with any framework. Vite
+applies it only to the dev server, so production builds have no panel and no
+endpoints:
 
 ```ts
 import { iteration } from 'isotone/vite';
@@ -54,16 +56,23 @@ export default defineConfig({
 });
 ```
 
-On **any other dev server**, run `npx isotone serve` and add one script tag to
-your development HTML:
+On **any other dev server**, run `npx isotone serve` in the project and load the
+panel from your development pages. This tag only loads on localhost, so it does
+nothing if the page ships:
 
 ```html
-<script src="http://127.0.0.1:4123/isotone.js" defer></script>
+<script>
+  if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))
+    document.head.append(Object.assign(document.createElement('script'),
+      { src: 'http://127.0.0.1:4123/isotone.js' }));
+</script>
 ```
 
-The [integration guide](docs/integrations.md) covers Next and other route
-handlers, React embeds, themes and production guards. Node.js 20 or later is
-required. Coming from the previous package? See the [migration guide](docs/migration.md).
+On Next, `init` prints the same panel as a `next/script` tag behind
+`process.env.NODE_ENV === 'development'`. The [integration guide](docs/integrations.md)
+covers route handlers, React embeds, themes and the production guards. Node.js 20
+or later is required. Coming from the previous package? See the
+[migration guide](docs/migration.md).
 
 ## Keys
 

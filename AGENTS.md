@@ -8,9 +8,11 @@ Isotone itself is at the end of this file.
 
 Install `isotone` as a development dependency with the project's package manager,
 then run `npx isotone init --yes`. Read the detected integration instructions and
-apply them to the existing app without replacing its plugins or routes. Keep the
-panel and endpoints in development only. See [the integration guide](docs/integrations.md)
-for Vite, standalone servers, React mounts, and other request handlers.
+apply them to the existing app without replacing its plugins or routes. Isotone is
+development-only: keep the panel and endpoints behind the framework's development
+check and never ship them to production unless the user explicitly asks. See
+[the integration guide](docs/integrations.md) for Vite, standalone servers, React
+mounts, other request handlers and the production guards.
 
 ## Act on feedback
 

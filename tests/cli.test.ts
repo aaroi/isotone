@@ -511,6 +511,33 @@ describe('init', () => {
     expect(existsSync(join(root, '.isotone'))).toBe(false);
   });
 
+  it('keeps a Next setup dev-only and points it at the root layout', async () => {
+    const root = tempRepo();
+    writeFileSync(join(root, 'next.config.ts'), 'export default {};\n');
+    mkdirSync(join(root, 'src', 'app'), { recursive: true });
+    writeFileSync(join(root, 'src', 'app', 'layout.tsx'), 'export default function Layout() {}\n');
+    const io = makeIo(root);
+    expect(await runCli(['init'], io)).toBe(0);
+    expect(io.text.out).toContain('In src/app/layout.tsx');
+    expect(io.text.out).toContain("{process.env.NODE_ENV === 'development' && (");
+    expect(io.text.out).toContain('{ allowProduction: true }');
+    // No plain, unguarded tag for a Next app.
+    expect(io.text.out).not.toContain('<script src=');
+  });
+
+  it('gives a static site the localhost-only loader', async () => {
+    const io = makeIo(tempRepo());
+    expect(await runCli(['init'], io)).toBe(0);
+    expect(io.text.out).toContain("if(/^(localhost|127\\.0\\.0\\.1|\\[::1\\])$/.test(location.hostname))");
+  });
+
+  it('writes an AGENTS.md section that states the dev-only rule', async () => {
+    const root = tempRepo();
+    expect(await runCli(['init', '--yes'], makeIo(root))).toBe(0);
+    const guide = readFileSync(join(root, 'AGENTS.md'), 'utf8');
+    expect(guide).toContain('Never ship it\nto production unless the user explicitly asks');
+  });
+
   it('rejects an unknown --approach', async () => {
     const root = tempRepo();
     const io = makeIo(root);

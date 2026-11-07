@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { serveIteration, type ServedIteration } from '../src/serve/index';
+import { guardedScriptTag } from '../src/serve/tag';
 import { NOTES_ENDPOINT } from '../src/store';
 import { UPDATE_ENDPOINT } from '../src/update';
 
@@ -143,10 +144,34 @@ describe('CORS', () => {
   });
 });
 
+describe('the guarded script tag', () => {
+  const run = (hostname: string) => {
+    const tag = guardedScriptTag('http://127.0.0.1:4123/isotone.js');
+    const code = tag.replace(/^<script>/, '').replace(/<\/script>$/, '');
+    const appended: { src: string }[] = [];
+    const document = { createElement: () => ({ src: '' }), head: { append: (el: { src: string }) => appended.push(el) } };
+    new Function('location', 'document', code)({ hostname }, document);
+    return appended.map((el) => el.src);
+  };
+
+  it('loads the panel on a loopback page', () => {
+    for (const host of ['localhost', '127.0.0.1', '[::1]']) {
+      expect(run(host), host).toEqual(['http://127.0.0.1:4123/isotone.js']);
+    }
+  });
+
+  it('requests nothing from a deployed page, even one that only looks local', () => {
+    for (const host of ['example.com', 'localhost.example.com', '127.0.0.1.nip.io', 'staging.app']) {
+      expect(run(host), host).toEqual([]);
+    }
+  });
+});
+
 describe('the setup page', () => {
   it('prints the script tag and a bookmarklet for pages you cannot edit', async () => {
     const html = await (await fetch(`${served.url}/`)).text();
-    expect(html).toContain('&lt;script src=');
+    // The copyable tag only loads on loopback pages, so it is inert if shipped.
+    expect(html).toContain('location.hostname');
     expect(html).toContain(served.bundleUrl);
     expect(html).toContain('javascript:(function()');
     expect(html).toContain(file); // says where notes land

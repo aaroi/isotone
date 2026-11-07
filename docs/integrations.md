@@ -7,11 +7,14 @@ npm install -D isotone
 npx isotone init --yes
 ```
 
-`init` detects the project, prints the integration to add, and adds a short guide
-to `AGENTS.md`. It does not overwrite app code, install dependencies, or replace
-an existing guide. Running it again is safe. `init --json` returns a setup plan
-without writing files; add `--yes` to write the guide. `--approach overlay|host|serve`
-overrides the recommendation.
+`init` detects the project, prints the development-only integration to add, and
+adds a short guide to `AGENTS.md`. It does not overwrite app code, install
+dependencies, or replace an existing guide. Running it again is safe. `init --json`
+returns a setup plan without writing files; add `--yes` to write the guide.
+`--approach overlay|host|serve` overrides the recommendation.
+
+Isotone is a development tool. Every integration below keeps it out of production
+by default; see [Production](#production) for how each one does that.
 
 ## Vite: one plugin
 
@@ -27,7 +30,8 @@ plugins: [/* existing plugins */, iteration()]
 Restart the dev server. Source-file variants and notes are available immediately.
 The panel carries its own React runtime, so React, Vue, Svelte and vanilla Vite
 projects use the same setup. It does not enter the host's dependency optimizer or
-Fast Refresh graph. Nothing is injected in a production build.
+Fast Refresh graph. The plugin acts only on the dev server: `vite build` injects
+nothing and serves no endpoints, so it needs no guard of its own.
 
 If the app mounts `IterationPanel` or `mountIteration` itself, use
 `iteration({ panel: false })` to keep local endpoints and source variants without
@@ -55,18 +59,42 @@ Run this inside the project in a second terminal:
 npx isotone serve
 ```
 
-Add this script to the development HTML only:
+Then load the panel in development only. For plain HTML pages, add this loader to
+each page. It requests nothing unless the page itself is on localhost, so it stays
+inert if the HTML is deployed:
 
 ```html
-<script src="http://127.0.0.1:4123/isotone.js" defer></script>
+<script>
+  if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))
+    document.head.append(Object.assign(document.createElement('script'),
+      { src: 'http://127.0.0.1:4123/isotone.js' }));
+</script>
+```
+
+A plain `<script src="http://127.0.0.1:4123/isotone.js" defer></script>` works too,
+but only behind a development flag of the template or build step: in production
+HTML it would make every visitor's browser request its own localhost, which recent
+browsers turn into a permission prompt. In a Next app, render it from the root
+layout (`app/layout.tsx`, or `pages/_app.tsx`) behind the development check, which
+Next inlines at build time:
+
+```tsx
+import Script from 'next/script';
+
+// Inside <body>:
+{process.env.NODE_ENV === 'development' && (
+  <Script src="http://127.0.0.1:4123/isotone.js" strategy="afterInteractive" />
+)}
 ```
 
 Open the printed setup URL for a copyable tag or a bookmarklet. The bundle has no
 host framework dependencies. This path supports notes; source-file switching
 needs the Vite plugin, or a host-owned `VariantsSource`.
 
-`--port 4124` selects another port. `--file path/to/notes.json` selects a notes
-file. `--theme light` fixes the panel theme. The server binds to loopback and
+`--port 4124` selects another port; use the same port in the tag, and keep both in
+one place with a script such as `"isotone": "isotone serve --port 4124"`.
+`--file path/to/notes.json` selects a notes file. `--theme light` fixes the panel
+theme. The server binds to loopback and
 accepts browser requests from localhost origins only. An HTTPS page may block
 an HTTP script; use the same-origin route integration below in that case.
 
@@ -75,6 +103,12 @@ an HTTP script; use the same-origin route integration below in that case.
 Use this when the framework should own the endpoint. Install `react` and
 `react-dom` if the app does not already have them; direct `isotone/react`
 imports use the host's React runtime.
+
+The Request adapters, `serveNotesRequest` and `serveVariantsRequest`, answer 404
+when `NODE_ENV` is `production`, so a route that reaches a deployment cannot read or
+write the notes file. A deliberate, access-controlled review deployment can pass
+`{ allowProduction: true }` as the third argument. Keep the route's own development
+check as well; it also covers runtimes that leave `NODE_ENV` unset.
 
 For a Next App Router project:
 
@@ -126,7 +160,10 @@ export function ReviewTools() {
 ```
 
 Render `<ReviewTools />` once in the app layout. The effect handles development
-Strict Mode and route unmounts. Other Request-based servers use the same handler;
+Strict Mode and route unmounts. The dynamic import sits behind the check, so a
+production bundle does not include the panel. `mountIteration` itself has no
+production guard: a host may deliberately mount a variants-only panel on a preview
+site. Other Request-based servers use the same handler;
 Node HTTP servers can call `notesResponse` and serialize its `body` themselves.
 That lower-level handler does not read or limit the HTTP request body, or check
 the request's origin: the host must handle those concerns. Prefer the
@@ -176,13 +213,28 @@ file holds. The panel slows its retries while the server is unreachable and stop
 polling in a hidden tab. Custom endpoints built on `notesResponse` or
 `serveNotesRequest` get this without changes.
 
+## Production
+
+| Integration | What keeps it out of production |
+| --- | --- |
+| Vite plugin | Acts only on `vite dev`. A build injects no panel and serves no endpoints. `ISOTONE_VARIANT` bakes chosen variants into a build only when set. |
+| `isotone serve` | A separate local process bound to loopback that accepts only localhost origins. The tag that loads it is either behind the framework's development check or the localhost-only loader above. |
+| Request adapters | `serveNotesRequest` and `serveVariantsRequest` answer 404 under `NODE_ENV=production` unless given `allowProduction: true`. The route keeps its own development check. |
+| `notesResponse`, `variantsResponse` | Lower-level functions with no guard; the host calls them only from development code. |
+| `mountIteration`, `IterationPanel` | No guard, by design. Import them dynamically behind the development check. |
+
+Agents set up through `init` are told the same rule in `AGENTS.md`: development
+only, unless the user explicitly asks to ship it.
+
 ## Confirm the integration
 
 1. Open the app in development and submit a note on an element.
 2. Run `npx isotone --json` in the app directory. Confirm the note's route,
    viewport and selector.
 3. Run `npx isotone --done <id-prefix>` and check that it leaves the panel.
-4. Build and serve the production app. The panel and dev endpoint should be absent.
+4. Build the production app and search the output for `isotone` and
+   `/api/iteration`. With the localhost-only loader, the tag remains in the HTML
+   but loads nothing outside localhost.
 
 If the panel is visible but the CLI has no notes, compare the dev server's printed
 notes path with the CLI's working directory. If the endpoint is unreachable, the

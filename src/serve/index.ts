@@ -27,6 +27,7 @@ import { checkOrigin, HttpError, isLoopback, readNodeJson, sendFailure } from '.
 import { ensureFileIgnored, notesResponse, NOTES_ENDPOINT } from '../store';
 
 import { readBundle } from '../standalone/bundle';
+import { guardedScriptTag } from './tag';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../update';
 export { readBundle } from '../standalone/bundle';
 
@@ -117,7 +118,7 @@ function escapeHtml(v: string): string {
 }
 
 function indexPage(origin: string, file: string): string {
-  const tag = `<script src="${origin}${BUNDLE_PATH}" defer></script>`;
+  const tag = guardedScriptTag(`${origin}${BUNDLE_PATH}`);
   const mark = bookmarklet(origin);
   return `<!doctype html>
 <html lang="en">
@@ -141,7 +142,7 @@ function indexPage(origin: string, file: string): string {
          box-shadow: 0 0 10px rgba(74,222,128,.5); }
   h1 { font-family: var(--mono); font-size: 14px; font-weight: 500; letter-spacing: .02em; }
   .sub { color: var(--muted); font-size: 13px; margin-bottom: 40px; }
-  .sub code { font-family: var(--mono); font-size: 11.5px; color: var(--fg); }
+  .sub code, p.note code { font-family: var(--mono); font-size: 11.5px; color: var(--fg); }
   h2 { font-family: var(--mono); font-size: 10.5px; font-weight: 500;
        letter-spacing: .08em; text-transform: uppercase; color: var(--faint);
        margin: 32px 0 10px; }
@@ -174,12 +175,14 @@ function indexPage(origin: string, file: string): string {
   <header><span class="dot"></span><h1>Isotone</h1></header>
   <p class="sub">Serving the feedback loop on <code>${escapeHtml(origin)}</code>.</p>
 
-  <h2>Script tag for your dev page</h2>
+  <h2>Script for your dev pages</h2>
   <div class="card row">
     <pre>${escapeHtml(tag)}</pre>
     <button type="button" class="copy" data-c="${escapeHtml(tag)}"
       onclick="navigator.clipboard.writeText(this.dataset.c);this.textContent='copied';setTimeout(()=>this.textContent='copy',1200)">copy</button>
   </div>
+  <p class="note">It loads the panel only on localhost, so it stays inert if the page ships.
+  Behind a development flag, a plain <code>&lt;script src="${escapeHtml(origin + BUNDLE_PATH)}" defer&gt;</code> works too.</p>
 
   <h2>Bookmarklet — drag to your bookmarks bar</h2>
   <a class="bm" href="${escapeHtml(mark)}">✎ Iteration</a>

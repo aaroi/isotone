@@ -12,6 +12,9 @@
 - feat: larger touch hit areas around the composer controls, reference removal, note delete and panel close
 - fix: select-mode hints are never cut off. They read "Hold ⇧ to use the page" (touch: "Tap Done to use the page") and, beside a pinned element, "Click to pin more · ⇧ uses the page" (touch: "Tap to pin more · crosshair pauses"), each on one line at phone and desktop widths
 - chore: the demo works on phones: touch copy in the tour, the cards scroll into view, larger touch targets, and a list layout and top bar that fit a phone
+- fix: `serveNotesRequest` and `serveVariantsRequest` answer 404 when `NODE_ENV` is `production`. A deliberate review deployment can pass `{ allowProduction: true }`
+- fix: `init` and the serve setup page give static HTML a script loader that requests nothing outside localhost, and give Next a `next/script` tag behind `NODE_ENV === 'development'` in the root layout, instead of a plain tag that would make visitors' browsers request their own localhost if it shipped
+- fix: the generated AGENTS.md section states the development-only rule
 
 ## 1.1.3
 

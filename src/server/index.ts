@@ -46,6 +46,33 @@ export interface ServeRequestOptions {
    * Off by default: only the API's own origin is accepted.
    */
   loopbackOrigins?: boolean;
+  /**
+   * Answer even when `NODE_ENV` is `production`. Off by default: the handler
+   * reads and writes a file in the project, which a deployed app has no
+   * business exposing, so a production runtime gets a 404 instead. Set it only
+   * for a deliberate, access-controlled review deployment.
+   */
+  allowProduction?: boolean;
+}
+
+/** The answer a production runtime gets unless the host opted in. */
+function refusedInProduction(options: ServeRequestOptions): { status: number; headers: Record<string, string>; body: unknown } | null {
+  if (options.allowProduction || !isProductionRuntime()) return null;
+  return {
+    status: 404,
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+    body: { error: 'isotone is development-only; this endpoint is off because NODE_ENV is production' },
+  };
+}
+
+/**
+ * Whether this process runs as a production build. Only an explicit
+ * `NODE_ENV=production` counts: test runners and hand-started dev servers
+ * often leave it unset, and every common production runtime (`next start`,
+ * Vercel, Netlify, most container images) sets it.
+ */
+function isProductionRuntime(): boolean {
+  return typeof process !== 'undefined' && process.env?.NODE_ENV === 'production';
 }
 
 /**
@@ -58,6 +85,8 @@ export async function serveNotesRequest(
   request: Request,
   options: ServeRequestOptions = {},
 ): Promise<{ status: number; headers: Record<string, string>; body: unknown }> {
+  const refused = refusedInProduction(options);
+  if (refused) return refused;
   try {
     const url = new URL(request.url);
     checkOrigin(request.headers.get('origin'), url.host, options.loopbackOrigins);
@@ -83,6 +112,8 @@ export async function serveVariantsRequest(
   request: Request,
   options: ServeRequestOptions = {},
 ): Promise<{ status: number; headers: Record<string, string>; body: unknown }> {
+  const refused = refusedInProduction(options);
+  if (refused) return refused;
   try {
     const url = new URL(request.url);
     checkOrigin(request.headers.get('origin'), url.host, options.loopbackOrigins);
