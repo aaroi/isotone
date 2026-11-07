@@ -124,7 +124,7 @@ function printVariantHelp(io: CliIO): void {
   out(io, 'Variants that override the same file are alternatives of one selector without a');
   out(io, '--group; use one when the alternatives touch different files.');
   out(io, 'With more than a few selectors on a page, give each a section: --section "Header",');
-  out(io, 'or a group label prefix such as --group-label "Header / Logo".');
+  out(io, 'or a group label prefix such as --group-label "Header > Logo".');
 }
 
 function cmdList(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
@@ -419,7 +419,7 @@ function cmdSection(rest: string[], io: CliIO, opts: VariantsStoreOptions): numb
   const members = overlayGroups(listVariants(opts)).find((g) => g.members.some((m) => m.id === id))?.members
     .map((m) => m.id) ?? [id];
   // No text hands the decision back to the label prefix; --none keeps the
-  // selector out of every section even when its label has a " / ".
+  // selector out of every section even when its label has a " > ".
   for (const member of members) setVariantSection(opts, member, none ? '' : text || undefined);
   const others = members.length > 1 ? ` (with ${members.filter((m) => m !== id).map((m) => `"${m}"`).join(', ')})` : '';
   out(io, text ? `"${id}"${others} is now in section "${text}"`

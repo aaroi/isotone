@@ -53,16 +53,18 @@ the part of the page it changes. Write the section as a label prefix, a slash
 with a space on each side:
 
 ```ts
-{ id: 'logo-size', label: 'Header / Logo size', kind: 'range', min: 16, max: 48, step: 2, defaultValue: 24, unit: 'px' }
+{ id: 'logo-size', label: 'Header > Logo size', kind: 'range', min: 16, max: 48, step: 2, defaultValue: 24, unit: 'px' }
 ```
 
 The panel shows a **Header** heading with *Logo size* under it. The heading stays
 at the top of the list while you scroll through its selectors, shows how many it
 holds, and folds the section away. Screen readers, notes and saved defaults keep
-the full name, `Header / Logo size`.
+the full name, `Header › Logo size`.
 
-- Only the first ` / ` splits, so `Header / Nav / Gap` is *Nav / Gap* in Header.
-  `Light/Dark`, `Header/Footer` and a ratio such as `16 / 9` stay whole labels.
+- Only the first ` > ` splits, so `Header > Nav > Gap` is *Nav > Gap* in Header.
+  ` › ` works the same way. The spaces matter: `a>b` stays one label.
+- A slash never makes a section, so binary selectors such as `Light / Dark` or
+  `Grid / List` keep their whole label.
 - Sections match without regard to case and keep the casing of their first selector.
 - Selectors without a section come first, without a heading. Sections follow in
   the order their first selector appears, and selectors keep their order inside them.
@@ -71,15 +73,15 @@ the full name, `Header / Logo size`.
 
 An explicit `section` field overrides the prefix. The label then shows as written,
 less a prefix that repeats the section. `section: ''` keeps a label that needs a
-spaced slash, such as `Light / Dark`, out of every section:
+spaced `>`, such as `Before > After`, out of every section:
 
 ```ts
-{ id: 'mode', label: 'Light / Dark', section: 'Theme', options: [/* … */], defaultOption: 'light' }
+{ id: 'order', label: 'Before > After', section: '', options: [/* … */], defaultOption: 'before' }
 ```
 
 The same works everywhere a selector is defined. Host axes and `.isotone/knobs.json`
 entries take a prefixed `label` or a `section` field. File variants take it from the
-group label (`variant new <id> --group-label "Header / Logo"`), or from
+group label (`variant new <id> --group-label "Header > Logo"`), or from
 `variant new <id> --section Header`. `variant section <id> <text>` moves an existing
 selector, with every variant in its group; `variant section <id> --none` takes it out
 of every section. `variant list` shows a SECTION column.
@@ -170,7 +172,7 @@ optional `route` (a pattern like a variant's, or a list of them):
   {
     "kind": "range",
     "id": "fade-from",
-    "label": "Hero / Fade starts",
+    "label": "Hero > Fade starts",
     "min": 0,
     "max": 100,
     "step": 1,
@@ -233,7 +235,7 @@ document.addEventListener('isotone:knob', ({ detail }) => {
 The event only fires while the panel is mounted, so keep the committed default in
 the source. Knob values live in the reviewer's browser, not on the server. "Save as
 defaults" files the moved knobs in the same `[set-defaults]` note as the
-variant picks, as `Knobs: Hero / Fade starts 40% (fade-from)` with a `knobs`
+variant picks, as `Knobs: Hero › Fade starts 40% (fade-from)` with a `knobs`
 payload of `fade-from:40`; the agent writes the number into the source and
 into the knob file's `defaultValue`.
 

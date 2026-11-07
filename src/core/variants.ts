@@ -54,7 +54,7 @@ export interface SelectVariantAxis {
   showWhen?: VariantAxisCondition;
   /**
    * The part of the page the selector belongs to, shown as a section header in
-   * the panel. Usually written as a label prefix instead (`"Header / Logo size"`);
+   * the panel. Usually written as a label prefix instead (`"Header > Logo size"`);
    * see {@link axisSection}. When set, it wins over the prefix, and `''` keeps the
    * selector out of every section with its label shown as written.
    */
@@ -110,7 +110,8 @@ export interface VariantAction {
 
 /** Between a section and a selector name in a label: a slash with whitespace on
  *  both sides, so `"Light/Dark"` and `"Header/Footer"` stay whole labels. */
-export const SECTION_SEPARATOR = ' / ';
+/** How a section and its selector are joined for display: `Header › Logo size`. */
+export const SECTION_SEPARATOR = ' › ';
 
 export interface SectionedLabel {
   /** The section's display name, or `null` for a selector without one. */
@@ -123,22 +124,25 @@ export interface SectionedLabel {
 
 const squash = (text: string) => text.replace(/\s+/g, ' ').trim();
 
-/** The first spaced slash that is not between two numbers (`"16 / 9"`). */
+/**
+ * The first spaced `>` (or `›`) with text on both sides. A slash is deliberately
+ * not a separator: binary selectors are naturally named `Light / Dark` or
+ * `Grid / List`, and a slash would turn their first word into a section.
+ */
 function prefixSplit(label: string): [string, string] | null {
-  for (const match of label.matchAll(/\s+\/\s+/g)) {
+  for (const match of label.matchAll(/\s+[>›]\s+/g)) {
     const before = label.slice(0, match.index);
     const after = label.slice(match.index + match[0].length);
     if (!before.trim() || !after.trim()) continue;
-    if (/\d$/.test(before) && /^\d/.test(after)) continue;
     return [squash(before), squash(after)];
   }
   return null;
 }
 
 /**
- * Split a selector label into its section and its own name. `"Header / Logo size"`
+ * Split a selector label into its section and its own name. `"Header > Logo size"`
  * is the Logo size selector in the Header section. The first separator wins, so
- * `"Header / Nav / Gap"` is Nav / Gap in Header. An explicit `section` overrides
+ * `"Header > Nav > Gap"` is `Nav > Gap` in Header. An explicit `section` overrides
  * the prefix: the label then shows as written, less a prefix that repeats the
  * section, and `''` means no section at all.
  */
@@ -512,7 +516,7 @@ export interface OverlayVariant {
   /** What the panel calls the group's selector. Any member may carry it. */
   groupLabel?: string;
   /** The panel section the group's selector sits in, like an axis `section`.
-   *  Any member may carry it; a `groupLabel` prefix (`"Header / Logo"`) also works. */
+   *  Any member may carry it; a `groupLabel` prefix (`"Header > Logo"`) also works. */
   section?: string;
   createdAt: string;
   /**

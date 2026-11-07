@@ -29,9 +29,9 @@ function layoutThumb(cards: [number, number, number, number][]): string {
     `<rect x="${x + 4}" y="${y + 4}" width="${Math.min(14, w - 8)}" height="2.5" rx="1.25" fill="#8b8e99"/>`).join('');
   return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 72">${shapes}</svg>`)}`;
 }
-/** Selectors sit in sections named by a label prefix ("Cards / Layout"). The README
+/** Selectors sit in sections named by a label prefix ("Cards > Layout"). The README
  *  capture keeps its two plain selectors for a compact composition. */
-const named = (section: string, label: string, plain: string) => screenshot ? plain : `${section} / ${label}`;
+const named = (section: string, label: string, plain: string) => screenshot ? plain : `${section} > ${label}`;
 const axes: VariantAxis[] = [
   { id: 'layout', label: named('Cards', 'Layout', 'Card layout'), defaultOption: 'row', options: [
     { id: 'row', label: 'Row', image: layoutThumb([[33, 12, 26, 32], [62, 12, 26, 32], [91, 12, 26, 32]]) },
@@ -50,7 +50,7 @@ const axes: VariantAxis[] = [
 ];
 axes.push({ id: 'card-radius', label: named('Cards', 'Corner radius', 'Card radius'), kind: 'range', min: 0, max: 24, step: 1, defaultValue: 11, unit: 'px' });
 if (!screenshot) axes.push(
-  { id: 'card-padding', label: 'Cards / Padding', kind: 'range', min: 8, max: 32, step: 2, defaultValue: 18, unit: 'px' },
+  { id: 'card-padding', label: 'Cards > Padding', kind: 'range', min: 8, max: 32, step: 2, defaultValue: 18, unit: 'px' },
 );
 if (stress) {
   const startingAxes = axes.length;
@@ -64,7 +64,7 @@ if (stress) {
         ? { label: `Long label ${'without any room to wrap '.repeat(40)}` }
         : area === 1
           ? { label: `Decision ${index + 1}`, section: `Section with a long name ${'that keeps on going '.repeat(12)}` }
-          : { label: `Area ${area + 1} / Decision ${index + 1}` }),
+          : { label: `Area ${area + 1} > Decision ${index + 1}` }),
       defaultOption: 'option-0',
       options: Array.from({ length: index % 25 === 0 ? 50 : 4 }, (_, option) => ({
         id: `option-${option}`,

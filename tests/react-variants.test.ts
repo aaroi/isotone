@@ -718,7 +718,7 @@ describe('mountIteration variants options', () => {
     );
     const body = JSON.parse(String(note?.[1]?.body));
     expect(body.feedback).toBe(
-      '[set-defaults] Make the default: "table.tsx: Striped" (table-striped); "Account / Settings: Tabs" (settings-tabs).',
+      '[set-defaults] Make the default: "table.tsx: Striped" (table-striped); "Account › Settings: Tabs" (settings-tabs).',
     );
     expect(body.payload).toEqual({ variants: 'table-striped, settings-tabs' });
     expect(body.route).toBe('/projects');
@@ -1122,19 +1122,19 @@ describe('review dock interactions', () => {
   });
   describe('sections', () => {
     const SECTIONED: VariantAxis[] = [
-      { id: 'logo', label: 'Header / Logo size', kind: 'range', min: 16, max: 48, step: 2, defaultValue: 24, unit: 'px' },
+      { id: 'logo', label: 'Header > Logo size', kind: 'range', min: 16, max: 48, step: 2, defaultValue: 24, unit: 'px' },
       { id: 'layout', label: 'Layout', defaultOption: 'row', options: [{ id: 'row', label: 'Row' }, { id: 'grid', label: 'Grid' }] },
       { id: 'ink', label: 'Ink', kind: 'color', defaultColor: '#111111', section: 'Header', swatches: [
         { id: 'black', label: 'Black', value: '#111111' }, { id: 'blue', label: 'Blue', value: '#2255ff' },
       ] },
-      { id: 'links', label: 'Footer / Links', defaultOption: 'a', options: [{ id: 'a', label: 'Plain' }, { id: 'b', label: 'Bold' }] },
-      { id: 'theme', label: 'Light / Dark', section: '', defaultOption: 'l', options: [{ id: 'l', label: 'Light' }, { id: 'd', label: 'Dark' }] },
+      { id: 'links', label: 'Footer > Links', defaultOption: 'a', options: [{ id: 'a', label: 'Plain' }, { id: 'b', label: 'Bold' }] },
+      { id: 'theme', label: 'Before > After', section: '', defaultOption: 'l', options: [{ id: 'l', label: 'Light' }, { id: 'd', label: 'Dark' }] },
     ];
     const headers = () => Array.from(container.querySelectorAll('.isotone-section-toggle span')).map(el => el.textContent);
 
     it('renders loose selectors first, then a sticky header per section with its count', async () => {
       await render(createElement(VariantsView, { source: createVariantsSource({ axes: SECTIONED }) }));
-      expect(labels()).toEqual(['Layout', 'Light / Dark', 'Logo size', 'Ink', 'Links']);
+      expect(labels()).toEqual(['Layout', 'Before > After', 'Logo size', 'Ink', 'Links']);
       expect(headers()).toEqual(['Header', 'Footer']);
       const body = container.querySelector('.isotone-vars-body');
       expect(Array.from(body?.children ?? []).map(el => el.className)).toEqual([
@@ -1144,10 +1144,10 @@ describe('review dock interactions', () => {
       expect(header?.querySelector('.isotone-section-toggle small')?.textContent).toBe('2');
       expect(header?.querySelector('h3 > button')?.getAttribute('aria-label')).toBe('Header, 2 selectors');
       // Controls keep their full name for assistive technology.
-      expect(container.querySelector('input[type=range]')?.getAttribute('aria-label')).toBe('Header / Logo size');
-      expect(byText('Header / Ink actions')).toBeDefined();
-      expect(container.querySelector('fieldset.isotone-swatches')?.getAttribute('aria-label')).toBe('Header / Ink');
-      expect(byText('Light / Dark actions')).toBeDefined();
+      expect(container.querySelector('input[type=range]')?.getAttribute('aria-label')).toBe('Header › Logo size');
+      expect(byText('Header › Ink actions')).toBeDefined();
+      expect(container.querySelector('fieldset.isotone-swatches')?.getAttribute('aria-label')).toBe('Header › Ink');
+      expect(byText('Before > After actions')).toBeDefined();
     });
 
     it('shows no headers when nothing is sectioned', async () => {
@@ -1177,25 +1177,25 @@ describe('review dock interactions', () => {
       const onFeedback = vi.fn();
       const onManage = vi.fn(async () => {});
       await render(createElement(VariantsView, { source: createVariantsSource({ axes: SECTIONED }), onFeedback, onManage }));
-      await click(byText('Footer / Links actions'));
+      await click(byText('Footer › Links actions'));
       const dialog = container.querySelector('.isotone-axis-menu');
-      expect(dialog?.getAttribute('aria-label')).toBe('Footer / Links actions');
+      expect(dialog?.getAttribute('aria-label')).toBe('Footer › Links actions');
       expect(dialog?.querySelector('.isotone-menu-title strong')?.textContent).toBe('Links');
       await click(byText('Remove Bold'));
       expect(onManage).toHaveBeenCalledWith(
         { axisId: 'links', action: 'remove-option', optionId: 'b' },
-        expect.objectContaining({ label: 'Footer / Links', optionLabel: 'Bold' }),
+        expect.objectContaining({ label: 'Footer › Links', optionLabel: 'Bold' }),
       );
       await click(byText('Feedback on this selector'));
-      expect(onFeedback).toHaveBeenCalledWith(expect.objectContaining({ axisId: 'links', label: 'Footer / Links' }));
-      await click(byText('Header / Ink actions'));
+      expect(onFeedback).toHaveBeenCalledWith(expect.objectContaining({ axisId: 'links', label: 'Footer › Links' }));
+      await click(byText('Header › Ink actions'));
       await click(byText('Feedback on Blue'));
-      expect(onFeedback).toHaveBeenLastCalledWith(expect.objectContaining({ label: 'Header / Ink', optionLabel: 'Blue' }));
+      expect(onFeedback).toHaveBeenLastCalledWith(expect.objectContaining({ label: 'Header › Ink', optionLabel: 'Blue' }));
     });
 
     it('renders 500 sectioned selectors with every choice available', async () => {
       const axes: VariantAxis[] = Array.from({ length: 500 }, (_, i) => ({
-        id: `axis-${i}`, label: `Area ${Math.floor(i / 12)} / Selector ${i} ${'long label '.repeat(i % 50 === 0 ? 20 : 0)}`,
+        id: `axis-${i}`, label: `Area ${Math.floor(i / 12)} > Selector ${i} ${'long label '.repeat(i % 50 === 0 ? 20 : 0)}`,
         defaultOption: 'a', options: [{ id: 'a', label: 'Default' }, { id: 'b', label: 'Alternative' }],
       }));
       const source = createVariantsSource({ axes });

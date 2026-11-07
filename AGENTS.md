@@ -74,7 +74,7 @@ shows the supported shapes.
 
 Once a page has more than a few selectors, put each in a section named after the
 part of the page it changes. Prefix the label with the section and a spaced slash,
-`Header / Logo size`, in host axes, `knobs.json` and `--group-label`; or pass
+`Header > Logo size`, in host axes, `knobs.json` and `--group-label`; or pass
 `variant new <id> --section Header`. `variant section <id> <text>` moves an
 existing selector. A label that needs a spaced slash of its own takes an explicit
 `section` field instead.
