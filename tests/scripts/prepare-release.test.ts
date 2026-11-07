@@ -67,3 +67,15 @@ it('does not reuse a tagged version if npm latest has not caught up', () => {
   execFileSync('git', ['-C', root, 'tag', 'v1.0.0']);
   expect(prepare(root, '0.4.2')).toBe('1.0.1');
 });
+
+it('moves notes merged after a failed publish into the still-unpublished version', () => {
+  const root = fixture('1.0.0', '# Changelog\n\n## Unreleased\n\n- First change.\n\n## 1.0.0\n\n- Stable release.\n');
+  expect(prepare(root, '1.0.0')).toBe('1.0.1');
+  // Publishing 1.0.1 failed (no tag, npm still on 1.0.0); another change merges.
+  const changelog = readFileSync(join(root, 'CHANGELOG.md'), 'utf8').replace('## Unreleased\n', '## Unreleased\n\n- Second change.\n');
+  writeFileSync(join(root, 'CHANGELOG.md'), changelog);
+  expect(prepare(root, '1.0.0')).toBe('1.0.1');
+  expect(readFileSync(join(root, 'CHANGELOG.md'), 'utf8')).toBe(
+    '# Changelog\n\n## Unreleased\n\n## 1.0.1\n\n- Second change.\n- First change.\n\n## 1.0.0\n\n- Stable release.\n',
+  );
+});
