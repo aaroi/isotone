@@ -214,7 +214,12 @@ function printApproach(io: CliIO, approach: Approach, host: Host): void {
     if (host === 'next') {
       const entry = detectNextEntry(io.cwd) ?? 'app/layout.tsx';
       out(io, `Then load the panel in development only. In ${entry}, import Script at the top`);
-      out(io, 'and render the tag inside <body>:');
+      // The Pages Router `_app` renders the page component and has no <body>.
+      if (/(^|\/)pages\/_app\./.test(entry)) {
+        out(io, 'and render the tag alongside <Component {...pageProps} />, in a fragment with it:');
+      } else {
+        out(io, 'and render the tag inside <body>:');
+      }
       out(io, '');
       out(io, "  import Script from 'next/script';");
       out(io, '  ...');
