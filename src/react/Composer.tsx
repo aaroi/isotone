@@ -9,7 +9,7 @@ import { showOverflowTitle } from './tooltips';
  * The composer's text, outside React state: typing re-renders the composer
  * alone, and the panel reads the text only when it sends, edits or saves a draft.
  */
-interface DraftText {
+export interface DraftText {
   get(): string;
   set(value: string): void;
   subscribe(listener: () => void): () => void;

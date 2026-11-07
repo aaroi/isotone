@@ -1,8 +1,8 @@
-import { FEEDBACK_STORAGE_KEY, readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '../core/browser-storage';
+import { FEEDBACK_STORAGE_KEY } from '../core/browser-storage';
 import { createNoteId } from '../core/id';
 import { MAX_FEEDBACK_LENGTH } from '../core/limits';
 import type { IterationStoreConfig } from '../core/notes-client';
-import { isRouteVisible, type RouteGateOptions } from '../core/routes';
+import { isRouteVisible, normalizeRoute, type RouteGateOptions } from '../core/routes';
 import type { IterationElement, IterationNote, IterationShortcut, IterationTheme, VariantReference } from '../core/types';
 import { type VariantAction, type VariantsSource, visibleAxes } from '../core/variants';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
@@ -16,6 +16,7 @@ import { detectTheme, observeTheme } from './theme';
 import { UpdateNotice } from './UpdateNotice';
 import { useDockMotion } from './useDockMotion';
 import { useDockSize } from './useDockSize';
+import { useDraft } from './useDraft';
 import { useFloatingComposer } from './useFloatingComposer';
 import { useLayoutMotion } from './useLayoutMotion';
 import { useNotes } from './useNotes';
@@ -42,8 +43,6 @@ export interface IterationPanelProps {
 
 /** How long "an agent is working on this" is believed without a sign of life. */
 const WORKING_FRESH_MS = 20 * 60 * 1000;
-/** How long typing settles before the draft is written to storage. */
-const DRAFT_SAVE_MS = 300;
 
 const DEFAULT_SHORTCUT: IterationShortcut = { code: 'Period', mod: true, shift: true };
 
@@ -96,7 +95,7 @@ function shortcutText(shortcut: IterationShortcut | false): string {
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 export function IterationPanel({
-  route,
+  route: pageRoute,
   theme: themePreference = 'auto',
   updateEndpoint,
   store: storeCfg,
@@ -107,6 +106,8 @@ export function IterationPanel({
   defaultTab = 'notes',
   shortcut = DEFAULT_SHORTCUT,
 }: IterationPanelProps) {
+  // One page, however the URL spells it: `/about/` and `/about?tab=2` are `/about`, as for the CLI.
+  const route = normalizeRoute(pageRoute);
   const nsKey = storeCfg.key ?? FEEDBACK_STORAGE_KEY;
   const [mode, dispatch] = useReducer(reduceMode, CLOSED);
   const update = useCallback((change: ModeUpdate) => dispatch({ update: change, compact: isCompactViewport() }), []);
@@ -163,7 +164,10 @@ export function IterationPanel({
   const pages = useMemo(() => {
     const counts = new Map<string, number>();
     // The update note belongs to the project, not a page: it shows everywhere.
-    for (const n of openNotes) if (!n.update) counts.set(n.route, (counts.get(n.route) ?? 0) + 1);
+    for (const n of openNotes) {
+      const page = normalizeRoute(n.route);
+      if (!n.update) counts.set(page, (counts.get(page) ?? 0) + 1);
+    }
     const others = [...counts.keys()].filter((r) => r !== route).sort();
     return { counts, others };
   }, [openNotes, route]);
@@ -173,7 +177,10 @@ export function IterationPanel({
   }, [scope, route, pages]);
   const updateRequested = useMemo(() => openNotes.some((n) => n.update), [openNotes]);
   const visibleNotes = useMemo(
-    () => openNotes.filter((n) => n.update || selectedPages.has(n.route)).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    () =>
+      openNotes
+        .filter((n) => n.update || selectedPages.has(normalizeRoute(n.route)))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     [openNotes, selectedPages],
   );
   // An agent's claim goes stale: a crashed or abandoned run should not pulse forever.
@@ -182,7 +189,7 @@ export function IterationPanel({
     [visibleNotes, clock],
   );
   const pendingActions = useMemo(
-    () => notes.flatMap((n) => (!n.done && n.route === route && n.variantAction ? [n.variantAction] : [])),
+    () => notes.flatMap((n) => (!n.done && normalizeRoute(n.route) === route && n.variantAction ? [n.variantAction] : [])),
     [notes, route],
   );
 
@@ -223,26 +230,43 @@ export function IterationPanel({
     const active = (root?.getRootNode() as Document | ShadowRoot | undefined)?.activeElement;
     return Boolean(root && active && root.contains(active));
   }, []);
+  /** Remember the host control to return to on close. The dock itself (seen from outside as the shadow host) is
+   *  not one: focus would land on a div that cannot take it, then on the body. Closing falls back to the launcher. */
+  const rememberFocus = useCallback(() => {
+    const active = document.activeElement;
+    const root = rootRef.current;
+    const ours = !root || active === (root.getRootNode() as ShadowRoot).host || (active !== null && root.contains(active));
+    previousFocus.current = active instanceof HTMLElement && active !== document.body && !ours ? active : null;
+  }, []);
+  /** After the next commit, focus the launcher: a rail button (this panel's, if given) while the rail shows, else the pill. */
+  const focusLauncher = useCallback(
+    (panel?: 'notes' | 'variants') => {
+      cancelAnimationFrame(focusFrame.current);
+      focusFrame.current = requestAnimationFrame(() => {
+        const selector = panel ? `.isotone-rail-button[aria-controls="${id}-${panel}"]` : '.isotone-rail-button';
+        const button = rootRef.current?.querySelector<HTMLButtonElement>(selector);
+        (button && !button.closest('[inert]') ? button : fabRef.current)?.focus();
+      });
+    },
+    [id],
+  );
   const closeAll = useCallback(() => {
     const inDock = focusInDock();
     cancelAnimationFrame(focusFrame.current);
     update(CLOSED);
     setHovered(false);
-    if (inDock) (previousFocus.current?.isConnected ? previousFocus.current : fabRef.current)?.focus();
-  }, [update, focusInDock]);
+    if (!inDock) return;
+    if (previousFocus.current?.isConnected) previousFocus.current.focus();
+    else focusLauncher();
+  }, [update, focusInDock, focusLauncher]);
   /** Close one panel. Focus inside it goes to its rail button, or the launcher once the rail folds away. */
   const closePanel = useCallback(
     (panel: 'notes' | 'variants') => {
       const inDock = focusInDock();
       update(panel === 'notes' ? { notesOpen: false, picking: false, expanded: false } : { variantsOpen: false, expanded: false });
-      if (!inDock) return;
-      cancelAnimationFrame(focusFrame.current);
-      focusFrame.current = requestAnimationFrame(() => {
-        const button = rootRef.current?.querySelector<HTMLButtonElement>(`.isotone-rail-button[aria-controls="${id}-${panel}"]`);
-        (button && !button.closest('[inert]') ? button : fabRef.current)?.focus();
-      });
+      if (inDock) focusLauncher(panel);
     },
-    [update, focusInDock, id],
+    [update, focusInDock, focusLauncher],
   );
   const closeNotes = useCallback(() => closePanel('notes'), [closePanel]);
   const closeVariants = useCallback(() => closePanel('variants'), [closePanel]);
@@ -486,7 +510,7 @@ export function IterationPanel({
         update({ picking: false });
         focusComposer();
       } else {
-        if (!notesOpen && !variantsOpen) previousFocus.current = document.activeElement as HTMLElement;
+        if (!notesOpen && !variantsOpen) rememberFocus();
         update({ expanded: true });
         startFeedback(true);
       }
@@ -529,7 +553,7 @@ export function IterationPanel({
         for (const type of FENCED_EVENTS) shadow.removeEventListener(type, stop);
       }
     };
-  }, [visible, update, focusComposer, startFeedback, dockComposer, cancelEdit, closeAll]);
+  }, [visible, update, focusComposer, startFeedback, dockComposer, cancelEdit, closeAll, rememberFocus]);
 
   // Opening a surface or changing route loads at once; the poll in useNotes keeps it current.
   // biome-ignore lint/correctness/useExhaustiveDependencies: open-time refresh.
@@ -544,83 +568,24 @@ export function IterationPanel({
     if (variants && !variantsAvailable) refreshSource(variants);
   }, [variants]);
 
-  // The draft for this page: restored when the route changes, saved as it changes.
-  const draftRestored = useRef('');
-  const restoringDraft = useRef(false);
-  useEffect(() => {
-    if (draftRestored.current === draftKey) return;
-    draftRestored.current = draftKey;
-    restoringDraft.current = true;
+  useDraft(draftKey, text, { targets, variantTarget, editing }, (restoredTargets, restoredVariant) => {
     update({ anchor: null });
     setEditing(null);
-    text.set('');
-    setTargets([]);
-    setVariantTarget(null);
-    try {
-      const raw = readBrowserStorage(localStorage, draftKey);
-      if (!raw) return;
-      try {
-        const draft = JSON.parse(raw);
-        if (draft && typeof draft.text === 'string') {
-          text.set(draft.text);
-          setTargets(Array.isArray(draft.elements) ? draft.elements : []);
-          setVariantTarget(draft.variant ?? null);
-        } else text.set(raw);
-      } catch {
-        text.set(raw);
-      }
-    } catch {}
-  }, [draftKey, text, update]);
-  const saveDraft = useCallback(
-    (key: string) => {
-      const { editing, targets, variantTarget } = latest.current;
-      if (editing || draftRestored.current !== key) return;
-      const value = text.get();
-      try {
-        if (!value && targets.length === 0 && !variantTarget) removeBrowserStorage(localStorage, key);
-        else writeBrowserStorage(localStorage, key, JSON.stringify({ text: value, elements: targets, variant: variantTarget }));
-      } catch {}
-    },
-    [text],
-  );
-  // Typing saves once it settles; leaving the page saves what is pending.
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const off = text.subscribe(() => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        timer = undefined;
-        saveDraft(draftKey);
-      }, DRAFT_SAVE_MS);
-    });
-    return () => {
-      off();
-      if (timer === undefined) return;
-      clearTimeout(timer);
-      saveDraft(draftKey);
-    };
-  }, [text, draftKey, saveDraft]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: references and edits save at once.
-  useEffect(() => {
-    // Restoration commits after this effect pass; never save the previous route's references over it.
-    if (restoringDraft.current) {
-      restoringDraft.current = false;
-      return;
-    }
-    saveDraft(draftKey);
-  }, [targets, variantTarget, editing, draftKey, saveDraft]);
+    setTargets(restoredTargets);
+    setVariantTarget(restoredVariant);
+  });
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll follows new notes.
   useEffect(() => {
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [notes, notesOpen]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-sample the surrounding page when opened.
+  // The observer follows the page from here on; opening a panel or changing route does not rebuild it.
   useLayoutEffect(() => {
     if (!visible) return;
     const root = rootRef.current?.getRootNode();
     if (root instanceof ShadowRoot || root instanceof Document) ensurePanelStyles(root);
     return observeTheme(setTheme, themePreference);
-  }, [visible, open, route, themePreference]);
+  }, [visible, themePreference]);
 
   if (!visible) return null;
   const composer = (
@@ -751,7 +716,6 @@ export function IterationPanel({
               <VariantsView
                 source={variants}
                 active={variantsOpen}
-                onClose={closeVariants}
                 onFeedback={notesAvailable ? feedback : undefined}
                 onSaved={loadNotes}
                 onManage={notesAvailable ? queueRemoval : undefined}
@@ -842,7 +806,7 @@ export function IterationPanel({
             if (open) closeAll();
             else if (expanded) update({ expanded: false });
             else {
-              previousFocus.current = document.activeElement as HTMLElement | null;
+              rememberFocus();
               update({ expanded: true });
               const { defaultTab, notesAvailable, variantsAvailable } = latest.current;
               if ((defaultTab === 'variants' || !notesAvailable) && variantsAvailable) update({ variantsOpen: true });

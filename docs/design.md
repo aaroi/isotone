@@ -123,7 +123,7 @@ whole selector, or that moves to another surface, closes it:
 | Remove an option, failed | Stays open with the error in the footer | The same trash button |
 | Feedback on the selector or an option | Closes | The composer |
 | Reset to default | Closes | The selector's heading |
-| Keep only this, Keep default only, Remove selector & options | Closes | The selector's heading, or the option's chevron in an option-scoped dialog |
+| Keep only this, Keep default only, Remove selector & options | Closes | The selector's heading, or whatever opened an option-scoped dialog: its chevron, or the option itself after a right click, Shift+F10 or the context-menu key |
 
 Escape, the close button and a pointer outside the dialog close it and return
 focus to the heading.
@@ -314,7 +314,7 @@ the composer must not remeasure unchanged selectors or notes.
 | `src/react/IterationPanel.tsx` | The dock: which surfaces are open, the rail, focus on close, host event fence and shortcut |
 | `src/react/Composer.tsx`, `NotesPanel.tsx` | The composer and its text, and the feedback panel with its saved notes |
 | `src/react/picking.tsx`, `useFloatingComposer.ts` | Select mode, hover and pin outlines, and the composer floating beside a pin |
-| `src/react/useNotes.ts` | Loading, polling and optimistic writes of notes |
+| `src/react/useNotes.ts`, `useDraft.ts` | Loading, polling and optimistic writes of notes; each page's unsent draft |
 | `src/react/VariantsView.tsx` | The selector list, sections, colour popover and the defaults bar |
 | `src/react/AxisControl.tsx`, `AxisActionsDialog.tsx` | One selector's controls, and its action dialog |
 | `src/react/theme.ts` | Theme resolution, observation and cleanup |

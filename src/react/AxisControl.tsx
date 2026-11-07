@@ -151,12 +151,6 @@ export const AxisControl = memo(function AxisControl({
 function moveChoice(event: KeyboardEvent<HTMLElement>) {
   const target = event.target as HTMLElement;
   if (target.getAttribute('role') !== 'radio') return;
-  // Shift+F10 and the context-menu key open the option's actions, as a right click does.
-  if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
-    event.preventDefault();
-    target.parentElement?.querySelector<HTMLButtonElement>('.isotone-opt-more')?.click();
-    return;
-  }
   const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
   if (step === undefined && event.key !== 'Home' && event.key !== 'End') return;
   event.preventDefault();
@@ -171,7 +165,9 @@ function moveChoice(event: KeyboardEvent<HTMLElement>) {
 /**
  * Positions an option's actions button beside its own button: a button cannot
  * nest in a button. The chevron is out of the tab order; keyboard users reach
- * the same dialog with Shift+F10 on the option.
+ * the same dialog with Shift+F10 or the context-menu key on the option. A right
+ * click or a key opens it from the option, so focus returns there, not to the
+ * chevron.
  */
 function OptionFrame({
   label,
@@ -191,6 +187,11 @@ function OptionFrame({
     <div
       className={`isotone-opt ${className}`}
       onContextMenu={(e) => {
+        e.preventDefault();
+        onOpen(e.currentTarget.querySelector('button'));
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== 'ContextMenu' && !(e.key === 'F10' && e.shiftKey)) return;
         e.preventDefault();
         onOpen(e.currentTarget.querySelector('button'));
       }}

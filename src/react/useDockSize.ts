@@ -164,9 +164,14 @@ export function useDockSize(rootRef: RefObject<HTMLElement | null>, key: string,
   }, [rootRef]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: these are the changes that move a handle's range.
   useLayoutEffect(() => {
-    refresh();
     const root = rootRef.current;
-    if (!root || (!open.variants && !open.notes) || typeof ResizeObserver === 'undefined') return;
+    if (!root || (!open.variants && !open.notes)) {
+      setExtents((previous) => (Object.keys(previous).length ? {} : previous));
+      return;
+    }
+    // The observer's first report comes after the browser's own layout; measuring here would force that
+    // layout synchronously, which is most of what opening a long Variants list costs.
+    if (typeof ResizeObserver === 'undefined') return refresh();
     const observer = new ResizeObserver(refresh);
     for (const panel of root.querySelectorAll('.isotone-panel')) observer.observe(panel);
     return () => observer.disconnect();
