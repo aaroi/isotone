@@ -127,7 +127,7 @@ ${APPEARANCE_CSS}
 .isotone-vars-body:has(> .isotone-section) { scroll-padding-top: 44px; }
 .isotone-axis-head { display: flex; align-items: center; justify-content: space-between; min-height: 24px; gap: 8px; margin-bottom: 6px; }
 .isotone-axis-label { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; min-height: 24px; padding: 2px 7px; margin-left: -7px; border-radius: 6px; text-align: left; }
-.isotone-axis-label, .isotone-menu-title > strong { font: inherit; font-weight: 550; }
+.isotone-axis-label, .isotone-menu-title > strong, .isotone-menu-heading > strong { font: inherit; font-weight: 550; }
 .isotone-axis-label > span, .isotone-menu-title > strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isotone-axis-label svg { color: var(--iso-muted); }
 .isotone-axis-value { min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--iso-muted); font: 10px var(--iso-sans); font-variant-numeric: tabular-nums; }
@@ -152,9 +152,11 @@ ${APPEARANCE_CSS}
 .isotone-opt-swatch > .isotone-opt-more { top: -11px; right: -11px; width: 16px; height: 16px; border-radius: 50%; }
 .isotone-opt-swatch > .isotone-opt-more::before { inset: 1px; }
 .isotone-opt-swatch > .isotone-opt-more svg { width: 10px; height: 10px; }
-.isotone-menu-heading { display: flex; flex-direction: column; min-width: 0; }
-.isotone-menu-heading > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.isotone-menu-heading > small { font-size: 10px; color: var(--iso-muted); }
+.isotone-menu-heading { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.isotone-menu-heading > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The option leads, the selector follows in the same line and size, quieter, as in “Compact Spacing”. */
+.isotone-menu-heading > strong { flex: 0 1 auto; }
+.isotone-menu-heading > span { flex: 0 1000 auto; color: var(--iso-muted); font-weight: 400; }
 .isotone-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
 .isotone-thumb { position: relative; display: block; min-width: 0; border-radius: 5px; overflow: hidden; background: var(--iso-well); box-shadow: var(--iso-thumb-shadow); color: var(--iso-muted); }
 .isotone-thumb img { display: block; width: 100%; height: 72px; object-fit: cover; }
@@ -336,9 +338,10 @@ ${FEEDBACK_LAYOUT_CSS}
   .isotone-note .isotone-x { opacity: 0; }
   .isotone-opt > .isotone-opt-more:hover { color: var(--iso-fg); }
   .isotone-opt > .isotone-opt-more { opacity: 0; pointer-events: none; }
-  .isotone-opt:hover > .isotone-opt-more, .isotone-opt:focus-within > .isotone-opt-more, .isotone-opt > .isotone-opt-more[aria-expanded='true'] { opacity: 1; pointer-events: auto; }
-  /* The chevron takes the default dot's corner while it shows. */
-  .isotone-opt:is(:hover, :focus-within) .isotone-default-dot { opacity: 0; }
+  .isotone-opt:hover > .isotone-opt-more, .isotone-opt:has(:focus-visible) > .isotone-opt-more, .isotone-opt > .isotone-opt-more[aria-expanded='true'] { opacity: 1; pointer-events: auto; }
+  /* The chevron takes the default dot's corner while it shows. Keyboard focus shows it;
+     focus a closed dialog returns to it after a click does not. */
+  .isotone-opt:is(:hover, :has(:focus-visible)) .isotone-default-dot { opacity: 0; }
   .isotone-note:hover .isotone-x, .isotone-note:focus-within .isotone-x, .isotone-note-editing .isotone-x { opacity: 1; }
 }
 /* Phones. Panels take turns (see viewport.ts). Variants stop at about half the

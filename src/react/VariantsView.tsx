@@ -16,6 +16,7 @@ import {
 } from '../core/variants';
 import { ColorPicker } from './ColorPicker';
 import { Icon } from './icons';
+import { MOTION } from './motion';
 import { useLayoutMotion } from './useLayoutMotion';
 
 export function refreshSource(source: VariantsSource): void {
@@ -83,6 +84,7 @@ export function VariantsView({
   const menuName = menu ? nameOf(menu) : null;
   // Set when the dialog was opened from one option instead of the selector label.
   const [menuOption, setMenuOption] = useState<string | null>(null);
+  const menuRelease = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [menuOpen, setMenuOpen] = useState(false);
   const [colourOpen, setColourOpen] = useState<string | null>(null);
   const colourPop = useRef<HTMLFieldSetElement>(null);
@@ -200,11 +202,15 @@ export function VariantsView({
     const dialog = menuRef.current;
     const scroll = dialog?.querySelector<HTMLElement>('.isotone-menu-scroll');
     if (!root) return;
+    clearTimeout(menuRelease.current);
     const clear = () => {
       root.style.removeProperty('--iso-menu-need');
       root.style.removeProperty('--iso-menu-top');
     };
-    if (!menuOpen || !dialog || !scroll) { clear(); return; }
+    // A closing dialog keeps its place and the room it took until its fade has
+    // finished; dropping them at once moved it to the panel's top mid-fade.
+    if (!menuOpen) { menuRelease.current = setTimeout(clear, MOTION.exit + 20); return; }
+    if (!dialog || !scroll) { clear(); return; }
     const place = () => {
       const natural = dialog.offsetHeight + scroll.scrollHeight - scroll.clientHeight;
       root.style.setProperty('--iso-menu-need', `${natural + 12}px`);
@@ -224,9 +230,15 @@ export function VariantsView({
     return () => {
       window.removeEventListener('resize', place);
       observer?.disconnect();
-      clear();
     };
   }, [menuOpen, menu, menuOptions.length, error]);
+  // Unmounting drops the dialog's place and room at once.
+  useEffect(() => () => {
+    clearTimeout(menuRelease.current);
+    const root = bodyRef.current?.parentElement;
+    root?.style.removeProperty('--iso-menu-need');
+    root?.style.removeProperty('--iso-menu-top');
+  }, []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: closeMenu only touches state setters and refs, so the listener follows menuOpen alone.
   useEffect(() => {
@@ -483,7 +495,7 @@ export function VariantsView({
             {scoped ? (
               <span className="isotone-menu-heading">
                 <strong>{scoped.label}</strong>
-                <small>{menuName?.label ?? menu.label}</small>
+                <span>{menuName?.label ?? menu.label}</span>
               </span>
             ) : (
               <strong>{menuName?.label ?? menu.label}</strong>
