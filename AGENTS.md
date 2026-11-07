@@ -63,5 +63,6 @@ shows the supported shapes.
 
 For work on this package, use [development guidance](docs/development.md).
 That document links the maintainer's design language and release checks, and
-says how to write a pull request description: what the user experiences today,
-what changes for them, then only the technical detail a reviewer needs.
+says how to write a pull request description for a reader who doesn't know the
+codebase: what the user experiences today, what changes for them, then only the
+technical detail a reviewer needs.

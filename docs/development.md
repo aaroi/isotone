@@ -22,8 +22,10 @@ a second language or runtime.
 
 ## Pull requests
 
-Write the description for a person who hasn't followed the work, however
-technical the change is. `.github/pull_request_template.md` has the outline:
+Write the description for a person who hasn't followed the work and doesn't
+know the codebase well, however technical the change is. When the review depends
+on a part of Isotone (the dock, knobs, overlay variants, the notes file), say in a
+sentence what it is. `.github/pull_request_template.md` has the outline:
 
 - **Before:** what someone using Isotone experiences today, in plain words. Name
   who that is: the person reviewing their app, their coding agent, or a maintainer.

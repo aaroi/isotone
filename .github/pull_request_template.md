@@ -1,5 +1,6 @@
 <!--
-Write for a person who hasn't followed the work. Start with what the user sees,
+Write for a person who hasn't followed the work and doesn't know the codebase
+well. Explain any part of Isotone the review depends on in a sentence. Start with what the user sees,
 then add only the technical detail a reviewer needs. See "Pull requests" in
 docs/development.md.
 -->
