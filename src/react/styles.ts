@@ -45,7 +45,7 @@ ${APPEARANCE_CSS}
   text-align: left; letter-spacing: normal; color-scheme: dark;
   /* Inherited text properties cross the shadow boundary: an RTL or styled host must not mirror or restyle the panel. */
   direction: ltr; writing-mode: horizontal-tb; word-spacing: normal; text-indent: 0; text-transform: none;
-  text-shadow: none; white-space: normal; font-feature-settings: normal; font-variation-settings: normal;
+  text-shadow: none; white-space: normal; font-feature-settings: normal; font-variation-settings: normal; -webkit-text-fill-color: currentColor;
 }
 .isotone-root :where(button, input, textarea):focus-visible { outline: 2px solid var(--iso-focus); outline-offset: 3px; }
 .isotone-root button { transition: transform var(--iso-fast) var(--iso-ease-out), opacity var(--iso-fast) var(--iso-ease-out); }
@@ -102,14 +102,9 @@ ${APPEARANCE_CSS}
 .isotone-root .isotone-panel > .isotone-panel-close:hover { color: var(--iso-fg); }
 .isotone-panel-close:hover::before { background: var(--iso-control-hover-face); }
 @media (hover: none) { .isotone-panel-close { opacity: 1; } }
-.isotone-panel-head { flex: 0 0 42px; min-height: 42px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 14px; gap: 8px; border-bottom: 1px solid var(--iso-line); }
-.isotone-root .isotone-notes-panel > .isotone-panel-head { display: none; }
-.isotone-root .isotone-vars > .isotone-panel-head { order: 2; flex: 0 0 auto; min-height: 48px; padding: var(--iso-space); border: 0; }
-.isotone-root .isotone-vars > .isotone-panel-head:has(.isotone-save) { position: relative; z-index: 1; margin-top: calc(0px - var(--iso-space)); background: linear-gradient(to bottom, transparent, var(--iso-bg) var(--iso-space)); }
-.isotone-root .isotone-vars > .isotone-panel-head:not(:has(.isotone-save)) { display: none; }
-.isotone-root .isotone-vars > .isotone-panel-head :is(h2, .isotone-icon) { display: none; }
+/* The defaults bar, at the foot of the variants panel while a pick differs from its default. */
+.isotone-root .isotone-vars > .isotone-panel-head { order: 2; flex: 0 0 auto; min-height: 48px; display: flex; align-items: center; gap: 8px; padding: var(--iso-space); position: relative; z-index: 1; margin-top: calc(0px - var(--iso-space)); background: linear-gradient(to bottom, transparent, var(--iso-bg) var(--iso-space)); }
 .isotone-root .isotone-axis-menu { top: var(--iso-menu-top, 6px); max-height: calc(100% - var(--iso-menu-top, 6px) - 6px); }
-.isotone-panel-head h2 { font-size: 12px; font-weight: 600; letter-spacing: -.01em; }
 .isotone-head-actions { display: flex; align-items: center; gap: 6px; margin-right: auto; }
 .isotone-icon { width: 28px; height: 28px; display: inline-grid; place-items: center; flex: none; color: var(--iso-muted); border-radius: 6px; }
 .isotone-count { margin-left: 5px; color: var(--iso-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
@@ -360,6 +355,8 @@ ${FEEDBACK_LAYOUT_CSS}
   .isotone-opt:is(:hover, :has(:focus-visible)) .isotone-default-dot { opacity: 0; }
   .isotone-note:hover .isotone-x, .isotone-note:focus-within .isotone-x, .isotone-note-editing .isotone-x { opacity: 1; }
 }
+/* Without a hovering fine pointer the chevron always shows, so it always has the dot's corner. */
+@media not all and (hover: hover) and (pointer: fine) { .isotone-opt .isotone-default-dot { opacity: 0; } }
 @media (max-width: 640px), (max-height: 500px) { .isotone-resize { display: none; } }
 /* The dock's size is the reviewer's choice on a window with room for it. */
 @media (min-width: 641px) and (min-height: 501px) {

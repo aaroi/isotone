@@ -160,7 +160,7 @@ export function AxisActionsDialog({
   // Removing one option from the selector's dialog keeps it open, so several can
   // be requested in a row. Everything else closes it: Keep default only, Keep only
   // this and Remove selector decide the selector, and the option-scoped dialog has
-  // no list to move focus along, so it closes and returns focus to its chevron.
+  // no list to move focus along, so it closes and returns focus to what opened it.
   async function manage(action: VariantAction) {
     if (busy || !onManage || requested(action)) return;
     const option = action.action === 'remove-option' && !scoped ? action.optionId : undefined;

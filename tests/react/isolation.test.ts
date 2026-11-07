@@ -156,12 +156,37 @@ it('swallows presses on the page while selecting, unless Shift is held', async (
 it('returns focus to the rail or launcher when a panel closes from inside', async () => {
   await render({ variants: source() });
   await openFeedback();
-  const close = $<HTMLButtonElement>('.isotone-notes-panel .isotone-panel-head button');
+  const close = $<HTMLButtonElement>('.isotone-notes-panel > .isotone-panel-close');
   close.focus();
   await act(async () => close.click());
   await frame();
   expect(shadow.activeElement).not.toBeNull();
   expect([$('.isotone-fab'), $('.isotone-rail-button[aria-label^="Feedback"]')]).toContain(shadow.activeElement);
+});
+
+it('never drops focus to the page body when Escape closes a panel opened from the launcher', async () => {
+  await render();
+  document.getElementById('host-button')?.focus();
+  await openFeedback();
+  await act(async () => {
+    $('textarea').focus();
+    $('textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
+  });
+  await frame();
+  expect($('.isotone-notes-panel').dataset.open).toBe('false');
+  expect(document.activeElement).toBe(host);
+  expect([$('.isotone-fab'), $('.isotone-rail-button')]).toContain(shadow.activeElement);
+});
+
+it('treats a trailing slash or query as the same page, as the CLI does', async () => {
+  notes = [
+    { id: 'a', route: '/about/', feedback: 'Slash', element: null, done: false, createdAt: '2026-01-01T00:00:00.000Z' },
+    { id: 'b', route: '/about', feedback: 'Bare', element: null, done: false, createdAt: '2026-01-01T00:00:01.000Z' },
+  ];
+  await render({ route: '/about/?tab=2' });
+  await openFeedback();
+  expect(shadow.querySelectorAll('.isotone-note')).toHaveLength(2);
+  expect(shadow.querySelector('.isotone-pages')).toBeNull();
 });
 
 it('names the note count on the launcher and the Feedback button', async () => {
@@ -215,6 +240,8 @@ it('makes single choices a radio group with one tab stop and keyboard actions', 
   await render({ variants });
   await act(async () => $('.isotone-fab').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
   await act(async () => $<HTMLButtonElement>('.isotone-rail-button[aria-label="Variants"]').click());
+  // Opening from the launcher focuses the composer a frame later; let that land before the keys.
+  await frame();
   const group = $('[role="radiogroup"]');
   const radios = () => Array.from(group.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
   expect(radios().map((r) => [r.getAttribute('aria-checked'), r.tabIndex])).toEqual([
@@ -241,4 +268,12 @@ it('makes single choices a radio group with one tab stop and keyboard actions', 
   await key(radios()[1], { key: 'F10', shiftKey: true });
   expect($('.isotone-axis-menu').getAttribute('aria-label')).toBe('Comfy option actions');
   expect($('.isotone-axis-menu').dataset.open).toBe('true');
+  // Closing it returns focus to the option, where the arrow keys still work, not to its off-tab-order chevron.
+  await act(async () => {
+    $('.isotone-axis-menu').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  });
+  await frame();
+  await frame();
+  expect($('.isotone-axis-menu').dataset.open).toBe('false');
+  expect(shadow.activeElement).toBe(radios()[1]);
 });

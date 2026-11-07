@@ -1,4 +1,5 @@
 import { type HTMLAttributes, memo, type ReactNode, type RefObject } from 'react';
+import { normalizeRoute } from '../core/routes';
 import type { IterationNote } from '../core/types';
 import { Icon } from './icons';
 import { dotPulse } from './motion';
@@ -58,14 +59,6 @@ export function NotesPanel({
     >
       <PanelClose label="Close feedback" onClose={onClose} />
       {open && <div {...resizeHandle} />}
-      <div className="isotone-panel-head">
-        <h2>
-          Feedback <span className="isotone-count">{notes.length || ''}</span>
-        </h2>
-        <button type="button" className="isotone-icon" aria-label="Close feedback" title="Close feedback" onClick={onClose}>
-          <Icon name="close" />
-        </button>
-      </div>
       {pages.counts.size > 1 && (
         <fieldset className="isotone-pages" aria-label="Pages">
           {[route, ...pages.others].map((page) => (
@@ -88,7 +81,7 @@ export function NotesPanel({
           <NoteRow
             key={note.id}
             note={note}
-            page={note.route !== route ? note.route : undefined}
+            page={normalizeRoute(note.route) !== route ? note.route : undefined}
             editing={editingId === note.id}
             working={working.has(note.id)}
             onEdit={onEdit}

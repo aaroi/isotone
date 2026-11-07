@@ -118,3 +118,22 @@ it('does not briefly overwrite the destination draft while changing routes', asy
   }
   expect(JSON.parse(values.get(newKey) ?? '{}').text).toBe('Project draft');
 });
+
+it('saves the last keystrokes when the page is hidden or unloaded before the save settles', async () => {
+  await render();
+  const field = await open();
+  const type = (value: string) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(field, value);
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  await type('Before a reload');
+  expect(values.has(newKey)).toBe(false);
+  window.dispatchEvent(new Event('pagehide'));
+  expect(JSON.parse(values.get(newKey) ?? '{}').text).toBe('Before a reload');
+  await type('Before switching tabs');
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+  document.dispatchEvent(new Event('visibilitychange'));
+  Reflect.deleteProperty(document, 'visibilityState');
+  expect(JSON.parse(values.get(newKey) ?? '{}').text).toBe('Before switching tabs');
+});
