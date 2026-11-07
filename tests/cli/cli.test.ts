@@ -917,7 +917,8 @@ describe('note listing and actions', () => {
     expect(await ids(root)).toEqual(['old-open']);
     expect(await ids(root, '--days', '7')).toEqual(['old-open', 'recent-done']);
     expect(await ids(root, '--all')).toEqual(['old-done', 'old-open', 'recent-done']);
-    expect(await ids(root, '--all', '--days', '7')).toEqual(['old-open', 'recent-done']);
+    // --all already covers what --days would add.
+    expect(await ids(root, '--all', '--days', '7')).toEqual(['old-done', 'old-open', 'recent-done']);
   });
 
   it('takes a route without its slash and a /* pattern', async () => {
@@ -965,6 +966,14 @@ describe('note listing and actions', () => {
       expect(await runCli(argv, io)).toBe(0);
       expect(JSON.parse(readFileSync(join(root, '.iteration-feedback.json'), 'utf8'))[0].reply.text).toBe('-1px or -2px?');
     }
+  });
+
+  it('prints --reply --json as an array, like the other actions', async () => {
+    const root = tempRepo();
+    seed(root);
+    const io = makeIo(root);
+    expect(await runCli(['--reply', 'old-open', 'Which colour?', '--json'], io)).toBe(0);
+    expect(JSON.parse(io.text.out)).toMatchObject([{ id: 'old-open', reply: { text: 'Which colour?' } }]);
   });
 });
 

@@ -88,7 +88,8 @@ function parseNotesArgs(input: string[], cwd: string): NotesArgs {
     ids,
     replyText,
     route,
-    closed: daysText !== undefined ? days : has(argv, '--all') ? 'all' : 'none',
+    // `--all` already includes what `--days` would add.
+    closed: has(argv, '--all') ? 'all' : daysText !== undefined ? days : 'none',
   };
 }
 
@@ -126,7 +127,7 @@ function reply(io: CliIO, args: NotesArgs, root: string): number {
     return 1;
   }
   touchSession(args.file);
-  if (args.json) out(io, toJson(noteRecord(match, root)));
+  if (args.json) out(io, toJson([noteRecord(match, root)]));
   else {
     out(io, `replied: [${shortId(match)}] ${oneLine(match.route)} — ${oneLine(args.replyText, 60)}`);
     out(io, 'The note stays open. The reviewer sees your reply under it and answers by editing the note.');
