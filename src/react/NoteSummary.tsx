@@ -7,9 +7,10 @@ function SummaryTag({ label }: { label: string }) {
   return <span className="isotone-chip"><span onPointerOver={showOverflowTitle}>{label}</span></span>;
 }
 
-/** The agent's question about a note, from `isotone --reply`; edit the note to answer. */
+/** The agent's question about a note, from `isotone --reply`; edit the note to answer.
+ *  Once answered it is no longer a question, so it is not shown. */
 function Reply({ note }: { note: IterationNote }) {
-  if (!note.reply?.text) return null;
+  if (!note.reply?.text || note.reply.answered) return null;
   return <p className="isotone-reply" onPointerOver={showOverflowTitle}><span>Agent asks</span> {note.reply.text}</p>;
 }
 

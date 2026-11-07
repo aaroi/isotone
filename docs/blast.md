@@ -106,8 +106,9 @@ a session starts.
 
   The reply shows under the note in the panel ("Agent asks …"), and in full
   while the reviewer edits the note. Editing it is the answer: the note is handed
-  out again with the reply attached. Until then no session hands it out, and the
-  end of a session lists it as waiting for the reviewer.
+  out again with the reply attached and marked `"answered": true`, and the panel
+  stops showing the question. Until then no session hands it out, and the end of
+  a session lists it as waiting for the reviewer.
 - Leave risky or large requests open, and flag them in the summary.
 - When the session is over, give the user a short summary of what changed and
   what is still open.

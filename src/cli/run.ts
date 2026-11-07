@@ -22,7 +22,7 @@
  */
 import { resolve } from 'node:path';
 
-import { readNotes, replyOf, MAX_REPLY_LENGTH, updateNotes, type StoredNote } from '../store';
+import { readNotes, replyView, MAX_REPLY_LENGTH, updateNotes, type StoredNote } from '../store';
 import { noteFingerprint, touchSession } from '../blast';
 import { BLAST } from '../core/blast';
 import { runBlast } from './blast';
@@ -325,7 +325,7 @@ export function noteRecord(record: StoredNote, root: string) {
   // A hand-edited, malformed update request or reply is dropped, not passed on.
   const checked = agentNote(record, root);
   const update = checked.update;
-  const reply = replyOf(record.reply);
+  const reply = replyView(record);
   const { reply: _reply, ...rest } = checked;
   const n = { ...rest, ...(reply ? { reply } : {}) };
   return n.done ? n : {
@@ -369,8 +369,8 @@ export function printNotes(io: CliIO, rows: StoredNote[], root: string): void {
     if (context) out(io, `  · ${context}`);
     const text = update ? updateNoteText(update) : n.feedback;
     if (text) out(io, `  ${text}`);
-    const reply = replyOf(n.reply);
-    if (reply) out(io, `  ↩ you asked: ${reply.text}`);
+    const reply = replyView(n);
+    if (reply) out(io, reply.answered ? `  ↩ you asked, and the reviewer has since edited the note: ${reply.text}` : `  ↩ you asked: ${reply.text}`);
   }
   out(io, `\n${rows.length} iteration note(s).`);
   if (rows.some((n) => !n.done && updateRequestOf(n.update, { root }))) out(io, UPDATE_HINT);

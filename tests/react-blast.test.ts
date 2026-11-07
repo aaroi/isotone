@@ -154,4 +154,13 @@ describe('an agent reply under a note', () => {
     expect(host.querySelector('.isotone-reply')?.textContent).toBe('Agent asks Spacing, copy or layout?');
     expect(host.textContent).toContain('Make this nicer.');
   });
+
+  it('stops asking once the reviewer has answered by editing the note', async () => {
+    const note = { id: 'n1', route: '/', feedback: 'Make the spacing nicer.', element: null, done: false, createdAt: new Date(NOW).toISOString(),
+      reply: { text: 'Spacing, copy or layout?', at: new Date(NOW).toISOString(), answered: true } };
+    await act(async () => root.render(h(NoteSummary, { note })));
+    expect(host.querySelector('.isotone-reply')).toBeNull();
+    expect(host.textContent).not.toContain('Agent asks');
+    expect(host.textContent).toContain('Make the spacing nicer.');
+  });
 });

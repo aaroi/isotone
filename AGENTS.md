@@ -55,7 +55,8 @@ the notable changes from the new CHANGELOG for the user, and run the note's
 
 When a note is ambiguous, ask rather than guess: `npx isotone --reply <id> "<question>"`
 shows your question under the note in the panel and leaves it open. The reviewer
-answers by editing the note.
+answers by editing the note; the note then comes back with its `reply` marked
+`"answered": true`, and the edited note is the answer.
 
 ## Blast mode
 

@@ -70,6 +70,9 @@ export interface NoteReply {
   /** A fingerprint of the note as it was when the agent asked. Until the
    *  reviewer edits the note, Blast does not hand it out again. */
   about?: string;
+  /** Set when the note has changed since the agent asked: the reviewer's
+   *  edit answered the question, so it is no longer pending. */
+  answered?: boolean;
 }
 
 /** A note written in the panel, read and answered by the coding agent. */

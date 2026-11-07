@@ -4,7 +4,7 @@
  * database. The path comes from the plugin/CLI options.
  */
 import { execFileSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
@@ -210,7 +210,7 @@ function toItem(n: StoredNote, root: string) {
     // directory is outside the project, is not shown.
     ...(update ? { update } : {}),
     // Only the CLI writes a reply; a hand-edited, malformed one is not shown.
-    ...(replyOf(n.reply) ? { reply: replyOf(n.reply) } : {}) };
+    ...(replyView(n) ? { reply: replyView(n) } : {}) };
 }
 
 /** The transport-agnostic result of a notes request — any runtime (Vite
@@ -436,6 +436,32 @@ export function replyOf(value: unknown): NoteReply | null {
   const v = value as Partial<NoteReply>;
   if (typeof v.text !== 'string' || !v.text.trim() || typeof v.at !== 'string' || !Number.isFinite(Date.parse(v.at))) return null;
   return { text: v.text.slice(0, MAX_REPLY_LENGTH), at: v.at, ...(typeof v.about === 'string' && v.about.length <= 64 ? { about: v.about } : {}) };
+}
+
+/**
+ * What the agent was given for a note. A reviewer who edits a handed-out note
+ * (to answer the agent's question, say) changes it, and the note is handed out
+ * again.
+ */
+export function noteFingerprint(note: StoredNote): string {
+  const update = updateRequestOf(note.update);
+  const content = JSON.stringify([
+    note.feedback, note.route,
+    (note.elements ?? (note.element ? [note.element] : [])).map((element) => element.selector),
+    note.variant ?? null, note.variantAction ?? null, update?.to ?? null,
+  ]);
+  return createHash('sha256').update(content).digest('base64url').slice(0, 16);
+}
+
+/**
+ * A note's reply as readers see it. Once the note has changed since the agent
+ * asked (the reviewer answers by editing it), the question is no longer
+ * pending: it comes back marked `answered`.
+ */
+export function replyView(note: StoredNote): NoteReply | null {
+  const reply = replyOf(note.reply);
+  if (!reply) return null;
+  return reply.about !== undefined && reply.about !== noteFingerprint(note) ? { ...reply, answered: true } : reply;
 }
 
 function cap(v: string, max: number): string {

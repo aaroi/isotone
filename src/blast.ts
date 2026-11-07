@@ -4,17 +4,17 @@
  * browser may only extend or stop a session; it never starts one or sends a
  * command. See `src/core/blast.ts` for the names and `docs/blast.md`.
  */
-import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 
 import {
   EXTEND_MS, HEARTBEAT_MS, LIVE_HEARTBEAT_MS, MAX_SESSION_MS, BLAST, type BlastState,
 } from './core/blast';
 import { withFileLock, writeJson } from './file-store';
-import { ensureFileIgnored, type NotesResponse, type StoredNote } from './store';
+import { ensureFileIgnored, noteFingerprint, type NotesResponse, type StoredNote } from './store';
 import { updateRequestOf } from './update-request';
 
 export { BLAST } from './core/blast';
+export { noteFingerprint } from './store';
 export type { BlastState } from './core/blast';
 
 /** The stored session. `seen` maps each handed-out note to its fingerprint. */
@@ -103,20 +103,6 @@ export function publicState(session: BlastSession, now = Date.now()): BlastState
   };
 }
 
-/**
- * What the agent was given for a note. A reviewer who edits a handed-out note
- * (to answer the agent's question, say) changes it, and the note is handed out
- * again.
- */
-export function noteFingerprint(note: StoredNote): string {
-  const update = updateRequestOf(note.update);
-  const content = JSON.stringify([
-    note.feedback, note.route,
-    (note.elements ?? (note.element ? [note.element] : [])).map((element) => element.selector),
-    note.variant ?? null, note.variantAction ?? null, update?.to ?? null,
-  ]);
-  return createHash('sha256').update(content).digest('base64url').slice(0, 16);
-}
 
 /** Open notes in the session's scope that have not been handed out as they are now. */
 export function unseenNotes(notes: StoredNote[], session: BlastSession): StoredNote[] {

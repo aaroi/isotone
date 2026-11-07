@@ -8,7 +8,7 @@ import { blastFile, blastResponse, readSession, touchSession } from '../src/blas
 import { runBlast, ENDED_EXIT } from '../src/cli/blast';
 import { runCli } from '../src/cli/run';
 import { BLAST, BLAST_CLI, formatDuration, parseDuration, blastPrompt, timeLeft } from '../src/core/blast';
-import { readNotes, type StoredNote, updateNotes, writeNotes } from '../src/store';
+import { notesResponse, readNotes, type StoredNote, updateNotes, writeNotes } from '../src/store';
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -148,6 +148,26 @@ describe(`isotone ${BLAST.command}`, () => {
     expect(batch.type).toBe('batch');
     expect(batch.notes[0].feedback).toBe('Note ask. The primary one.');
     expect(batch.notes[0].reply.text).toBe('Which of the two buttons?');
+    // The edit answered it: no longer a pending question, anywhere it is read.
+    expect(batch.notes[0].reply.answered).toBe(true);
+    await runCli(['--json'], p.io);
+    expect(JSON.parse(p.take())[0].reply).toMatchObject({ text: 'Which of the two buttons?', answered: true });
+    await runCli([], p.io);
+    expect(p.take()).toContain('↩ you asked, and the reviewer has since edited the note: Which of the two buttons?');
+    const [row] = notesResponse(p.notes, { method: 'GET', url: '/' }).body as StoredNote[];
+    expect(row.reply?.answered).toBe(true);
+  });
+
+  it('keeps a question pending until the note changes', async () => {
+    const p = project();
+    add(p.notes, note('wait', { createdAt: new Date(Date.now() - 5_000).toISOString() }));
+    await runCli(['--reply', 'wait', 'Which page?'], p.io);
+    p.take();
+    const [row] = notesResponse(p.notes, { method: 'GET', url: '/' }).body as StoredNote[];
+    expect(row.reply).toMatchObject({ text: 'Which page?' });
+    expect(row.reply?.answered).toBeUndefined();
+    await runCli([], p.io);
+    expect(p.take()).toContain('↩ you asked: Which page?');
   });
 
   it('holds back a note with an unanswered question, even in a new session', async () => {

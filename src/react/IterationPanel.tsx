@@ -1039,7 +1039,7 @@ export function IterationPanel({
       }}
     >
     {/* The agent's question, in full, while the reviewer edits the note to answer it. */}
-    {editing?.reply?.text && <p className="isotone-editing-reply"><span>Agent asks</span> {editing.reply.text}</p>}
+    {editing?.reply?.text && !editing.reply.answered && <p className="isotone-editing-reply"><span>Agent asks</span> {editing.reply.text}</p>}
     <div className="isotone-context" aria-live="polite">
       {editing && (
         <span className="isotone-chip">
