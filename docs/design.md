@@ -138,7 +138,9 @@ a pointer it appears only on hover or keyboard focus, and while its dialog is
 open; hidden, it takes no clicks. Touch screens always show it. It replaces the
 default dot in that corner while it shows, and it never takes label width. On a
 swatch it is a 16px badge just off the corner, overlapping only the rounded
-corner outside the paint, so a press anywhere on the colour picks it. A right click opens the same thing. Both open the selector
+corner outside the paint, so a press anywhere on the colour picks it. A right click opens the same thing, and so do
+Shift+F10 and the context-menu key on a focused option; the chevron itself takes no Tab stop. Single choices
+(segments, thumbnails, swatches) are a radio group with one Tab stop, where arrow keys, Home and End move and pick. Both open the selector
 action dialog scoped to that option, titled with the option and the selector as
 secondary text: Feedback on this option, Keep only this, then Remove this option
 (disabled for the default). Opening it never changes the selection, and the dialog opens below the option
@@ -309,8 +311,12 @@ the composer must not remeasure unchanged selectors or notes.
 | `src/react/UpdateNotice.tsx` | Quiet update line, and the dialog that hands the upgrade to the agent |
 | `src/react/icons.tsx` | Icon choices, optical size and stroke |
 | `src/react/NoteSummary.tsx` | Saved feedback/defaults summaries and their shared tag rendering |
-| `src/react/IterationPanel.tsx` | Dock, composer, feedback and element-picking behavior |
-| `src/react/VariantsView.tsx` | Selectors, action dialogs and the defaults bar |
+| `src/react/IterationPanel.tsx` | The dock: which surfaces are open, the rail, focus on close, host event fence and shortcut |
+| `src/react/Composer.tsx`, `NotesPanel.tsx` | The composer and its text, and the feedback panel with its saved notes |
+| `src/react/picking.tsx`, `useFloatingComposer.ts` | Select mode, hover and pin outlines, and the composer floating beside a pin |
+| `src/react/useNotes.ts` | Loading, polling and optimistic writes of notes |
+| `src/react/VariantsView.tsx` | The selector list, sections, colour popover and the defaults bar |
+| `src/react/AxisControl.tsx`, `AxisActionsDialog.tsx` | One selector's controls, and its action dialog |
 | `src/react/theme.ts` | Theme resolution, observation and cleanup |
 | `src/react/motion.ts` | Motion timing and work limits |
 | `src/react/viewport.ts` | Small-screen, touch and on-screen keyboard rules |
