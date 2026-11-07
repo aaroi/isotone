@@ -12,10 +12,11 @@ and a short first run for the agent. It never edits app code or installs
 anything. `--yes` also writes a short Isotone section into `AGENTS.md`, between
 `<!-- isotone:start … -->` and `<!-- isotone:end -->` markers, and for Vite
 projects `.isotone/variants/README.md`. Running it again rewrites only the text
-between the markers, so the section follows upgrades; a section written by
-Isotone 1.2.4 or earlier has no markers, and `init` prints its replacement instead
-of editing it. Once the project has variants or knobs, the first run is skipped.
-`--json` prints the plan, including the files `--yes` writes, and
+between the markers, so the section follows upgrades: keep your own notes outside
+them. A section written by Isotone 1.2.4 or earlier has no markers, and `init`
+prints its replacement instead of editing it. Once the project has variants or
+knobs, the first run is skipped. `--json` prints the plan, including the files
+`--yes` writes and, when it does not write the section, its text as `agentsSection`, and
 `--approach overlay|host|serve` overrides the recommendation. From then on, agents
 work as [the agent guide](agent-guide.md) describes.
 

@@ -60,6 +60,7 @@ describe('--help', () => {
     for (const argv of [['--help'], ['-h'], ['help']]) {
       const io = makeIo(root);
       expect(await runCli(argv, io)).toBe(0);
+      expect(io.text.out).toContain('Agent guide: node_modules/isotone/docs/agent-guide.md');
       expect(io.text.out).toContain('isotone serve');
       expect(io.text.out).toContain('isotone init');
     }
@@ -610,13 +611,23 @@ describe('init', () => {
     expect(readFileSync(join(root, 'AGENTS.md'), 'utf8')).toBe(legacy);
     expect(io.text.out).toContain('cannot safely replace');
     expect(io.text.out).toContain('<!-- isotone:end -->');
+    // An agent reading JSON gets the replacement text too.
+    const legacyJson = makeIo(root);
+    expect(await runCli(['init', '--yes', '--json'], legacyJson)).toBe(0);
+    const plan = JSON.parse(legacyJson.text.out);
+    expect(plan).toMatchObject({ agents: 'legacy', writes: [] });
+    expect(plan.agentsSection).toMatch(/^<!-- isotone:start [\s\S]*<!-- isotone:end -->$/);
 
     // A start marker without its end is left alone too.
     const broken = '<!-- isotone:start 1.0.0 -->\n## Isotone\n\nNo end marker.\n';
     writeFileSync(join(root, 'AGENTS.md'), broken);
     const json = makeIo(root);
     expect(await runCli(['init', '--yes', '--json'], json)).toBe(0);
-    expect(JSON.parse(json.text.out)).toMatchObject({ agents: 'legacy', writes: [] });
+    expect(JSON.parse(json.text.out)).toMatchObject({ agents: 'unterminated', writes: [] });
+    expect(readFileSync(join(root, 'AGENTS.md'), 'utf8')).toBe(broken);
+    const text = makeIo(root);
+    expect(await runCli(['init', '--yes'], text)).toBe(0);
+    expect(text.text.out).toContain('without `<!-- isotone:end -->`, so init left it alone');
     expect(readFileSync(join(root, 'AGENTS.md'), 'utf8')).toBe(broken);
   });
 
