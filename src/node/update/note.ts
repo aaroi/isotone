@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { updateNoteText, type UpdateInfo, type UpdateRequest } from '../../core/update';
-import { MAX_UPDATE_NOTE_ROUTE, MAX_UPDATE_NOTED_BYTES } from '../../core/limits';
+import { MAX_ROUTE, MAX_UPDATE_NOTED_BYTES } from '../../core/limits';
 import { readJsonBounded, writeJsonAtomic } from '../fs/atomic';
 import { SERVER_LOCK_WAIT_MS, withFileLock } from '../fs/lock';
 import { readNotes, writeNotes } from '../notes/store';
@@ -43,7 +43,7 @@ function updateRequestFrom(info: UpdateInfo, file?: string): UpdateRequest | nul
 export function requestUpdateNote(file: string, info: UpdateInfo, route = '/'): { id: string; created: boolean } | null {
   const update = updateRequestFrom(info, file);
   if (!update) return null;
-  const where = route.startsWith('/') && route.length <= MAX_UPDATE_NOTE_ROUTE ? route : '/';
+  const where = route.startsWith('/') && route.length <= MAX_ROUTE ? route : '/';
   const root = notesProjectRoot(file);
   return withFileLock(
     file,

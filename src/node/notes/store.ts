@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 
 import type { IterationElement, NoteContext, NoteReply } from '../../core/types';
+import { NOTE_ID } from '../../core/id';
 import { MAX_REPLY_LENGTH } from '../../core/limits';
 import { writeJson } from '../fs/atomic';
 import { withFileLock } from '../fs/lock';
@@ -57,10 +58,17 @@ export function readNotes(file: string): StoredNote[] {
     ) {
       throw new Error('expected an array of notes');
     }
+    // A hand-edited or older file may hold an id no shell-safe command can
+    // carry; it reads under a stable safe id instead, and keeps it on write.
+    for (const note of data as StoredNote[]) if (!NOTE_ID.test(note.id)) note.id = safeIdFor(note.id);
     return data as StoredNote[];
   } catch (cause) {
     throw new Error(`Could not read notes from ${file}; the file has been left untouched.`, { cause });
   }
+}
+
+function safeIdFor(id: string): string {
+  return `id-${createHash('sha256').update(id).digest('hex').slice(0, 16)}`;
 }
 
 export function writeNotes(file: string, notes: StoredNote[]): void {

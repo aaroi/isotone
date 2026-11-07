@@ -134,6 +134,64 @@ describe('notesResponse', () => {
     expect((pending.body as Array<{ route: string }>).map((r) => r.route)).toEqual(['/b']);
   });
 
+  it('stores only ids an agent can safely run in a command', () => {
+    const file = tempFile();
+    for (const id of ['a1b2 ; touch pwned #', '$(id)', 'x'.repeat(65), '']) {
+      expect(post(file, { id, route: '/', feedback: 'Hi' }).status).toBe(400);
+    }
+    expect(del(file, 'a%20b').status).toBe(400);
+    expect(post(file, { id: 'abc_DEF-123', route: '/', feedback: 'Hi' }).status).toBe(201);
+    expect(readNotes(file).map((note) => note.id)).toEqual(['abc_DEF-123']);
+  });
+
+  it('reads a stored unsafe id under a stable safe one, which works for every action', () => {
+    const file = tempFile();
+    writeNotes(file, [
+      { id: 'x; rm -rf ~', route: '/', feedback: 'Hi', element: null, done: false, doneAt: null, createdAt: '2026-01-01T00:00:00.000Z' },
+    ]);
+    const [first] = readNotes(file);
+    expect(first?.id).toMatch(/^id-[0-9a-f]{16}$/);
+    expect(readNotes(file)[0]?.id).toBe(first?.id);
+    expect(del(file, first?.id ?? '').status).toBe(200);
+    expect(readNotes(file)).toEqual([]);
+  });
+
+  it('reopens a done note when the reviewer changes it, and only then', () => {
+    const file = tempFile();
+    post(file, { id: 'n1', route: '/', feedback: 'Make it blue' });
+    writeNotes(
+      file,
+      readNotes(file).map((note) => ({ ...note, done: true, doneAt: '2026-01-02T00:00:00.000Z' })),
+    );
+    // A retried save of the same content leaves it closed.
+    expect(post(file, { id: 'n1', route: '/', feedback: 'Make it blue' }).status).toBe(200);
+    expect(readNotes(file)[0]?.done).toBe(true);
+    expect(post(file, { id: 'n1', route: '/', feedback: 'Make it blue AND bigger' }).status).toBe(200);
+    expect(readNotes(file)[0]).toMatchObject({ done: false, doneAt: null, feedback: 'Make it blue AND bigger' });
+  });
+
+  it('never dates a note in the future, and caps the route', () => {
+    const file = tempFile();
+    post(file, { id: 'later', route: '/', feedback: 'Hi', createdAt: '2999-01-01T00:00:00.000Z' });
+    post(file, { id: 'earlier', route: '/', feedback: 'Hi', createdAt: '2026-01-01T00:00:00.000Z' });
+    const dates = Object.fromEntries(readNotes(file).map((note) => [note.id, note.createdAt]));
+    expect(Date.parse(dates.later ?? '')).toBeLessThanOrEqual(Date.now());
+    expect(dates.earlier).toBe('2026-01-01T00:00:00.000Z');
+    expect(post(file, { route: `/${'x'.repeat(2000)}`, feedback: 'Hi' }).status).toBe(400);
+  });
+
+  it('refuses a new note once the file holds the most notes it takes', () => {
+    const file = tempFile();
+    const note = { route: '/', feedback: 'Hi', element: null, done: true, doneAt: null, createdAt: '2026-01-01T00:00:00.000Z' };
+    writeNotes(
+      file,
+      Array.from({ length: 10_000 }, (_, index) => ({ ...note, id: `n${index}` })),
+    );
+    expect(post(file, { route: '/', feedback: 'One more' }).status).toBe(409);
+    // Editing an existing note still works.
+    expect(post(file, { id: 'n1', route: '/', feedback: 'Edited' }).status).toBe(200);
+  });
+
   it('rejects a POST without feedback and a DELETE without an id', () => {
     const file = tempFile();
     expect(post(file, { route: '/x', feedback: '  ', element: null }).status).toBe(400);

@@ -18,8 +18,11 @@ export const MAX_REPLY_LENGTH = 2000;
  *  points at some other element. */
 export const MAX_SELECTOR = 2000;
 
-/** Longest route an update note records as its context. */
-export const MAX_UPDATE_NOTE_ROUTE = 2000;
+/** Longest route a note records. */
+export const MAX_ROUTE = 2000;
+
+/** Most notes one notes file holds; a new note past this is refused. */
+export const MAX_NOTES = 10_000;
 
 /** Largest JSON request body the HTTP adapters read, in bytes. */
 export const MAX_BODY_BYTES = 1024 * 1024;
