@@ -10,6 +10,7 @@ import { knobsFor, overlayGroups, splitSectionLabel, variantAppliesTo } from '..
 import { isRouteModule, scanExports } from '../vite/exports';
 import { readNotes } from '../node/notes/store';
 import {
+  activeConflict,
   addVariantFile,
   createVariant,
   crossGroupOverlaps,
@@ -28,7 +29,27 @@ import {
   writeActive,
   type VariantsStoreOptions,
 } from '../node/variants';
-import { type CliIO, errOut, extractBoolFlag, extractFlag, findNoteByPrefix, out, printTable } from './util';
+import { mutateVariants } from '../node/variants/options';
+import { isValidVariantId } from '../node/variants/paths';
+import { type CliIO, errOut, extractFlag, findNoteByPrefix, has, out, parseArgs, printTable, valueFor } from './util';
+
+/** Each subcommand's value flags, boolean flags and most positionals; anything else is refused. */
+const SPEC: Record<string, [values: string[], booleans: string[], positionals: number]> = {
+  list: [[], ['--all-routes'], 1],
+  new: [['--label', '--route', '--note', '--description', '--file', '--group', '--group-label', '--section'], [], 1],
+  add: [[], ['--new'], Number.POSITIVE_INFINITY],
+  rm: [[], [], 2],
+  use: [[], [], 2],
+  off: [[], [], 1],
+  group: [['--label'], [], 2],
+  section: [[], ['--none'], Number.POSITIVE_INFINITY],
+  sync: [[], [], 1],
+  promote: [[], ['--force'], 1],
+  drop: [[], [], 1],
+  path: [[], [], 2],
+};
+
+type Command = (pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions) => number;
 
 export function runVariant(args: string[], io: CliIO): number {
   // `--dir` applies to the whole command group, so it is stripped before the
@@ -43,36 +64,31 @@ export function runVariant(args: string[], io: CliIO): number {
     return sub === undefined ? 1 : 0;
   }
 
+  const commands: Record<string, Command> = {
+    list: cmdList,
+    new: cmdNew,
+    add: cmdAdd,
+    rm: cmdRm,
+    use: cmdUse,
+    off: cmdOff,
+    group: cmdGroup,
+    section: cmdSection,
+    sync: cmdSync,
+    promote: cmdPromote,
+    drop: cmdDrop,
+    path: cmdPath,
+  };
+  const spec = Object.hasOwn(SPEC, sub) ? SPEC[sub] : undefined;
+  if (!spec) {
+    errOut(io, `Unknown "variant" subcommand "${sub}". Run \`isotone variant --help\` for the list.`);
+    return 1;
+  }
   try {
-    switch (sub) {
-      case 'list':
-        return cmdList(rest, io, opts);
-      case 'new':
-        return cmdNew(rest, io, opts);
-      case 'add':
-        return cmdAdd(rest, io, opts);
-      case 'rm':
-        return cmdRm(rest, io, opts);
-      case 'use':
-        return cmdUse(rest, io, opts);
-      case 'off':
-        return cmdOff(rest, io, opts);
-      case 'group':
-        return cmdGroup(rest, io, opts);
-      case 'section':
-        return cmdSection(rest, io, opts);
-      case 'sync':
-        return cmdSync(rest, io, opts);
-      case 'promote':
-        return cmdPromote(rest, io, opts);
-      case 'drop':
-        return cmdDrop(rest, io, opts);
-      case 'path':
-        return cmdPath(rest, io, opts);
-      default:
-        errOut(io, `Unknown "variant" subcommand "${sub}". Run \`isotone variant --help\` for the list.`);
-        return 1;
-    }
+    // Validate every flag before anything is read or written: a typo such as
+    // `drop x --dry-run` must fail, not delete.
+    const positionals = parseArgs(rest, spec[0], spec[1]);
+    if (positionals.length > spec[2]) throw new Error(`Unexpected "${positionals[spec[2]]}". Run \`isotone variant --help\`.`);
+    return commands[sub](positionals, rest, io, opts);
   } catch (err) {
     // Every store function throws a plain Error with a one-line, already
     // user-facing message (invalid id, unknown variant, escaping path); this
@@ -116,9 +132,9 @@ function printVariantHelp(io: CliIO): void {
   out(io, 'or a group label prefix such as --group-label "Header > Logo".');
 }
 
-function cmdList(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const { present: allRoutes, rest: r1 } = extractBoolFlag(rest, '--all-routes');
-  const route = r1[0];
+function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const allRoutes = has(args, '--all-routes');
+  const route = pos[0];
   const variants = listVariants(opts);
   const active = readActive(opts);
   const rows = route && !allRoutes ? variants.filter((v) => variantAppliesTo(v.route, route)) : variants;
@@ -205,7 +221,7 @@ function printKnobs(io: CliIO, opts: VariantsStoreOptions, route: string | undef
     if (id !== null && valid.slice(0, next).some((knob) => knob.id === id)) {
       skipped.push(`Skipped ${name}: another knob earlier in the file already has this id. Give each knob its own id.`);
     } else {
-      skipped.push(`Skipped ${name}: not a valid range, color or select knob (see docs/variants.md#knobs).`);
+      skipped.push(`Skipped ${name}: ${knobProblem(entry)} (see node_modules/isotone/docs/variants.md, "Knobs").`);
     }
   });
   const shown = route ? knobsFor(valid, route) : valid;
@@ -222,16 +238,18 @@ function printKnobs(io: CliIO, opts: VariantsStoreOptions, route: string | undef
   for (const line of skipped) out(io, line);
 }
 
-function cmdNew(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const { value: label, rest: r1 } = extractFlag(rest, '--label');
-  const { value: route, rest: r2 } = extractFlag(r1, '--route');
-  const { value: notePrefix, rest: r3 } = extractFlag(r2, '--note');
-  const { value: description, rest: r4 } = extractFlag(r3, '--description');
-  const { value: notesFile, rest: r5 } = extractFlag(r4, '--file');
-  const { value: group, rest: r6 } = extractFlag(r5, '--group');
-  const { value: groupLabel, rest: r7 } = extractFlag(r6, '--group-label');
-  const { value: section, rest: r8 } = extractFlag(r7, '--section');
-  const id = r8[0];
+function cmdNew(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const [label, route, notePrefix, description, notesFile, group, groupLabel, section] = [
+    '--label',
+    '--route',
+    '--note',
+    '--description',
+    '--file',
+    '--group',
+    '--group-label',
+    '--section',
+  ].map((flag) => valueFor(args, flag));
+  const id = pos[0];
   if (!id) {
     errOut(io, 'Give a variant id: isotone variant new <id>');
     return 1;
@@ -247,7 +265,7 @@ function cmdNew(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
     const file = resolve(io.cwd, notesFile ?? '.iteration-feedback.json');
     const match = findNoteByPrefix(readNotes(file), notePrefix);
     seededRoute = seededRoute ?? match.route;
-    element = match.element;
+    element = match.elements?.[0] ?? match.element;
     note = match.id;
   }
 
@@ -271,9 +289,9 @@ function cmdNew(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
   return 0;
 }
 
-function cmdAdd(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const { present: create, rest: args } = extractBoolFlag(rest, '--new');
-  const [id, ...files] = args;
+function cmdAdd(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const create = has(args, '--new');
+  const [id, ...files] = pos;
   if (!id || files.length === 0) {
     errOut(io, 'Usage: isotone variant add <id> [--new] <file...>');
     return 1;
@@ -314,8 +332,8 @@ function warnOverlaps(io: CliIO, opts: VariantsStoreOptions, id: string): void {
   }
 }
 
-function cmdRm(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const [id, file] = rest;
+function cmdRm(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const [id, file] = pos;
   if (!id || !file) {
     errOut(io, 'Usage: isotone variant rm <id> <file>');
     return 1;
@@ -325,51 +343,57 @@ function cmdRm(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
   return 0;
 }
 
-function cmdUse(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const [id, groupId] = rest;
+function cmdUse(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const [id, groupId] = pos;
   if (!id) {
     errOut(io, 'Usage: isotone variant use <id> | variant use default [<groupId>]');
     return 1;
   }
-  const active = readActive(opts);
-  if (id === 'default') {
-    if (!groupId) {
-      writeActive(opts, []);
-      out(io, 'active: default');
-      return 0;
-    }
-    const group = overlayGroups(listVariants(opts)).find((g) => g.id === groupId);
-    if (!group) {
-      errOut(io, `No group "${groupId}". \`variant list\` shows the GROUP column.`);
-      return 1;
-    }
-    const members = new Set(group.members.map((m) => m.id));
-    writeActive(
-      opts,
-      active.filter((a) => !members.has(a)),
-    );
-    out(io, `active: default for ${groupId}${describeActive(readActive(opts))}`);
-    return 0;
-  }
-  if (!readVariant(opts, id)) {
-    errOut(io, `No variant "${id}"`);
+  if (groupId !== undefined && id !== 'default') {
+    errOut(io, `Unexpected "${groupId}": only \`variant use default <groupId>\` takes a group.`);
     return 1;
   }
-  // Only the siblings leave: the reviewer's other picks stay as they were,
-  // the same as choosing an option in one selector of the panel.
-  const siblings = new Set(
-    overlayGroups(listVariants(opts))
-      .find((g) => g.members.some((m) => m.id === id))
-      ?.members.map((m) => m.id) ?? [id],
-  );
-  const next = [...active.filter((a) => !siblings.has(a)), id];
-  writeActive(opts, next);
-  out(io, `active: "${id}"${describeActive(readActive(opts), id)}`);
+  // Under the same lock as every other variants change, and refused like the
+  // panel's request when another group already overrides one of its files.
+  const message = mutateVariants(opts, () => {
+    const active = readActive(opts);
+    const groups = overlayGroups(listVariants(opts));
+    if (id === 'default') {
+      if (!groupId) {
+        writeActive(opts, []);
+        return 'active: default';
+      }
+      const group = groups.find((g) => g.id === groupId);
+      if (!group) throw new Error(`No group "${groupId}". \`variant list\` shows the GROUP column.`);
+      const members = new Set(group.members.map((m) => m.id));
+      writeActive(
+        opts,
+        active.filter((a) => !members.has(a)),
+      );
+      return `active: default for ${groupId}${describeActive(readActive(opts))}`;
+    }
+    if (!readVariant(opts, id)) throw new Error(`No variant "${id}"`);
+    // Only the siblings leave: the reviewer's other picks stay as they were,
+    // the same as choosing an option in one selector of the panel.
+    const siblings = new Set(groups.find((g) => g.members.some((m) => m.id === id))?.members.map((m) => m.id) ?? [id]);
+    const next = [...active.filter((a) => !siblings.has(a)), id];
+    const conflict = activeConflict(opts, next);
+    if (conflict) {
+      const [a, b, file] = conflict;
+      const other = a === id ? b : a;
+      throw new Error(
+        `"${id}" and "${other}" both override ${file}, so only one can be active. Turn "${other}" off first (\`variant off ${other}\`), or put them in one group.`,
+      );
+    }
+    writeActive(opts, next);
+    return `active: "${id}"${describeActive(readActive(opts), id)}`;
+  });
+  out(io, message);
   return 0;
 }
 
-function cmdOff(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const id = rest[0];
+function cmdOff(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const id = pos[0];
   if (!id) {
     errOut(io, 'Usage: isotone variant off <id>');
     return 1;
@@ -378,10 +402,11 @@ function cmdOff(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
     errOut(io, `No variant "${id}"`);
     return 1;
   }
-  const active = readActive(opts);
-  writeActive(
-    opts,
-    active.filter((a) => a !== id),
+  mutateVariants(opts, () =>
+    writeActive(
+      opts,
+      readActive(opts).filter((a) => a !== id),
+    ),
   );
   out(io, `off: "${id}"${describeActive(readActive(opts))}`);
   return 0;
@@ -394,9 +419,9 @@ function describeActive(active: string[], except?: string): string {
   return others.length ? ` (also active: ${others.map((a) => `"${a}"`).join(', ')})` : '';
 }
 
-function cmdGroup(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const { value: label, rest: r1 } = extractFlag(rest, '--label');
-  const [id, groupId] = r1;
+function cmdGroup(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const label = valueFor(args, '--label');
+  const [id, groupId] = pos;
   if (!id || !groupId) {
     errOut(io, 'Usage: isotone variant group <id> <groupId> [--label <text>]');
     return 1;
@@ -408,9 +433,9 @@ function cmdGroup(rest: string[], io: CliIO, opts: VariantsStoreOptions): number
 }
 
 /** A section belongs to the selector, so every variant in the group gets it. */
-function cmdSection(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const { present: none, rest: r1 } = extractBoolFlag(rest, '--none');
-  const [id, ...words] = r1;
+function cmdSection(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const none = has(args, '--none');
+  const [id, ...words] = pos;
   if (!id || (none && words.length)) {
     errOut(io, 'Usage: isotone variant section <id> [<text> | --none]');
     return 1;
@@ -444,8 +469,8 @@ function cmdSection(rest: string[], io: CliIO, opts: VariantsStoreOptions): numb
   return 0;
 }
 
-function cmdSync(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const id = rest[0];
+function cmdSync(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const id = pos[0];
   if (!id) {
     errOut(io, 'Usage: isotone variant sync <id>');
     return 1;
@@ -466,11 +491,9 @@ function syncAdvice(opts: VariantsStoreOptions, id: string, file: string): strin
   return `${file}: there is no base version to merge from, so the copy was left as it is. Compare it with the real file by hand, then \`variant promote ${id} --force\` when it should win.`;
 }
 
-function cmdPromote(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  // Pulled out first so `promote --force <id>` and `promote <id> --force`
-  // both leave the id as the one positional.
-  const { present: force, rest: r1 } = extractBoolFlag(rest, '--force');
-  const id = r1[0];
+function cmdPromote(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const force = has(args, '--force');
+  const id = pos[0];
   if (!id) {
     errOut(io, 'Usage: isotone variant promote <id> [--force]');
     return 1;
@@ -481,8 +504,8 @@ function cmdPromote(rest: string[], io: CliIO, opts: VariantsStoreOptions): numb
   return 0;
 }
 
-function cmdDrop(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const id = rest[0];
+function cmdDrop(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const id = pos[0];
   if (!id) {
     errOut(io, 'Usage: isotone variant drop <id>');
     return 1;
@@ -496,8 +519,8 @@ function cmdDrop(rest: string[], io: CliIO, opts: VariantsStoreOptions): number 
   return 0;
 }
 
-function cmdPath(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const [id, file] = rest;
+function cmdPath(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const [id, file] = pos;
   if (!id || !file) {
     errOut(io, 'Usage: isotone variant path <id> <file>');
     return 1;
@@ -521,4 +544,47 @@ function repoRelative(root: string, file: string): string {
     throw new Error(`"${file}" escapes the project root`);
   }
   return rel.split(sep).join('/');
+}
+
+/**
+ * Why a `.isotone/knobs.json` entry is skipped, field by field. Only called for
+ * entries `readKnobs` dropped, so it explains its rules rather than deciding.
+ */
+function knobProblem(entry: unknown): string {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return 'not a JSON object.';
+  const k = entry as Record<string, unknown>;
+  const num = (key: string) => typeof k[key] === 'number' && Number.isFinite(k[key]);
+  const hex = (v: unknown) => typeof v === 'string' && /^#(?:[a-f0-9]{3}|[a-f0-9]{6})$/i.test(v);
+  const named = (list: unknown, value?: (o: Record<string, unknown>) => boolean) =>
+    Array.isArray(list) && list.every((o) => o && typeof o.id === 'string' && typeof o.label === 'string' && (!value || value(o)));
+  if (typeof k.id !== 'string' || !isValidVariantId(k.id)) return 'id must be lowercase letters, digits and dashes.';
+  if (typeof k.label !== 'string') return 'label must be a string.';
+  if (k.route !== undefined && typeof k.route !== 'string' && !(Array.isArray(k.route) && k.route.every((r) => typeof r === 'string')))
+    return 'route must be a route pattern or a list of them.';
+  if (k.section !== undefined && typeof k.section !== 'string') return 'section must be a string.';
+  if (k.showWhen !== undefined) {
+    const w = k.showWhen as Record<string, unknown> | null;
+    if (
+      !w ||
+      typeof w.axis !== 'string' ||
+      (w.equals !== undefined && typeof w.equals !== 'string') ||
+      (w.not !== undefined && typeof w.not !== 'string')
+    )
+      return 'showWhen needs an axis id, and equals or not as strings.';
+  }
+  if (k.kind === 'range') {
+    if (!['min', 'max', 'step', 'defaultValue'].every(num)) return 'a range needs numeric min, max, step and defaultValue.';
+    const [min, max, step, value] = [k.min, k.max, k.step, k.defaultValue] as number[];
+    if (!(min < max)) return 'min must be below max.';
+    if (!(step > 0)) return 'step must be above 0.';
+    if (value < min || value > max) return 'defaultValue must be between min and max.';
+    if (k.unit !== undefined && typeof k.unit !== 'string') return 'unit must be a string.';
+  } else if (k.kind === 'color') {
+    if (!hex(k.defaultColor)) return 'defaultColor must be a hex colour such as #3366ff.';
+    if (!named(k.swatches, (o) => hex(o.value))) return 'swatches must be a list of { id, label, value } with hex values.';
+  } else if (k.kind === 'select') {
+    if (!named(k.options) || !(k.options as unknown[]).length) return 'a select needs options, each with an id and a label.';
+    if (!(k.options as { id: string }[]).some((o) => o.id === k.defaultOption)) return 'defaultOption must be one of the option ids.';
+  } else return 'kind must be "select", "range" or "color".';
+  return 'not a valid knob.';
 }

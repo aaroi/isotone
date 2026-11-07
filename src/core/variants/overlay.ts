@@ -2,6 +2,7 @@
 
 import { readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '../browser-storage';
 import { request } from '../request';
+import { matchRoute } from '../routes';
 import type { IterationElement } from '../types';
 import type { SelectVariantAxis, RangeVariantAxis, ColorVariantAxis, VariantAxis, VariantSelections } from './axes';
 import { axisDefault, isValidSelection, formatRangeValue } from './helpers';
@@ -264,18 +265,13 @@ function groupLabel(id: string, members: OverlayVariant[]): string {
  * the tests can build it from a listing.
  */
 /**
- * Does a variant scoped to `pattern` belong on `route`? No pattern means
- * everywhere; an exact route means that page; a pattern ending in `/*`
- * means the base and every page under it, so a variant made on one
- * detail page (`/items/42`) can be filed for `/items/*` and show on all.
+ * Does a variant scoped to `pattern` belong on `route`? The shared route
+ * grammar (`core/routes.ts`): no pattern means everywhere, an exact route
+ * means that page, and `/items/*` the base and every page under it, so a
+ * variant made on one detail page can be filed for all of them.
  */
 export function variantAppliesTo(pattern: string | undefined, route: string): boolean {
-  if (!pattern) return true;
-  if (pattern.endsWith('/*')) {
-    const base = pattern.slice(0, -2);
-    return route === base || route.startsWith(`${base}/`);
-  }
-  return pattern === route;
+  return matchRoute(pattern, route);
 }
 
 export function overlayAxes(list: OverlayVariantsList, route: string): SelectVariantAxis[] {

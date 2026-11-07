@@ -33,22 +33,37 @@ export function errOut(io: CliIO, line: string): void {
   io.stderr.write(`${line}\n`);
 }
 
+/** The value after `flag`, looking only before a bare `--`. */
 export function valueFor(args: string[], flag: string): string | undefined {
-  const idx = args.indexOf(flag);
+  const idx = options(args).indexOf(flag);
   return idx >= 0 ? args[idx + 1] : undefined;
 }
 
+/** Whether `name` was given as an option, before a bare `--`. */
 export function has(args: string[], name: string): boolean {
-  return args.indexOf(name) >= 0;
+  return options(args).indexOf(name) >= 0;
 }
 
-/** Validate a command before it reads or writes files. Returns its positionals. */
+function options(args: string[]): string[] {
+  const end = args.indexOf('--');
+  return end < 0 ? args : args.slice(0, end);
+}
+
+/**
+ * Validate a command before it reads or writes files. Returns its
+ * positionals; everything after a bare `--` is one, even when it starts with
+ * a dash.
+ */
 export function parseArgs(args: string[], values: readonly string[], booleans: readonly string[] = []): string[] {
   const positionals: string[] = [];
   const seen = new Set<string>();
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (!arg.startsWith('-')) {
+    if (arg === '--') {
+      positionals.push(...args.slice(i + 1));
+      break;
+    }
+    if (!arg.startsWith('-') || arg === '-') {
       positionals.push(arg);
       continue;
     }
