@@ -149,19 +149,28 @@ export function useDockSize(rootRef: RefObject<HTMLElement | null>, key: string,
     apply(load(key), false);
   }, [key, apply]);
   // A handle that unmounts or changes role mid-drag never sees pointerup.
-  const was = useRef(open);
-  useEffect(() => {
-    if (was.current.variants !== open.variants || was.current.notes !== open.notes) stop();
-    was.current = open;
-  });
-  useEffect(() => stop, [stop]);
-  useLayoutEffect(() => {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a panel opening or closing changes every handle's role.
+  useEffect(() => stop, [open.variants, open.notes, stop]);
+  // The handles announce what a panel can reach. That changes when a panel opens or closes, a size is
+  // set, or the dock resizes; content changes are picked up when a handle is about to be used.
+  const latestOpen = useRef(open);
+  latestOpen.current = open;
+  const refresh = useCallback(() => {
     const root = rootRef.current;
     if (!root) return;
-    const frame = measure(root, open);
+    const frame = measure(root, latestOpen.current);
     const next = Object.fromEntries(PANELS.filter((name) => frame.panels[name]).map((name) => [name, extent(name, frame)]));
     setExtents((previous) => (JSON.stringify(previous) === JSON.stringify(next) ? previous : next));
-  });
+  }, [rootRef]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: these are the changes that move a handle's range.
+  useLayoutEffect(() => {
+    refresh();
+    const root = rootRef.current;
+    if (!root || (!open.variants && !open.notes) || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(refresh);
+    for (const panel of root.querySelectorAll('.isotone-panel')) observer.observe(panel);
+    return () => observer.disconnect();
+  }, [open.variants, open.notes, size, refresh, rootRef]);
 
   const vars: Record<string, string> = {};
   if (size.width) vars['--iso-width'] = `min(${size.width}px, calc(100vw - ${INSET}px))`;
@@ -194,6 +203,8 @@ export function useDockSize(rootRef: RefObject<HTMLElement | null>, key: string,
       'aria-valuemin': range.min,
       'aria-valuemax': range.max,
       tabIndex: 0,
+      onFocus: refresh,
+      onPointerEnter: refresh,
       onPointerDown(event: PointerEvent<HTMLElement>) {
         const dock = rootRef.current;
         if (!dock || event.button !== 0) return;
