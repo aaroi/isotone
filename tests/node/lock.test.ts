@@ -1,9 +1,11 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { LockBusyError, withFileLock } from '../../src/node/fs/lock';
+import { notesResponse } from '../../src/node/notes/handler';
+import { variantsDir, variantsResponse } from '../../src/node/variants';
 import { serveNotesRequest } from '../../src/server';
 import { compileSources } from '../helpers/compile';
 
@@ -138,4 +140,15 @@ it('answers 503 quickly from a server while another writer holds the store', asy
   );
   expect(response.status).toBe(503);
   expect(Date.now() - started).toBeLessThan(1_000);
+});
+
+it('answers 503 from the handlers themselves, for servers that call them directly', () => {
+  const file = join(root, 'notes.json');
+  writeLock(file, owner(process.pid), 0);
+  expect(notesResponse(file, { method: 'POST', url: '/', body: { route: '/', feedback: 'Hi' } }).status).toBe(503);
+  // The panel's variant switch waits on the same lock as `variant use` and `promote`.
+  const opts = { root };
+  mkdirSync(variantsDir(opts), { recursive: true });
+  writeLock(join(variantsDir(opts), '.mutation'), owner(process.pid), 0);
+  expect(variantsResponse(opts, { method: 'POST', url: '/active', body: { active: [] } }).status).toBe(503);
 });

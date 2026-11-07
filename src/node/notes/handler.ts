@@ -8,7 +8,7 @@ import type { IterationElement } from '../../core/types';
 import { NOTE_ID } from '../../core/id';
 import { MAX_FEEDBACK_LENGTH, MAX_NOTES, MAX_ROUTE, MAX_SELECTOR, PAYLOAD_MAX } from '../../core/limits';
 import { updateNoteText } from '../../core/update';
-import { SERVER_LOCK_WAIT_MS, withFileLock } from '../fs/lock';
+import { LockBusyError, SERVER_LOCK_WAIT_MS, withFileLock } from '../fs/lock';
 import { type HandlerRequest, type HandlerResponse, jsonResponse } from '../http';
 import { notesProjectRoot, updateRequestOf } from '../update/request';
 import { noteFingerprint, notesRevision, readNotes, replyView, type StoredNote, writeNotes } from './store';
@@ -33,7 +33,12 @@ export function notesResponse(file: string, req: NotesRequest): NotesResponse {
   if (req.method === 'POST' || req.method === 'DELETE') {
     // A server must not freeze on someone else's lock: past a short wait it
     // answers 503 and the panel keeps the note to retry.
-    return withFileLock(file, () => handleNotesRequest(file, req), { waitMs: SERVER_LOCK_WAIT_MS });
+    try {
+      return withFileLock(file, () => handleNotesRequest(file, req), { waitMs: SERVER_LOCK_WAIT_MS });
+    } catch (error) {
+      if (error instanceof LockBusyError) return jsonResponse(503, { error: error.message });
+      throw error;
+    }
   }
   return handleNotesRequest(file, req);
 }
