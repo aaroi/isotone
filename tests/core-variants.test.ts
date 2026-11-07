@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   OVERLAY_DEFAULT_OPTION,
+  createVariantsSource,
   type OverlayVariantStatus,
   overlayAxes,
   overlayGroups,
@@ -221,6 +222,34 @@ describe('knobs', () => {
   it('reports only the knobs off their default, as the panel showed them', () => {
     const moved = knobDelta([fade, dots], { 'fade-from': '40', 'dot-alpha': '0.1' });
     expect(moved.map((m) => [m.axis.id, m.value, m.shown])).toEqual([['fade-from', '40', '40%']]);
+  });
+});
+
+describe('createVariantsSource manage', () => {
+  it('keeps one chosen option as the selection and removes its selector', async () => {
+    const onManage = vi.fn();
+    const source = createVariantsSource({
+      axes: [
+        { id: 'layout', label: 'Layout', options: [{ id: 'grid', label: 'Grid' }, { id: 'stack', label: 'Stack' }], defaultOption: 'grid' },
+        { kind: 'color', id: 'accent', label: 'Accent', swatches: [{ id: 'blue', label: 'Blue', value: '#0000ff' }, { id: 'red', label: 'Red', value: '#ff0000' }], defaultColor: '#0000ff' },
+      ],
+      onManage,
+    });
+    await source.manage?.({ axisId: 'layout', action: 'keep-option', optionId: 'stack' });
+    await source.manage?.({ axisId: 'accent', action: 'keep-option', optionId: 'red' });
+    expect(source.getAxes()).toEqual([]);
+    expect(source.getSelections()).toEqual({ layout: 'stack', accent: '#ff0000' });
+    await expect(createVariantsSource({ axes: [{ id: 'x', label: 'X', options: [{ id: 'a', label: 'A' }], defaultOption: 'a' }] })
+      .manage?.({ axisId: 'x', action: 'keep-option', optionId: 'gone' })).rejects.toThrow('no longer available');
+  });
+});
+
+describe('colour picker maths', async () => {
+  const { hexToHsv, hsvToHex, normalizeHex } = await import('../src/react/ColorPicker');
+  it('round-trips hex through hsv and normalises short forms', () => {
+    for (const hex of ['#000000', '#ffffff', '#ea382e', '#3b82f6', '#6687ff', '#808080']) expect(hsvToHex(hexToHsv(hex))).toBe(hex);
+    expect(normalizeHex('ABC')).toBe('#aabbcc');
+    expect(normalizeHex('#12345')).toBeNull();
   });
 });
 

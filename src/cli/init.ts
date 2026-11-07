@@ -382,7 +382,7 @@ function printFirstRun(print: Print, approach: Approach): void {
   print('   - what you made: open Variants and switch them on the live page;');
   print('   - in one line: ⌘/Ctrl + Shift + . (or the pin button), click an element, type');
   print('     the change and press Enter, then say “check my Isotone notes”;');
-  print('   - last, a short list of the files you changed. Save as defaults turns their');
+  print('   - last, a short list of the files you changed. Make default turns their');
   print('     picks into a note for you.');
 }
 
@@ -487,16 +487,8 @@ function agentsParagraph(approach: Approach): string {
     'When a note is ambiguous, ask instead of guessing: `npx isotone --reply <id> "<question>"`',
     'shows it under the note and leaves it open; the reviewer answers by editing the note.',
     '',
-    `${BLAST.name} mode: when the user asks for a session (\`${BLAST_CLI} --for 45m --new\`), run`,
-    'that once (it blocks until new notes arrive, then prints a batch; allow a 10-minute command',
-    'timeout, or add `--every 90s`), act on each note (`--working` → fix → verify → `--done`), and run',
-    `bare \`${BLAST_CLI}\` (no --for, no --new) after every batch or check-in. When it prints "${BLAST.name} session over"`,
-    '(exit status 3), stop and give the user a short summary of what changed and what is open.',
-    'While acting by yourself: act only on what notes ask; one small, reversible change at a',
-    'time; never install or upgrade packages (except an update note), push, deploy, or delete',
-    'anything outside the change; `--reply` when a note is unclear; leave risky or large',
-    `requests open and flag them. \`--stream\` prints one JSON line per batch for background`,
-    `tasks or a monitor. See node_modules/isotone/${BLAST.doc}.`,
+    `${BLAST.name} mode: when the user asks for a session, run \`${BLAST_CLI} start <duration>\` and follow`,
+    'what it prints until a run says the session is over.',
     '',
     approachParagraph(approach),
     '',

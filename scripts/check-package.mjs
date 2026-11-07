@@ -38,7 +38,7 @@ assert.equal(await runCli(['init', '--yes', '--json'], io), 0);
 assert.equal(JSON.parse(output).approach, 'serve');
 assert.equal(existsSync('AGENTS.md'), true);
 assert.match(execFileSync(process.execPath, ['node_modules/isotone/dist/cli.js', '--help'], { encoding: 'utf8' }), /--json/);
-assert.match(execFileSync(process.execPath, ['node_modules/isotone/dist/cli.js', 'blast', '--status'], { encoding: 'utf8' }), /No Blast session/);
+assert.match(execFileSync(process.execPath, ['node_modules/isotone/dist/cli.js', 'blast', 'status'], { encoding: 'utf8' }), /No Blast session/);
 const app = await serveIteration({ file: 'notes.json', port: 0, theme: 'system', checkForUpdates: false });
 try {
   const bundle = await (await fetch(app.bundleUrl)).text();

@@ -1,12 +1,12 @@
 import {
-  ArrowUp, Check, ChevronDown, Crosshair, Gem, MessageSquare,
+  ArrowUp, Check, ChevronDown, Crosshair, Gem, MessageSquare, Pipette,
   RotateCcw, SlidersHorizontal, Trash2, X,
 } from 'lucide-react';
 
 const icons = {
   close: X, chevron: ChevronDown, message: MessageSquare,
   sliders: SlidersHorizontal, pin: Crosshair, send: ArrowUp,
-  reset: RotateCcw, trash: Trash2, check: Check, iterate: Gem,
+  reset: RotateCcw, trash: Trash2, check: Check, iterate: Gem, pipette: Pipette,
 };
 
 /** One optical size and stroke across the dock, menus and composer. */

@@ -4,6 +4,21 @@
 
 - feat: drag the dock's left edge to change its width, and the top edge of the top open panel to change that panel's height. With both panels open, the gap between them moves the split. The arrow keys resize a focused edge, Shift takes bigger steps, and Home or a double-click restores the default. Sizes are remembered per browser; phones keep their one-panel layout
 
+## 1.2.2
+
+- feat: custom colours open a picker in the panel's own popup material instead of the browser's native colour dialog
+- feat: Save as defaults becomes Make default, beside a count of the changed picks, and confirms with “Default request saved”
+- feat: the variants panel marks each selector's source default with a dot on its option or swatch and a tick on its range
+- feat: any option or swatch can be kept as the only choice and made the default from its row in the selector dialog, which replaces Keep default only for those selectors. Notes carry a `keep-option` variant action
+
+## 1.2.1
+
+- change: Blast commands are subcommands. `npx isotone blast start 45m [</route>]` starts a session, prints the loop and the guardrails, and exits, so the user's prompt is one line and the agent reads no guide. Bare `npx isotone blast` waits for the next batch and never starts a session. `status`, `stop` and `extend 15m` replace the flags. The 1.2.0 flags still work: `--for 45m --new` starts and waits in one run
+- feat: `npx isotone blast --every off` waits for a batch or the end only, with no check-ins, for an agent that runs it as a background task. An idle session then costs the agent no turns
+- change: `start` refuses while another agent is in a live session and replaces an abandoned one; `--for` on a live session no longer continues it with a notice, and a run after the end no longer suggests starting again (`status` does)
+- change: Blast JSON is compact, one object per line. `--every` is per waiting run and no longer stored in the session file, and an end's `reason` is `time`, `stopped` or `none` (was `stopped-cli` and `removed`); `stillOpen` on an end has the same shape with `--stream` and `--json`
+- docs: the Blast sections of AGENTS.md and the one `init` writes shrink to a pointer at `blast start`, which every agent session loads
+
 ## 1.2.0
 
 - chore: the hosted demo deploys from `main` and gives each pull request a preview link, through Vercel's Git connection

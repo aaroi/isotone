@@ -46,7 +46,7 @@ export interface VariantReference {
 
 export interface VariantRemoval {
   axisId: string;
-  action: 'remove-option' | 'remove-axis' | 'keep-default';
+  action: 'remove-option' | 'remove-axis' | 'keep-default' | 'keep-option';
   optionId?: string;
 }
 

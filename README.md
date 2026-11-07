@@ -105,8 +105,7 @@ you choose, it keeps picking up each batch of new notes, fixing and closing them
 without being prompted again. Paste this into your agent:
 
 ```text
-Run an Isotone Blast session for 45 minutes: `npx isotone blast --for 45m --new`.
-Follow node_modules/isotone/docs/blast.md until it says the session is over.
+Run an Isotone Blast session for 45 minutes: `npx isotone blast start 45m`, then follow what it prints.
 ```
 
 Blast has no button in the panel; you start, extend and stop it through your
