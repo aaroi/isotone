@@ -183,6 +183,8 @@ the composer must not remeasure unchanged selectors or notes.
 | `src/react/theme.ts` | Theme resolution, observation and cleanup |
 | `src/react/motion.ts` | Motion timing and work limits |
 | `src/react/useDockMotion.ts`, `useLayoutMotion.ts` | Measured movement and interruption handling |
+| `src/react/StyleInspector.tsx`, `style-fields.tsx`, `style-inspector-css.ts` | The experimental style editor, its fields and their layout |
+| `src/react/style-preview.ts`, `src/core/style.ts`, `src/core/style-source.ts` | Style previews, the property catalogue and diff, and rule origins |
 
 To add a control, choose its semantic role first: surface, well, raised action or
 selection. Reuse that recipe and an existing control class where possible.
@@ -204,6 +206,23 @@ circular paint tokens. React tests cover shared interactions, theme changes and
 async state preservation. Run `pnpm check` before a release. For screenshots,
 use synthetic demo content; never include local feedback files, personal notes
 or a real project's private interface.
+
+## Experimental style editor
+
+The style editor is opt-in (`experimental.styleEditor`) and lives in its own
+files. It is a panel in the dock, above feedback, not a floating inspector: it
+stays put while edits move and resize the element, never covers the element
+being edited, and keeps the composer docked beneath it. While it is open, the
+note list keeps a few rows and pinned outlines pass behind the dock's panels.
+
+It follows the same materials. Fields, the box-model ring and the segment track
+are wells; the current breadcrumb, pressed segments and the size readout are
+raised selections; Reset and Send to agent are raised actions. Mixed values use
+the field placeholder, and the chips that narrow an edit to one value use a
+dashed edge so they read as choices rather than references. Changed fields
+brighten their label and show a reset control. Number fields scrub sideways on
+their label and step with the arrow keys. Keep its paint on the shared tokens so
+both themes stay identical in geometry.
 
 ## Accepted design choices
 

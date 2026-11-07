@@ -11,6 +11,7 @@ import { request } from './request';
 import { FEEDBACK_STORAGE_KEY, readBrowserStorage, writeBrowserStorage } from './browser-storage';
 import { MAX_FEEDBACK_LENGTH } from './limits';
 import { createNoteId } from './id';
+import type { StyleEdit } from './style';
 
 /** A UI element picked with the panel's selector mode. */
 export interface IterationElement {
@@ -54,6 +55,9 @@ export interface NoteContext {
   variantAction?: VariantRemoval;
   elements?: IterationElement[];
   variant?: VariantReference | null;
+  /** Experimental: previewed style changes, one entry per edited pinned
+   *  element, matched to `elements` by selector. */
+  styleEdits?: StyleEdit[];
 }
 
 /** A note written in the panel, read and answered by the coding agent. */
@@ -408,6 +412,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
           ...(item.elements !== undefined ? { elements: item.elements } : {}),
           ...(item.variant !== undefined ? { variant: item.variant } : {}),
           ...(item.variantAction !== undefined ? { variantAction: item.variantAction } : {}),
+          ...(item.styleEdits !== undefined ? { styleEdits: item.styleEdits } : {}),
           ...(item.payload !== undefined ? { payload: item.payload } : {}),
           ...(item.viewport ? { viewport: item.viewport } : {}),
         }),
@@ -521,6 +526,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
         delete existing.elements;
         delete existing.variant;
         delete existing.variantAction;
+        delete existing.styleEdits;
         delete existing.payload;
       }
       existing.feedback = feedback;
@@ -647,3 +653,4 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
   };
 }
 export * from './variants';
+export type { StyleChange, StyleEdit } from './style';

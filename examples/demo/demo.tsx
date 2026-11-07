@@ -134,7 +134,7 @@ function serveNotesInPage(path: string) {
     const body = JSON.parse(String(init?.body ?? '{}')) as Partial<DemoNote> & { elements?: unknown[]; element?: unknown };
     const feedback = String(body.feedback ?? '').trim();
     if (!body.route || !feedback) return reply(400, { error: 'route and feedback are required' });
-    const fields = Object.fromEntries(['element', 'elements', 'variant', 'variantAction', 'payload', 'viewport']
+    const fields = Object.fromEntries(['element', 'elements', 'variant', 'variantAction', 'styleEdits', 'payload', 'viewport']
       .filter((key) => body[key] !== undefined).map((key) => [key, body[key]]));
     // Like the server, a new "save as defaults" replaces the open one on its page.
     const defaults = feedback.startsWith('[set-defaults]') && !notes.some((n) => n.id === body.id)
@@ -219,7 +219,8 @@ function Panel({ theme }: { theme: IterationTheme }) {
   useEffect(() => {
     panel.current?.render(<IterationPanel route={page} theme={theme} updateEndpoint={screenshot || hosted ? undefined : params.has('update-preview') ? '/demo-update' : '/api/iteration/update'}
       store={{ endpoint, key: `isotone-public-demo-${session}` }}
-      variants={source} defaultTab="variants" shortcut={screenshot ? false : undefined} />);
+      variants={source} defaultTab="variants" shortcut={screenshot ? false : undefined}
+      experimental={screenshot ? undefined : { styleEditor: true }} />);
   }, [theme]);
   useEffect(() => {
     if (!screenshot && !review) return;

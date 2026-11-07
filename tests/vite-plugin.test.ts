@@ -71,7 +71,7 @@ beforeAll(async () => {
       },
     },
     plugins: [
-      iteration({ file: notesFile, theme: 'system' }),
+      iteration({ file: notesFile, theme: 'system', experimental: { styleEditor: true } }),
       {
         // A stand-in for a framework's SSR handler: the document arrives as
         // Uint8Array chunks through res.write/res.end, with the ETag and
@@ -128,6 +128,7 @@ describe('the Vite adapter, served', () => {
     );
     expect(script).toContain('__isotone.mount');
     expect(script).toContain('"theme":"system"');
+    expect(script).toContain('"experimental":{"styleEditor":true}');
     expect(script).toContain(UPDATE_ENDPOINT);
     expect(script.length).toBeGreaterThan(200);
     // Variants are on by default, so the mount asks for the overlay source.
