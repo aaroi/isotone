@@ -1,4 +1,4 @@
-import { FEEDBACK_STORAGE_KEY, readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '../core/browser-storage';
+import { FEEDBACK_STORAGE_KEY } from '../core/browser-storage';
 import { createNoteId } from '../core/id';
 import { MAX_FEEDBACK_LENGTH } from '../core/limits';
 import type { IterationStoreConfig } from '../core/notes-client';
@@ -16,6 +16,7 @@ import { detectTheme, observeTheme } from './theme';
 import { UpdateNotice } from './UpdateNotice';
 import { useDockMotion } from './useDockMotion';
 import { useDockSize } from './useDockSize';
+import { useDraft } from './useDraft';
 import { useFloatingComposer } from './useFloatingComposer';
 import { useLayoutMotion } from './useLayoutMotion';
 import { useNotes } from './useNotes';
@@ -42,8 +43,6 @@ export interface IterationPanelProps {
 
 /** How long "an agent is working on this" is believed without a sign of life. */
 const WORKING_FRESH_MS = 20 * 60 * 1000;
-/** How long typing settles before the draft is written to storage. */
-const DRAFT_SAVE_MS = 300;
 
 const DEFAULT_SHORTCUT: IterationShortcut = { code: 'Period', mod: true, shift: true };
 
@@ -552,71 +551,12 @@ export function IterationPanel({
     if (variants && !variantsAvailable) refreshSource(variants);
   }, [variants]);
 
-  // The draft for this page: restored when the route changes, saved as it changes.
-  const draftRestored = useRef('');
-  const restoringDraft = useRef(false);
-  useEffect(() => {
-    if (draftRestored.current === draftKey) return;
-    draftRestored.current = draftKey;
-    restoringDraft.current = true;
+  useDraft(draftKey, text, { targets, variantTarget, editing }, (restoredTargets, restoredVariant) => {
     update({ anchor: null });
     setEditing(null);
-    text.set('');
-    setTargets([]);
-    setVariantTarget(null);
-    try {
-      const raw = readBrowserStorage(localStorage, draftKey);
-      if (!raw) return;
-      try {
-        const draft = JSON.parse(raw);
-        if (draft && typeof draft.text === 'string') {
-          text.set(draft.text);
-          setTargets(Array.isArray(draft.elements) ? draft.elements : []);
-          setVariantTarget(draft.variant ?? null);
-        } else text.set(raw);
-      } catch {
-        text.set(raw);
-      }
-    } catch {}
-  }, [draftKey, text, update]);
-  const saveDraft = useCallback(
-    (key: string) => {
-      const { editing, targets, variantTarget } = latest.current;
-      if (editing || draftRestored.current !== key) return;
-      const value = text.get();
-      try {
-        if (!value && targets.length === 0 && !variantTarget) removeBrowserStorage(localStorage, key);
-        else writeBrowserStorage(localStorage, key, JSON.stringify({ text: value, elements: targets, variant: variantTarget }));
-      } catch {}
-    },
-    [text],
-  );
-  // Typing saves once it settles; leaving the page saves what is pending.
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const off = text.subscribe(() => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        timer = undefined;
-        saveDraft(draftKey);
-      }, DRAFT_SAVE_MS);
-    });
-    return () => {
-      off();
-      if (timer === undefined) return;
-      clearTimeout(timer);
-      saveDraft(draftKey);
-    };
-  }, [text, draftKey, saveDraft]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: references and edits save at once.
-  useEffect(() => {
-    // Restoration commits after this effect pass; never save the previous route's references over it.
-    if (restoringDraft.current) {
-      restoringDraft.current = false;
-      return;
-    }
-    saveDraft(draftKey);
-  }, [targets, variantTarget, editing, draftKey, saveDraft]);
+    setTargets(restoredTargets);
+    setVariantTarget(restoredVariant);
+  });
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll follows new notes.
   useEffect(() => {
     const el = listRef.current;
