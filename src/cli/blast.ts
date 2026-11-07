@@ -67,7 +67,7 @@ type Outcome =
   | { type: 'interrupted' };
 
 function help(io: CliIO): void {
-  out(io, `Usage: isotone ${BLAST.command} start [30m] [<route>]    start a session and print how to run it`);
+  out(io, `Usage: isotone ${BLAST.command} start [30m] [<route>]      start a session and print how to run it`);
   out(io, `       isotone ${BLAST.command} [--every 5m|off]           wait for the next batch of notes`);
   out(io, `       isotone ${BLAST.command} status | stop | extend <duration>`);
   out(io);
