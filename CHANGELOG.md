@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.2.1
+
 - change: Blast commands are subcommands. `npx isotone blast start 45m [</route>]` starts a session, prints the loop and the guardrails, and exits, so the user's prompt is one line and the agent reads no guide. Bare `npx isotone blast` waits for the next batch and never starts a session. `status`, `stop` and `extend 15m` replace the flags. The 1.2.0 flags still work: `--for 45m --new` starts and waits in one run
 - feat: `npx isotone blast --every off` waits for a batch or the end only, with no check-ins, for an agent that runs it as a background task. An idle session then costs the agent no turns
 - change: `start` refuses while another agent is in a live session and replaces an abandoned one; `--for` on a live session no longer continues it with a notice, and a run after the end no longer suggests starting again (`status` does)
