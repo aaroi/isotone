@@ -48,21 +48,8 @@ const DRAFT_SAVE_MS = 300;
 const DEFAULT_SHORTCUT: IterationShortcut = { code: 'Period', mod: true, shift: true };
 
 /** Events that stay inside the dock, so host shortcuts, focus traps, outside-press handlers and scroll hijackers ignore it. */
-const FENCED_EVENTS = [
-  'pointerdown',
-  'mousedown',
-  'touchstart',
-  'click',
-  'contextmenu',
-  'keydown',
-  'keyup',
-  'keypress',
-  'beforeinput',
-  'input',
-  'focusin',
-  'focusout',
-  'wheel',
-];
+const FENCED_EVENTS =
+  'pointerdown mousedown touchstart click contextmenu keydown keyup keypress beforeinput input focusin focusout wheel'.split(' ');
 
 /** Which surfaces are open, and what the composer is doing. */
 interface Mode {
@@ -201,7 +188,7 @@ export function IterationPanel({
 
   // Handlers read the current render through `latest`, so they stay stable and
   // memoized children (the composer, note rows, selectors) skip unrelated renders.
-  const latest = useRef({
+  const current = {
     mode,
     route,
     targets,
@@ -212,19 +199,10 @@ export function IterationPanel({
     notesAvailable,
     variantsAvailable,
     defaultTab,
-  });
-  latest.current = {
-    mode,
-    route,
-    targets,
-    variantTarget,
-    editing,
-    selectedPages,
-    getPayload,
-    notesAvailable,
-    variantsAvailable,
-    defaultTab,
+    shortcut,
   };
+  const latest = useRef(current);
+  latest.current = current;
 
   useEffect(() => () => cancelAnimationFrame(focusFrame.current), []);
   const focusComposer = useCallback(() => {
@@ -485,15 +463,14 @@ export function IterationPanel({
 
   // The global shortcut and the input modality listen in capture, so they work while typing (browser- and
   // OS-reserved chords never reach a page). Escape belongs to the dock. The fence keeps the dock's events from the host.
-  const keys = useRef({ shortcut, open, picking, anchor, editing, notesAvailable });
-  keys.current = { shortcut, open, picking, anchor, editing, notesAvailable };
   useEffect(() => {
     const root = rootRef.current;
     if (!visible || !root) return;
     const onKey = (e: KeyboardEvent) => {
       root.setAttribute('data-instant', 'true');
       setInstant(true);
-      const { shortcut, picking, open, notesAvailable } = keys.current;
+      const { shortcut, mode, notesAvailable } = latest.current;
+      const { picking, notesOpen, variantsOpen } = mode;
       if (!shortcut || e.repeat || e.isComposing) return;
       if (
         e.code !== shortcut.code ||
@@ -509,7 +486,7 @@ export function IterationPanel({
         update({ picking: false });
         focusComposer();
       } else {
-        if (!open) previousFocus.current = document.activeElement as HTMLElement;
+        if (!notesOpen && !variantsOpen) previousFocus.current = document.activeElement as HTMLElement;
         update({ expanded: true });
         startFeedback(true);
       }
@@ -523,12 +500,12 @@ export function IterationPanel({
     const onEscape = (event: Event) => {
       const e = event as KeyboardEvent;
       if (e.key !== 'Escape' || e.defaultPrevented) return;
-      const { open, picking, anchor, editing } = keys.current;
-      if (!open || picking) return;
+      const { mode, editing } = latest.current;
+      if (!(mode.notesOpen || mode.variantsOpen) || mode.picking) return;
       const { target } = e;
       const unfocused = !(target instanceof Element) || target === document.body || target === document.documentElement;
       if (!unfocused && !e.composedPath().includes(root)) return;
-      if (anchor) dockComposer();
+      if (mode.anchor) dockComposer();
       else if (editing) cancelEdit();
       else closeAll();
     };
