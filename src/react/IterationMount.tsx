@@ -8,7 +8,7 @@ import {
   type VariantsSource,
   VARIANTS_ENDPOINT,
 } from '../core/variants';
-import { IterationPanel, type IterationShortcut } from './IterationPanel';
+import { type IterationExperiments, IterationPanel, type IterationShortcut } from './IterationPanel';
 import { ensurePanelStyles } from './styles';
 import type { IterationTheme } from './theme';
 
@@ -40,6 +40,8 @@ export interface MountIterationOptions {
   /** Host context attached to each new note as its opaque payload — see
    *  IterationPanelProps.getPayload. */
   getPayload?: () => unknown;
+  /** Experimental features, all off by default, e.g. `{ styleEditor: true }`. */
+  experimental?: IterationExperiments;
 }
 
 /**
@@ -156,6 +158,7 @@ export function mountIteration(opts: MountIterationOptions): () => void {
         shortcut={opts.shortcut}
         updateEndpoint={opts.updateEndpoint}
         theme={opts.theme}
+        experimental={opts.experimental}
       />,
     );
   }

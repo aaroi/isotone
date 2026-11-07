@@ -18,6 +18,8 @@ export function NoteSummary({ note, page }: { note: IterationNote; page?: string
       }] : []),
       ...elements.map(element => ({ key: element.selector, label: element.text || element.tag })),
     ];
+    const styleChanges = note.styleEdits?.reduce((sum, edit) => sum + edit.changes.length, 0) ?? 0;
+    if (styleChanges) references.push({ key: 'style', label: `${styleChanges} style change${styleChanges === 1 ? '' : 's'}` });
     return <>
       <p>{note.feedback}</p>
       {references.length > 0 && <span className="isotone-meta">

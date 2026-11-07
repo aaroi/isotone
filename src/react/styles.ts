@@ -3,6 +3,7 @@ import { MOTION } from './motion';
 import { FEEDBACK_LAYOUT_CSS } from './feedback-layout';
 import { PILL_ACTIVE_CSS } from './pill-active';
 import { UPDATE_NOTICE_CSS } from './UpdateNotice';
+import { STYLE_INSPECTOR_CSS } from './style-inspector-css';
 
 /** One shared set of tokens and controls for the shadow-root and inline mounts. */
 const MARKER = 'data-isotone-styles';
@@ -270,6 +271,7 @@ ${FEEDBACK_LAYOUT_CSS}
 /* Instant mode follows any key press, but the corner close only ever appears under the pointer, so it keeps its fade. */
 .isotone-root[data-instant='true'] .isotone-panel > .isotone-panel-close { transition-duration: 220ms, 120ms !important; }
 ${UPDATE_NOTICE_CSS}
+${STYLE_INSPECTOR_CSS}
 `;
 /**
  * Put the panel's styles in `target`, once. Idempotent: a second call with the

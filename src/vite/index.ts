@@ -21,7 +21,7 @@ import {
 
 import { ensureDirIgnored, ensureFileIgnored, notesResponse, NOTES_ENDPOINT } from '../store';
 import type { RouteGateOptions } from '../core/index';
-import type { IterationShortcut } from '../react/IterationPanel';
+import type { IterationExperiments, IterationShortcut } from '../react/IterationPanel';
 import type { IterationTheme } from '../react/theme';
 import { readBundle } from '../standalone/bundle';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../update';
@@ -62,6 +62,8 @@ export interface IterationViteOptions {
   theme?: IterationTheme;
   /** Defaults to Cmd/Ctrl+Shift+Period; customize or disable with false. */
   shortcut?: IterationShortcut | false;
+  /** Experimental panel features, all off by default, e.g. `{ styleEditor: true }`. */
+  experimental?: IterationExperiments;
   /** Where notes persist. Relative paths resolve against Vite's `root` (the
    *  directory of the app, whatever the shell's cwd), so a monorepo package
    *  started from the workspace root still writes next to its own config.
@@ -765,7 +767,7 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
         res.setHeader('cache-control', 'no-store');
         res.end(readBundle());
       });
-      const mountCode = mountModuleSource(options.rule ?? {}, options.key ?? '', variantsOptions !== null, options.shortcut, options.theme);
+      const mountCode = mountModuleSource(options.rule ?? {}, options.key ?? '', variantsOptions !== null, options.shortcut, options.theme, options.experimental);
 
       server.middlewares.use((req, res, next) => {
         // Only navigations: buffering every response to look for </body>
@@ -828,8 +830,8 @@ function answer(
 }
 
 /** Load after the host has mounted, without importing its React or HMR runtime. */
-function mountModuleSource(rule: RouteGateOptions, key: string, variants: boolean, shortcut?: IterationShortcut | false, theme?: IterationTheme): string {
-  const config = JSON.stringify({ endpoint: NOTES_ENDPOINT, updateEndpoint: UPDATE_ENDPOINT, key, shortcut, theme, rule, ...(variants ? { variants: 'overlay' } : {}) }).replace(/</g, '\\u003c');
+function mountModuleSource(rule: RouteGateOptions, key: string, variants: boolean, shortcut?: IterationShortcut | false, theme?: IterationTheme, experimental?: IterationExperiments): string {
+  const config = JSON.stringify({ endpoint: NOTES_ENDPOINT, updateEndpoint: UPDATE_ENDPOINT, key, shortcut, theme, rule, ...(experimental ? { experimental } : {}), ...(variants ? { variants: 'overlay' } : {}) }).replace(/</g, '\\u003c');
   return `
     const start = () => {
       const mount = () => window.__isotone.mount(${config});

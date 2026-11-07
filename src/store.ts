@@ -10,6 +10,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 
 import type { IterationElement, NoteContext, VariantReference, VariantRemoval } from './core/index';
 import { MAX_FEEDBACK_LENGTH } from './core/limits';
+import { MAX_STYLE_EDITS, styleEditsOf } from './core/style';
 import { withFileLock, writeJson } from './file-store';
 
 export interface StoredNote extends NoteContext {
@@ -201,7 +202,8 @@ function toItem(n: StoredNote) {
   if (n.payload !== undefined) item.payload = n.payload;
   return { ...item, ...(n.elements !== undefined ? { elements: n.elements } : {}),
     ...(n.variant !== undefined ? { variant: n.variant } : {}),
-    ...(n.variantAction !== undefined ? { variantAction: n.variantAction } : {}) };
+    ...(n.variantAction !== undefined ? { variantAction: n.variantAction } : {}),
+    ...(n.styleEdits !== undefined ? { styleEdits: n.styleEdits } : {}) };
 }
 
 /** The transport-agnostic result of a notes request — any runtime (Vite
@@ -289,6 +291,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
       elements?: unknown;
       variant?: unknown;
       variantAction?: unknown;
+      styleEdits?: unknown;
       createdAt?: unknown;
     };
     const { id, route, feedback, element, payload, viewport } = body;
@@ -316,6 +319,9 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     const variant = body.variant === undefined ? undefined : variantOf(body.variant);
     const variantAction = removalOf(body.variantAction);
     if (body.variantAction !== undefined && !variantAction) return json(400, { error: 'Invalid variant action' });
+    // Experimental style diffs: malformed entries are dropped, like elements.
+    const styleEdits = styleEditsOf(body.styleEdits, MAX_SELECTOR);
+    if (styleEdits === null) return json(400, { error: `styleEdits must be an array of at most ${MAX_STYLE_EDITS} edits` });
     let cleanElement: IterationElement | null = null;
     if (element && typeof element === 'object' && !Array.isArray(element)) {
       cleanElement = {
@@ -338,6 +344,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
           delete existing.elements;
           delete existing.variant;
           delete existing.variantAction;
+          delete existing.styleEdits;
           delete existing.payload;
         }
         existing.feedback = cleanFeedback;
@@ -348,6 +355,9 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
         } else if (existing.elements) existing.element = existing.elements[0] ?? null;
         if (variant !== undefined) existing.variant = variant;
         if (variantAction) existing.variantAction = variantAction;
+        // Omitted keeps the saved diff; an empty list removes it.
+        if (styleEdits?.length) existing.styleEdits = styleEdits;
+        else if (styleEdits) delete existing.styleEdits;
         // An omitted payload leaves the stored one alone, so a host that only
         // sends it on the first save does not lose it on the next autosave.
         if (payload !== undefined) existing.payload = payload;
@@ -378,6 +388,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
       ...(elements !== undefined ? { elements, element: elements[0] ?? null } : {}),
       ...(variant !== undefined ? { variant } : {}),
       ...(variantAction ? { variantAction } : {}),
+      ...(styleEdits?.length ? { styleEdits } : {}),
     });
     writeNotes(file, notes);
     return json(201, { id: newId });

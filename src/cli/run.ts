@@ -22,6 +22,7 @@
  */
 import { resolve } from 'node:path';
 
+import { describeStyleEdit } from '../core/style';
 import { readNotes, updateNotes, type StoredNote } from '../store';
 import { runInit } from './init';
 import { type CliIO, errOut, findNoteByPrefix, has, makeIo, out, parseArgs, valueFor } from './util';
@@ -67,7 +68,7 @@ function printHelp(io: CliIO): void {
   out(io, '  isotone --json             full note records as JSON for agents and scripts');
   out(io);
   out(io, 'Endpoint and panel for a host without the Vite plugin');
-  out(io, '  isotone serve [--port 4123] [--file <path>] [--theme auto|light|dark|system]');
+  out(io, '  isotone serve [--port 4123] [--file <path>] [--theme auto|light|dark|system] [--style-editor]');
   out(io);
   out(io, 'Overlay variants');
   out(io, '  isotone variant --help');
@@ -90,10 +91,11 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
     out(io, 'Usage: isotone serve [--port 4123] [--host 127.0.0.1] [--file <path>] [--theme auto|light|dark|system]');
     out(io, 'Run it inside the repo under review, then add the printed <script> tag to the dev page.');
     out(io, '--no-update-check disables the daily background npm update check.');
+    out(io, '--style-editor turns on the experimental visual style editor in select mode.');
     return 0;
   }
   try {
-    if (parseArgs(args, ['--file', '--port', '--host', '--theme'], ['--no-update-check']).length) throw new Error('serve does not take positional arguments.');
+    if (parseArgs(args, ['--file', '--port', '--host', '--theme'], ['--no-update-check', '--style-editor']).length) throw new Error('serve does not take positional arguments.');
   } catch (error) {
     errOut(io, (error as Error).message);
     return 1;
@@ -112,7 +114,10 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
   }
   let served: Awaited<ReturnType<typeof serveIteration>>;
   try {
-    served = await serveIteration({ file, port, host, theme, projectRoot: io.cwd, checkForUpdates: !has(args, '--no-update-check') });
+    served = await serveIteration({
+      file, port, host, theme, projectRoot: io.cwd, checkForUpdates: !has(args, '--no-update-check'),
+      ...(has(args, '--style-editor') ? { experimental: { styleEditor: true } } : {}),
+    });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'EADDRINUSE') {
       errOut(
@@ -234,7 +239,11 @@ function runNotes(argv: string[], io: CliIO): number {
   if (has(argv, '--json')) {
     // Additive per-record field: an agent that only reads this output still
     // learns how to close the note once it is fixed.
-    const records = rows.map((n) => (n.done ? n : { ...n, doneCommand: doneCommand(n.id) }));
+    const records = rows.map((n) => (n.done ? n : {
+      ...n,
+      ...(n.styleEdits?.length ? { styleHint: STYLE_HINT } : {}),
+      doneCommand: doneCommand(n.id),
+    }));
     out(io, JSON.stringify(records, null, 2));
     return 0;
   }
@@ -266,6 +275,15 @@ function runNotes(argv: string[], io: CliIO): number {
       if (element.near) out(io, `    near: "${element.near}"`);
       if (element.attributes) out(io, `    attributes: ${Object.entries(element.attributes).map(([name, value]) => `${name}="${value}"`).join(' ')}`);
       if (element.rect) out(io, `    at: ${element.rect.x},${element.rect.y} ${element.rect.w}×${element.rect.h}`);
+      const edit = n.styleEdits?.find((e) => e.selector === element.selector);
+      if (edit) for (const line of describeStyleEdit(edit)) out(io, line);
+    }
+    // A diff for an element the note no longer lists still says where it applies.
+    const listed = new Set((n.elements ?? (n.element ? [n.element] : [])).map((element) => element.selector));
+    for (const edit of n.styleEdits ?? []) {
+      if (listed.has(edit.selector)) continue;
+      out(io, `  ↳ ${edit.selector}`);
+      for (const line of describeStyleEdit(edit)) out(io, line);
     }
     if (n.variant) out(io, `  ◇ ${n.variant.label}${n.variant.optionLabel ? ` → ${n.variant.optionLabel}` : ''} — selector=${n.variant.axisId}${n.variant.optionId ? ` option=${n.variant.optionId}` : ''}${n.variant.value ? ` value=${n.variant.value}` : ''}`);
     const context = n.payload === undefined ? '' : describePayload(n.payload);
@@ -273,11 +291,13 @@ function runNotes(argv: string[], io: CliIO): number {
     if (n.feedback) out(io, `  ${n.feedback}`);
   }
   out(io, `\n${rows.length} iteration note(s).`);
+  if (rows.some((n) => !n.done && n.styleEdits?.length)) out(io, STYLE_HINT);
   if (rows.some((n) => !n.done)) out(io, DONE_HINT);
   return 0;
 }
 
 const DONE_HINT = 'When you start a note: npx isotone --working <id>. After you fix and verify it, close it: npx isotone --done <id>';
+const STYLE_HINT = 'Style changes were previewed in the browser only. Make each one in source with the project\'s own styling (its utility classes, CSS module, tokens or styled component), changing the rule or token named next to it rather than adding inline styles.';
 
 function doneCommand(id: string): string {
   return `npx isotone --done ${id}`;

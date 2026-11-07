@@ -144,6 +144,14 @@ and `IterationPanel`. The standalone CLI accepts the same values with `--theme`:
 | `light` | Always light. |
 | `dark` | Always dark. |
 
+## Experimental features
+
+`experimental: { styleEditor: true }` on `iteration`, `serveIteration`,
+`mountIteration` or `IterationPanel` (or `npx isotone serve --style-editor`)
+adds a visual style editor to select mode. Reviewers adjust pinned elements in a
+docked inspector and send the changes as a structured diff for the agent to make
+in source. See [the style editor guide](style-editor.md).
+
 ## Hand off to an agent
 
 After installation, the generated `AGENTS.md` section explains the loop. Agents
