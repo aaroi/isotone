@@ -33,19 +33,6 @@ Your agent reads the notes with `npx isotone --json`, makes the changes, and
 closes each note when it's done. The panel marks the note the agent is working
 on and updates without a reload, so you can keep adding notes while it works.
 
-For a longer review, ask your agent for a Blast session. For the time you
-choose, it keeps picking up each batch of new notes, fixing and closing them,
-without being prompted again. Paste this into your agent:
-
-```text
-Run an Isotone Blast session for 45 minutes: `npx isotone blast --for 45m --new`.
-Follow node_modules/isotone/docs/blast.md until it says the session is over.
-```
-
-Blast has no button in the panel; you start, extend and stop it through your
-agent. Isotone still never runs the agent; it hands your agent the notes.
-[Blast mode](docs/blast.md).
-
 Comparing design directions one prompt at a time is slow, and so is describing
 UI to an agent in words. Element pickers built into agents such as Claude Code
 only work inside the agent's own browser. Isotone works in the browser you
@@ -110,6 +97,21 @@ On Next, `init` prints the same panel as a `next/script` tag behind
 `process.env.NODE_ENV === 'development'`. The [integration guide](docs/integrations.md)
 covers route handlers, React embeds, themes and the production guards. Coming
 from the previous package? See the [migration guide](docs/migration.md).
+
+## Blast mode
+
+Once Isotone is set up, you can ask your agent for a Blast session. For the time
+you choose, it keeps picking up each batch of new notes, fixing and closing them,
+without being prompted again. Paste this into your agent:
+
+```text
+Run an Isotone Blast session for 45 minutes: `npx isotone blast --for 45m --new`.
+Follow node_modules/isotone/docs/blast.md until it says the session is over.
+```
+
+Blast has no button in the panel; you start, extend and stop it through your
+agent. Isotone still never runs the agent; it hands your agent the notes.
+[Blast mode](docs/blast.md).
 
 ## Keys
 
