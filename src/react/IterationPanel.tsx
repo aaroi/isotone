@@ -22,6 +22,7 @@ import { NoteSummary } from './NoteSummary';
 import { Icon } from './icons';
 import { useLayoutMotion } from './useLayoutMotion';
 import { useDockMotion } from './useDockMotion';
+import { useDockSize } from './useDockSize';
 import { UpdateNotice } from './UpdateNotice';
 import { MOTION } from './motion';
 import { HINTS } from './hints';
@@ -292,6 +293,7 @@ export function IterationPanel({
     }
   }, [notesOpen, variantsOpen]);
   const open = notesOpen || variantsOpen;
+  const dockSize = useDockSize(rootRef, `${nsKey}::dock`, { variants: variantsOpen, notes: notesOpen });
   const railOpen = expanded || hovered || (focused && instant) || open || picking;
   useEffect(() => {
     if (!railOpen || !instant) return;
@@ -1001,6 +1003,7 @@ export function IterationPanel({
           ref={node => { node?.toggleAttribute('inert', !variantsOpen); }}
         >
           <PanelClose label="Close variants" onClose={() => { setVariantsOpen(false); setExpanded(false); }} />
+          {variantsOpen && <div {...dockSize.handle('variants')} />}
           <VariantsView
             source={variants}
             active={variantsOpen}
@@ -1195,6 +1198,7 @@ export function IterationPanel({
               setPicking(false);
             }}
           />
+          {notesOpen && <div {...dockSize.handle('notes')} />}
           <div className="isotone-panel-head">
             <h2>
               Feedback{' '}
@@ -1306,7 +1310,9 @@ export function IterationPanel({
       data-working={working.size > 0}
       data-open={open}
       className="isotone-root"
+      {...dockSize.root}
     >
+      {open && <div {...dockSize.handle('width')} />}
       <div className="isotone-rail-track" aria-hidden="true" />
       {(picking || floating) &&
         [

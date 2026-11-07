@@ -51,7 +51,17 @@ ${APPEARANCE_CSS}
 /* Panels move independently; their content and corners retain their natural size. */
 .isotone-root[data-open='true'] { width: var(--iso-dock-width); }
 .isotone-root { pointer-events: none; }
-.isotone-root :is(.isotone-panel, .isotone-rail-button, .isotone-fab, .isotone-float) { pointer-events: auto; }
+.isotone-root :is(.isotone-panel, .isotone-rail-button, .isotone-fab, .isotone-float, .isotone-resize) { pointer-events: auto; }
+/* Invisible handles on the dock's left edge, the top edge of the top panel and the gap between two panels.
+   Only keyboard focus draws one, as a line on the edge itself, kept clear of the rounded corners. */
+.isotone-resize { position: absolute; z-index: 2; touch-action: none; outline: none; }
+.isotone-resize-w { left: -4px; top: 20px; bottom: calc(var(--iso-rail-size) + var(--iso-view-gap) + 12px); width: 8px; cursor: ew-resize; }
+.isotone-resize-h { top: -4px; left: 20px; right: 20px; height: 8px; cursor: ns-resize; }
+.isotone-resize-split { top: calc(0px - var(--iso-view-gap)); }
+.isotone-resize:focus-visible::after { content: ''; position: absolute; border-radius: 2px; background: var(--iso-focus); }
+.isotone-resize-w:focus-visible::after { left: 3px; width: 2px; top: 0; bottom: 0; }
+.isotone-resize-h:focus-visible::after { top: 3px; height: 2px; left: 0; right: 0; }
+.isotone-root[data-resizing='true'] { user-select: none; }
 /* The horizontal pill stays anchored while its panels open above it. */
 .isotone-rail, .isotone-rail-tools { display: contents; border: 0; margin: 0; padding: 0; min-width: 0; }
 .isotone-root[data-expanded='true'] { min-height: 44px; }
@@ -346,6 +356,14 @@ ${FEEDBACK_LAYOUT_CSS}
      focus a closed dialog returns to it after a click does not. */
   .isotone-opt:is(:hover, :has(:focus-visible)) .isotone-default-dot { opacity: 0; }
   .isotone-note:hover .isotone-x, .isotone-note:focus-within .isotone-x, .isotone-note-editing .isotone-x { opacity: 1; }
+}
+@media (max-width: 640px), (max-height: 500px) { .isotone-resize { display: none; } }
+/* The dock's size is the reviewer's choice on a window with room for it. */
+@media (min-width: 641px) and (min-height: 501px) {
+  .isotone-root[data-open='true'] { width: var(--iso-width, var(--iso-dock-width)); }
+  .isotone-variants-panel { max-height: min(var(--iso-variants-height, 100vh), calc(var(--iso-view-height) - 76px)); }
+  .isotone-notes-panel { max-height: min(var(--iso-notes-height, 100vh), calc(var(--iso-view-height) - 76px)); }
+  .isotone-root[data-sized-notes='true'] .isotone-list { max-height: none; }
 }
 /* Phones. Panels take turns (see viewport.ts). Variants stop at about half the
    screen, so the page they change stays in view; action dialogs keep their

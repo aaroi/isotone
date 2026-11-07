@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- feat: drag the dock's left edge to change its width, and the top edge of the top open panel to change that panel's height. With both panels open, the gap between them moves the split. The arrow keys resize a focused edge, Shift takes bigger steps, and Home or a double-click restores the default. Sizes are remembered per browser; phones keep their one-panel layout
+
 ## 1.2.3
 
 - feat: every select option, thumbnail and colour swatch has its own actions (from #37). A chevron in its corner, shown on hover or keyboard focus and always on touch screens, or a right click opens the selector dialog scoped to that option: Feedback on this option, Keep only this, Remove this option. Opening it never changes the selection, and it opens below the option when it cannot fit above. Its title reads as one line, the option then the selector ("Compact Spacing")

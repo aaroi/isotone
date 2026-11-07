@@ -165,6 +165,35 @@ overflow. Do not put full feedback notes, readable labels or internal selectors
 in `title` attributes. Check label overflow on pointer entry, without observing
 or measuring every row during render. Accessible labels retain the full text.
 
+## Resizing the dock
+
+The open panels resize by dragging their edges. The handles are invisible 8px
+strips and exist only while a panel is open; the resize cursor is the only
+pointer cue, so nothing lights up on hover and a drag never looks as if it
+resizes both panels. Width is one handle on the dock's left edge. Height belongs
+to each panel: the top edge of the top-most open panel resizes that panel, and
+with both open the strip in the gap between them is the split, where moving it
+up grows feedback and shrinks variants, and down does the reverse. Keyboard focus
+draws a 2px `--iso-focus` line on the focused handle, inset to stay clear of the
+rounded corners.
+
+Sizes are max-heights and a max-width, stored in `localStorage` under
+`<namespace>::dock` as `{ width, variants, notes }` and set as `--iso-width`,
+`--iso-variants-height` and `--iso-notes-height`. A height is clamped to the
+panel's content height, so dragging past the content stores nothing larger and
+the handle's `aria-valuenow` and `aria-valuemax` are what the panel can really
+reach. The upper bound is also the room left in `--iso-view-height` after the
+other open panel (with both open, after the upper panel's minimum). Each panel
+keeps its own minimum: its header and composer plus a little of its scrolling
+body, never less than would clip its content. Arrow keys move a focused handle
+16px (Shift 64px), where ArrowUp always moves a horizontal handle up; Home or a
+double-click restores the default. Releasing the pointer, losing pointer capture
+or closing a panel mid-drag ends the drag, so dock motion never stays switched
+off. An earlier single `height` is ignored.
+
+On phones, where the panels take turns, the handles are hidden and the stored
+sizes are ignored.
+
 ## Hints and instructions
 
 Instructional and hint text is never truncated. Every hint, such as the
