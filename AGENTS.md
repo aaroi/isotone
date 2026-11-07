@@ -63,3 +63,6 @@ shows the supported shapes.
 
 For work on this package, use [development guidance](docs/development.md).
 That document links the maintainer's design language and release checks.
+Every user-facing change also updates the demo (`examples/demo`) so it shows
+the change, at phone sizes too; the hosted demo redeploys when the change
+merges, and each pull request gets a preview link.

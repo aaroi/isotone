@@ -107,6 +107,29 @@ overflow. Do not put full feedback notes, readable labels or internal selectors
 in `title` attributes. Check label overflow on pointer entry, without observing
 or measuring every row during render. Accessible labels retain the full text.
 
+## Phones and touch
+
+`viewport.ts` holds the small-screen rules. Below 640px wide or 500px tall the
+variants and feedback panels take turns: opening one closes the other. Below
+640px wide the variants panel stops at half the screen (never below the 360px a
+selector dialog reserves), so the page it changes stays in view. While
+selecting on a small screen, the feedback panel hides its saved notes and keeps
+only the composer, so the page can be reached; they return afterwards.
+
+An on-screen keyboard covers the page without resizing it. The dock rises above
+it and limits its height to what is visible, and the floating composer is
+placed within the same visible area. Pinch zoom is left alone.
+
+Copy follows the last pointer used: a finger reads "Tap", sees no ⌘, Ctrl,
+Shift or ↵, and is told that Done (or the crosshair, beside a pinned element)
+pauses selecting so the page can be used, which is the touch counterpart of
+holding Shift; pins stay. A tapped element gets the floating composer under or
+over the whole element, centred on the tap, because a finger hides the point.
+Selection previews follow hovering pointers only. Coarse pointers get larger
+hit areas around the composer controls, reference removal, note delete and
+panel close without changing their faces. The two-tool pill keeps its
+76 × 44px geometry.
+
 ## Scrolling
 
 Keep native scrolling, wheel/trackpad input and keyboard focus reveal. Hide
@@ -182,6 +205,7 @@ the composer must not remeasure unchanged selectors or notes.
 | `src/react/VariantsView.tsx` | Selectors, action dialogs and Save as defaults |
 | `src/react/theme.ts` | Theme resolution, observation and cleanup |
 | `src/react/motion.ts` | Motion timing and work limits |
+| `src/react/viewport.ts` | Small-screen, touch and on-screen keyboard rules |
 | `src/react/useDockMotion.ts`, `useLayoutMotion.ts` | Measured movement and interruption handling |
 
 To add a control, choose its semantic role first: surface, well, raised action or

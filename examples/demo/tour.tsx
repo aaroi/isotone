@@ -45,8 +45,27 @@ function rememberTour() {
 }
 
 const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+// Touch screens get no keyboard shortcuts or keys in the copy.
 const touch = matchMedia('(pointer: coarse)').matches;
 const press = touch ? 'Tap' : 'Click';
+/** On a phone the open panel covers most of the page. */
+const narrow = () => matchMedia('(max-width: 640px)').matches;
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * Scroll the overview cards into the strip between the tour card and the
+ * panel, so a phone shows what a variant or a pin changes. Leaves the page
+ * alone when they are already in view or there is no room.
+ */
+function revealCards() {
+  const cards = document.getElementById('overview-cards')?.getBoundingClientRect();
+  const dock = inPanel('.isotone-root')?.getBoundingClientRect();
+  if (!cards || !dock) return;
+  const top = (document.querySelector('.tour-card')?.getBoundingClientRect().bottom ?? 0) + 12;
+  const room = dock.top - top;
+  if (room < 96 || (cards.top >= top && cards.top <= top + 24)) return;
+  window.scrollBy({ top: cards.top - top, behavior: reducedMotion() ? 'auto' : 'smooth' });
+}
 
 type AgentState = 'waiting' | 'working' | 'done';
 /** What to highlight: a key that changes whenever the highlighted things change, and how to find them. */
@@ -81,6 +100,15 @@ export function Tour({ onClose, subscribeVariants }: {
   }, [step, panel.open]);
 
   useEffect(() => subscribeVariants(() => setSwitched(true)), [subscribeVariants]);
+
+  // On a phone, keep the cards in view while trying variants and pinning one,
+  // once the panel and the tour card have settled.
+  const showCards = (step === 'variants' && panel.variants) || (step === 'pin' && panel.picking && !panel.pinned);
+  useEffect(() => {
+    if (!showCards || !narrow()) return;
+    const timer = setTimeout(revealCards, 460);
+    return () => clearTimeout(timer);
+  }, [showCards]);
 
   useEffect(() => {
     const sent = (event: Event) => {
@@ -166,6 +194,7 @@ function stepContent(step: Step, panel: PanelState, switched: boolean, agent: Ag
 } {
   // The pill behind the button: it stays visible when hovering swaps the button for the tools.
   const fab = one('.isotone-rail-track');
+  const sendHint = touch ? <>tap the arrow to send it</> : <>press <Keys keys={['↵']} /> to send it</>;
   switch (step) {
     case 'welcome': return {
       title: 'This is a pretend app',
@@ -214,12 +243,12 @@ function stepContent(step: Step, panel: PanelState, switched: boolean, agent: Ag
       };
       if (panel.picking) return {
         title: 'Leave a note',
-        body: <p>The card is selected, and a note field opened next to it. Write what you'd change, like "make this number bigger", and press <Keys keys={['↵']} /> to send it. You can click more cards first.</p>,
+        body: <p>The card is selected, and a note field opened next to it. Write what you'd change, like "make this number bigger", and {sendHint}. You can {press.toLowerCase()} more cards first.</p>,
         highlight: one('.isotone-float'),
       };
       if (panel.pinned) return {
         title: 'Leave a note',
-        body: <p>Write what you'd change, like "make this number bigger", and press <Keys keys={['↵']} /> to send it.</p>,
+        body: <p>Write what you'd change, like "make this number bigger", and {sendHint}.</p>,
         highlight: inPanel('.isotone-float') ? one('.isotone-float') : one('.isotone-compose'),
       };
       return {
@@ -241,7 +270,7 @@ function stepContent(step: Step, panel: PanelState, switched: boolean, agent: Ag
     case 'finish': return {
       title: 'Try it in your own app',
       body: <>
-        <p>Run these in your project. It works with Vite and other dev servers, and none of it ends up in your production build.</p>
+        <p>{touch ? 'On your computer, run these in your project.' : 'Run these in your project.'} It works with Vite and other dev servers, and none of it ends up in your production build.</p>
         <Install />
       </>,
       highlight: null,

@@ -68,9 +68,47 @@ frames with ffmpeg. The header comment has the commands.
 
 `pnpm build:demo` builds the demo as a static site in `demo-dist/`. Without a
 dev server, the page answers the notes endpoint itself from `localStorage`, and
-the pretend agent edits those notes there. It is
-deployed to [isotone.vercel.app](https://isotone.vercel.app) with
-`vercel deploy --prod`; `vercel.json` holds the build command.
+the pretend agent edits those notes there. `pnpm dev --mode hosted` serves the
+same hosted variant from the dev server. `vercel.json` holds the install and
+build commands.
+
+Every user-facing change updates the demo so it shows the change: new controls
+appear in the sample app, new copy in the tour, new behaviour somewhere a
+visitor will try it. Many visitors use a phone, so check the demo at a phone
+size (375 × 812 and landscape) as well.
+
+`.github/workflows/demo.yml` deploys [isotone.vercel.app](https://isotone.vercel.app):
+production on every push to `main`, and a preview for every pull request, whose
+link it posts and then keeps updated in one PR comment, so a change can be tried
+on a phone before it merges. `publish.yml` dispatches the workflow again after
+its version commit, because pushes made with `GITHUB_TOKEN` start no workflows;
+a run whose commit is no longer the tip of `main` skips production. The workflow
+uses a pinned Vercel CLI and three repository secrets. Without them (forks,
+Dependabot, or before setup) it skips with a notice and passes.
+
+To set it up once:
+
+1. Create a token at [vercel.com/account/tokens](https://vercel.com/account/tokens),
+   scoped to the team or account that owns the demo project.
+2. Find the IDs: run `vercel link` in a checkout and read `orgId` and
+   `projectId` from `.vercel/project.json` (ignored by Git), or copy the Project
+   ID from the project's Settings → General and the team or user ID from its
+   settings.
+3. Add them as repository secrets (Settings → Secrets and variables → Actions),
+   or with `gh secret set VERCEL_TOKEN`, `gh secret set VERCEL_ORG_ID` and
+   `gh secret set VERCEL_PROJECT_ID`.
+4. Vercel protects preview deployments with Vercel Authentication by default.
+   To open previews on a phone without signing in, turn it off for previews in
+   the project's Settings → Deployment Protection, or sign in to Vercel there.
+
+Pull-request builds run with the token, so only branches in this repository get
+previews; keep the token scoped to the demo's team. Connecting the repository
+in the Vercel dashboard (Project → Settings → Git) is an alternative: Vercel then
+deploys `main` and comments on pull requests itself, using `vercel.json`. Use
+one or the other, not both, or every commit deploys twice; if you choose the
+Git integration, delete `demo.yml` and its dispatch step in `publish.yml`.
+Deploying by hand with `vercel deploy --prod` still works for an emergency.
+
 Demo feedback uses seeded files in a temporary
 directory, separate from project notes; the server removes them when it closes.
 Open `/?stress=1` for 500 selectors and 500 notes, including long labels and large
@@ -104,7 +142,9 @@ Follow [the design language](design.md). Use shared semantic materials and
 components rather than selector-specific theme overrides. Check both themes,
 selected/hover/focus/disabled states, long labels, empty and populated feedback,
 sticky fades, narrow viewports, and reduced motion. Context must remain accessible
-even when a label is visually truncated.
+even when a label is visually truncated. On touch, copy names taps rather than
+keys or Shift, and nothing depends on hover; see "Phones and touch" in
+[the design language](design.md).
 
 `src/react/feedback-layout.ts` holds the accepted inline-reference layout.
 `src/react/pill-active.ts` holds the accepted Clean Highlight recipe. Future
