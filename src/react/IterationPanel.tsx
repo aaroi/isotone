@@ -570,13 +570,13 @@ export function IterationPanel({
     const el = listRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [notes, notesOpen]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-sample the surrounding page when opened.
+  // The observer follows the page from here on; opening a panel or changing route does not rebuild it.
   useLayoutEffect(() => {
     if (!visible) return;
     const root = rootRef.current?.getRootNode();
     if (root instanceof ShadowRoot || root instanceof Document) ensurePanelStyles(root);
     return observeTheme(setTheme, themePreference);
-  }, [visible, open, route, themePreference]);
+  }, [visible, themePreference]);
 
   if (!visible) return null;
   const composer = (
