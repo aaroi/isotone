@@ -430,6 +430,9 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
           const n = listVariants(vopts).length;
           server.config.logger.info(`  isotone  variants → ${shownDir}  (${n} variant${n === 1 ? '' : 's'})`);
         }
+        if (allowedHosts().network) {
+          server.config.logger.warn('  isotone  exposed with --host: anyone on your network can read and write notes and switch variants');
+        }
       });
 
       const updates = startUpdateCheck(server.config.root, options.checkForUpdates !== false);

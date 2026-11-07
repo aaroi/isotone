@@ -36,7 +36,8 @@ plugins: [/* existing plugins */, iteration()]
 Restart the dev server. Source-file variants and notes are available immediately.
 The endpoints answer only this machine, unless you start the dev server with
 `--host` (or set `server.host`): then other devices on your network, such as a
-phone you review on, can use the panel too. Pages served under a name other than
+phone you review on, can use the panel too, and so can anyone else on that
+network; the dev server says so when it starts. Pages served under a name other than
 an IP address, `localhost`, `*.localhost`, `*.test` or one in Vite's
 `server.allowedHosts` are refused.
 The panel carries its own React runtime, so React, Vue, Svelte and vanilla Vite
@@ -140,6 +141,13 @@ export { handle as GET, handle as POST, handle as DELETE };
 When the page and this API listen on different ports, every request gets 403
 `origin not allowed`; pass `{ loopbackOrigins: true }` as the third argument to
 accept pages from any loopback port.
+
+The adapters see only the `Request`, not who sent it, so unlike the Vite plugin
+they cannot refuse other machines: they rely on the `Host` and `Origin` checks
+below, which accept any IP address. `next dev` listens on every network
+interface by default, which puts this route, and your notes, within reach of
+anyone on your network. Start it with `next dev -H 127.0.0.1` to keep it on this
+machine.
 
 A manual route does not touch Git configuration: add `.iteration-feedback.json`
 and `.iteration-feedback.blast.json` ([Blast](blast.md)'s session) to
