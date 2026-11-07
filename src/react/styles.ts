@@ -36,8 +36,11 @@ ${APPEARANCE_CSS}
   --iso-ease-out: ${MOTION.easeOut};
   --iso-fast: ${MOTION.exit}ms; --iso-enter: ${MOTION.enter}ms; --iso-exit: ${MOTION.exit}ms;
   --iso-dock-width: min(340px, calc(100vw - 32px));
-  position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom));
-  z-index: 2147483000; width: 44px; display: flex; flex-direction: column; isolation: isolate; max-height: calc(100dvh - 32px); color: var(--iso-fg);
+  /* The height the dock may fill: what is visible (above an on-screen keyboard,
+     see viewport.ts) less the safe areas it keeps clear of. */
+  --iso-view-height: calc(var(--iso-viewport, 100dvh) - env(safe-area-inset-top, 0px) - max(0px, env(safe-area-inset-bottom, 0px) - 16px));
+  position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: max(calc(16px + var(--iso-keyboard, 0px)), env(safe-area-inset-bottom));
+  z-index: 2147483000; width: 44px; display: flex; flex-direction: column; isolation: isolate; max-height: calc(var(--iso-view-height) - 32px); color: var(--iso-fg);
   font: 12px/1.5 var(--iso-sans); -webkit-font-smoothing: antialiased;
   text-align: left; letter-spacing: normal; color-scheme: dark;
 }
@@ -73,8 +76,8 @@ ${APPEARANCE_CSS}
 /* Panels are sections inside the dock. Only long content scrolls. */
 .isotone-panel { order: 0; position: relative; display: none; flex-direction: column; min-height: 0; flex: 0 1 auto; width: 100%; }
 .isotone-panel[data-open='true'] { display: flex; }
-.isotone-variants-panel { flex-shrink: 1; max-height: calc(100dvh - 76px); }
-.isotone-notes-panel { flex-shrink: 0; max-height: calc(100dvh - 76px); padding: var(--iso-space); gap: var(--iso-space); }
+.isotone-variants-panel { flex-shrink: 1; max-height: calc(var(--iso-view-height) - 76px); }
+.isotone-notes-panel { flex-shrink: 0; max-height: calc(var(--iso-view-height) - 76px); padding: var(--iso-space); gap: var(--iso-space); }
 .isotone-root .isotone-panel { background: var(--iso-bg); border: 1px solid var(--iso-line); border-radius: 12px; box-shadow: var(--iso-panel-shadow); }
 /* The close control sits on the panel's top-left corner, half outside it, with
    the same face as a note's delete button, a touch larger. It fades in while the
@@ -98,7 +101,7 @@ ${APPEARANCE_CSS}
 .isotone-icon { width: 28px; height: 28px; display: inline-grid; place-items: center; flex: none; color: var(--iso-muted); border-radius: 6px; }
 .isotone-count { margin-left: 5px; color: var(--iso-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .isotone-vars { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; }
-.isotone-vars { min-height: min(var(--iso-menu-need, 0px), calc(100dvh - 76px)); }
+.isotone-vars { min-height: min(var(--iso-menu-need, 0px), calc(var(--iso-view-height) - 76px)); }
 /* The panel no longer clips, so its corner close can overhang; the variants body clips itself. */
 .isotone-root .isotone-panel > .isotone-vars { overflow: hidden; border-radius: 11px; }
 .isotone-vars-body { flex: 1; overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: var(--iso-space); display: flex; flex-direction: column; gap: var(--iso-space); }
@@ -244,14 +247,15 @@ ${FEEDBACK_LAYOUT_CSS}
 .isotone-picking { position: absolute; inset: -4px; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 0 4px 0 8px; border-radius: 6px; background: var(--iso-well); cursor: default; }
 .isotone-picking > svg { flex: none; color: var(--iso-fg); }
 .isotone-picking p { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; margin: 0; }
-.isotone-picking span { font-size: 12px; line-height: 16px; color: var(--iso-fg); font-variant-numeric: tabular-nums; }
-.isotone-picking small { font-size: 10px; line-height: 14px; color: var(--iso-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Hints are never truncated (design.md, "Hints and instructions"): one line, copy short enough to fit. */
+.isotone-picking span { font-size: 12px; line-height: 16px; color: var(--iso-fg); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.isotone-picking small { font-size: 10px; line-height: 14px; color: var(--iso-muted); white-space: nowrap; }
 .isotone-picking button { flex: none; display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 9px; }
 .isotone-picking kbd { font: inherit; color: var(--iso-muted); }
 /* After a pin, the composer floats beside the element on a panel surface, placed by
    IterationPanel inside the viewport. It grows out of the point that was clicked. */
 .isotone-float { position: fixed; z-index: 2147483002; width: min(300px, calc(100vw - 16px)); padding: 4px; background: var(--iso-bg); border: 1px solid var(--iso-line); border-radius: 12px; box-shadow: var(--iso-panel-shadow); }
-.isotone-float-hint { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--iso-muted); }
+.isotone-float-hint { flex: 1 0 auto; white-space: nowrap; font-size: 10px; color: var(--iso-muted); }
 /* Meanwhile the dock keeps the composer's slot and says where the writing went. */
 .isotone-away { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 50px; padding: 8px 8px 8px 10px; text-align: left; color: var(--iso-fg); background: var(--iso-well); border: 1px solid var(--iso-input-border); box-shadow: var(--iso-input-shadow); border-radius: 8px; }
 .isotone-away > svg { flex: none; }
@@ -276,6 +280,23 @@ ${FEEDBACK_LAYOUT_CSS}
   .isotone-x:hover::before { background: var(--iso-control-hover-face); }
   .isotone-note .isotone-x { opacity: 0; }
   .isotone-note:hover .isotone-x, .isotone-note:focus-within .isotone-x, .isotone-note-editing .isotone-x { opacity: 1; }
+}
+/* Phones. Panels take turns (see viewport.ts). Variants stop at about half the
+   screen, so the page they change stays in view; action dialogs keep their
+   360px. While selecting, the dock shrinks to the composer so the page can be
+   reached, and the saved notes return afterwards. */
+@media (max-width: 640px) {
+  .isotone-variants-panel { max-height: min(calc(var(--iso-view-height) - 76px), max(50dvh, 360px)); }
+}
+@media (max-width: 640px), (max-height: 500px) {
+  .isotone-root[data-selecting='true'] .isotone-notes-panel > :is(.isotone-list, .isotone-pages) { display: none; }
+}
+/* A finger needs more than the drawn faces. Hit areas grow without moving
+   anything; the faces keep Instrument's geometry. */
+@media (pointer: coarse) {
+  .isotone-pick::after, .isotone-send::after { inset: -8px -10px; }
+  .isotone-chip button { position: relative; }
+  .isotone-chip button::after, .isotone-note > .isotone-x::after, .isotone-panel-close::after { content: ''; position: absolute; inset: -6px; border-radius: 50%; }
 }
 @media (max-height: 580px) { .isotone-list { --iso-list-height: 72px; } .isotone-root .isotone-textarea { max-height: calc(64px + var(--iso-textarea-inset)); } }
 @media (prefers-reduced-motion: reduce) {

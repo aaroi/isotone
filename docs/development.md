@@ -143,7 +143,9 @@ Follow [the design language](design.md). Use shared semantic materials and
 components rather than selector-specific theme overrides. Check both themes,
 selected/hover/focus/disabled states, long labels, empty and populated feedback,
 sticky fades, narrow viewports, and reduced motion. Context must remain accessible
-even when a label is visually truncated.
+even when a label is visually truncated. On touch, copy names taps rather than
+keys or Shift, and nothing depends on hover; see "Phones and touch" in
+[the design language](design.md).
 
 `src/react/feedback-layout.ts` holds the accepted inline-reference layout.
 `src/react/pill-active.ts` holds the accepted Clean Highlight recipe. Future

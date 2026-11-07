@@ -91,11 +91,15 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       if (changed) measure();
     });
     mutations.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-open', 'data-instant'] });
+    // An on-screen keyboard lifts the dock through the root's own style (viewport.ts).
+    const lifted = new MutationObserver(measure);
+    lifted.observe(root, { attributes: true, attributeFilter: ['style'] });
     reduced?.addEventListener('change', measure);
     window.addEventListener('resize', measure);
     return () => {
       observer?.disconnect();
       mutations.disconnect();
+      lifted.disconnect();
       reduced?.removeEventListener('change', measure);
       window.removeEventListener('resize', measure);
       for (const element of exits.keys()) removeExit(element);

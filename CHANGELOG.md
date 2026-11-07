@@ -5,6 +5,13 @@
 - chore: the hosted demo deploys from `main` and gives each pull request a preview link (`demo.yml`)
 - feat: removing an option from a selector's action dialog keeps the dialog open, marks the row "Removal requested" and moves focus to the next option, so several can be removed in a row
 - feat: selector sections. A label prefix such as `Header > Logo size`, or a `section` field, puts the selector under a sticky, foldable Header heading with a count in the Variants panel, for host axes, knobs and file variants. `variant new --section` and `variant section` set it, and `variant list` has a SECTION column
+- feat: on touch, select mode says "Tap", shows no Shift, ⌘/Ctrl or ↵ hints, and explains that Done (or the crosshair) pauses selecting so the page can be used, with pins kept. Copy follows the last pointer used
+- feat: a tapped element gets the floating composer under or over it rather than on top of it, and a finger no longer leaves a stray selection preview
+- feat: on small screens the variants and feedback panels take turns, the variants panel stops at half the screen, and selecting hides the saved notes so the page can be reached
+- fix: the dock and the floating composer stay above an on-screen keyboard, and the dock's height allows for safe areas
+- feat: larger touch hit areas around the composer controls, reference removal, note delete and panel close
+- fix: select-mode hints are never cut off. They read "Hold ⇧ to use the page" (touch: "Tap Done to use the page") and, beside a pinned element, "Click to pin more · ⇧ uses the page" (touch: "Tap to pin more · crosshair pauses"), each on one line at phone and desktop widths
+- chore: the demo works on phones: touch copy in the tour, the cards scroll into view, larger touch targets, and a list layout and top bar that fit a phone
 
 ## 1.1.3
 
