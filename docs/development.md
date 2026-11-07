@@ -71,7 +71,7 @@ explicit theme), a light and dark toggle for the page, and a Tour button. The
 tour (`examples/demo/tour.tsx`) starts by itself on a browser's first visit and
 remembers when it was closed; `/?tour=1` starts it regardless. Its last step
 hands visitors the README's "Start with your agent" prompt, kept in
-`examples/demo/agent-prompt.ts`; `tests/agent-prompt.test.ts` keeps the two the
+`examples/demo/agent-prompt.ts`; `tests/package/agent-prompt.test.ts` keeps the two the
 same, so change both together. A pretend agent marks each new note as being worked on a moment after it
 is sent and closes it a few seconds later, the way `--working` and `--done`
 would.

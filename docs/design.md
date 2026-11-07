@@ -201,7 +201,7 @@ select-mode cover and the floating composer's line, is fully visible on one
 line by default, in pointer and touch copy, at 375px and desktop widths, in
 both themes. Make it fit with a smaller size, shorter copy or more reserved
 space; never with an ellipsis or a clip. `src/react/hints.ts` holds the panel's
-hints, and `tests/react-hints.test.ts` keeps them within the width a 375px
+hints, and `tests/react/hints.test.ts` keeps them within the width a 375px
 viewport leaves. The demo tour follows the same rule: its copy wraps.
 
 User content, such as note text and element names, may still truncate, with
