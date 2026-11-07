@@ -8,10 +8,11 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { runCli } from '../../src/cli/run';
 import { describeIterationElement, elementAsNode } from '../../src/core';
+import { resolveElementSource } from '../../src/core/element';
 import { applyKnobValues, knobDelta } from '../../src/core/variants';
 import { notesResponse } from '../../src/node/notes/handler';
 import { readNotes } from '../../src/node/notes/store';
@@ -120,6 +121,29 @@ it('reads the JSX callsite from React 19 debug stacks', () => {
     },
   });
   expect(describeIterationElement(elementAsNode(button)).source).toBe('src/old.tsx:3');
+});
+
+it('maps a React 19 callsite back to the original line through the module source map', async () => {
+  document.body.innerHTML = '<button>Changes</button>';
+  const button = document.querySelector('button') as Element;
+  const stack = ['Error: react-stack-top-frame', '    at TabButton (http://localhost:5173/src/tabs.tsx?t=1:2:7)'].join('\n');
+  Object.assign(button, { __reactFiber$abc: { type: 'button', _debugStack: { stack }, return: null } });
+  expect(describeIterationElement(elementAsNode(button)).source).toBe('/src/tabs.tsx:2');
+  // Generated line 2 maps to line 10 of tabs.tsx.
+  const map = btoa(JSON.stringify({ version: 3, sources: ['tabs.tsx'], mappings: ';AASA' }));
+  const fetch = vi.fn(async () => ({
+    text: async () => `import x;\njsxDEV("button");\n//# sourceMappingURL=data:application/json;base64,${map}\n`,
+  }));
+  vi.stubGlobal('fetch', fetch);
+  try {
+    expect(await resolveElementSource(button)).toBe('/src/tabs.tsx:10');
+    expect(fetch).toHaveBeenCalledWith('http://localhost:5173/src/tabs.tsx?t=1');
+    // React 18's own field is already exact: nothing to fetch.
+    Object.assign(button, { __reactFiber$abc: { type: 'button', _debugSource: { fileName: 'a.tsx', lineNumber: 1 }, return: null } });
+    expect(await resolveElementSource(button)).toBeUndefined();
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });
 
 it('keeps the context through the store and prints it for the agent', async () => {
