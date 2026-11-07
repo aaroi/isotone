@@ -149,7 +149,7 @@ export async function fetchLatest(fetcher: typeof fetch = fetch, signal?: AbortS
   }
 }
 
-export function updateInfo(latest: string, cwd: string, manager?: PackageManager): UpdateInfo {
+function updateInfo(latest: string, cwd: string, manager?: PackageManager): UpdateInfo {
   const order = compareVersions(latest, currentVersion);
   return {
     currentVersion,

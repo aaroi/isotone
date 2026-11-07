@@ -57,7 +57,7 @@ export function readSession(file: string): BlastSession | null {
   }
 }
 
-export function writeSession(file: string, session: BlastSession): void {
+function writeSession(file: string, session: BlastSession): void {
   const fresh = !existsSync(file);
   writeJson(file, session);
   // A local, per-checkout file like the notes; never committed.

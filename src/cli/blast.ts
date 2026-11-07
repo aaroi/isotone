@@ -44,7 +44,7 @@ import { type CliIO, errOut, extractFlag, has, out, parseArgs, valueFor } from '
 /** Exit status once the session is over, so an agent or script can tell it apart. */
 export const ENDED_EXIT = 3;
 
-export interface BlastTiming {
+interface BlastTiming {
   /** Quiet time after the last change to the notes before a batch is handed out. */
   debounceMs: number;
   /** A steady stream of notes is handed out after this long regardless. */

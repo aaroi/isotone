@@ -88,7 +88,7 @@ export function notesRevision(file: string): string {
 }
 
 /** A stored reply, or null when it is missing or malformed. */
-export function replyOf(value: unknown): NoteReply | null {
+function replyOf(value: unknown): NoteReply | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const v = value as Partial<NoteReply>;
   if (typeof v.text !== 'string' || !v.text.trim() || typeof v.at !== 'string' || !Number.isFinite(Date.parse(v.at))) return null;

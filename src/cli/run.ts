@@ -55,7 +55,7 @@ export async function runCli(argv: string[], ioInput: Partial<CliIO> = {}): Prom
   }
 }
 
-export function isHelp(arg: string | undefined): boolean {
+function isHelp(arg: string | undefined): boolean {
   return arg === '--help' || arg === '-h' || arg === 'help';
 }
 
@@ -325,7 +325,7 @@ function runNotes(argv: string[], io: CliIO): number {
  * the notes file's project (`notesProjectRoot`), and dropped when malformed;
  * a valid one's text is rebuilt from it rather than read from the file.
  */
-export function agentNote<T extends StoredNote>(note: T, root: string): T {
+function agentNote<T extends StoredNote>(note: T, root: string): T {
   const update = updateRequestOf(note.update, { root });
   const { update: _stored, ...rest } = note;
   return (update ? { ...rest, feedback: updateNoteText(update), update } : rest) as T;

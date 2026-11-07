@@ -4,7 +4,7 @@
  * pull this in without dragging the others' dependencies along.
  */
 
-export interface CliWritable {
+interface CliWritable {
   write(chunk: string): void;
 }
 

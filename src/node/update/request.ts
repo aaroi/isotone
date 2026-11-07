@@ -70,7 +70,7 @@ const PACKAGE_NAME = 'isotone';
 const STRICT_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*)?$/;
 
 /** A version an upgrade command may name: strict SemVer, nothing a shell could read as more. */
-export function isStrictVersion(value: unknown): value is string {
+function isStrictVersion(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 256 && STRICT_VERSION.test(value) && isVersion(value);
 }
 

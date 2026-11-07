@@ -21,7 +21,7 @@ import { changelogUrl, compareVersions, notesProjectRoot, updateRequestOf } from
  * The request a snapshot supports, or null when there is nothing to run. With
  * a notes file, its directory must also lie inside that file's project.
  */
-export function updateRequestFrom(info: UpdateInfo, file?: string): UpdateRequest | null {
+function updateRequestFrom(info: UpdateInfo, file?: string): UpdateRequest | null {
   if (info.status !== 'available' || !info.latestVersion || !info.upgrade) return null;
   return updateRequestOf(
     {

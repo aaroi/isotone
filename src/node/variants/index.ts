@@ -12,7 +12,7 @@
  */
 export { ACTIVE_FILE, DEFAULT_VARIANTS_DIR, KNOBS_FILE } from './options';
 export type { VariantsStoreOptions } from './options';
-export { isValidVariantId, variantDir, variantsDir } from './paths';
+export { variantDir, variantsDir } from './paths';
 export {
   addVariantFile,
   createVariant,
@@ -22,10 +22,8 @@ export {
   removeVariantFile,
   setVariantGroup,
   setVariantSection,
-  writeVariant,
 } from './manifest';
 export { dropVariant, promoteVariant } from './promote';
-export { blobOf, currentBlob } from './git';
 export { syncVariant } from './sync';
 export { activeConflict, crossGroupOverlaps, overrideSourcePath, readActive, resolveOverride, writeActive } from './active';
 export { readKnobs } from './knobs';
