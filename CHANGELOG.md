@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- feat: removing an option from a selector's action dialog keeps the dialog open, marks the row "Removal requested" and moves focus to the next option, so several can be removed in a row
+
 ## 1.1.3
 
 - fix: a failed variant switch shows the server's reason, naming the variants, their groups and the shared file
