@@ -99,16 +99,35 @@ export function detectTheme(preference: IterationTheme = 'auto', shadows?: Set<S
   }
 }
 
-/** Observe only the signals needed by the chosen mode, coalescing page changes per frame. */
+/** Page mutations re-sample at most this often; a ticking or animating host would otherwise pay a layout every frame. */
+const MUTATION_INTERVAL_MS = 200;
+
+/**
+ * Whether a page mutation can change the paint at the dock. Text changes only
+ * matter inside a stylesheet: a clock or streamed text cannot change a background.
+ */
+function paintRelevant(record: MutationRecord): boolean {
+  if (isPanel(record.target)) return false;
+  if (record.type === 'characterData') return record.target.parentElement?.localName === 'style';
+  if (record.type === 'childList')
+    return (
+      [...record.addedNodes, ...record.removedNodes].some((node) => node.nodeType === 1) || (record.target as Element).localName === 'style'
+    );
+  return true;
+}
+
+/** Observe only the signals needed by the chosen mode, coalescing page events per frame and page mutations per interval. */
 export function observeTheme(onTheme: (theme: ResolvedTheme) => void, preference: IterationTheme = 'auto'): () => void {
   let current: ResolvedTheme | undefined;
   let frame: number | undefined;
+  let throttle: ReturnType<typeof setTimeout> | undefined;
+  let sampledAt = Number.NEGATIVE_INFINITY;
   let disposed = false;
   const shadows = new Set<ShadowRoot>();
   const observer =
     preference === 'auto'
       ? new MutationObserver((records) => {
-          if (records.some((record) => !isPanel(record.target))) schedule();
+          if (records.some(paintRelevant)) scheduleMutation();
         })
       : undefined;
   const observe = () => {
@@ -132,6 +151,20 @@ export function observeTheme(onTheme: (theme: ResolvedTheme) => void, preference
   const schedule = () => {
     frame ??= window.requestAnimationFrame(sample);
   };
+  const scheduleMutation = () => {
+    if (frame !== undefined || throttle !== undefined) return;
+    const now = Date.now();
+    const wait = sampledAt + MUTATION_INTERVAL_MS - now;
+    if (wait <= 0) {
+      sampledAt = now;
+      schedule();
+    } else
+      throttle = setTimeout(() => {
+        throttle = undefined;
+        sampledAt = Date.now();
+        schedule();
+      }, wait);
+  };
   sample();
   if (preference === 'light' || preference === 'dark') return () => {};
 
@@ -152,6 +185,7 @@ export function observeTheme(onTheme: (theme: ResolvedTheme) => void, preference
     disposed = true;
     observer?.disconnect();
     if (frame !== undefined) window.cancelAnimationFrame(frame);
+    clearTimeout(throttle);
     media?.removeEventListener('change', schedule);
     window.removeEventListener('resize', schedule);
     document.removeEventListener('scroll', pageEvent, true);

@@ -38,6 +38,11 @@ async function frame() {
   await Promise.resolve();
   await vi.advanceTimersByTimeAsync(20);
 }
+/** Page mutations are sampled at most every 200ms. */
+async function settle() {
+  await Promise.resolve();
+  await vi.advanceTimersByTimeAsync(250);
+}
 
 it('uses body paint when a short page leaves only transparent html at the dock', () => {
   elementsAtDock = [document.documentElement];
@@ -191,7 +196,7 @@ it('tracks a new body and stylesheet text changes', async () => {
   const replacement = document.createElement('body');
   replacement.style.backgroundColor = 'white';
   document.body.replaceWith(replacement);
-  await frame();
+  await settle();
   expect(sample).toHaveBeenLastCalledWith('light');
   stop();
 });
@@ -234,4 +239,31 @@ it('cancels queued work and disconnects every listener on cleanup', async () => 
   media.dispatchEvent(new Event('change'));
   await frame();
   expect(sample).not.toHaveBeenCalled();
+});
+
+it('ignores host text updates and samples a constantly restyled page a few times a second', async () => {
+  const surface = document.createElement('div');
+  const clock = document.createTextNode('0');
+  surface.append(clock);
+  document.body.append(surface);
+  elementsAtDock = [surface];
+  const sample = vi.fn();
+  const stop = observeTheme(sample);
+  const sampled = vi.spyOn(document, 'elementsFromPoint');
+  for (let tick = 1; tick <= 60; tick++) {
+    clock.textContent = String(tick);
+    await vi.advanceTimersByTimeAsync(16);
+  }
+  expect(sampled).not.toHaveBeenCalled();
+  for (let tick = 1; tick <= 60; tick++) {
+    surface.style.opacity = String(tick / 60);
+    await vi.advanceTimersByTimeAsync(16);
+  }
+  await settle();
+  expect(sampled.mock.calls.length).toBeGreaterThan(0);
+  expect(sampled.mock.calls.length).toBeLessThanOrEqual(7);
+  surface.style.backgroundColor = 'black';
+  await settle();
+  expect(sample).toHaveBeenLastCalledWith('dark');
+  stop();
 });
