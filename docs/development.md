@@ -77,41 +77,15 @@ appear in the sample app, new copy in the tour, new behaviour somewhere a
 visitor will try it. Many visitors use a phone, so check the demo at a phone
 size (375 × 812 and landscape) as well.
 
-`.github/workflows/demo.yml` deploys [isotone.vercel.app](https://isotone.vercel.app):
-production on every push to `main`, and a preview for every pull request, whose
-link it posts and then keeps updated in one PR comment, so a change can be tried
-on a phone before it merges. `publish.yml` dispatches the workflow again after
-its version commit, because pushes made with `GITHUB_TOKEN` start no workflows;
-a run whose commit is no longer the tip of `main` skips production. The workflow
-uses a pinned Vercel CLI and three repository secrets. Without them (forks,
-Dependabot, or before setup) it skips with a notice and passes.
-
-To set it up once:
-
-1. Create a token at [vercel.com/account/tokens](https://vercel.com/account/tokens),
-   scoped to the team or account that owns the demo project.
-2. Find the IDs: run `vercel link` in a checkout and read `orgId` and
-   `projectId` from `.vercel/project.json` (ignored by Git), or copy the Project
-   ID from the project's Settings → General and the team or user ID from its
-   settings.
-3. Add them as repository secrets (Settings → Secrets and variables → Actions),
-   or with `gh secret set VERCEL_TOKEN`, `gh secret set VERCEL_ORG_ID` and
-   `gh secret set VERCEL_PROJECT_ID`.
-4. Vercel protects preview deployments with Vercel Authentication by default.
-   To open previews on a phone without signing in, turn it off for previews in
-   the project's Settings → Deployment Protection, or sign in to Vercel there.
-
-Pull-request runs have the token, so only branches in this repository get
-previews. Keep the token scoped to the team or account that owns the demo
-project and nothing wider: a pull request can change what the workflow runs.
-The workflow passes the token only to `vercel pull` and `vercel deploy`; the
-build, which runs the project's own scripts, gets no token, and the checkout
-keeps no GitHub credentials. A preview is built from the pull request merged
-into its base branch, as GitHub tests it, so its comment names both. Connecting the repository
-in the Vercel dashboard (Project → Settings → Git) is an alternative: Vercel then
-deploys `main` and comments on pull requests itself, using `vercel.json`. Use
-one or the other, not both, or every commit deploys twice; if you choose the
-Git integration, delete `demo.yml` and its dispatch step in `publish.yml`.
+The demo project on Vercel is connected to this repository (Project → Settings
+→ Git), so Vercel deploys [isotone.vercel.app](https://isotone.vercel.app) on
+every push to `main`, including the release workflow's version commit, and
+posts a preview link on every pull request, using `vercel.json`. Try a change on
+a phone from that link before it merges. No repository secrets are involved.
+Vercel protects preview deployments with Vercel Authentication by default; to
+open previews on a phone without signing in, turn it off for previews in the
+project's Settings → Deployment Protection, or sign in to Vercel there. Vercel
+asks a project member to authorize a preview for a pull request from a fork.
 Deploying by hand with `vercel deploy --prod` still works for an emergency.
 
 Demo feedback uses seeded files in a temporary

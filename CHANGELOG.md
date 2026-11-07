@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- chore: the hosted demo deploys from `main` and gives each pull request a preview link (`demo.yml`)
+- chore: the hosted demo deploys from `main` and gives each pull request a preview link, through Vercel's Git connection
 
 ## 1.1.3
 
