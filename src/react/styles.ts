@@ -43,6 +43,9 @@ ${APPEARANCE_CSS}
   z-index: 2147483000; width: 44px; display: flex; flex-direction: column; isolation: isolate; max-height: calc(var(--iso-view-height) - 32px); color: var(--iso-fg);
   font: 12px/1.5 var(--iso-sans); -webkit-font-smoothing: antialiased;
   text-align: left; letter-spacing: normal; color-scheme: dark;
+  /* Inherited text properties cross the shadow boundary: an RTL or styled host must not mirror or restyle the panel. */
+  direction: ltr; writing-mode: horizontal-tb; word-spacing: normal; text-indent: 0; text-transform: none;
+  text-shadow: none; white-space: normal; font-feature-settings: normal; font-variation-settings: normal;
 }
 .isotone-root :where(button, input, textarea):focus-visible { outline: 2px solid var(--iso-focus); outline-offset: 3px; }
 .isotone-root button { transition: transform var(--iso-fast) var(--iso-ease-out), opacity var(--iso-fast) var(--iso-ease-out); }
@@ -146,7 +149,7 @@ ${APPEARANCE_CSS}
 .isotone-segs { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; border-radius: 7px; background: var(--iso-well); box-shadow: var(--iso-segment-track-shadow); }
 .isotone-seg { width: 100%; flex: 1 1 64px; min-width: 0; padding: 5px 8px; line-height: 16px; border-radius: 5px; color: var(--iso-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isotone-seg > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.isotone-seg[aria-pressed='true'] { color: var(--iso-fg); }
+.isotone-seg[aria-checked='true'] { color: var(--iso-fg); }
 .isotone-opt { position: relative; display: flex; min-width: 0; }
 /* Never narrower than its label plus the chevron's corner on both sides, so a long label widens its own segment instead of running under the chevron. */
 .isotone-opt-seg { flex: 1 1 64px; min-width: fit-content; }
@@ -173,7 +176,7 @@ ${APPEARANCE_CSS}
 .isotone-thumb { position: relative; display: block; min-width: 0; border-radius: 5px; overflow: hidden; background: var(--iso-well); box-shadow: var(--iso-thumb-shadow); color: var(--iso-muted); }
 .isotone-thumb img { display: block; width: 100%; height: 72px; object-fit: cover; }
 .isotone-thumb > span { position: absolute; bottom: 5px; left: 5px; max-width: calc(100% - 10px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 6px; border-radius: 5px; background: var(--iso-label-face); box-shadow: var(--iso-label-shadow); color: var(--iso-fg); text-align: left; font-size: 10px; font-weight: 500; }
-.isotone-thumb[aria-pressed='true'] { color: var(--iso-fg); }
+.isotone-thumb[aria-checked='true'] { color: var(--iso-fg); }
 /* The 14px thumb has 5px of space above it inside its 24px hit area. */
 .isotone-axis-head:has(+ :is(.isotone-range, .isotone-range-wrap)) { margin-bottom: 1px; }
 .isotone-range { display: block; appearance: none; -webkit-appearance: none; width: 100%; height: 24px; cursor: pointer; }
@@ -183,7 +186,7 @@ ${APPEARANCE_CSS}
 .isotone-range::-moz-range-thumb { width: 14px; height: 14px; border: 0; box-shadow: var(--iso-range-thumb-shadow); border-radius: var(--iso-range-radius); background: var(--iso-range-thumb-face); }
 .isotone-swatches { display: flex; flex-wrap: wrap; gap: 10px; padding: 3px; }
 .isotone-swatch, .isotone-picker { width: 26px; height: 26px; border-radius: var(--iso-swatch-radius); box-shadow: var(--iso-swatch-shadow); flex: none; }
-.isotone-swatch[aria-pressed='true'] { box-shadow: var(--iso-swatch-selected-shadow); }
+.isotone-swatch[aria-checked='true'] { box-shadow: var(--iso-swatch-selected-shadow); }
 .isotone-picker { display: block; position: relative; overflow: hidden; background: conic-gradient(#ef4444,#eab308,#22c55e,#3b82f6,#a855f7,#ef4444); }
 .isotone-picker[aria-expanded='true'], .isotone-picker[data-custom='true'] { box-shadow: var(--iso-swatch-selected-shadow); }
 /* A custom pick shows its colour inside the hue ring, the way a selected swatch keeps its colour. */
@@ -209,8 +212,8 @@ ${APPEARANCE_CSS}
 /* Persistent selections share the raised action material, never the recessed
    field/slot material. Keep the face and shadow together in this one rule. */
 .isotone-note-editing .isotone-note-hit,
-.isotone-seg[aria-pressed='true'],
-.isotone-thumb[aria-pressed='true'],
+.isotone-seg[aria-checked='true'],
+.isotone-thumb[aria-checked='true'],
 .isotone-pick[aria-pressed='true'] { background: var(--iso-selected-face); box-shadow: var(--iso-selected-shadow); }
 ${PILL_ACTIVE_CSS}
 .isotone-secondary { padding: 6px 9px; font-size: 11px; font-weight: 500; white-space: nowrap; }
@@ -341,8 +344,8 @@ ${FEEDBACK_LAYOUT_CSS}
   .isotone-note:not(.isotone-note-editing):hover .isotone-note-hit:not(:disabled):not([data-static]) { background: var(--iso-hover); box-shadow: var(--iso-hover-shadow); }
   .isotone-rail-button:not(:disabled):hover { color: var(--iso-fg); }
   .isotone-seg:not(:disabled):hover { color: var(--iso-fg); }
-  .isotone-seg[aria-pressed='false']:not(:disabled):hover { box-shadow: var(--iso-hover-shadow); }
-  .isotone-thumb[aria-pressed='false']:not(:disabled):hover { box-shadow: var(--iso-thumb-hover-shadow); }
+  .isotone-seg[aria-checked='false']:not(:disabled):hover { box-shadow: var(--iso-hover-shadow); }
+  .isotone-thumb[aria-checked='false']:not(:disabled):hover { box-shadow: var(--iso-thumb-hover-shadow); }
   .isotone-root :where(.isotone-save, .isotone-secondary, .isotone-send, .isotone-picking button):not(:disabled):hover, .isotone-away:hover .isotone-away-action { background: var(--iso-control-hover-face); box-shadow: var(--iso-control-hover-shadow); }
   .isotone-chip button:hover { color: var(--iso-fg); background: var(--iso-hover); }
   .isotone-x:hover { color: var(--iso-fg); }

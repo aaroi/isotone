@@ -105,6 +105,13 @@ function size(name: 'variants' | 'notes', height: number, content = height) {
   Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: content - CHROME });
 }
 
+/** A handle reads the panel's content when it is about to be used: on focus or pointer entry. */
+function measure() {
+  return act(async () => {
+    for (const separator of dock().querySelectorAll<HTMLElement>('[role="separator"]')) separator.focus();
+  });
+}
+
 async function remount() {
   await act(async () => {
     panelRoot.unmount();
@@ -175,7 +182,7 @@ it('does not store a bigger value than the content, so ArrowUp is announced trut
   await drag(variantsTop(), 400, 0);
   expect(stored()).toEqual({ variants: 320 });
   size('variants', 320);
-  await render();
+  await measure();
   expect(variantsTop().getAttribute('aria-valuenow')).toBe('320');
   expect(variantsTop().getAttribute('aria-valuemax')).toBe('320');
   await key(variantsTop(), 'ArrowUp');
@@ -185,7 +192,7 @@ it('does not store a bigger value than the content, so ArrowUp is announced trut
 it('grows a panel when its content is taller than its size', async () => {
   await toggle('Variants');
   size('variants', 300, 600);
-  await render();
+  await measure();
   expect(variantsTop().getAttribute('aria-valuemax')).toBe('600');
   await drag(variantsTop(), 400, 300);
   expect(stored()).toEqual({ variants: 400 });
@@ -198,7 +205,7 @@ it('gives each panel its own minimum', async () => {
   await toggle('Feedback');
   size('variants', 300, 600);
   size('notes', 250, 400);
-  await render();
+  await measure();
   expect(split().getAttribute('aria-valuemin')).toBe('172');
   await drag(split(), 400, 2000);
   expect(stored()).toEqual({ notes: 172, variants: 378 });

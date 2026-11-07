@@ -8,10 +8,11 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { runCli } from '../../src/cli/run';
 import { describeIterationElement, elementAsNode } from '../../src/core';
+import { resolveElementSource } from '../../src/core/element';
 import { applyKnobValues, knobDelta } from '../../src/core/variants';
 import { notesResponse } from '../../src/node/notes/handler';
 import { readNotes } from '../../src/node/notes/store';
@@ -85,6 +86,64 @@ it('names the React components around it, skipping internal names', () => {
   const described = describeIterationElement(elementAsNode(button));
   expect(described.component).toEqual(['UsageTabs', 'TabButton']);
   expect(described.source).toBe('src/tabs.tsx:12');
+});
+
+it('reads the JSX callsite from React 19 debug stacks', () => {
+  document.body.innerHTML = '<button>Changes</button>';
+  const button = document.querySelector('button') as Element;
+  function TabButton() {}
+  const vite = [
+    'Error: react-stack-top-frame',
+    '    at exports.jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=1a2b:250:33)',
+    '    at TabButton (http://localhost:5173/src/tabs.tsx?t=1700000000:12:7)',
+    '    at renderWithHooks (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=1a2b:4100:24)',
+  ].join('\n');
+  Object.assign(button, { __reactFiber$abc: { type: 'button', _debugStack: { stack: vite }, return: { type: TabButton, return: null } } });
+  expect(describeIterationElement(elementAsNode(button)).source).toBe('/src/tabs.tsx:12');
+
+  const next = ['Error: react-stack-top-frame', '    at TabButton (webpack-internal:///(app-pages-browser)/./src/app/tabs.tsx:30:5)'].join(
+    '\n',
+  );
+  Object.assign(button, { __reactFiber$abc: { type: 'button', _debugStack: { stack: next }, return: null } });
+  expect(describeIterationElement(elementAsNode(button)).source).toBe('src/app/tabs.tsx:30');
+
+  const fs = ['Error', 'TabButton@http://localhost:5173/@fs/Users/me/app/src/tabs.tsx:8:3'].join('\n');
+  Object.assign(button, { __reactFiber$abc: { type: 'button', _debugStack: fs, return: null } });
+  expect(describeIterationElement(elementAsNode(button)).source).toBe('/Users/me/app/src/tabs.tsx:8');
+
+  // React 18's field still wins when present.
+  Object.assign(button, {
+    __reactFiber$abc: {
+      type: 'button',
+      _debugSource: { fileName: 'src/old.tsx', lineNumber: 3 },
+      _debugStack: { stack: vite },
+      return: null,
+    },
+  });
+  expect(describeIterationElement(elementAsNode(button)).source).toBe('src/old.tsx:3');
+});
+
+it('maps a React 19 callsite back to the original line through the module source map', async () => {
+  document.body.innerHTML = '<button>Changes</button>';
+  const button = document.querySelector('button') as Element;
+  const stack = ['Error: react-stack-top-frame', '    at TabButton (http://localhost:5173/src/tabs.tsx?t=1:2:7)'].join('\n');
+  Object.assign(button, { __reactFiber$abc: { type: 'button', _debugStack: { stack }, return: null } });
+  expect(describeIterationElement(elementAsNode(button)).source).toBe('/src/tabs.tsx:2');
+  // Generated line 2 maps to line 10 of tabs.tsx.
+  const map = btoa(JSON.stringify({ version: 3, sources: ['tabs.tsx'], mappings: ';AASA' }));
+  const fetch = vi.fn(async () => ({
+    text: async () => `import x;\njsxDEV("button");\n//# sourceMappingURL=data:application/json;base64,${map}\n`,
+  }));
+  vi.stubGlobal('fetch', fetch);
+  try {
+    expect(await resolveElementSource(button)).toBe('/src/tabs.tsx:10');
+    expect(fetch).toHaveBeenCalledWith('http://localhost:5173/src/tabs.tsx?t=1');
+    // React 18's own field is already exact: nothing to fetch.
+    Object.assign(button, { __reactFiber$abc: { type: 'button', _debugSource: { fileName: 'a.tsx', lineNumber: 1 }, return: null } });
+    expect(await resolveElementSource(button)).toBeUndefined();
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });
 
 it('keeps the context through the store and prints it for the agent', async () => {

@@ -85,6 +85,7 @@ function reactContext(el: Element): Pick<IterationElement, 'component' | 'source
     type?: unknown;
     return?: Fiber | null;
     _debugSource?: { fileName?: string; lineNumber?: number };
+    _debugStack?: { stack?: string } | string | null;
   };
   type Named = { displayName?: string; name?: string; render?: Named; type?: Named };
   const key = Object.keys(el).find((name) => name.startsWith('__reactFiber$'));
@@ -95,6 +96,7 @@ function reactContext(el: Element): Pick<IterationElement, 'component' | 'source
     if (!source && fiber._debugSource?.fileName) {
       source = `${fiber._debugSource.fileName}:${fiber._debugSource.lineNumber ?? 0}`;
     }
+    source ??= stackSource(fiber._debugStack);
     const type = fiber.type as Named | string | null | undefined;
     const named = type && typeof type !== 'string' ? (type.render ?? type.type ?? type) : null;
     const name = named?.displayName ?? named?.name;
@@ -103,6 +105,112 @@ function reactContext(el: Element): Pick<IterationElement, 'component' | 'source
     fiber = fiber.return;
   }
   return { ...(names.length ? { component: names } : {}), ...(source ? { source } : {}) };
+}
+
+interface StackFrame {
+  url: string;
+  line: number;
+  column: number;
+}
+
+/**
+ * React 19 dropped `_debugSource`; its `_debugStack` is an Error created where
+ * the JSX ran. The first frame outside React's own runtime is that callsite, in
+ * the module the dev server served: Vite, Next and webpack name the source file
+ * with a query or loader prefix, at the transformed line.
+ */
+function stackFrame(stack: { stack?: string } | string | null | undefined): StackFrame | undefined {
+  const text = typeof stack === 'string' ? stack : stack?.stack;
+  for (const line of text?.split('\n').slice(1) ?? []) {
+    const match = line.match(/(?:\(|@|\bat )((?:[a-z-]+:\/\/\/?|\/)\S+?):(\d+):(\d+)\)?\s*$/i);
+    if (!match || /react[-_]jsx|react-dom|react\.development|\/react\/|jsx-dev-runtime|jsx-runtime/i.test(match[1])) continue;
+    return { url: match[1], line: Number(match[2]), column: Number(match[3]) };
+  }
+  return undefined;
+}
+
+/** A served module URL as the source path it stands for. */
+function sourcePath(location: string): string {
+  let path = location.replace(/[?#].*$/, '').replace(/^webpack-internal:\/\/\/(?:\([^)]*\)\/)?/, '');
+  try {
+    const url = new URL(path);
+    path = url.protocol === 'file:' ? url.pathname : url.pathname.replace(/^\/@fs(?=\/)/, '');
+  } catch {}
+  try {
+    path = decodeURIComponent(path);
+  } catch {}
+  return path.replace(/^\.\//, '');
+}
+
+const stackSource = (stack: Parameters<typeof stackFrame>[0]) => {
+  const frame = stackFrame(stack);
+  return frame && `${sourcePath(frame.url)}:${frame.line}`;
+};
+
+const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/** The original source and line of a generated position, from a source map's VLQ mappings. */
+function mapPosition(mappings: string, line: number, column: number): { source: number; line: number } | undefined {
+  const lines = mappings.split(';');
+  const state = [0, 0, 0, 0];
+  let found: { source: number; line: number } | undefined;
+  for (let at = 0; at <= line && at < lines.length; at++) {
+    state[0] = 0;
+    for (const segment of lines[at].split(',')) {
+      const values: number[] = [];
+      let value = 0;
+      let shift = 0;
+      for (const char of segment) {
+        const digit = BASE64.indexOf(char);
+        value += (digit & 31) << shift;
+        if (digit & 32) shift += 5;
+        else {
+          values.push(value & 1 ? -(value >>> 1) : value >>> 1);
+          value = shift = 0;
+        }
+      }
+      if (values.length < 4) continue;
+      for (let i = 0; i < 4; i++) state[i] += values[i];
+      if (at === line && state[0] <= column) found = { source: state[1], line: state[2] };
+    }
+  }
+  return found;
+}
+
+/**
+ * The pinned element's JSX callsite in its original file, on React 19 hosts:
+ * the served module's source map turns the stack's transformed line into the
+ * line the agent will open. Resolves to undefined when there is nothing better
+ * than what `describeIterationElement` already recorded.
+ */
+export async function resolveElementSource(el: Element): Promise<string | undefined> {
+  type Fiber = { return?: Fiber | null; _debugSource?: unknown; _debugStack?: Parameters<typeof stackFrame>[0] };
+  const key = Object.keys(el).find((name) => name.startsWith('__reactFiber$'));
+  let fiber: Fiber | null | undefined = key ? (el as unknown as Record<string, Fiber | null>)[key] : null;
+  let frame: StackFrame | undefined;
+  for (; fiber && !frame; fiber = fiber.return) {
+    if (fiber._debugSource) return undefined;
+    frame = stackFrame(fiber._debugStack);
+  }
+  if (!frame || !/^https?:/.test(frame.url)) return undefined;
+  try {
+    const code = await (await fetch(frame.url)).text();
+    const reference = code.match(/\/\/[#@] sourceMappingURL=(\S+)\s*$/)?.[1];
+    if (!reference) return undefined;
+    const inline = reference.startsWith('data:');
+    // Sources in an inline map are relative to the module itself.
+    const mapUrl = inline ? new URL(frame.url) : new URL(reference, frame.url);
+    const map: { sources: string[]; sourceRoot?: string; mappings: string } = inline
+      ? JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(reference.slice(reference.indexOf(',') + 1)), (c) => c.charCodeAt(0))))
+      : await (await fetch(mapUrl)).json();
+    const position = mapPosition(map.mappings, frame.line - 1, frame.column - 1);
+    const file = position && map.sources[position.source];
+    if (!position || !file) return undefined;
+    const path = file.startsWith('/') ? file : new URL((map.sourceRoot ?? '') + file, mapUrl).href;
+    return `${sourcePath(path)}:${position.line + 1}`;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Everything about a pinned element that says which one it is, for the agent

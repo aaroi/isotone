@@ -482,10 +482,25 @@ function pinScene(shadow: ShadowRoot | null | undefined) {
   }, 300);
 }
 
-/** A host dropdown that closes on any outside press, like most UI libraries. */
+/**
+ * A host dropdown like most UI libraries make: it opens on pointerdown, closes
+ * on any outside press, and has a page-wide `/` shortcut that ignores typing in
+ * the page's own fields. Select mode pins it without opening it, and typing `/`
+ * in Isotone's composer stays in the composer.
+ */
 function NewProjectMenu() {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      if (event.key !== '/' || target.closest('input, textarea, select, [contenteditable]')) return;
+      event.preventDefault();
+      setOpen(true);
+    };
+    document.addEventListener('keydown', shortcut);
+    return () => document.removeEventListener('keydown', shortcut);
+  }, []);
   useEffect(() => {
     if (!open) return;
     const close = (event: Event) => {
@@ -500,7 +515,21 @@ function NewProjectMenu() {
   }, [open]);
   return (
     <div className="new-project-wrap" ref={wrap}>
-      <button className="button button-primary new-project" type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+      <button
+        className="button button-primary new-project"
+        type="button"
+        aria-expanded={open}
+        title="New project ( / )"
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          setOpen((v) => !v);
+        }}
+        // Enter and Space still open it from the keyboard.
+        onClick={(event) => {
+          if (event.detail === 0) setOpen((v) => !v);
+        }}
+      >
         <Plus size={14} />
         New project
       </button>
@@ -716,9 +745,9 @@ function Demo() {
           </section>
           {!screenshot && !hosted && (
             <p className="demo-hint">
-              Notes sent here go to a temporary file and a pretend agent picks each one up a moment later. To test select mode against a
-              dropdown, open New project, press the crosshair in the feedback composer, then Shift-click a menu item to reach it without
-              pinning.
+              Notes sent here go to a temporary file and a pretend agent picks each one up a moment later. New project opens on press and on{' '}
+              <kbd>/</kbd>, like many app menus: in select mode a click pins it without opening it, and <kbd>/</kbd> typed in the composer
+              stays there. Shift-click to use the page while selecting. Selectors take arrow keys, and Shift+F10 opens an option's actions.
             </p>
           )}
         </main>
