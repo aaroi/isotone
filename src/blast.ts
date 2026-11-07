@@ -1,16 +1,16 @@
 /**
- * Blast session state: one small JSON file next to the notes file, shared by
- * the CLI command that waits for notes and the dev server's endpoint. The
- * browser may only extend or stop a session; it never starts one or sends a
- * command. See `src/core/blast.ts` for the names and `docs/blast.md`.
+ * Blast session state: one small JSON file next to the notes file, read and
+ * written only by the CLI (the waiting command, `--status`, `--stop` and
+ * `--extend`) and by the note commands' heartbeat. Nothing serves it over
+ * HTTP. See `src/core/blast.ts` for the names and `docs/blast.md`.
  */
 import { existsSync, readFileSync } from 'node:fs';
 
 import {
-  EXTEND_MS, HEARTBEAT_MS, LIVE_HEARTBEAT_MS, MAX_SESSION_MS, BLAST, type BlastState,
+  HEARTBEAT_MS, LIVE_HEARTBEAT_MS, BLAST, type BlastState,
 } from './core/blast';
 import { withFileLock, writeJson } from './file-store';
-import { ensureFileIgnored, noteFingerprint, type NotesResponse, type StoredNote } from './store';
+import { ensureFileIgnored, noteFingerprint, type StoredNote } from './store';
 import { updateRequestOf } from './update-request';
 
 export { BLAST } from './core/blast';
@@ -27,7 +27,7 @@ export interface BlastSession {
   heartbeatAt: string | null;
   waiting: boolean;
   stoppedAt?: string;
-  stoppedBy?: 'cli' | 'panel';
+  stoppedBy?: 'cli';
   seen: Record<string, string>;
 }
 
@@ -54,7 +54,7 @@ export function readSession(file: string): BlastSession | null {
       heartbeatAt: iso(v.heartbeatAt) ? v.heartbeatAt : null,
       waiting: v.waiting === true,
       ...(iso(v.stoppedAt) ? { stoppedAt: v.stoppedAt } : {}),
-      ...(v.stoppedBy === 'cli' || v.stoppedBy === 'panel' ? { stoppedBy: v.stoppedBy } : {}),
+      ...(v.stoppedBy === 'cli' ? { stoppedBy: v.stoppedBy } : {}),
       seen,
     };
   } catch { return null; }
@@ -69,7 +69,7 @@ export function writeSession(file: string, session: BlastSession): void {
 
 /**
  * Read, change and write the session under the same lock the notes use, so
- * the waiting command and the endpoint never lose each other's writes.
+ * the waiting command and `--stop` or `--extend` never lose each other's writes.
  * `change` returns the new session, or null to leave the file alone.
  */
 export function updateSession<T>(file: string, change: (session: BlastSession | null) => { session: BlastSession | null; result: T }): T {
@@ -141,33 +141,4 @@ export function touchSession(notesFile: string, now = Date.now()): void {
       result: undefined,
     }));
   } catch { /* A busy or unreadable session file never fails a note command. */ }
-}
-
-/**
- * The session endpoint. GET reads the public state (`{ session: null }` when
- * there is none). POST takes `{ action: 'extend' }` (+15 minutes) or
- * `{ action: 'stop' }`; nothing else is read from the body. The waiting
- * command watches the file and picks a change up at once.
- */
-export function blastResponse(notesFile: string, req: { method?: string; body?: unknown }, now = Date.now()): NotesResponse {
-  const json = (status: number, body: unknown): NotesResponse => ({
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-    body,
-  });
-  const file = blastFile(notesFile);
-  if (req.method === 'GET') {
-    const session = readSession(file);
-    return json(200, { session: session ? publicState(session, now) : null });
-  }
-  if (req.method !== 'POST') return json(405, { error: 'method not allowed' });
-  const action = (req.body as { action?: unknown } | undefined)?.action;
-  if (action !== 'extend' && action !== 'stop') return json(400, { error: 'action must be extend or stop' });
-  return updateSession(file, (session) => {
-    if (!session || isEnded(session, now)) return { session: null, result: json(409, { error: `There is no ${BLAST.name} session running.` }) };
-    const next: BlastSession = action === 'stop'
-      ? { ...session, endsAt: new Date(now).toISOString(), stoppedAt: new Date(now).toISOString(), stoppedBy: 'panel' }
-      : { ...session, endsAt: new Date(Math.min(Date.parse(session.endsAt) + EXTEND_MS, now + MAX_SESSION_MS)).toISOString() };
-    return { session: next, result: json(200, { session: publicState(next, now) }) };
-  });
 }

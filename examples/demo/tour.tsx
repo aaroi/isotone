@@ -277,7 +277,6 @@ function stepContent(step: Step, panel: PanelState, switched: boolean, agent: Ag
         {agent === 'waiting' && <Status done={false}>Waiting for the agent</Status>}
         {agent === 'working' && <Status done={false}>The agent is on it. The dot by your note shows that.</Status>}
         {agent === 'done' && <Status done>Done. The agent closed your note.</Status>}
-        {agent === 'done' && <p className="tour-hint">For a longer review, Start Blast beside the pill keeps your agent picking up new notes for a set time.</p>}
       </>,
       highlight: panel.notes ? one('.isotone-list') : fab,
       ready: agent === 'done',

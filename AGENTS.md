@@ -85,8 +85,9 @@ Acting without being prompted for each note, keep to these guardrails:
 - When a request is ambiguous, `--reply` with a question and leave the note open.
 - Leave risky or large requests open, and flag them in your summary.
 
-The user can extend or stop the session from the panel; the command picks that
-up. If you can watch a background process (Claude Code's background tasks or
+The panel has no Blast controls. The user extends or stops a session by asking
+you, or with `npx isotone blast --extend 15m` or `--stop` in a terminal; a
+waiting command picks that up at once. If you can watch a background process (Claude Code's background tasks or
 Monitor), `npx isotone blast --for 45m --new --stream` instead prints one JSON line per
 batch until the end. See [Blast mode](docs/blast.md).
 

@@ -8,7 +8,6 @@ import { iteration } from '../src/vite/index';
 import { checkOrigin, readNodeJson, sendFailure } from '../src/server/http';
 import type { UpdateInfo } from '../src/core/update';
 import { updateResponse } from '../src/update-note';
-import { blastFile, blastResponse, isEnded, updateSession, writeSession } from '../src/blast';
 
 /**
  * Not a real release: the demo never contacts npm or installs anything. The
@@ -89,10 +88,6 @@ function demoNotes(): Plugin {
         writeNotes(file, notes);
       }
       server.httpServer?.once('close', () => rmSync(directory, { recursive: true, force: true }));
-      // `?blast-preview=1` keeps its fictional session in a state file of its
-      // own, so the demo without the parameter never shows it as running.
-      const previewBlastNotes = (name: string) =>
-        files.has(`/demo-notes/${name}`) ? join(directory, `${name}-blast-preview.json`) : undefined;
       server.middlewares.use(async (req, res, next) => {
         // `?update-preview=1`: a fictional update. Asking the agent files a real
         // update note in the session's notes, built by the same server code.
@@ -107,48 +102,16 @@ function demoNotes(): Plugin {
           } catch (error) { sendFailure(res, error); }
           return;
         }
-        // `?blast-preview=1`: the session endpoint, answered by the same server
-        // code over a fictional session the pretend agent keeps alive.
-        const blast = /^\/demo-blast\/([a-z]+)(-preview)?$/.exec((req.url ?? '').split('?')[0]);
-        if (blast) {
-          const notes = blast[2] ? previewBlastNotes(blast[1]) : files.get(`/demo-notes/${blast[1]}`);
-          if (!notes) { next(); return; }
-          try {
-            checkOrigin(req.headers.origin, req.headers.host ?? '');
-            const body = req.method === 'POST' ? await readNodeJson(req) : undefined;
-            const result = blastResponse(notes, { method: req.method, body });
-            res.writeHead(result.status, result.headers);
-            res.end(JSON.stringify(result.body));
-          } catch (error) { sendFailure(res, error); }
-          return;
-        }
         // The pretend agent: `start` is `isotone --working` on one note, `finish` is `--done`.
         if ((req.url ?? '').startsWith('/demo-agent') && req.method === 'POST') {
           try { checkOrigin(req.headers.origin, req.headers.host ?? ''); } catch (error) { sendFailure(res, error); return; }
           const query = new URL(req.url ?? '', 'http://x').searchParams;
           const action = query.get('action');
-          // `blast-start` is the agent running `isotone blast --for 32m`; `blast-beat`
-          // is its heartbeat while it waits for notes or works through a batch.
           const sessionNotes = files.get(`/demo-notes/${query.get('session') ?? ''}`);
           // A reload forgets what the pretend agent was doing, so nothing it
           // marked as being worked on will ever finish: clear it.
           if (sessionNotes && action === 'reset') {
             updateNotes(sessionNotes, (notes) => notes.map(({ workingAt: _stale, ...note }) => note));
-            res.writeHead(200, { 'content-type': 'application/json' });
-            res.end(JSON.stringify({ ok: true }));
-            return;
-          }
-          const notes = previewBlastNotes(query.get('session') ?? '');
-          if (notes && (action === 'blast-start' || action === 'blast-beat')) {
-            const now = Date.now();
-            if (action === 'blast-start') writeSession(blastFile(notes), {
-              version: 1, startedAt: new Date(now - 13 * 60_000).toISOString(), endsAt: new Date(now + 32 * 60_000).toISOString(),
-              every: 5 * 60_000, route: null, heartbeatAt: new Date(now).toISOString(), waiting: true, seen: {},
-            });
-            else updateSession(blastFile(notes), (current) => ({
-              session: current && !isEnded(current, now) ? { ...current, heartbeatAt: new Date(now).toISOString(), waiting: query.get('waiting') === '1' } : null,
-              result: undefined,
-            }));
             res.writeHead(200, { 'content-type': 'application/json' });
             res.end(JSON.stringify({ ok: true }));
             return;

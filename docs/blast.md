@@ -10,23 +10,32 @@ agent acts on them and runs it again, until the session is over.
 
 ## Starting a session
 
-Open the panel and choose **Start Blast** beside the pill. Pick a duration and
-**Copy prompt**, then paste the prompt into your coding agent. Isotone can't
-start the agent for you; the prompt is how the session begins. It reads like:
+Blast has no button in the panel. You start a session by asking your coding
+agent, in the chat where it already works on this app. Paste this, changing
+the duration if you like:
 
-> Run an Isotone Blast session for 45 minutes: run `npx isotone blast --for 45m --new`
-> (it waits up to 5 minutes for notes, so give it a 10-minute command timeout).
-> For each batch of notes it prints, act on one note at a time …
+```text
+Run an Isotone Blast session for 45 minutes: run `npx isotone blast --for 45m --new`
+(it waits up to 5 minutes for notes, so give it a 10-minute command timeout, or add
+`--every 90s`). For each batch of notes it prints, act on one note at a time:
+`npx isotone --working <id>`, fix it, verify it, then `npx isotone --done <id>`.
+After each batch or check-in, run `npx isotone blast` again, without --for or --new.
+Stop when it says the session is over, and give me a short summary of what changed.
+Follow the guardrails it prints when the session starts, and ask with
+`npx isotone --reply <id> "<question>"` when a note is unclear.
+```
 
-Or tell your agent yourself: "Run `npx isotone blast --for 45m --new` and keep
-acting on my notes until it says the session is over."
+Then review in the browser as usual and pin notes; the agent picks them up.
+To see, lengthen or end the session, ask the agent, or run these yourself in
+the app directory:
 
-While a session is live, the line beside the pill reads **Blast · 32 min left**.
-Its dot fills while the agent is working on a note. The dialog shows when the
-session ends and what the agent is doing, with **Extend 15 min** and **Stop**.
-Stop ends the session; a waiting agent sees it at once, a busy one at its next
-run of the command. The browser can only extend or stop a session. It cannot
-start one or send the agent a command.
+```sh
+npx isotone blast --status       # time left, and whether the agent is waiting
+npx isotone blast --extend 15m   # add time
+npx isotone blast --stop         # end it; a waiting agent sees it at once
+```
+
+A busy agent sees `--stop` at its next run of the command.
 
 ## The loop
 
@@ -76,10 +85,10 @@ every later run is bare `npx isotone blast`:
   never starts a session. More than two minutes after the end, it also says how to
   start a new one.
 - A run with `--for` or `--new` starts a new session whenever the last one is
-  over, however recently it ended, so Stop followed by Start Blast works at once.
+  over, however recently it ended, so `--stop` followed by a new session works at once.
 - On a live session, `--for` alone is ignored with a notice (use `--extend`), and
   `--new` is refused with a clear error rather than taking over a session another
-  agent is in: stop it first, from the panel or with `--stop`. A session whose
+  agent is in: stop it first with `--stop`. A session whose
   agent has not been seen for 15 minutes counts as abandoned, and `--for` or `--new`
   replaces it and hands out what is still open.
 
@@ -146,12 +155,10 @@ which Isotone adds to `.git/info/exclude` like the notes:
 ```
 
 The waiting command updates `heartbeatAt` every minute, and `--working`,
-`--done` and `--reply` update it too. The panel counts a session as live while
-its deadline has not passed and it has a heartbeat from the last 15 minutes.
+`--done` and `--reply` update it too. A session counts as live while its
+deadline has not passed and it has a heartbeat from the last 15 minutes.
 One notes file has one session at a time.
 
-The Vite plugin and `isotone serve` serve it at `GET /api/iteration/blast`
-(`{ session: null }` when there is none, never the `seen` record) and accept
-`POST { "action": "extend" }` or `{ "action": "stop" }`, with the notes endpoint's
-origin checks. Other runtimes use `serveBlastRequest(file, request)` from
-`isotone/server` and pass `blastEndpoint` to `mountIteration`.
+Only the CLI reads and writes this file. No dev server endpoint serves it, and
+the browser panel has no part in a session: it shows notes and the agent's
+progress on them as it always does.

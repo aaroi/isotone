@@ -193,10 +193,5 @@ files a demo update note, built by the same server code in the dev demo, which
 the pretend agent picks up and closes. It does not contact npm or install anything. `/?review=1` keeps
 feedback open across variant reloads.
 
-`/?blast-preview=1` starts a fictional Blast session, in the dev demo (through the
-real session endpoint code) and the hosted one: the line beside the pill reads
-"Blast · 32 min left", Extend and Stop work, and the pretend agent works through
-notes in batches after a three-second quiet time, one at a time, until the
-session is stopped. The session belongs to that parameter: without it the line
-offers Start Blast, even right after a preview. Reloading the demo clears any
-note the pretend agent had marked as being worked on, since it never finishes it.
+Reloading the demo clears any note the pretend agent had marked as being worked
+on, since it never finishes it.

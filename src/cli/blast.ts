@@ -126,7 +126,7 @@ export async function runBlast(args: string[], io: CliIO, timingOverrides: Parti
         return { session: started, result: { session: started, started: true } };
       }
       if (isEnded(session, now)) {
-        // A first run (`--for`, as Start Blast's prompt has it with `--new`)
+        // A first run (`--for`, as the documented prompt has it with `--new`)
         // starts the next session, however recently the last one ended. A bare
         // run is an agent continuing a session that is over: it stops.
         if (starting) {
@@ -138,7 +138,7 @@ export async function runBlast(args: string[], io: CliIO, timingOverrides: Parti
       // `--new` never takes over a session an agent is still in: two agents
       // would share one session, each handed half the notes.
       if (has(args, '--new') && isLive(session, now)) {
-        return { session: null, result: { error: `A ${BLAST.name} session is already running (${timeLeft(Date.parse(session.endsAt) - now)}, agent seen ${Math.max(0, Math.round((now - Date.parse(session.heartbeatAt ?? session.startedAt)) / 1000))}s ago). Run \`${BLAST_CLI}\` to continue it, or stop it first (Stop in the panel, or \`${BLAST_CLI} --stop\`) and run this again.` } };
+        return { session: null, result: { error: `A ${BLAST.name} session is already running (${timeLeft(Date.parse(session.endsAt) - now)}, agent seen ${Math.max(0, Math.round((now - Date.parse(session.heartbeatAt ?? session.startedAt)) / 1000))}s ago). Run \`${BLAST_CLI}\` to continue it, or stop it first with \`${BLAST_CLI} --stop\` and run this again.` } };
       }
       // A session no agent has touched for a while is abandoned: a new `--for`
       // or `--new` replaces it, so notes the last agent saw are handed out again.
@@ -219,15 +219,14 @@ async function stream(io: CliIO, notesFile: string, file: string, timing: BlastT
     }
     if (outcome.type === 'batch') {
       out(io, JSON.stringify({ type: 'batch', notes: outcome.notes.map((n) => noteRecord(n, notesProjectRoot(notesFile))), timeLeft: timeLeft(Date.parse(outcome.session.endsAt) - Date.now()), endsAt: outcome.session.endsAt }));
-      // Still listening: the panel shows the agent as attached.
+      // Still listening: the heartbeat keeps the session live.
       updateSession(file, (s) => ({ session: s && !isEnded(s) ? { ...s, waiting: true, heartbeatAt: new Date().toISOString() } : null, result: undefined }));
     }
   }
 }
 
-function endReason(session: BlastSession | null): 'time' | 'stopped-panel' | 'stopped-cli' | 'removed' {
+function endReason(session: BlastSession | null): 'time' | 'stopped-cli' | 'removed' {
   if (!session) return 'removed';
-  if (session.stoppedBy === 'panel') return 'stopped-panel';
   if (session.stoppedBy === 'cli' || session.stoppedAt) return 'stopped-cli';
   return 'time';
 }
@@ -242,7 +241,7 @@ function reportEnded(io: CliIO, notesFile: string, session: BlastSession | null,
     out(io, JSON.stringify({ type: 'ended', ended: true, reason, stillOpen: open.map((n) => ({ id: n.id, route: n.route, feedback: n.feedback.slice(0, 120), ...(isAwaitingAnswer(n) ? { awaitingAnswer: true } : {}) })) }, null, 2));
     return ENDED_EXIT;
   }
-  const why = reason === 'time' ? 'time is up' : reason === 'stopped-panel' ? 'stopped from the panel' : reason === 'stopped-cli' ? `stopped with \`${BLAST_CLI} --stop\`` : 'its state file was removed';
+  const why = reason === 'time' ? 'time is up' : reason === 'stopped-cli' ? `stopped with \`${BLAST_CLI} --stop\`` : 'its state file was removed';
   out(io, `${BLAST.name} session over (${why}).`);
   out(io, `Stop now: do not run \`${BLAST_CLI}\` again. Give the user a short summary of what you changed${open.length ? ' and what is still open' : ''}.`);
   if (open.length) {

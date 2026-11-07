@@ -26,8 +26,6 @@ import type { IterationTheme } from '../react/theme';
 import { readBundle } from '../standalone/bundle';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../update';
 import { autoUpdateNote, updateResponse } from '../update-note';
-import { BLAST } from '../core/blast';
-import { blastResponse } from '../blast';
 import { checkOrigin, readNodeJson, sendFailure } from '../server/http';
 import { type OverlayVariant, overlayGroups, VARIANTS_ENDPOINT } from '../core/variants';
 import {
@@ -537,16 +535,6 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
         }).catch((error) => sendFailure(res, error));
       });
 
-      // Blast session state: GET reads it, POST extends or stops it. The
-      // browser never starts a session or sends a command.
-      server.middlewares.use(BLAST.endpoint, (req, res) => {
-        if (!guardOrigin(req, res)) return;
-        const method = req.method ?? '';
-        (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined)).then((body) => {
-          answer(res, () => blastResponse(file, { method, body }));
-        }).catch((error) => sendFailure(res, error));
-      });
-
       // Notes endpoint → local file.
       server.middlewares.use(NOTES_ENDPOINT, (req, res, next) => {
         if (!guardOrigin(req, res)) return;
@@ -848,7 +836,7 @@ function answer(
 
 /** Load after the host has mounted, without importing its React or HMR runtime. */
 function mountModuleSource(rule: RouteGateOptions, key: string, variants: boolean, shortcut?: IterationShortcut | false, theme?: IterationTheme): string {
-  const config = JSON.stringify({ endpoint: NOTES_ENDPOINT, updateEndpoint: UPDATE_ENDPOINT, blastEndpoint: BLAST.endpoint, key, shortcut, theme, rule, ...(variants ? { variants: 'overlay' } : {}) }).replace(/</g, '\\u003c');
+  const config = JSON.stringify({ endpoint: NOTES_ENDPOINT, updateEndpoint: UPDATE_ENDPOINT, key, shortcut, theme, rule, ...(variants ? { variants: 'overlay' } : {}) }).replace(/</g, '\\u003c');
   return `
     const start = () => {
       const mount = () => window.__isotone.mount(${config});

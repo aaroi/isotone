@@ -36,11 +36,6 @@ import { variantsResponse } from '../variants-store';
 import type { VariantsStoreOptions } from '../variants-store';
 export type { VariantsStoreOptions } from '../variants-store';
 export { VARIANTS_ENDPOINT } from '../core/variants';
-export { blastFile, blastResponse, readSession as readBlastSession } from '../blast';
-export type { BlastSession } from '../blast';
-export { BLAST } from '../core/blast';
-export type { BlastState } from '../core/blast';
-import { blastResponse } from '../blast';
 import { VARIANTS_ENDPOINT } from '../core/variants';
 
 export interface ServeRequestOptions {
@@ -131,29 +126,6 @@ export async function serveVariantsRequest(
       url: `${mounted || '/'}?${url.searchParams.toString()}`,
       body,
     });
-  } catch (error) {
-    return httpFailure(error);
-  }
-}
-
-/**
- * Like {@link serveNotesRequest}, for the Blast session endpoint
- * (`BLAST.endpoint`): GET reads the session, POST `{ action: 'extend' | 'stop' }`
- * changes its deadline. Pass the same notes `file`; the session file sits
- * beside it. The same origin checks apply.
- */
-export async function serveBlastRequest(
-  file: string,
-  request: Request,
-  options: ServeRequestOptions = {},
-): Promise<{ status: number; headers: Record<string, string>; body: unknown }> {
-  const refused = refusedInProduction(options);
-  if (refused) return refused;
-  try {
-    const url = new URL(request.url);
-    checkOrigin(request.headers.get('origin'), url.host, options.loopbackOrigins);
-    const body = request.method === 'POST' ? await readWebJson(request) : undefined;
-    return blastResponse(file, { method: request.method, body });
   } catch (error) {
     return httpFailure(error);
   }

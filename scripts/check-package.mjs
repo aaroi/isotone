@@ -47,8 +47,8 @@ try {
   const note = await fetch(app.url + '/api/iteration/notes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ route: '/', feedback: 'Package smoke test' }) });
   assert.equal(note.status, 201);
   assert.equal(readNotes('notes.json').length, 1);
-  const blast = await fetch(app.url + '/api/iteration/blast');
-  assert.deepEqual(await blast.json(), { session: null });
+  // Blast is a CLI feature: no HTTP endpoint serves its session.
+  assert.equal((await fetch(app.url + '/api/iteration/blast')).status, 404);
 } finally { await app.close(); }
 console.log('Packed package: isolated install, public imports, CLI, bundle and notes endpoint passed.');
 `);

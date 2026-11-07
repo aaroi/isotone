@@ -1,13 +1,13 @@
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { blastFile, blastResponse, readSession, touchSession } from '../src/blast';
+import { blastFile, readSession, touchSession } from '../src/blast';
 import { runBlast, ENDED_EXIT } from '../src/cli/blast';
 import { runCli } from '../src/cli/run';
-import { BLAST, BLAST_CLI, formatDuration, parseDuration, blastPrompt, timeLeft } from '../src/core/blast';
+import { BLAST, BLAST_CLI, formatDuration, parseDuration, timeLeft } from '../src/core/blast';
 import { notesResponse, readNotes, type StoredNote, updateNotes, writeNotes } from '../src/store';
 
 const dirs: string[] = [];
@@ -42,6 +42,14 @@ function add(file: string, ...items: StoredNote[]) {
   updateNotes(file, (notes) => [...notes, ...items]);
 }
 
+/** A second terminal in the same project, for `--stop` or `--extend` while a command waits. */
+function other(cwd: string) {
+  return { cwd, stdout: { write: () => {} }, stderr: { write: () => {} } };
+}
+
+/** The ready-to-paste prompt in docs/blast.md, which is how users start a session. */
+const DOC_PROMPT = /## Starting a session[\s\S]*?```text\n([\s\S]*?)```/.exec(readFileSync(new URL('../docs/blast.md', import.meta.url), 'utf8'))?.[1] ?? '';
+
 const later = (ms: number, work: () => void) => new Promise<void>((done) => setTimeout(() => { work(); done(); }, ms));
 
 describe('durations and copy', () => {
@@ -63,15 +71,14 @@ describe('durations and copy', () => {
     expect(formatDuration(90 * 60_000)).toBe('1h 30m');
   });
 
-  it('builds the prompt the panel copies from the shared name', () => {
-    const prompt = blastPrompt(45);
+  it('documents a ready-to-paste prompt that uses the real command', () => {
+    const prompt = DOC_PROMPT.replace(/\s+/g, ' ');
     // The first run says --new, so it starts a session even right after one ended.
     expect(prompt).toContain(`${BLAST_CLI} --for 45m --new\``);
     expect(prompt).toContain(`run \`${BLAST_CLI}\` again, without --for or --new`);
     expect(prompt).toContain(`Isotone ${BLAST.name} session for 45 minutes`);
     expect(prompt).toContain('--working');
     expect(prompt).toContain('--reply');
-    expect(blastPrompt(60)).toContain('--for 1h');
   });
 });
 
@@ -221,18 +228,18 @@ describe(`isotone ${BLAST.command}`, () => {
     expect(p.state()?.stoppedAt ?? p.state()?.endsAt).toBeDefined();
   });
 
-  it('starts again from Start Blast\'s prompt right after Stop', async () => {
+  it('starts again from the documented prompt right after --stop', async () => {
     const p = project();
     add(p.notes, note('first', { createdAt: new Date(Date.now() - 5_000).toISOString() }));
     const waiting = runBlast(['--for', '10m', '--every', '5s', '--json'], p.io, FAST);
     await later(150, () => {});
-    // Stop in the panel ends the waiting command.
-    expect(blastResponse(p.notes, { method: 'POST', body: { action: 'stop' } }).status).toBe(200);
+    // `--stop` from another terminal ends the waiting command.
+    expect(await runBlast(['--stop'], other(p.cwd), FAST)).toBe(0);
     await waiting;
     p.take();
-    // The copied prompt's first run, at once: a new session, not "over".
-    const command = /`npx isotone blast ([^`]+)`/.exec(blastPrompt(10))?.[1].split(' ') ?? [];
-    expect(command).toEqual(['--for', '10m', '--new']);
+    // The documented prompt's first run, at once: a new session, not "over".
+    const command = /`npx isotone blast ([^`]+)`/.exec(DOC_PROMPT)?.[1].split(' ') ?? [];
+    expect(command).toEqual(['--for', '45m', '--new']);
     const started = runBlast([...command, '--every', '300ms', '--json'], p.io, FAST);
     expect(await started).toBe(0);
     const batch = JSON.parse(p.take());
@@ -241,7 +248,7 @@ describe(`isotone ${BLAST.command}`, () => {
     expect(p.state()?.stoppedAt).toBeUndefined();
   });
 
-  it('starts again from Start Blast\'s prompt right after the time runs out', async () => {
+  it('starts again from the documented prompt right after the time runs out', async () => {
     const p = project();
     await runBlast(['--for', '300ms', '--every', '5s'], p.io, FAST);
     p.take();
@@ -271,19 +278,19 @@ describe(`isotone ${BLAST.command}`, () => {
     expect(p.state()?.startedAt).not.toBe(before?.startedAt);
   });
 
-  it('picks up Extend and Stop from the endpoint while it waits', async () => {
+  it('picks up --extend and --stop from another terminal while it waits', async () => {
     const p = project();
     const waiting = runBlast(['--for', '10s', '--every', '5s', '--json'], p.io, FAST);
     await later(150, () => {});
     const before = Date.parse(p.state()?.endsAt ?? '');
-    expect(blastResponse(p.notes, { method: 'POST', body: { action: 'extend' } }).status).toBe(200);
+    expect(await runBlast(['--extend', '15m'], other(p.cwd), FAST)).toBe(0);
     expect(Date.parse(p.state()?.endsAt ?? '') - before).toBe(15 * 60_000);
     const started = Date.now();
-    expect(blastResponse(p.notes, { method: 'POST', body: { action: 'stop' } }).status).toBe(200);
+    expect(await runBlast(['--stop'], other(p.cwd), FAST)).toBe(0);
     expect(await waiting).toBe(ENDED_EXIT);
     expect(Date.now() - started).toBeLessThan(1000);
-    expect(JSON.parse(p.take())).toMatchObject({ type: 'ended', reason: 'stopped-panel' });
-    expect(blastResponse(p.notes, { method: 'POST', body: { action: 'extend' } }).status).toBe(409);
+    expect(JSON.parse(p.take())).toMatchObject({ type: 'ended', reason: 'stopped-cli' });
+    expect(await runBlast(['--extend', '15m'], other(p.cwd), FAST)).toBe(1);
   });
 
   it('--stop, --status and --extend from the CLI', async () => {
@@ -358,32 +365,27 @@ describe(`isotone ${BLAST.command}`, () => {
   });
 });
 
-describe('the session endpoint', () => {
-  it('reads the public state without the hand-out record', async () => {
+describe('the session state', () => {
+  it('--status --json shows the public state without the hand-out record', async () => {
     const p = project();
-    expect(blastResponse(p.notes, { method: 'GET' }).body).toEqual({ session: null });
+    expect(await runBlast(['--status', '--json'], p.io, FAST)).toBe(0);
+    expect(JSON.parse(p.take())).toEqual({ session: null });
     add(p.notes, note('g', { createdAt: new Date(Date.now() - 5_000).toISOString() }));
     await runBlast(['--for', '10m', '--every', '200ms'], p.io, FAST);
-    const { body } = blastResponse(p.notes, { method: 'GET' }) as { body: { session: Record<string, unknown> } };
-    expect(body.session).toMatchObject({ live: true, ended: false, route: null, every: 200 });
-    expect(body.session).not.toHaveProperty('seen');
+    p.take();
+    expect(await runBlast(['--status', '--json'], p.io, FAST)).toBe(0);
+    const { session } = JSON.parse(p.take()) as { session: Record<string, unknown> };
+    expect(session).toMatchObject({ live: true, ended: false, route: null, every: 200 });
+    expect(session).not.toHaveProperty('seen');
   });
 
-  it('accepts only extend and stop', () => {
-    const p = project();
-    for (const body of [undefined, {}, { action: 'start' }, { action: 'extend', endsAt: '2100-01-01' }]) {
-      const result = blastResponse(p.notes, { method: 'POST', body });
-      expect([400, 409]).toContain(result.status);
-    }
-    expect(readSession(blastFile(p.notes))).toBeNull();
-    expect(blastResponse(p.notes, { method: 'DELETE' }).status).toBe(405);
-  });
-
-  it('caps an extension at eight hours ahead', () => {
+  it('caps an extension at eight hours ahead', async () => {
     const p = project();
     const now = Date.now();
     writeFileSync(blastFile(p.notes), JSON.stringify({ version: 1, startedAt: new Date(now).toISOString(), endsAt: new Date(now + 7.9 * 3_600_000).toISOString(), every: 300_000, route: null, heartbeatAt: new Date(now).toISOString(), waiting: true, seen: {} }));
-    blastResponse(p.notes, { method: 'POST', body: { action: 'extend' } }, now);
-    expect(Date.parse(readSession(blastFile(p.notes))?.endsAt ?? '')).toBe(now + 8 * 3_600_000);
+    expect(await runBlast(['--extend', '1h'], p.io, FAST)).toBe(0);
+    const endsAt = Date.parse(readSession(blastFile(p.notes))?.endsAt ?? '');
+    expect(endsAt).toBeLessThanOrEqual(Date.now() + 8 * 3_600_000);
+    expect(endsAt).toBeGreaterThanOrEqual(now + 8 * 3_600_000);
   });
 });

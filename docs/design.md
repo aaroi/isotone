@@ -135,15 +135,6 @@ reads "Update requested". The update note is an ordinary saved note with an
 "Update" tag in place of element references, shown on every page; deleting it
 cancels the request, like a removal request.
 
-The Blast line sits beside the update line, nearer the pill, and uses the same
-quiet trigger and dialog. During a live session it reads "Blast · 32 min left"
-after a small ring, which fills with the focus colour while a note is in
-progress. Its dialog has the end time, what the agent is doing, one raised
-action, **Extend 15 min**, and a quiet Stop. Without a live session it reads
-"Start Blast"; its dialog has one line of explanation, a duration segment
-control, one raised Copy prompt and a muted line saying Isotone can't start
-an agent. Only one notice dialog is open at a time.
-
 Native tooltips are reserved for brief icon-only hints and labels that actually
 overflow. Do not put full feedback notes, readable labels or internal selectors
 in `title` attributes. Check label overflow on pointer entry, without observing
@@ -262,7 +253,6 @@ the composer must not remeasure unchanged selectors or notes.
 | `src/react/styles.ts` | Geometry, typography, shared control classes and state selectors |
 | `src/react/feedback-layout.ts`, `pill-active.ts` | Small material/layout recipes that can be independently previewed as overlays |
 | `src/react/UpdateNotice.tsx` | Quiet update line, and the dialog that hands the upgrade to the agent |
-| `src/react/BlastNotice.tsx` | Blast session line, Extend and Stop, and Start Blast's prompt |
 | `src/react/icons.tsx` | Icon choices, optical size and stroke |
 | `src/react/NoteSummary.tsx` | Saved feedback/defaults summaries and their shared tag rendering |
 | `src/react/IterationPanel.tsx` | Dock, composer, feedback and element-picking behavior |

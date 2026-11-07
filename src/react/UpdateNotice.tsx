@@ -1,5 +1,5 @@
 import { showOverflowTitle } from './tooltips';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { type UpdateInfo, updatePrompt } from '../core/update';
 import { Icon } from './icons';
 
@@ -13,22 +13,12 @@ export interface UpdateNoticeProps {
   requested?: boolean;
   /** Offered only where notes are kept: called once the server filed the note. */
   onRequested?: () => void;
-  /** Controlled by the panel, so only one notice dialog is open at a time. */
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
 }
 
 /** A quiet line, and a small dialog that hands the upgrade to the user's agent. */
-export function UpdateNotice({ endpoint, active, route = '/', requested = false, onRequested, open: controlled, onOpenChange }: UpdateNoticeProps) {
+export function UpdateNotice({ endpoint, active, route = '/', requested = false, onRequested }: UpdateNoticeProps) {
   const [info, setInfo] = useState<UpdateInfo | null>(null);
-  const [ownOpen, setOwnOpen] = useState(false);
-  const open = controlled ?? ownOpen;
-  const changeOpen = useRef(onOpenChange);
-  changeOpen.current = onOpenChange;
-  const setOpen = useCallback((next: boolean) => {
-    setOwnOpen(next);
-    changeOpen.current?.(next);
-  }, []);
+  const [open, setOpen] = useState(false);
   const [showCommand, setShowCommand] = useState(false);
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
@@ -59,7 +49,7 @@ export function UpdateNotice({ endpoint, active, route = '/', requested = false,
     }
     void read();
     return () => { controller.abort(); clearTimeout(retry); clearTimeout(deadline); };
-  }, [endpoint, active, setOpen]);
+  }, [endpoint, active]);
   useEffect(() => { if (requested) setAsked(false); }, [requested]);
   useEffect(() => {
     if (!open) return;

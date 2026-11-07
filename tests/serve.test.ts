@@ -13,7 +13,6 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { VARIANTS_ENDPOINT } from '../src/core/variants';
-import { BLAST } from '../src/core/blast';
 import { serveIteration, type ServedIteration } from '../src/serve/index';
 import { guardedScriptTag } from '../src/serve/tag';
 import { NOTES_ENDPOINT } from '../src/store';
@@ -112,24 +111,11 @@ describe('the update endpoint', () => {
   });
 });
 
-describe('the Blast endpoint', () => {
-  it('reads the session and refuses public origins and other actions', async () => {
-    const res = await fetch(`${served.url}${BLAST.endpoint}`, { headers: { origin: 'http://localhost:3000' } });
-    expect(res.status).toBe(200);
-    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
-    expect(await res.json()).toEqual({ session: null });
-    expect((await fetch(`${served.url}${BLAST.endpoint}`, { headers: { origin: 'https://outside.example' } })).status).toBe(403);
-    const post = (origin: string, body: unknown) => fetch(`${served.url}${BLAST.endpoint}`, {
-      method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify(body),
-    });
-    expect((await post('https://outside.example', { action: 'stop' })).status).toBe(403);
-    expect((await post('http://localhost:5173', { action: 'start', for: '8h' })).status).toBe(400);
-    expect((await post('http://localhost:5173', { action: 'extend' })).status).toBe(409);
-  });
-
-  it('hands the panel its endpoint', async () => {
+describe('Blast', () => {
+  it('has no HTTP endpoint and no panel wiring: it is a CLI feature', async () => {
+    expect((await fetch(`${served.url}/api/iteration/blast`, { headers: { origin: 'http://localhost:3000' } })).status).toBe(404);
     const js = await (await fetch(served.bundleUrl)).text();
-    expect(js.includes(`"blastEndpoint":"${served.url}${BLAST.endpoint}"`)).toBe(true);
+    expect(js.includes('blastEndpoint')).toBe(false);
   });
 });
 

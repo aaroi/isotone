@@ -3,20 +3,20 @@
  * notes without being prompted for each one. Isotone never runs the agent; a
  * blocking CLI command hands it each batch of new notes until the deadline.
  *
- * Browser-safe: names, the public session shape, durations and the prompt the
- * panel copies. The file store and the waiting loop live in `src/blast.ts`.
+ * Blast has no panel UI: the user starts it by asking their agent, and the
+ * agent drives it through the CLI. This module holds the names, the public
+ * session shape and durations. The file store lives in `src/blast.ts` and the
+ * waiting loop in `src/cli/blast.ts`.
  *
  * The feature's name is likely to change. Every user-facing name, the CLI
- * command, the endpoint path and the state file come from {@link BLAST}, so a
- * rename is one edit here plus the docs (`docs/blast.md`, AGENTS.md).
+ * command and the state file come from {@link BLAST}, so a rename is one edit
+ * here plus the docs (`docs/blast.md`, AGENTS.md).
  */
 export const BLAST = {
-  /** The name in panel copy and CLI output. */
+  /** The name in CLI output. */
   name: 'Blast',
   /** The CLI subcommand: `npx isotone blast`. */
   command: 'blast',
-  /** The adapter endpoint for session state, Extend and Stop. */
-  endpoint: '/api/iteration/blast',
   /** Appended to the notes file's name, without `.json`, for the session file. */
   stateSuffix: '.blast.json',
   /** The guide shipped in the package. */
@@ -26,8 +26,6 @@ export const BLAST = {
 /** The CLI invocation agents are told to run. */
 export const BLAST_CLI = `npx isotone ${BLAST.command}`;
 
-/** What Extend adds, from the panel or `--extend` without a value. */
-export const EXTEND_MS = 15 * 60_000;
 /** The longest a session may run ahead of now, however often it is extended. */
 export const MAX_SESSION_MS = 8 * 60 * 60_000;
 /** `--every` at most this, so one wait stays under common agent command timeouts. */
@@ -39,7 +37,7 @@ export const LIVE_HEARTBEAT_MS = 15 * 60_000;
 /** A waiting command beats this often; twice this without one, it is gone. */
 export const HEARTBEAT_MS = 60_000;
 
-/** The session as the panel sees it: no record of which notes were handed out. */
+/** The session as `--status --json` prints it: no record of which notes were handed out. */
 export interface BlastState {
   startedAt: string;
   endsAt: string;
@@ -52,11 +50,11 @@ export interface BlastState {
   waiting: boolean;
   /** Set when the session was ended early, and by whom. */
   stoppedAt?: string;
-  stoppedBy?: 'cli' | 'panel';
+  stoppedBy?: 'cli';
   /** Deadline not passed and an agent seen recently. */
   live: boolean;
   ended: boolean;
-  /** The server's clock, so the panel counts down without trusting its own. */
+  /** The clock the state was read at. */
   now: string;
 }
 
@@ -92,20 +90,6 @@ export function timeLeft(ms: number): string {
   const minutes = Math.ceil(ms / 60_000);
   const h = Math.floor(minutes / 60), m = minutes % 60;
   return h ? `${h} h${m ? ` ${m} min` : ''} left` : `${m} min left`;
-}
-
-/**
- * The request the panel copies for the user's agent. The panel cannot start an
- * agent; the user pastes this into one.
- */
-export function blastPrompt(minutes: number): string {
-  const duration = minutes % 60 === 0 ? `${minutes / 60}h` : `${minutes}m`;
-  const label = minutes % 60 === 0 ? `${minutes / 60} hour${minutes === 60 ? '' : 's'}` : `${minutes} minutes`;
-  return `Run an Isotone ${BLAST.name} session for ${label}: run \`${BLAST_CLI} --for ${duration} --new\` (it waits up to 5 minutes for notes, so give it a 10-minute command timeout). ` +
-    `For each batch of notes it prints, act on one note at a time: \`npx isotone --working <id>\`, fix it, verify it, then \`npx isotone --done <id>\`. ` +
-    `After each batch or check-in, run \`${BLAST_CLI}\` again, without --for or --new. Stop when it says the session is over, and give me a short summary of what changed. ` +
-    `Follow the guardrails it prints when the session starts: act only on what notes ask, one small change at a time, never install packages, push or deploy, ` +
-    `and ask with \`npx isotone --reply <id> "<question>"\` when a note is unclear.`;
 }
 
 /** What an agent acting on notes by itself must keep to; printed when a session starts. */
