@@ -1,17 +1,22 @@
 # Development
 
 This guide is for changing Isotone itself. Agents using Isotone in another
-project should follow that project’s generated `AGENTS.md` section and the
-[integration guide](integrations.md).
+project follow [the agent guide](agent-guide.md).
 
 Read [the design language](design.md) before changing panel UI. Instrument is
 the accepted design; keep geometry and interaction rules shared across themes.
 Selection is raised, and Clean Highlight is the pill’s active state. Keep
 experimental alternatives separate until the reviewer chooses one.
 
-Run `pnpm check` for types, lint, build, and tests. For package or adapter
-changes, also run `pnpm check:package`. Inspect both themes, keyboard use,
-reduced motion, scrolling, and long content when changing UI.
+Run `pnpm check` for types, lint, build, and tests. `pnpm test` rebuilds a stale
+`dist/isotone.global.js` itself. For package, adapter or shipped-doc changes, also
+run `pnpm check:package`, which installs the packed archive in a clean consumer.
+`pnpm smoke` (after `pnpm build`; it needs the network) installs it into fresh
+Vite 5 and Vite 8 apps with React 18 and 19 and checks that a production build
+has no panel. Tests focus on observable behaviour, transport and store failures,
+lifecycle cleanup and design boundaries; add a small regression case for each bug.
+Inspect both themes, keyboard use, reduced motion, scrolling, and long content
+when changing UI.
 
 [Onboarding](onboarding.md) explains how the README prompt, `init` and its first
 run fit together, and the simulations behind them. Re-run one when changing them.
@@ -22,6 +27,24 @@ before merging; use a development branch until the change is ready for npm.
 The runtime is TypeScript throughout. The expensive work is DOM traversal, disk
 access, and redundant updates; avoiding that work matters more here than adding
 a second language or runtime.
+
+## Documentation
+
+Each topic lives in one file, for one reader; other files link to it.
+
+| File | Reader | Owns |
+| --- | --- | --- |
+| `README.md` | Someone trying Isotone | What it is, the agent prompt, keys |
+| `docs/agent-guide.md` | The agent in a user's app | Setup steps, the notes loop, the note record, update notes, variant procedure |
+| The section `init` writes | The same agent, every session | Dev-only rule, the loop, trust, where the guide is |
+| `docs/integrations.md` | Whoever wires up a host | Hosts, endpoint rules, themes, production guards |
+| `docs/variants.md` | Agent and host developer | Variants, knobs, sections, live switching |
+| `docs/blast.md`, `updates.md`, `migration.md` | The person using Isotone | Blast, update checks, the rename |
+| `AGENTS.md`, `docs/development.md`, `design.md`, `releasing.md`, `onboarding.md` | Maintainers | Not shipped |
+
+`tests/package/docs.test.ts` checks that shipped docs link only to shipped files
+and existing headings (use absolute GitHub URLs for the rest), and that the agent
+guide and the CLI's `updateHint` list the same update commands.
 
 ## Pull requests
 
@@ -107,26 +130,18 @@ appear in the sample app, new copy in the tour, new behaviour somewhere a
 visitor will try it. Many visitors use a phone, so check the demo at a phone
 size (375 × 812 and landscape) as well.
 
-The demo project on Vercel is connected to this repository (Project → Settings
-→ Git), so Vercel deploys [isotone.vercel.app](https://isotone.vercel.app) on
-every push to `main`, including the release workflow's version commit, and
-posts a preview link on every pull request, using `vercel.json`. Try a change on
-a phone from that link before it merges. No repository secrets are involved.
-Vercel protects preview deployments with Vercel Authentication by default; to
-open previews on a phone without signing in, turn it off for previews in the
-project's Settings → Deployment Protection, or sign in to Vercel there. Vercel
-asks a project member to authorize a preview for a pull request from a fork.
-Deploying by hand with `vercel deploy --prod` still works for an emergency.
+The Vercel project is connected to this repository, so Vercel deploys
+[isotone.vercel.app](https://isotone.vercel.app) on every push to `main` and
+posts a preview link on every pull request; try a change on a phone from that
+link before it merges. To open previews without signing in, turn off Vercel
+Authentication for previews in the project's Settings → Deployment Protection.
+Pull requests from forks need a project member to authorize their preview.
+`vercel deploy --prod` still works for an emergency.
 
 Demo feedback uses seeded files in a temporary
 directory, separate from project notes; the server removes them when it closes.
 Open `/?stress=1` for 500 selectors and 500 notes, including long labels and large
 feedback.
-
-`pnpm check` runs types, lint, build, and the test suite. `pnpm check:package`
-exercises the packed artifact in a clean consumer. Tests focus on observable
-behaviour, transport/store failures, lifecycle cleanup, and design boundaries.
-Use small regression cases for bugs; avoid tests that merely duplicate code.
 
 ## Performance
 

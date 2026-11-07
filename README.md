@@ -63,54 +63,22 @@ check your Isotone notes.
 
 ```sh
 npm install -D isotone
-npx isotone init --yes
+npx isotone init
 ```
 
-`init` detects your setup, prints the one change to make and a short first run,
-and adds a section to `AGENTS.md` that teaches your agent the loop.
-
-On **Vite**, the change is one plugin, and it works with any framework. Vite
-applies it only to the dev server, so production builds have no panel and no
-endpoints:
-
-```ts
-import { iteration } from 'isotone/vite';
-
-export default defineConfig({
-  plugins: [/* your framework plugin */, iteration()],
-});
-```
-
-On **any other dev server**, run `npx isotone serve` in the project and load the
-panel from your development pages. This tag only loads on localhost, so it does
-nothing if the page ships:
-
-```html
-<script>
-  if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))
-    document.head.append(Object.assign(document.createElement('script'),
-      { src: 'http://127.0.0.1:4123/isotone.js' }));
-</script>
-```
-
-On Next, `init` prints the same panel as a `next/script` tag behind
-`process.env.NODE_ENV === 'development'`. The [integration guide](docs/integrations.md)
-covers route handlers, React embeds, themes and the production guards. Coming
-from the previous package? See the [migration guide](docs/migration.md).
+`init` looks at your project and prints the one change to make: on Vite, a
+plugin line that only acts on the dev server; on any other dev server, a small
+local server and a script tag that loads only on localhost. `init --yes` also
+adds a short section to `AGENTS.md` that teaches your agent the loop. The
+[integration guide](docs/integrations.md) covers every setup and how each stays
+out of production. Coming from `iso-iterate`? See the [migration guide](docs/migration.md).
 
 ## Blast mode
 
-Once Isotone is set up, you can ask your agent for a Blast session. For the time
-you choose, it keeps picking up each batch of new notes, fixing and closing them,
-without being prompted again. Paste this into your agent:
-
-```text
-Run an Isotone Blast session for 45 minutes: `npx isotone blast start 45m`, then follow what it prints.
-```
-
-Blast has no button in the panel; you start, extend and stop it through your
-agent. Isotone still never runs the agent; it hands your agent the notes.
-[Blast mode](docs/blast.md).
+Once Isotone is set up, ask your agent for a [Blast session](docs/blast.md): for
+the time you choose, it keeps picking up each batch of new notes, fixing and
+closing them, without being prompted again. Isotone still never runs the agent;
+it hands your agent the notes.
 
 ## Keys
 
@@ -131,9 +99,10 @@ picks up with the others. The check sends no project content and stays quiet
 offline. Nothing installs by itself. Set `checkForUpdates: false` to turn it off.
 [Update details](docs/updates.md).
 
-## For maintainers
+## For agents and maintainers
 
+Coding agents working in your app follow the [agent guide](docs/agent-guide.md).
 [Development and contributing](https://github.com/aaroi/isotone/blob/main/docs/development.md)
-covers the source, design language, checks and releases.
+covers changing Isotone itself.
 
 MIT.

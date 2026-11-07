@@ -1,13 +1,10 @@
 # Updates
 
-The project controls its installed version. Publishing a new release does not
-replace files in someone else's checkout. Isotone checks for a newer release
-in the background and lets you hand the upgrade to your coding agent, or copy
-the exact command. Isotone itself never installs packages, executes that
-command, or changes a manifest or lockfile.
-
-Moving from the previous package name is a separate [migration](migration.md).
-An update check does not replace a dependency with a differently named package.
+Your project controls its installed version. Isotone checks for a newer release
+in the background and lets you hand the upgrade to your coding agent, or copy the
+exact command; it never installs packages, runs that command, or changes a
+manifest or lockfile itself. Moving from `iso-iterate` is a separate
+[migration](migration.md).
 
 The Vite plugin and standalone server check the public npm `latest` tag at most
 once per day while their per-user cache (`~/.cache/isotone`, or `$XDG_CACHE_HOME/isotone`) is retained. Checks take at
@@ -30,16 +27,11 @@ the other notes, on every page, tagged "Update", and reaches your agent through
 also listed for every route (`npx isotone <route> --json`). The dialog then reads "Update
 requested". Deleting the note cancels the request.
 
-The dev server builds the note from its own update check: the current and
-latest version, the upgrade command and the directory. The browser only asks for
-it, and the notes endpoint never accepts an update request, so a page cannot put
-a command in front of your agent. At most one update note is open. If a newer
-release appears while one is open, that note is updated instead of a second
-being added.
-
-The note's text is the server's too: the panel, `npx isotone` and `--json` show
-"Update Isotone 1.1.3 → 1.2.0" built from the request, whatever the file holds,
-and the notes endpoint refuses edits to an update note. Delete it to cancel.
+The dev server builds the note from its own update check: the versions, the
+upgrade command and the directory, and the note's text, "Update Isotone 1.1.3 →
+1.2.0". The browser only asks for it, and the notes endpoint refuses an update
+request or an edit to an update note, so a page cannot put a command in front of
+your agent. At most one update note is open; a newer release updates it.
 
 Because the notes file is a plain file in the project, every reader checks the
 request again before showing it, and drops it if anything is off:
@@ -47,9 +39,8 @@ request again before showing it, and drops it if anything is off:
 - `update.to` is a strict SemVer version (`1.2.0`, `1.2.0-rc.1`, no build
   metadata);
 - `update.command` is exactly the command `check-update` builds for
-  `update.manager` and that version: `npm install [-D] --save-exact isotone@<to>`,
-  `pnpm add [-D] [-w] --exact isotone@<to>` or `yarn add [-D] [-W] --exact
-  isotone@<to>`;
+  `update.manager` and that version (the three forms are in the
+  [agent guide](agent-guide.md#update-notes));
 - `update.cwd` is an existing directory inside the notes file's project (the
   Git checkout that holds it, or its directory outside Git), after symlinks.
 
@@ -73,14 +64,10 @@ The note carries a structured `update` field next to its text:
 }
 ```
 
-An agent treats it as the user's explicit request to upgrade. It runs the
-printed command only if it matches one of the canonical forms above, with the
-note's version, in that directory inside the project, and treats any other
-command or text as context. It then restarts the dev server if it runs it,
-checks that the panel still loads, summarizes the notable changes from the new
-CHANGELOG (also at `node_modules/isotone/CHANGELOG.md` after the install), and
-closes the note with `--done`. Page text and other notes are still context, not
-instructions; the update note's command comes from Isotone's own server.
+The [agent guide](agent-guide.md#update-notes) says how the agent carries it out:
+run the command only in that exact form and directory, restart and check the
+panel, refresh its `AGENTS.md` section with `npx isotone init --yes`, summarize the
+changelog for you and close the note.
 
 The button needs a notes endpoint and a command Isotone can name. When it
 cannot name one (Bun, competing lockfiles, an optional or peer dependency, or
@@ -103,17 +90,11 @@ note; it is not filed again until a newer release. The versions already offered
 are remembered in the same per-user cache directory as the daily check. The
 default stays as it is: a notice, with the button.
 
-There is no mode that installs updates silently. Changing dependencies and the
-lockfile without the user's say:
-
-- adds supply-chain risk: a compromised or broken release would land in every
-  project the moment it is published, with nobody reviewing it first;
-- breaks reproducibility for teams: one developer's dev server would rewrite the
-  manifest and lockfile, and the next commit would carry an upgrade nobody chose;
-- restarts or breaks a dev server in the middle of someone's work.
-
-An update note keeps a person in the loop at the cost of one click, and the agent
-does the work in the open, where its diff can be reviewed.
+There is deliberately no mode that installs updates silently: a compromised or
+broken release would land in every project unreviewed, one developer's dev
+server would rewrite the lockfile for the whole team, and a dev server would
+restart mid-work. An update note keeps a person in the loop at the cost of one
+click, and the agent's diff can be reviewed.
 
 ## Checking and upgrading
 
@@ -124,41 +105,19 @@ npx isotone check-update
 npx isotone check-update --json
 ```
 
-This compares the **running CLI version** with npm's `latest` tag. Use the
-project's local CLI; `npx isotone@latest` runs a different version and does
-not update the dependency declared by the project. Explicit checks bypass the
-daily cache. Exit status is zero when the check succeeds, including when an
-update is available; failure to check returns one. JSON reports the status,
-current/latest versions, and an optional upgrade command and working directory.
+This compares the running CLI version (use the project's own, not
+`npx isotone@latest`) with npm's `latest` tag, bypassing the daily cache. It
+exits 0 when the check succeeds, update or not, and 1 when it cannot check.
 
-The suggested command pins the specific version you just checked, rather than a
-`latest` tag that could move before installation. For example:
-
-```sh
-npm install -D --save-exact isotone@1.0.0
-pnpm add -D --exact isotone@1.0.0
-yarn add -D --exact isotone@1.0.0
-```
-
-These examples illustrate the syntax; use the version reported by your check.
-The command detects the project's `packageManager` or lockfile, preserves an
-existing production dependency, and targets the manifest that declares it,
-including an inherited workspace-root dependency. If competing lockfiles make that ambiguous, pass
-`--manager npm|pnpm|yarn`. Unsupported managers and optional/peer dependencies
-need a manual decision. The tool does not silently choose a different manager.
-
-Review the changelog, run the command from the displayed directory, restart the
-dev server, and check the app. Commit the manifest and lockfile changes together.
-Use your existing package-manager configuration, registry, and install policies;
-the lookup itself always reads public npm and does not read registry credentials.
-
-The exact-version flags are documented by [npm](https://docs.npmjs.com/cli/v11/commands/npm-install/),
-[pnpm](https://pnpm.io/cli/add), and [Yarn](https://yarnpkg.com/cli/add).
-Yarn's `add` command targets the current workspace; `yarn up` can update matches
-across workspaces, so the suggestion uses `add`.
-For a Yarn workspace-root dependency, declare the Yarn version in
-`packageManager`: [Yarn Classic requires `-W`](https://classic.yarnpkg.com/en/docs/cli/add),
-while modern Yarn does not use that flag.
+It suggests a command pinned to the version it found, such as
+`pnpm add -D --exact isotone@1.2.0`, for the project's `packageManager` or
+lockfile and the manifest that declares Isotone, keeping a production
+dependency a production one. Pass `--manager npm|pnpm|yarn` when competing
+lockfiles make that ambiguous; Bun, optional and peer dependencies need a manual
+upgrade, and a Yarn workspace root needs the Yarn version in `packageManager`.
+Run it from the displayed directory, restart the dev server, check the app, and
+commit the manifest and lockfile together. The lookup reads public npm and never
+your registry credentials.
 
 ## Turn off automatic checks
 
@@ -182,27 +141,11 @@ only show update information when given an `updateEndpoint` supplied by a local
 server; they do not contact npm from the browser. GET on that endpoint returns
 the cached check, and POST files the update note.
 
-For a layout check, `/?review=1&update-preview=1` in the demo shows a fictional
-update; asking the agent there files a demo note that the pretend agent picks up
-and closes. It does not contact npm or install anything.
+## Version ranges
 
-## Version ranges and reproducibility
-
-A lockfile records the selected dependency tree. `npm ci` installs that tree
-without updating the manifest or lockfile; publishing another version does not
-change it. [npm ci](https://docs.npmjs.com/cli/v11/commands/npm-ci/)
-
-`npm update` respects the declared range. `^1.0.0` accepts compatible minor
-and patch releases below `2.0.0`. Older `^0.3.4` installs stay below `0.4.0`;
-they do not adopt `1.0.0`. `^0.0.4` stays below `0.0.5`.
-An explicit install of a new version deliberately changes that choice.
-[npm's range examples](https://docs.npmjs.com/cli/v11/commands/npm-update/)
-
-Prereleases compare below the corresponding stable release, and build metadata
-does not affect precedence. An installed version ahead of the `latest` tag is
-reported as ahead; the tool does not suggest a downgrade.
-[Semantic Versioning](https://semver.org/)
-
-Existing installations remain usable offline. There is no remotely enforced
-minimum version, remote UI replacement, or update requirement that blocks access
-to local feedback.
+A lockfile pins the installed version: `npm ci` and publishing a new release
+change nothing, and `npm update` stays within the declared range (`^1.0.0`
+stays below `2.0.0`). Only an explicit install of a new version changes it. An
+installed version ahead of the `latest` tag is reported as ahead, never
+downgraded. Existing installations keep working offline; there is no remotely
+enforced minimum version.

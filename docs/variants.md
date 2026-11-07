@@ -12,9 +12,9 @@ every version up front and switches between them itself (see
 [live switching](#live-switching)). Variants that override the same files, or share a
 `--group`, are alternatives of one decision and appear as one selector with
 Default and each option; unrelated variants get their own selectors and can
-be active at the same time. A selector shows only on the variant's route;
-a route ending in `/*` covers every page under it, and a variant made
-without a route shows everywhere.
+be active at the same time. A selector shows only on the variant's route:
+`/items` is that page, `/items/*` also every page under it, and `/items*` any
+route starting with `/items`. A variant made without a route shows everywhere.
 
 **A host with its own variant system** hands the panel a `VariantsSource`:
 
@@ -86,12 +86,11 @@ group label (`variant new <id> --group-label "Header > Logo"`), or from
 selector, with every variant in its group; `variant section <id> --none` takes it out
 of every section. `variant list` shows a SECTION column.
 
-For a range, choose bounds that produce useful, valid designs at both extremes.
-Use a positive `step` that matches the decision's precision, and a default aligned
-to that step within `min` and `max`. For example, padding from 8–32px in 2px steps
-is easier to compare than 0–1000px in tiny increments. Radius from 0–24px in 1px
-steps retains useful control. Use a unit such as `px`, `%` or `ms`; a bare 0–1
-range displays as a percentage, while `unit: ''` keeps its raw numeric value.
+For a range, choose bounds that give a valid design at both extremes (padding
+8–32px in 2px steps, not 0–1000px), a positive `step` matching the decision's
+precision, and a default on a step within `min` and `max`. Use a unit such as
+`px`, `%` or `ms`; a bare 0–1 range displays as a percentage, and `unit: ''`
+keeps the raw number.
 
 In a host source, ranges return numeric **strings** in `selections`; the host's
 `onChange` must apply them to its state or styles. For example:
@@ -112,40 +111,22 @@ const source = createVariantsSource({
 .card { border-radius: var(--card-radius, 11px); }
 ```
 
-Use source-file variants for structural or content alternatives. In a Vite overlay
-project, declare numeric and colour controls in `knobs.json` as below, and read
-their CSS custom properties instead of copying a file for every possible value.
-Verify every control changes the intended app property, including its minimum,
-maximum and reset state. When saving defaults, keep the source fallback and the
-axis default in sync. The interactive demo includes card radius and padding sliders
-in a Cards section and the accent colour in a Theme section; its screenshot view
-keeps the original two selectors, without sections, for a compact composition.
+Use file variants for structural or content alternatives and [knobs](#knobs) for
+numbers, colours and named styles. Check that every control changes the intended
+property at its minimum, maximum and reset, and keep the source fallback and the
+axis default in sync.
 
-Each option, thumbnail and colour swatch has a small chevron in its corner (and a right click)
-that opens the selector dialog for that option alone: feedback on it, keep only
-it, or remove it. The selector's own dialog offers the same per-option actions.
-Opening it does not change the selection.
+Each option's chevron (or a right click) opens its actions: feedback on it, keep
+only it, or remove it. Keep and remove actions, and **Make default**, file a
+request note for the agent ([what each asks](agent-guide.md#requests-from-the-variants-panel));
+the selector stays as it is until the agent changes the project, and deleting a
+pending request cancels it.
 
-A `[keep-option]` note means the reviewer picked a winner: make that option the
-default and remove the selector and the other options. Apply it like a promoted
-variant: `variant promote <id>` for the named option (or inline the knob's
-chosen branch), then drop the others. `[keep-default]` is the same for the
-current default, and `[remove-option]` / `[remove-axis]` only remove.
-
-Removal actions in the panel save requests for the agent. Selectors and options
-stay visible and usable until the agent changes the project. Requests open in
-the composer like any note; editing them preserves their structured action and
-reference. Cancelling a pending request leaves the selector unchanged. Deleting
-a request after the agent has applied it does not undo a source change.
-
-For hosts that explicitly manage their own definitions, the core source also
-provides a programmatic `manage(action)` API. Its `onManage(axes, selections,
-action)` callback can persist edited definitions or reject to leave them
-unchanged. The panel never calls this API as a side effect of creating a note.
-Normal selection changes still use `onChange`. A custom source can expose optional `getError(): string | null`
-to surface load or update failures in the panel; notify subscribers when that
-error changes, and return `null` after recovery. Feedback stores a `variant` reference with
-selector/option IDs separately from the host's `payload`.
+A host that manages its own definitions can use the source's `manage(action)`
+API: its `onManage(axes, selections, action)` callback persists edited definitions
+or rejects to leave them unchanged; the panel never calls it when filing a note.
+A custom source can expose `getError(): string | null` to show load or update
+failures in the panel, notifying subscribers when it changes.
 
 **Keeping copies current.** A copy records the version of the real file it was
 made from, and reads as stale once that file moves on. `variant sync <id>` merges
@@ -159,13 +140,6 @@ since they are alternatives to what was just promoted.
 Two groups that override the same file cannot both be active. The panel names
 them when you pick the second, and `variant add` warns when the overlap is created.
 
-**The loop.** Pin an element and write the ask. The agent starts a variant
-from the note and edits the copy. You switch between Default and the
-alternatives in the panel; the switch applies in place. **Make
-default** files your picks as a note, and the agent lands the named
-variants over the real files with `variant promote`. Nothing else changes:
-other variants stay until you ask for one to be dropped.
-
 Variant files are committed by default, since they are the change under
 review; `variants: { ignored: true }` keeps them local. The active pointer,
 `.isotone/active.json`, is local and never committed. `ISOTONE_VARIANT=<id>`
@@ -176,7 +150,7 @@ review; `variants: { ignored: true }` keeps them local. The active pointer,
 Some decisions are a number, not an alternative file: how far a fade
 reaches, how dense a dot field is. Declare those in
 `.isotone/knobs.json`, a JSON array of range, colour or select axes with an
-optional `route` (a pattern like a variant's, or a list of them):
+optional `route` (a pattern as above, or a list of them):
 
 ```json
 [
@@ -244,11 +218,8 @@ document.addEventListener('isotone:knob', ({ detail }) => {
 ```
 
 The event only fires while the panel is mounted, so keep the committed default in
-the source. Knob values live in the reviewer's browser, not on the server. "Make
-default" files the moved knobs in the same `[set-defaults]` note as the
-variant picks, as `Knobs: Hero › Fade starts 40% (fade-from)` with a `knobs`
-payload of `fade-from:40`; the agent writes the number into the source and
-into the knob file's `defaultValue`.
+the source. Knob values live in the reviewer's browser; **Make default** files the
+moved ones in its `[set-defaults]` note (`payload.knobs` as `fade-from:40`).
 
 ## Live switching
 
@@ -265,17 +236,16 @@ browser:
   fixed when the page loads, because React cannot swap a hook under a mounted
   component. A switch that changes one reloads the page.
 
-Every copy of a file defines its functions and objects afresh, so a copied
-file that exports a hook or helper reloads on every switch even when that
-export is unchanged. Keep a variant's copies to files that export only
-components, and move shared helpers into files the variant leaves alone.
+Every copy defines its functions and objects afresh, so a copied file that
+exports a hook or helper reloads on every switch even when that export is
+unchanged: copy only files that export components, and move shared helpers
+into files the variant leaves alone.
 
-The selection belongs to the tab. Picking an option writes it to the URL as
-`?v=<group>:<variant>`, in the same grammar as host variants, and the URL
-keeps it through client-side navigation, so a copied link opens the same
-variant. A tab without `?v=` shows `.isotone/active.json`, and the panel
-writes each pick there too, as the default for new tabs and for the agent.
-Two tabs with different `?v=` values show different variants side by side.
+The selection belongs to the tab: a pick is written to the URL as
+`?v=<group>:<variant>` (the grammar host variants use), kept through client-side
+navigation, so a copied link opens the same variant and two tabs can compare
+side by side. The pick also goes to `.isotone/active.json`, which tabs without
+`?v=` and the agent follow.
 
 A variant can add a file the project does not have:
 `isotone variant add <id> --new <file>` starts an empty one. Import it
@@ -293,21 +263,17 @@ files over HMR, which is also what non-React hosts, CSS files, Vite 5 and
 - files whose exports it cannot list (`export *`, destructuring, several
   declarators in one `export const`).
 
-A file served whole, and every CSS file, follows `.isotone/active.json` in
-every tab, so it does not take part in per-tab selection. The browser also
-loads every version of a dispatched file, so a variant's copy runs even
-while its variant is off. A global stylesheet it imports applies on every
-tab, and a syntax error in it breaks pages that import the real file until
-it is fixed.
+A file served whole, and every CSS file, follows `.isotone/active.json` in every
+tab. The browser loads every version of a dispatched file, so a copy runs even
+while its variant is off: a global stylesheet it imports applies everywhere, and
+a syntax error in it breaks pages that import the real file.
 
-**Server rendering.** The server renders from `.isotone/active.json`, since
-it cannot tell which tab a request is for. A component mismatch between the
-server and the tab hydrates from the server's version and switches right
-after. When a link opens a tab whose `?v=` differs from the server in a
-fixed export, the tab saves its set as the default and reloads once. A
-reload in such a tab leaves the default alone and hydrates with a
-recoverable mismatch instead, so two tabs never take the server back and
-forth.
+**Server rendering** follows `.isotone/active.json`, since the server cannot tell
+tabs apart. A tab whose components differ hydrates from the server's version and
+switches right after. When a link opens a tab whose `?v=` differs in a fixed
+export, the tab saves its set as the default and reloads once; a later reload
+hydrates with a recoverable mismatch instead, so two tabs never fight over the
+default.
 
 ## What whole-file switching needs from the host
 
