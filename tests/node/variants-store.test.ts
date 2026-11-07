@@ -82,12 +82,16 @@ describe('create / add / list', () => {
   it('refuses to copy a file that looks like a secret into a variant', () => {
     const { root, opts } = tempRepo();
     createVariant(opts, { id: 'v1' });
-    for (const name of ['.env', '.env.local', 'server.pem', 'id_rsa', '.npmrc']) {
+    for (const name of ['.env', '.env.local', 'server.pem', 'id_rsa', '.npmrc', '.envrc', '.dev.vars', 'credentials.json']) {
       writeFileSync(join(root, name), 'SECRET=1\n');
       expect(() => addVariantFile(opts, 'v1', name)).toThrow(/looks like a secret/);
     }
     writeFileSync(join(root, '.env.example'), 'SECRET=\n');
     expect(Object.keys(addVariantFile(opts, 'v1', '.env.example').files)).toEqual(['.env.example']);
+    // Whatever the project keeps out of git stays out of variants too.
+    writeFileSync(join(root, '.gitignore'), 'private.txt\n');
+    writeFileSync(join(root, 'private.txt'), 'token\n');
+    expect(() => addVariantFile(opts, 'v1', 'private.txt')).toThrow(/Git ignores/);
   });
 
   it('rejects an invalid or duplicate id', () => {

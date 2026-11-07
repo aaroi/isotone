@@ -6,16 +6,20 @@ import type { IterationElement } from '../../core/types';
 import { OVERLAY_GROUP_ID, type OverlayVariant, type OverlayVariantStatus } from '../../core/variants/overlay';
 import { writeJson } from '../fs/atomic';
 import { isWithin } from '../fs/paths';
-import { blobOf, hashFile } from './git';
+import { blobOf, hashFile, isGitIgnored } from './git';
 import { type VariantsStoreOptions, mutateVariants, variantsDir } from './options';
 import { variantDir, isValidVariantId, isSafeManifestKey, repoRelativeKey } from './paths';
 
-/** Env files, private keys and registry credentials: a copy would sit in a
- *  directory that is committed by default. `.env.example` and the like are fine. */
+/** Env files, private keys and credentials: a copy would sit in a directory
+ *  that is committed by default. `.env.example` and the like are fine. */
 function looksSecret(key: string): boolean {
   const name = key.slice(key.lastIndexOf('/') + 1).toLowerCase();
   if (/^\.env(\..+)?$/.test(name)) return !/\.(example|sample|template)$/.test(name);
-  return /\.(pem|key|p12|pfx)$/.test(name) || /^id_(rsa|dsa|ecdsa|ed25519)/.test(name) || name === '.npmrc' || name === '.netrc';
+  return (
+    /\.(pem|key|p12|pfx)$/.test(name) ||
+    /^id_(rsa|dsa|ecdsa|ed25519)/.test(name) ||
+    ['.npmrc', '.netrc', '.envrc', '.dev.vars', 'credentials.json'].includes(name)
+  );
 }
 
 function isPlausibleVariant(v: unknown): v is OverlayVariant {
@@ -242,6 +246,7 @@ export function addVariantFile(
     }
     if (!existsSync(sourceAbs)) throw new Error(`"${file}" does not exist. Use --new for a file the variant adds.`);
     if (looksSecret(key)) throw new Error(`"${file}" looks like a secret; variants are meant to be committed, so it is not copied.`);
+    if (isGitIgnored(sourceAbs)) throw new Error(`Git ignores "${file}"; variants are meant to be committed, so it is not copied.`);
     mkdirSync(dirname(destAbs), { recursive: true });
     writeFileSync(destAbs, readFileSync(sourceAbs));
     manifest.files = { ...manifest.files, [key]: { base: blobOf(sourceAbs) } };

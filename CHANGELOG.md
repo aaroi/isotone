@@ -20,7 +20,7 @@
 - Every POST to the notes, update and variants endpoints needs a JSON content type, which a cross-site form cannot send.
 - Note IDs are checked on write. A note already in the file with another ID is listed and closed under a stable safe ID (`id-` and 16 hex characters).
 - Routes are capped at 2,000 characters and a notes file at 10,000 notes; a new note past that gets 409 and a message to delete done notes.
-- `variant add` refuses files that look like secrets (`.env` and `.env.*` other than `.example`, `.sample` and `.template`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa`-style keys, `.npmrc`, `.netrc`), because variants are committed by default.
+- `variant add` refuses files that look like secrets (`.env` and `.env.*` other than `.example`, `.sample` and `.template`, `.envrc`, `.dev.vars`, `credentials.json`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa`-style keys, `.npmrc`, `.netrc`) and files Git ignores, because variants are committed by default.
 - Plain-text note output no longer passes terminal escape sequences or other control characters through. Reviewer text is printed as quoted lines starting with `> `, and newlines in routes, selectors and element text show as `⏎`, so note content cannot pose as CLI output. JSON output also escapes C1 control and bidirectional-override characters.
 
 ### Fixed
