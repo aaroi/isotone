@@ -101,6 +101,38 @@ describe('mountIteration next to a document-level host root', () => {
   });
 });
 
+describe('mountIteration and history', () => {
+  it('restores pushState on unmount, but keeps a wrapper a router added after it', async () => {
+    const original = window.history.pushState;
+    const off = mountIteration({ endpoint: '/api/iteration/notes' });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const ours = window.history.pushState;
+    expect(ours).not.toBe(original);
+    const seen: unknown[] = [];
+    const router = function (this: History, ...args: Parameters<History['pushState']>) {
+      seen.push(args[2]);
+      return ours.apply(this, args);
+    };
+    window.history.pushState = router;
+    dispose(off);
+    expect(window.history.pushState).toBe(router);
+    window.history.pushState(null, '', '/after-unmount');
+    expect(seen).toEqual(['/after-unmount']);
+    expect(window.location.pathname).toBe('/after-unmount');
+    window.history.pushState = original;
+
+    const again = mountIteration({ endpoint: '/api/iteration/notes' });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(window.history.pushState).not.toBe(original);
+    dispose(again);
+    expect(window.history.pushState).toBe(original);
+  });
+});
+
 describe('mountIteration with a cross-origin variants endpoint', () => {
   it('reads overlay knobs from the endpoint it is given, as isotone serve passes it', async () => {
     vi.useRealTimers();

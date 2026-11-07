@@ -160,14 +160,17 @@ export function mountIteration(opts: MountIterationOptions): () => void {
     window.addEventListener('popstate', notify);
     listeners.push(() => window.removeEventListener('popstate', notify));
     for (const evt of ['pushState', 'replaceState'] as const) {
-      const orig = window.history[evt].bind(window.history);
-      window.history[evt] = ((...a: Parameters<History['pushState']>) => {
-        const r = orig(...a);
+      const orig = window.history[evt];
+      const wrapper = function (this: History, ...a: Parameters<History['pushState']>) {
+        const r = orig.apply(this, a);
         notify();
         return r;
-      }) as typeof orig;
+      };
+      window.history[evt] = wrapper;
+      // A router or devtool that wrapped history after us keeps its wrapper:
+      // ours stays in its chain and goes quiet once disposed.
       listeners.push(() => {
-        window.history[evt] = orig as never;
+        if (window.history[evt] === wrapper) window.history[evt] = orig;
       });
     }
   }, 0);
