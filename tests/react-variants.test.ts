@@ -14,6 +14,7 @@ import {
   mountIteration,
   VariantsView,
 } from '../src/react/index';
+import { PANEL_CSS } from '../src/react/styles';
 
 const AXES: VariantAxis[] = [
   {
@@ -1151,6 +1152,33 @@ describe('review dock interactions', () => {
       expect(document.activeElement).toBe(byText('Reset to default'));
       expect(['m', 'l', 'xl'].every(id => row(id)?.textContent?.includes('Removal requested'))).toBe(true);
       expect(row('s')?.textContent).not.toContain('Removal requested');
+    });
+
+    it('truncates only a long option label, never its Default or Removal requested tag', async () => {
+      const long = 'An option label long enough to fill the whole dialog width and then some more';
+      const axes: VariantAxis[] = [{
+        id: 'size', label: 'Size', defaultOption: 's',
+        options: [{ id: 's', label: long }, { id: 'm', label: long }],
+      }];
+      const style = document.createElement('style');
+      style.textContent = PANEL_CSS;
+      document.head.append(style);
+      try {
+        await render(createElement(Host, { axes }));
+        await click(byText('Size actions'));
+        await click(container.querySelector(`[aria-label="Remove ${long}"]:not(:disabled)`));
+        for (const [id, tag] of [['s', 'Default'], ['m', 'Removal requested']]) {
+          const label = row(id)?.querySelector<HTMLElement>('.isotone-option-label');
+          const tags = row(id)?.querySelector<HTMLElement>('.isotone-option-tags');
+          // The ellipsized element holds the label alone; the tag is its sibling.
+          expect(label?.textContent).toBe(long);
+          expect(getComputedStyle(label as HTMLElement).textOverflow).toBe('ellipsis');
+          expect(tags?.textContent).toBe(tag);
+          expect(label?.contains(tags as Node)).toBe(false);
+          expect(tags?.parentElement).toBe(label?.parentElement);
+          expect(getComputedStyle(tags as HTMLElement).flexShrink).toBe('0');
+        }
+      } finally { style.remove(); }
     });
 
     it('moves focus back up the list after removing the last removable option', async () => {
