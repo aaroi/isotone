@@ -28,3 +28,8 @@ export interface UpdateRequest {
 export function updatePrompt(update: Pick<UpdateRequest, 'from' | 'to' | 'command' | 'cwd'>): string {
   return `Update Isotone in this project from ${update.from} to ${update.to}: run \`${update.command}\` in ${update.cwd}, restart the dev server if you run it, check the Isotone panel still loads, then tell me what changed (the new CHANGELOG.md).`;
 }
+
+/** An update note's text, always built from its request rather than stored text. */
+export function updateNoteText(update: Pick<UpdateRequest, 'from' | 'to'>): string {
+  return `Update Isotone ${update.from} → ${update.to}`;
+}

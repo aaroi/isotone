@@ -2,6 +2,9 @@
  * Version precedence and the validation of a stored update request. Kept free
  * of the package manifest and the network so the notes store can use it.
  */
+import { existsSync, realpathSync, statSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, sep } from 'node:path';
+
 import type { UpdateRequest } from './core/update';
 
 interface Version { parts: bigint[]; prerelease: string[] }
@@ -44,17 +47,79 @@ const plainText = (value: unknown, max: number): value is string =>
   typeof value === 'string' && value !== '' && value.length <= max &&
   ![...value].some((char) => { const code = char.charCodeAt(0); return code < 32 || code === 127; });
 
+type Manager = UpdateRequest['manager'];
+const PACKAGE_NAME = 'isotone';
+/** MAJOR.MINOR.PATCH with an optional prerelease, and no build metadata. */
+const STRICT_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*)?$/;
+
+/** A version an upgrade command may name: strict SemVer, nothing a shell could read as more. */
+export function isStrictVersion(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 256 && STRICT_VERSION.test(value) && isVersion(value);
+}
+
+/**
+ * The upgrade command for Isotone, the one form `check-update` suggests: the
+ * project's manager, an exact version, `-D` for a development dependency, and
+ * the workspace-root flag where that manager needs one (pnpm `-w`, Yarn
+ * Classic `-W`).
+ */
+export function upgradeCommand(manager: Manager, version: string, flags: { dev: boolean; workspace: boolean }): string {
+  if (!isStrictVersion(version)) throw new Error('Invalid version.');
+  const dev = flags.dev ? ' -D' : '';
+  if (manager === 'npm') return `npm install${dev} --save-exact ${PACKAGE_NAME}@${version}`;
+  const workspace = flags.workspace ? (manager === 'pnpm' ? ' -w' : ' -W') : '';
+  return `${manager} add${dev}${workspace} --exact ${PACKAGE_NAME}@${version}`;
+}
+
+/** Every command an update note may carry for this manager and version. */
+export function canonicalUpgradeCommands(manager: Manager, version: string): string[] {
+  if (!isStrictVersion(version)) return [];
+  const commands: string[] = [];
+  for (const dev of [true, false]) {
+    for (const workspace of manager === 'npm' ? [false] : [false, true]) commands.push(upgradeCommand(manager, version, { dev, workspace }));
+  }
+  return commands;
+}
+
+/**
+ * The project a notes file belongs to: the nearest directory holding it that
+ * is a Git checkout, or the file's own directory outside one. An update note
+ * may only name a directory inside it.
+ */
+export function notesProjectRoot(file: string): string {
+  const start = dirname(file);
+  for (let directory = start; ; directory = dirname(directory)) {
+    if (existsSync(join(directory, '.git'))) return directory;
+    if (dirname(directory) === directory) return start;
+  }
+}
+
+/** Whether `cwd` is an existing directory at or below `root`, after symlinks. */
+export function isInside(cwd: string, root: string): boolean {
+  try {
+    const target = realpathSync(cwd);
+    if (!statSync(target).isDirectory()) return false;
+    const path = relative(realpathSync(root), target);
+    return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path));
+  } catch { return false; }
+}
+
 /**
  * A stored update request, or null when any part of it is malformed. The
  * notes file is a plain JSON file in the project, so a hand edit is checked
- * before an agent is told to run the command in it.
+ * before an agent is told to run the command in it: the command must be
+ * exactly the one `check-update` would build for that manager and version,
+ * and, given the project root, the directory must be inside it.
  */
-export function updateRequestOf(value: unknown): UpdateRequest | null {
+export function updateRequestOf(value: unknown, context: { root?: string } = {}): UpdateRequest | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const v = value as Partial<UpdateRequest>;
-  if (!isVersion(v.from) || !isVersion(v.to)) return null;
+  if (!isVersion(v.from) || !isStrictVersion(v.to)) return null;
   if (v.manager !== 'npm' && v.manager !== 'pnpm' && v.manager !== 'yarn') return null;
   if (!plainText(v.command, 500) || !plainText(v.cwd, 4096)) return null;
+  if (!canonicalUpgradeCommands(v.manager, v.to).includes(v.command)) return null;
+  if (!isAbsolute(v.cwd)) return null;
+  if (context.root !== undefined && !isInside(v.cwd, context.root)) return null;
   if (v.changelog !== undefined && !(plainText(v.changelog, 500) && v.changelog.startsWith('https://'))) return null;
   return { from: v.from, to: v.to, command: v.command, cwd: v.cwd, manager: v.manager,
     ...(v.changelog !== undefined ? { changelog: v.changelog } : {}) };

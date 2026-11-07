@@ -15,7 +15,7 @@ const CACHE_FILE = join(tmpdir(), `isotone-update-${process.getuid?.() ?? 'user'
 type Manager = 'npm' | 'pnpm' | 'yarn';
 export type { UpdateInfo, UpdateRequest } from './core/update';
 export { changelogUrl, compareVersions, updateRequestOf } from './update-request';
-import { compareVersions, parseVersion } from './update-request';
+import { compareVersions, parseVersion, upgradeCommand } from './update-request';
 
 function manifest(directory: string): Record<string, unknown> | null {
   try {
@@ -75,16 +75,18 @@ export function upgradePlan(cwd: string, latest: string, override?: Manager): Pi
   const optional = project.json?.optionalDependencies as Record<string, unknown> | undefined;
   const peers = project.json?.peerDependencies as Record<string, unknown> | undefined;
   if (optional?.[packageName] || peers?.[packageName]) return { upgrade: null, message: 'Review this optional/peer dependency manually with your package manager.' };
-  const dev = production?.[packageName] ? '' : ' -D';
-  let workspace = manager === 'pnpm' && existsSync(join(project.directory, 'pnpm-workspace.yaml')) ? ' -w' : '';
+  const dev = !production?.[packageName];
+  let workspace = manager === 'pnpm' && existsSync(join(project.directory, 'pnpm-workspace.yaml'));
   if (manager === 'yarn' && project.json?.workspaces) {
     const declared = project.json.packageManager;
     if (typeof declared !== 'string' || !/^yarn@\d+\./.test(declared)) return { upgrade: null, message: 'Declare the Yarn version in packageManager before updating a workspace-root dependency; Yarn Classic and modern Yarn use different root flags.' };
-    if (declared.startsWith('yarn@1.')) workspace = ' -W';
+    workspace = declared.startsWith('yarn@1.');
   }
-  const command = manager === 'npm'
-    ? `npm install${dev} --save-exact ${packageName}@${latest}`
-    : `${manager} add${dev}${workspace} --exact ${packageName}@${latest}`;
+  // One builder for the suggestion and for checking a stored update note.
+  let command: string;
+  try { command = upgradeCommand(manager, latest, { dev, workspace }); } catch {
+    return { upgrade: null, message: 'This release has a version the upgrade command does not name. Upgrade with your project’s package manager.' };
+  }
   return { upgrade: { manager, command, cwd: project.directory } };
 }
 

@@ -32,6 +32,8 @@ export function useVariantsSource(source: VariantsSource | undefined) {
 
 const NO_PENDING_ACTIONS: VariantAction[] = [];
 
+const DEFAULT_EMPTY_TEXT = 'No variants on this page yet. Ask your agent to create variants of any design and they will appear here.';
+
 export function VariantsView({
   source,
   showTitle = true,
@@ -41,6 +43,7 @@ export function VariantsView({
   onSaved,
   onManage,
   pendingActions = NO_PENDING_ACTIONS,
+  emptyText = DEFAULT_EMPTY_TEXT,
 }: {
   source: VariantsSource;
   showTitle?: boolean;
@@ -50,6 +53,8 @@ export function VariantsView({
   onSaved?: () => void;
   onManage?: (action: VariantAction, reference: VariantReference) => Promise<void>;
   pendingActions?: VariantAction[];
+  /** What the list says when this page has no selectors. */
+  emptyText?: string;
 }) {
   const revision = useVariantsSource(source);
   useEffect(() => {
@@ -351,7 +356,7 @@ export function VariantsView({
       <div className="isotone-vars-body" ref={node => { bodyRef.current = node; node?.toggleAttribute('inert', menuOpen); }}>
         {sourceError && <p className="isotone-danger" role="alert">{sourceError}</p>}
         {shown.length === 0 && (
-          <p className="isotone-empty">No variants on this page yet. Ask your agent to create variants of any design and they will appear here.</p>
+          <p className="isotone-empty">{emptyText}</p>
         )}
         {sections.map(section => section.name === null
           ? section.axes.map(renderAxis)
@@ -415,10 +420,15 @@ export function VariantsView({
                   const pending = requested({ axisId: menu.id, action: 'remove-option', optionId: option.id });
                   return (
                   <div className="isotone-option-row" key={option.id} data-option-id={option.id} data-requested={pending || undefined}>
-                    <span>
-                      {option.label}
-                      {option.isDefault && <small>Default</small>}
-                      {pending && <small>Removal requested</small>}
+                    {/* Only the label truncates; its tags sit beside it and always show in full. */}
+                    <span className="isotone-option-name">
+                      <span className="isotone-option-label">{option.label}</span>
+                      {(option.isDefault || pending) && (
+                        <span className="isotone-option-tags">
+                          {option.isDefault && <small>Default</small>}
+                          {pending && <small>Removal requested</small>}
+                        </span>
+                      )}
                     </span>
                     {onFeedback && (
                       <button

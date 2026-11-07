@@ -29,6 +29,7 @@ import { VARIANTS_ENDPOINT } from '../core/variants';
 import { readKnobs } from '../variants-store';
 
 import { readBundle } from '../standalone/bundle';
+import { serveMountOptions } from './mount-config';
 import { guardedScriptTag } from './tag';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../update';
 import { autoUpdateNote, updateResponse } from '../update-note';
@@ -99,19 +100,8 @@ function cors(req: IncomingMessage, res: ServerResponse): void {
 }
 
 /** The bundle plus the mount call, with the config the server itself knows. */
-function bundleWithMount(origin: string, opts: ServeIterationOptions): string {
-  const config = JSON.stringify({
-    endpoint: `${origin}${NOTES_ENDPOINT}`,
-    // Knobs only: file variants need a bundler to swap modules, which a
-    // script tag on another dev server does not have.
-    variants: 'overlay',
-    variantsEndpoint: `${origin}${VARIANTS_ENDPOINT}`,
-    updateEndpoint: `${origin}${UPDATE_ENDPOINT}`,
-    blastEndpoint: `${origin}${BLAST.endpoint}`,
-    key: opts.key ?? '',
-    rule: opts.rule ?? {},
-    theme: opts.theme,
-  });
+function bundleWithMount(origin: string, opts: ServeIterationOptions, projectRoot: string): string {
+  const config = JSON.stringify({ ...serveMountOptions(origin, projectRoot, opts), blastEndpoint: `${origin}${BLAST.endpoint}` });
   return `${readBundle()}\n;window.__isotone&&window.__isotone.mount(${config});\n`;
 }
 
@@ -268,7 +258,7 @@ export function serveIteration(
     if (path === BUNDLE_PATH && method === 'GET') {
       let body: string;
       try {
-        body = bundleWithMount(origin, opts);
+        body = bundleWithMount(origin, opts, projectRoot);
       } catch (err) {
         res.statusCode = 500;
         res.setHeader('content-type', 'text/plain; charset=utf-8');

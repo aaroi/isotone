@@ -53,6 +53,8 @@ export interface IterationPanelProps {
   rule?: RouteGateOptions;
   getPayload?: () => unknown;
   variants?: VariantsSource;
+  /** What the Variants list says on a page without selectors. */
+  variantsEmptyText?: string;
   /** Initial surface. Kept for compatibility; surfaces can now open together. */
   defaultTab?: 'variants' | 'notes';
   /** Default: Cmd/Ctrl+Shift+Period. false disables the shortcut. */
@@ -155,6 +157,7 @@ export function IterationPanel({
   rule,
   getPayload,
   variants,
+  variantsEmptyText,
   defaultTab = 'notes',
   shortcut = DEFAULT_SHORTCUT,
 }: IterationPanelProps) {
@@ -1013,6 +1016,7 @@ export function IterationPanel({
             onSaved={loadNotes}
             onManage={notesAvailable ? queueRemoval : undefined}
             pendingActions={pendingActions}
+            emptyText={variantsEmptyText}
           />
         </section>
       );
@@ -1243,15 +1247,24 @@ export function IterationPanel({
                 data-motion-key={note.id}
                 className={`isotone-note${editing?.id === note.id ? ' isotone-note-editing' : ''}`}
               >
-                <button
-                  type="button"
-                  className="isotone-note-hit"
-                  aria-current={editing?.id === note.id ? true : undefined}
-                  onClick={() => beginEdit(note)}
-                >
-                  {working.has(note.id) && <span className="isotone-working" ref={dotPulse} role="img" aria-label="An agent is working on this" title="An agent is working on this" />}
-                  <NoteSummary note={note} page={note.route !== route && !note.update ? note.route : undefined} />
-                </button>
+                {note.update ? (
+                  // Isotone writes an update note's text from its request, so
+                  // there is nothing to edit; its corner action cancels it.
+                  <div className="isotone-note-hit" data-static="">
+                    {working.has(note.id) && <span className="isotone-working" ref={dotPulse} role="img" aria-label="An agent is working on this" title="An agent is working on this" />}
+                    <NoteSummary note={note} />
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="isotone-note-hit"
+                    aria-current={editing?.id === note.id ? true : undefined}
+                    onClick={() => beginEdit(note)}
+                  >
+                    {working.has(note.id) && <span className="isotone-working" ref={dotPulse} role="img" aria-label="An agent is working on this" title="An agent is working on this" />}
+                    <NoteSummary note={note} page={note.route !== route ? note.route : undefined} />
+                  </button>
+                )}
                 <button
                   type="button"
                   className="isotone-x isotone-icon"

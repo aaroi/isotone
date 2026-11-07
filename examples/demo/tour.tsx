@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Copy, X } from 'lucide-react';
 import { AGENT_PROMPT, SETUP_COMMANDS } from './agent-prompt';
+import { prefersTouch } from '../../src/react/viewport';
 
 /**
  * A short guided tour for first-time visitors. It never blocks the page: each
@@ -46,9 +47,19 @@ function rememberTour() {
 }
 
 const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-// Touch screens get no keyboard shortcuts or keys in the copy.
-const touch = matchMedia('(pointer: coarse)').matches;
-const press = touch ? 'Tap' : 'Click';
+/**
+ * Touch gets no keyboard shortcuts or keys in the copy. Same rule as the panel:
+ * a first guess from the media query, then whichever pointer was used last.
+ */
+function useTouch() {
+  const [touch, setTouch] = useState(prefersTouch);
+  useEffect(() => {
+    const onPointer = (event: PointerEvent) => { if (event.pointerType) setTouch(event.pointerType === 'touch'); };
+    window.addEventListener('pointerdown', onPointer, true);
+    return () => window.removeEventListener('pointerdown', onPointer, true);
+  }, []);
+  return touch;
+}
 /** On a phone the open panel covers most of the page. */
 const narrow = () => matchMedia('(max-width: 640px)').matches;
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -81,6 +92,7 @@ export function Tour({ onClose, subscribeVariants }: {
   const [switched, setSwitched] = useState(false);
   const [agent, setAgent] = useState<AgentState>('waiting');
   const note = useRef<string | null>(null);
+  const touch = useTouch();
 
   const close = useCallback(() => { rememberTour(); onClose(); }, [onClose]);
 
@@ -138,7 +150,7 @@ export function Tour({ onClose, subscribeVariants }: {
     else close();
   };
 
-  const content = stepContent(step, panel, switched, agent);
+  const content = stepContent(step, panel, switched, agent, touch);
   return <TourCard
     step={step}
     layout={`${panel.variants}-${panel.notes}`}
@@ -190,9 +202,10 @@ function Status({ done, children }: { done: boolean; children: ReactNode }) {
 const one = (selector: string): Highlight => ({ key: selector, find: () => [inPanel(selector)].filter(e => e !== null) });
 
 /** What each step says and highlights, given what the visitor has done so far. */
-function stepContent(step: Step, panel: PanelState, switched: boolean, agent: AgentState): {
+function stepContent(step: Step, panel: PanelState, switched: boolean, agent: AgentState, touch: boolean): {
   title: string; body: ReactNode; highlight: Highlight | null; ready?: boolean;
 } {
+  const press = touch ? 'Tap' : 'Click';
   // The pill behind the button: it stays visible when hovering swaps the button for the tools.
   const fab = one('.isotone-rail-track');
   const sendHint = touch ? <>tap the arrow to send it</> : <>press <Keys keys={['↵']} /> to send it</>;
@@ -300,7 +313,9 @@ function useCopy(text: string): [boolean, () => void] {
 function Prompt() {
   const [copied, copy] = useCopy(AGENT_PROMPT);
   return <div className="tour-prompt">
-    <p>{AGENT_PROMPT}</p>
+    {/* Each `command` stays on one line: a phone would otherwise break `--yes` after its dashes. */}
+    <p>{AGENT_PROMPT.split(/(`[^`]+`)/).map(part =>
+      part.startsWith('`') ? <span key={part} className="tour-token">{part}</span> : part)}</p>
     <button type="button" className="tour-button tour-primary" onMouseDown={keepFocus} onClick={copy}>
       {copied ? <Check size={13} /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy prompt'}
     </button>

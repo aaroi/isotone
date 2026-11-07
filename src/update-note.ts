@@ -10,24 +10,24 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
-import type { UpdateInfo, UpdateRequest } from './core/update';
+import { updateNoteText, type UpdateInfo, type UpdateRequest } from './core/update';
 import { withFileLock } from './file-store';
 import { readNotes, writeNotes, type NotesResponse } from './store';
-import { changelogUrl, compareVersions, updateRequestOf } from './update-request';
+import { changelogUrl, compareVersions, notesProjectRoot, updateRequestOf } from './update-request';
 
-/** The note's readable text. */
-export function updateNoteText(update: Pick<UpdateRequest, 'from' | 'to'>): string {
-  return `Update Isotone ${update.from} → ${update.to}`;
-}
+export { updateNoteText } from './core/update';
 
-/** The request a snapshot supports, or null when there is nothing to run. */
-export function updateRequestFrom(info: UpdateInfo): UpdateRequest | null {
+/**
+ * The request a snapshot supports, or null when there is nothing to run. With
+ * a notes file, its directory must also lie inside that file's project.
+ */
+export function updateRequestFrom(info: UpdateInfo, file?: string): UpdateRequest | null {
   if (info.status !== 'available' || !info.latestVersion || !info.upgrade) return null;
   return updateRequestOf({
     from: info.currentVersion, to: info.latestVersion,
     command: info.upgrade.command, cwd: info.upgrade.cwd, manager: info.upgrade.manager,
     changelog: changelogUrl(info.latestVersion),
-  });
+  }, file === undefined ? {} : { root: notesProjectRoot(file) });
 }
 
 const MAX_ROUTE = 2000;
@@ -37,13 +37,14 @@ const MAX_ROUTE = 2000;
  * and whether it is new; null when the snapshot has no update to request.
  */
 export function requestUpdateNote(file: string, info: UpdateInfo, route = '/'): { id: string; created: boolean } | null {
-  const update = updateRequestFrom(info);
+  const update = updateRequestFrom(info, file);
   if (!update) return null;
   const where = route.startsWith('/') && route.length <= MAX_ROUTE ? route : '/';
+  const root = notesProjectRoot(file);
   return withFileLock(file, () => {
     const notes = readNotes(file);
     const open = notes
-      .filter((note) => !note.done && updateRequestOf(note.update))
+      .filter((note) => !note.done && updateRequestOf(note.update, { root }))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     const current = open[0];
     if (!current) {
@@ -55,12 +56,13 @@ export function requestUpdateNote(file: string, info: UpdateInfo, route = '/'): 
       writeNotes(file, notes);
       return { id, created: true };
     }
-    const existing = updateRequestOf(current.update) as UpdateRequest;
+    const existing = updateRequestOf(current.update, { root }) as UpdateRequest;
     let changed = open.length > 1;
     // A newer release, or a new command for the same one, replaces the request.
     // An older snapshot (another server still on yesterday's check) leaves it.
     if (compareVersions(existing.to, update.to) <= 0 && JSON.stringify(existing) !== JSON.stringify(update)) {
-      if (current.feedback === updateNoteText(existing)) current.feedback = updateNoteText(update);
+      // The text is the server's, never the reviewer's, so it follows the request.
+      current.feedback = updateNoteText(update);
       current.update = update;
       delete current.workingAt;
       changed = true;
@@ -108,7 +110,7 @@ async function readNoted(file: string): Promise<Record<string, string>> {
  * temporary directory as the daily check.
  */
 export async function autoUpdateNote(file: string, info: UpdateInfo, options: { stateFile?: string } = {}): Promise<string | null> {
-  const update = updateRequestFrom(info);
+  const update = updateRequestFrom(info, file);
   if (!update) return null;
   const stateFile = options.stateFile ?? NOTED_FILE;
   const key = resolve(file);

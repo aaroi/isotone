@@ -496,7 +496,7 @@ function Demo() {
   return <>
     {!screenshot && <header className="demo-bar">
       <a href={hosted ? 'https://github.com/aaroi/isotone' : '/'} className="brand"><Gem size={15} strokeWidth={1.75} />Isotone</a>
-      <span className="demo-bar-note">{stress ? 'Stress test · 500 selectors and 500 notes' : 'Demo. The page below stands in for your app.'}</span>
+      <span className="demo-bar-note"><span>{stress ? 'Stress test · 500 selectors and 500 notes' : 'Demo. The page below stands in for your app.'}</span></span>
       <div className="demo-bar-actions">
         {!hosted && <>
           <label className="demo-select">Panel <select value={panelTheme} onChange={event => setPanelTheme(event.target.value as IterationTheme)}>

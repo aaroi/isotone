@@ -59,9 +59,11 @@ describe('the browser bundle', () => {
 });
 
 describe('knobs', () => {
-  it('serves the project’s knobs and hands the panel their endpoint', async () => {
-    const js = await (await fetch(served.bundleUrl)).text();
-    expect(js.includes(`"variantsEndpoint":"${served.url}${VARIANTS_ENDPOINT}"`), 'passes the knobs endpoint').toBe(true);
+  it('serves the project’s knobs and hands the panel their endpoint once there are some', async () => {
+    // Without knobs there is nothing serve can put in a Variants tool.
+    const before = await (await fetch(served.bundleUrl)).text();
+    expect(before.includes('"variantsEndpoint"'), 'no knobs endpoint without knobs').toBe(false);
+    expect(before.includes('"variants":"knobs"'), 'no Variants tool without knobs').toBe(false);
 
     const empty = await fetch(`${served.url}${VARIANTS_ENDPOINT}`, { headers: { origin: 'http://localhost:3000' } });
     expect(empty.status).toBe(200);
@@ -72,6 +74,10 @@ describe('knobs', () => {
     const radius = { kind: 'range', id: 'card-radius', label: 'Card radius', min: 0, max: 24, step: 1, defaultValue: 12, unit: 'px' };
     writeFileSync(join(dir, '.isotone', 'knobs.json'), JSON.stringify([radius, { id: 'broken' }]));
     expect(await (await fetch(`${served.url}${VARIANTS_ENDPOINT}`)).json()).toEqual({ variants: [], active: [], knobs: [radius] });
+
+    // The bundle is not cached, so the next page load gets the tool.
+    const after = await (await fetch(served.bundleUrl)).text();
+    expect(after.includes(`"variants":"knobs","variantsEndpoint":"${served.url}${VARIANTS_ENDPOINT}"`), 'passes the knobs endpoint').toBe(true);
   });
 
   it('refuses file-variant activation, which needs a bundler', async () => {

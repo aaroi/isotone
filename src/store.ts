@@ -11,7 +11,8 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import type { IterationElement, NoteContext, NoteReply, VariantReference, VariantRemoval } from './core/index';
 import { MAX_FEEDBACK_LENGTH } from './core/limits';
 import { withFileLock, writeJson } from './file-store';
-import { updateRequestOf } from './update-request';
+import { updateNoteText } from './core/update';
+import { notesProjectRoot, updateRequestOf } from './update-request';
 
 export interface StoredNote extends NoteContext {
   id: string;
@@ -176,7 +177,8 @@ export function hasExcludePattern(exclude: string, pattern: string): boolean {
     .some((line) => line.trim() === pattern || line.trim() === bare);
 }
 
-function toItem(n: StoredNote) {
+function toItem(n: StoredNote, root: string) {
+  const update = updateRequestOf(n.update, { root });
   const item: {
     id: string;
     route: string;
@@ -190,7 +192,8 @@ function toItem(n: StoredNote) {
   } = {
     id: n.id,
     route: n.route,
-    feedback: n.feedback,
+    // An update note says what the server's request says, whatever the file holds.
+    feedback: update ? updateNoteText(update) : n.feedback,
     element: n.element,
     done: n.done,
     createdAt: n.createdAt,
@@ -203,8 +206,9 @@ function toItem(n: StoredNote) {
   return { ...item, ...(n.elements !== undefined ? { elements: n.elements } : {}),
     ...(n.variant !== undefined ? { variant: n.variant } : {}),
     ...(n.variantAction !== undefined ? { variantAction: n.variantAction } : {}),
-    // Only the server writes an update request; a malformed one is not shown.
-    ...(updateRequestOf(n.update) ? { update: updateRequestOf(n.update) } : {}),
+    // Only the server writes an update request; a malformed one, or one whose
+    // directory is outside the project, is not shown.
+    ...(update ? { update } : {}),
     // Only the CLI writes a reply; a hand-edited, malformed one is not shown.
     ...(replyOf(n.reply) ? { reply: replyOf(n.reply) } : {}) };
 }
@@ -259,6 +263,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     const rev = polled ? notesRevision(file) : '';
     if (polled && rev === String(query.rev)) return json(200, { rev, unchanged: true });
     const route = String(query.route ?? '');
+    const root = notesProjectRoot(file);
     const all = query.all !== undefined && String(query.all) !== '' && String(query.all) !== '0';
     const notes = polled ? readNotesAt(file, rev) : readNotes(file);
     // `?all=1` lists every note on every route, done ones included. `?route=`
@@ -272,7 +277,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
           : notes.filter((n) => !n.done)
     )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .map(toItem);
+      .map((note) => toItem(note, root));
     return json(200, polled ? { rev, notes: rows } : rows);
   }
 
@@ -297,7 +302,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
       createdAt?: unknown;
     };
     // A body's `update` is never read: only the update endpoint writes one,
-    // from the server's own check. Editing an update note keeps its request.
+    // from the server's own check, and an update note cannot be edited.
     // Nor is `reply`: only the agent writes one, with `isotone --reply`.
     const { id, route, feedback, element, payload, viewport } = body;
     if (id !== undefined && id !== null && (typeof id !== 'string' || !id || id.length > 200)) {
@@ -341,6 +346,9 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     const updateId = previousDefaults?.id ?? id;
     if (typeof updateId === 'string' && updateId !== '') {
       const existing = notes.find((n) => n.id === updateId && n.route === route);
+      if (existing?.update !== undefined) {
+        return json(409, { error: 'An update note is written by Isotone and cannot be edited. Delete it to cancel the update.' });
+      }
       if (existing) {
         if (previousDefaults) {
           delete existing.elements;

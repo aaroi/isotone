@@ -18,6 +18,7 @@ import {
   seenOpenNotes, unseenNotes, updateSession,
 } from '../blast';
 import { notesRevision, readNotes, type StoredNote } from '../store';
+import { notesProjectRoot } from '../update-request';
 import { noteRecord, printNotes } from './run';
 import { type CliIO, errOut, has, out, parseArgs, valueFor } from './util';
 
@@ -166,12 +167,12 @@ export async function runBlast(args: string[], io: CliIO, timingOverrides: Parti
   if (outcome.type === 'batch') {
     if (json) {
       out(io, JSON.stringify({
-        type: 'batch', notes: outcome.notes.map(noteRecord), timeLeft: timeLeft(left), endsAt: outcome.session.endsAt, next,
+        type: 'batch', notes: outcome.notes.map((n) => noteRecord(n, notesProjectRoot(notesFile))), timeLeft: timeLeft(left), endsAt: outcome.session.endsAt, next,
         ...(started ? { started: true, guardrails: BLAST_GUARDRAILS } : {}), ...(notice ? { notice } : {}),
       }, null, 2));
     } else {
       out(io, `${BLAST.name} · ${outcome.notes.length} new note${outcome.notes.length === 1 ? '' : 's'} · ${timeLeft(left)}`);
-      printNotes(io, outcome.notes);
+      printNotes(io, outcome.notes, notesProjectRoot(notesFile));
       out(io);
       out(io, `Act on these one at a time, then run \`${next}\` again.`);
     }
@@ -203,7 +204,7 @@ async function stream(io: CliIO, notesFile: string, file: string, timing: BlastT
       return ENDED_EXIT;
     }
     if (outcome.type === 'batch') {
-      out(io, JSON.stringify({ type: 'batch', notes: outcome.notes.map(noteRecord), timeLeft: timeLeft(Date.parse(outcome.session.endsAt) - Date.now()), endsAt: outcome.session.endsAt }));
+      out(io, JSON.stringify({ type: 'batch', notes: outcome.notes.map((n) => noteRecord(n, notesProjectRoot(notesFile))), timeLeft: timeLeft(Date.parse(outcome.session.endsAt) - Date.now()), endsAt: outcome.session.endsAt }));
       // Still listening: the panel shows the agent as attached.
       updateSession(file, (s) => ({ session: s && !isEnded(s) ? { ...s, waiting: true, heartbeatAt: new Date().toISOString() } : null, result: undefined }));
     }
