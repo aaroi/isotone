@@ -56,6 +56,11 @@
 - On React 19 apps, a pinned element's note now records its source file and line again (React 19 removed the field Isotone used); the line is mapped through the dev server's source map to the line in your file.
 - Unmounting the panel (for example on a hot reload) no longer removes a `history.pushState`/`replaceState` wrapper that a router or devtool added after Isotone.
 - Pin and hover outlines, and the floating composer, now follow their element when it moves without a scroll (an accordion opening, data reloading), and the hover outline updates while scrolling.
+- Closing the panel with Escape, or everything at once, leaves keyboard focus on the launcher (the pill or a rail button) instead of the page body.
+- The panel treats `/about/`, `/about` and `/about?tab=2` as one page, like `npx isotone <route>`, Blast and variants, so notes, drafts and pending removals are no longer split by a trailing slash or query.
+- Closing an option's actions dialog opened with Shift+F10 or the context-menu key returns focus to the option, where the arrow keys work.
+- On touch screens an option's default dot no longer overlaps its always-visible chevron, and a host stylesheet can no longer paint the panel's text through `-webkit-text-fill-color`.
+- Opening the Variants panel on a page with hundreds of selectors is a little faster.
 
 ### Changed
 
@@ -75,8 +80,9 @@
 - An option's actions chevron is no longer a separate Tab stop; press Shift+F10 or the context-menu key on a focused option to open its actions (a right click and the visible chevron still work).
 - The launcher and the Feedback button now include the note count in their accessible names (for example "Isotone, 3 notes"), so screen readers hear what the badge shows.
 - The automatic theme now ignores text updates on the host page and re-checks the page at most five times a second while it keeps changing, so a ticking clock or an animation no longer costs a layout on every frame. A theme change made only by page mutations can take up to 200 ms to show.
-- Drafts in the feedback box are saved to the browser once typing pauses (about 300 ms), not on every keystroke; leaving the page still saves what is pending.
+- Drafts in the feedback box are saved to the browser once typing pauses (about 300 ms), not on every keystroke; leaving or reloading the page (including Vite's reload after a variant switch) still saves what is pending.
 - `VariantsSource.title` and the `title` option of `createVariantsSource` are removed: the panel never showed them. Delete them from your source if TypeScript reports them.
+- `VariantsView` no longer takes `showTitle` or `onClose`: inside the panel its title and close button were always hidden. Drop these props if you render `VariantsView` yourself.
 
 ## 1.2.4
 
