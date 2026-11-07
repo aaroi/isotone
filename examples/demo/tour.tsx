@@ -312,7 +312,9 @@ function useCopy(text: string): [boolean, () => void] {
 function Prompt() {
   const [copied, copy] = useCopy(AGENT_PROMPT);
   return <div className="tour-prompt">
-    <p>{AGENT_PROMPT}</p>
+    {/* Each `command` stays on one line: a phone would otherwise break `--yes` after its dashes. */}
+    <p>{AGENT_PROMPT.split(/(`[^`]+`)/).map(part =>
+      part.startsWith('`') ? <span key={part} className="tour-token">{part}</span> : part)}</p>
     <button type="button" className="tour-button tour-primary" onMouseDown={keepFocus} onClick={copy}>
       {copied ? <Check size={13} /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy prompt'}
     </button>
