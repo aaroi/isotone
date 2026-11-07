@@ -707,7 +707,6 @@ export function IterationPanel({
               <VariantsView
                 source={variants}
                 active={variantsOpen}
-                onClose={closeVariants}
                 onFeedback={notesAvailable ? feedback : undefined}
                 onSaved={loadNotes}
                 onManage={notesAvailable ? queueRemoval : undefined}

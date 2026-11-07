@@ -61,10 +61,8 @@ const DEFAULT_EMPTY_TEXT = 'No variants on this page yet. Ask your agent to crea
 
 interface VariantsViewProps {
   source: VariantsSource;
-  showTitle?: boolean;
   active?: boolean;
   onFeedback?: (reference: VariantReference) => void;
-  onClose?: () => void;
   onSaved?: () => void;
   onManage?: (action: VariantAction, reference: VariantReference) => Promise<void>;
   pendingActions?: VariantAction[];
@@ -74,10 +72,8 @@ interface VariantsViewProps {
 
 export const VariantsView = memo(function VariantsView({
   source,
-  showTitle = true,
   active = true,
   onFeedback,
-  onClose,
   onSaved,
   onManage,
   pendingActions = NO_PENDING_ACTIONS,
@@ -208,19 +204,13 @@ export const VariantsView = memo(function VariantsView({
 
   return (
     <div className="isotone-vars">
-      <div className="isotone-panel-head">
-        {showTitle && <h2>{source.title ?? 'Variants'}</h2>}
-        <div className="isotone-head-actions">
-          {source.saveDefaults && isDirty(shown, selections) && (
+      {source.saveDefaults && isDirty(shown, selections) && (
+        <div className="isotone-panel-head">
+          <div className="isotone-head-actions">
             <DefaultsBar source={source} changed={changedCount(shown, selections)} onSaved={onSaved} />
-          )}
-          {onClose && (
-            <button type="button" className="isotone-icon" aria-label="Close variants" title="Close variants" onClick={onClose}>
-              <Icon name="close" />
-            </button>
-          )}
+          </div>
         </div>
-      </div>
+      )}
       <div
         className="isotone-vars-body"
         ref={(node) => {
