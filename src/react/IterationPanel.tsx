@@ -238,26 +238,35 @@ export function IterationPanel({
     const ours = !root || active === (root.getRootNode() as ShadowRoot).host || (active !== null && root.contains(active));
     previousFocus.current = active instanceof HTMLElement && active !== document.body && !ours ? active : null;
   }, []);
+  /** After the next commit, focus the launcher: a rail button (this panel's, if given) while the rail shows, else the pill. */
+  const focusLauncher = useCallback(
+    (panel?: 'notes' | 'variants') => {
+      cancelAnimationFrame(focusFrame.current);
+      focusFrame.current = requestAnimationFrame(() => {
+        const selector = panel ? `.isotone-rail-button[aria-controls="${id}-${panel}"]` : '.isotone-rail-button';
+        const button = rootRef.current?.querySelector<HTMLButtonElement>(selector);
+        (button && !button.closest('[inert]') ? button : fabRef.current)?.focus();
+      });
+    },
+    [id],
+  );
   const closeAll = useCallback(() => {
     const inDock = focusInDock();
     cancelAnimationFrame(focusFrame.current);
     update(CLOSED);
     setHovered(false);
-    if (inDock) (previousFocus.current?.isConnected ? previousFocus.current : fabRef.current)?.focus();
-  }, [update, focusInDock]);
+    if (!inDock) return;
+    if (previousFocus.current?.isConnected) previousFocus.current.focus();
+    else focusLauncher();
+  }, [update, focusInDock, focusLauncher]);
   /** Close one panel. Focus inside it goes to its rail button, or the launcher once the rail folds away. */
   const closePanel = useCallback(
     (panel: 'notes' | 'variants') => {
       const inDock = focusInDock();
       update(panel === 'notes' ? { notesOpen: false, picking: false, expanded: false } : { variantsOpen: false, expanded: false });
-      if (!inDock) return;
-      cancelAnimationFrame(focusFrame.current);
-      focusFrame.current = requestAnimationFrame(() => {
-        const button = rootRef.current?.querySelector<HTMLButtonElement>(`.isotone-rail-button[aria-controls="${id}-${panel}"]`);
-        (button && !button.closest('[inert]') ? button : fabRef.current)?.focus();
-      });
+      if (inDock) focusLauncher(panel);
     },
-    [update, focusInDock, id],
+    [update, focusInDock, focusLauncher],
   );
   const closeNotes = useCallback(() => closePanel('notes'), [closePanel]);
   const closeVariants = useCallback(() => closePanel('variants'), [closePanel]);
