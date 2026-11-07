@@ -66,6 +66,7 @@
 - The launcher and the Feedback button now include the note count in their accessible names (for example "Isotone, 3 notes"), so screen readers hear what the badge shows.
 - The automatic theme now ignores text updates on the host page and re-checks the page at most five times a second while it keeps changing, so a ticking clock or an animation no longer costs a layout on every frame. A theme change made only by page mutations can take up to 200 ms to show.
 - Drafts in the feedback box are saved to the browser once typing pauses (about 300 ms), not on every keystroke; leaving the page still saves what is pending.
+- `VariantsSource.title` and the `title` option of `createVariantsSource` are removed: the panel never showed them. Delete them from your source if TypeScript reports them.
 
 ## 1.2.4
 
