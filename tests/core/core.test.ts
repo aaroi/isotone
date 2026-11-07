@@ -48,8 +48,9 @@ describe('isRouteVisible', () => {
   });
 
   it('honors an explicit allow-list (visible) over the default', () => {
-    const rule = { visible: ['/projects', '/sandboxes*'] };
+    const rule = { visible: ['/projects/*', '/sandboxes*'] };
     expect(isRouteVisible('/projects/xyz', rule)).toBe(true);
+    expect(isRouteVisible('/projects/xyz', { visible: ['/projects'] })).toBe(false);
     expect(isRouteVisible('/sandboxes/one', rule)).toBe(true);
     expect(isRouteVisible('/overview', rule)).toBe(false);
   });
@@ -60,8 +61,9 @@ describe('isRouteVisible', () => {
     expect(isRouteVisible('/auth/session', rule)).toBe(false);
   });
 
-  it('supports a catch-all by listing the bare prefix', () => {
-    const rule = { hidden: ['/sandboxes', '/secrets'] };
+  it('hides a page and everything under it with /*', () => {
+    expect(isRouteVisible('/login/reset')).toBe(false);
+    const rule = { hidden: ['/sandboxes/*', '/secrets*'] };
     expect(isRouteVisible('/sandboxes/sb_1', rule)).toBe(false);
     expect(isRouteVisible('/secrets/key_1', rule)).toBe(false);
     expect(isRouteVisible('/projects', rule)).toBe(true);
