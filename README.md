@@ -98,6 +98,21 @@ On Next, `init` prints the same panel as a `next/script` tag behind
 covers route handlers, React embeds, themes and the production guards. Coming
 from the previous package? See the [migration guide](docs/migration.md).
 
+## Blast mode
+
+Once Isotone is set up, you can ask your agent for a Blast session. For the time
+you choose, it keeps picking up each batch of new notes, fixing and closing them,
+without being prompted again. Paste this into your agent:
+
+```text
+Run an Isotone Blast session for 45 minutes: `npx isotone blast --for 45m --new`.
+Follow node_modules/isotone/docs/blast.md until it says the session is over.
+```
+
+Blast has no button in the panel; you start, extend and stop it through your
+agent. Isotone still never runs the agent; it hands your agent the notes.
+[Blast mode](docs/blast.md).
+
 ## Keys
 
 **Enter** sends a note and **Shift + Enter** adds a newline. Click a saved note
@@ -111,9 +126,11 @@ you clicked, and you can start typing right away. Once you're done selecting,
 
 ## Updates
 
-The dev server checks npm for a newer version at most once a day and shows the
-upgrade command in the panel. The check sends no project content and stays quiet
-offline. Set `checkForUpdates: false` to turn it off. [Update details](docs/updates.md).
+The dev server checks npm for a newer version at most once a day. When one is out,
+the panel says so, and **Ask agent to update** files a feedback note your agent
+picks up with the others. The check sends no project content and stays quiet
+offline. Nothing installs by itself. Set `checkForUpdates: false` to turn it off.
+[Update details](docs/updates.md).
 
 ## For maintainers
 

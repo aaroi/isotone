@@ -32,14 +32,16 @@ import { readBundle } from '../standalone/bundle';
 import { serveMountOptions } from './mount-config';
 import { guardedScriptTag } from './tag';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../update';
+import { autoUpdateNote, updateResponse } from '../update-note';
 export { readBundle } from '../standalone/bundle';
 
 export const DEFAULT_PORT = 4123;
 const BUNDLE_PATH = '/isotone.js';
 
 export interface ServeIterationOptions {
-  /** Background npm notice, at most once a day. false disables the check. */
-  checkForUpdates?: boolean;
+  /** Background npm notice, at most once a day. false disables the check;
+   *  'note' also files an update note for your agent once per new version. */
+  checkForUpdates?: boolean | 'note';
   /** Project directory for the suggested update command and for
    *  `.isotone/knobs.json`. Defaults to the notes directory. */
   projectRoot?: string;
@@ -206,6 +208,7 @@ export function serveIteration(
   if (!isLoopback(host)) throw new Error('isotone serve binds only to localhost, 127.0.0.1 or ::1.');
   ensureFileIgnored(file);
   const updates = startUpdateCheck(projectRoot, opts.checkForUpdates !== false);
+  if (opts.checkForUpdates === 'note') void updates.ready.then(() => autoUpdateNote(file, updates.getSnapshot())).catch(() => {});
 
   // The port we were ASKED for is not necessarily the one we got: 0 means "any
   // free port". The panel's endpoint has to be the bound one or the bundle
@@ -229,10 +232,13 @@ export function serveIteration(
     }
 
     if (path === UPDATE_ENDPOINT) {
-      res.setHeader('content-type', 'application/json; charset=utf-8');
-      res.setHeader('cache-control', 'no-store');
-      res.statusCode = method === 'GET' ? 200 : 405;
-      res.end(JSON.stringify(method === 'GET' ? updates.getSnapshot() : { error: 'method not allowed' }));
+      // POST asks for the update note, built from this server's own check.
+      (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined)).then((body) => {
+        const out = updateResponse(file, updates.getSnapshot(), { method, body });
+        res.statusCode = out.status;
+        for (const [key, value] of Object.entries(out.headers)) res.setHeader(key, value);
+        res.end(JSON.stringify(out.body));
+      }).catch((error) => sendFailure(res, error));
       return;
     }
 

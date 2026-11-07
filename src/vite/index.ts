@@ -25,6 +25,7 @@ import type { IterationShortcut } from '../react/IterationPanel';
 import type { IterationTheme } from '../react/theme';
 import { readBundle } from '../standalone/bundle';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../update';
+import { autoUpdateNote, updateResponse } from '../update-note';
 import { checkOrigin, readNodeJson, sendFailure } from '../server/http';
 import { type OverlayVariant, overlayGroups, VARIANTS_ENDPOINT } from '../core/variants';
 import {
@@ -56,8 +57,9 @@ import {
 export interface IterationViteOptions {
   /** Inject the bundled panel. false keeps endpoints and variants for a manual mount. */
   panel?: boolean;
-  /** Background npm notice, at most once a day. false disables the check. */
-  checkForUpdates?: boolean;
+  /** Background npm notice, at most once a day. false disables the check;
+   *  'note' also files an update note for your agent once per new version. */
+  checkForUpdates?: boolean | 'note';
   /** Defaults to auto (page background); system follows the OS preference. */
   theme?: IterationTheme;
   /** Defaults to Cmd/Ctrl+Shift+Period; customize or disable with false. */
@@ -520,12 +522,17 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
 
       const updates = startUpdateCheck(server.config.root, options.checkForUpdates !== false);
       server.httpServer?.once('close', updates.dispose);
+      if (options.checkForUpdates === 'note') {
+        void updates.ready.then(() => autoUpdateNote(file, updates.getSnapshot())).catch(() => {});
+      }
+      // GET reads the cached check; POST asks for the update note, which the
+      // server builds from that check rather than from the request.
       server.middlewares.use(UPDATE_ENDPOINT, (req, res) => {
         if (!guardOrigin(req, res)) return;
-        res.setHeader('content-type', 'application/json; charset=utf-8');
-        res.setHeader('cache-control', 'no-store');
-        res.statusCode = req.method === 'GET' ? 200 : 405;
-        res.end(JSON.stringify(req.method === 'GET' ? updates.getSnapshot() : { error: 'method not allowed' }));
+        const method = req.method ?? '';
+        (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined)).then((body) => {
+          answer(res, () => updateResponse(file, updates.getSnapshot(), { method, body }));
+        }).catch((error) => sendFailure(res, error));
       });
 
       // Notes endpoint → local file.

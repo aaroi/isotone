@@ -163,9 +163,43 @@ function serveNotesInPage(path: string) {
     return reply(201, { id });
   };
 }
+/** `?update-preview=1`: a fictional release. The demo never contacts npm. */
+const updatePreview = !screenshot && params.has('update-preview');
+const updateEndpoint = `/demo-update/${session}`;
+const DEMO_UPDATE = {
+  currentVersion: '1.1.3', latestVersion: '1.2.0', status: 'available',
+  upgrade: { manager: 'pnpm', command: 'pnpm add -D --exact isotone@1.2.0', cwd: '/workspace/example-app' },
+} as const;
+/**
+ * The update endpoint for the hosted build. Like the dev server, it builds the
+ * update note itself and keeps at most one open.
+ */
+function serveUpdateInPage(path: string) {
+  const network = window.fetch.bind(window);
+  window.fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+    if (url.pathname !== path) return network(input, init);
+    const reply = (status: number, body: unknown) =>
+      new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+    if ((init?.method ?? 'GET').toUpperCase() === 'GET') return reply(200, DEMO_UPDATE);
+    const notes = readHostedNotes();
+    const open = notes.find((n) => !n.done && n.update);
+    if (open) return reply(200, { id: open.id, created: false });
+    const { currentVersion: from, latestVersion: to, upgrade } = DEMO_UPDATE;
+    const route = String((JSON.parse(String(init?.body ?? '{}')) as { route?: unknown }).route ?? '/');
+    const id = crypto.randomUUID();
+    writeHostedNotes([...notes, {
+      id, route, feedback: `Update Isotone ${from} → ${to}`, element: null, done: false, doneAt: null,
+      createdAt: new Date().toISOString(),
+      update: { from, to, command: upgrade.command, cwd: upgrade.cwd, manager: upgrade.manager },
+    }]);
+    return reply(201, { id, created: true });
+  };
+}
 if (hosted && !screenshot) {
   try { if (localStorage.getItem(HOSTED_KEY) === null) seedHostedNotes(); } catch { /* No storage. */ }
   serveNotesInPage(endpoint);
+  if (updatePreview) serveUpdateInPage(updateEndpoint);
 }
 /**
  * A pretend coding agent. A moment after a note is sent it marks it as being
@@ -173,18 +207,33 @@ if (hosted && !screenshot) {
  * `--done`. The tour listens to the same events.
  */
 function runPretendAgent() {
+  void clearStaleWorking();
   const network = window.fetch.bind(window);
   window.fetch = async (input, init) => {
     const response = await network(input, init);
     const url = new URL(input instanceof Request ? input.url : String(input), location.href);
-    if (url.pathname !== endpoint || (init?.method ?? 'GET').toUpperCase() !== 'POST' || response.status !== 201) return response;
+    // An update request is a note too: the agent picks it up the same way.
+    if (![endpoint, updateEndpoint].includes(url.pathname) || (init?.method ?? 'GET').toUpperCase() !== 'POST' || response.status !== 201) return response;
     const { id } = await response.clone().json() as { id: string };
-    const feedback = String((JSON.parse(String(init?.body ?? '{}')) as { feedback?: string }).feedback ?? '');
+    const feedback = url.pathname === updateEndpoint ? '[update]'
+      : String((JSON.parse(String(init?.body ?? '{}')) as { feedback?: string }).feedback ?? '');
     window.dispatchEvent(new CustomEvent('demo:note', { detail: { id, action: feedback.startsWith('[') } }));
     setTimeout(() => void agentStep(id, 'working'), 1600);
     setTimeout(() => void agentStep(id, 'done'), 6400);
     return response;
   };
+}
+/**
+ * The pretend agent lives in this page, so a note it was working on when the
+ * page last closed will never be finished. On load, nothing is in progress.
+ */
+async function clearStaleWorking() {
+  if (hosted) {
+    const notes = readHostedNotes();
+    if (notes.some((note) => note.workingAt)) writeHostedNotes(notes.map(({ workingAt: _stale, ...note }) => note));
+    return;
+  }
+  await fetch(`/demo-agent?action=reset&session=${session}`, { method: 'POST' });
 }
 async function agentStep(id: string, state: 'working' | 'done') {
   if (hosted) {
@@ -230,7 +279,7 @@ function Panel({ theme }: { theme: IterationTheme }) {
     };
   }, []);
   useEffect(() => {
-    panel.current?.render(<IterationPanel route={page} theme={theme} updateEndpoint={screenshot || hosted ? undefined : params.has('update-preview') ? '/demo-update' : '/api/iteration/update'}
+    panel.current?.render(<IterationPanel route={page} theme={theme} updateEndpoint={updatePreview ? updateEndpoint : screenshot || hosted ? undefined : '/api/iteration/update'}
       store={{ endpoint, key: `isotone-public-demo-${session}` }}
       variants={source} defaultTab="variants" shortcut={screenshot ? false : undefined} />);
   }, [theme]);
