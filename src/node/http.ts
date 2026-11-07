@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { MAX_BODY_BYTES } from '../core/limits';
+import { LockBusyError } from './fs/lock';
 
 /** The transport-agnostic result of a request — any runtime (Vite
  *  middleware, Next route handler, Bun serve, Vercel) can render it. */
@@ -102,10 +103,12 @@ export async function readWebJson(request: Request): Promise<unknown> {
 }
 
 export function httpFailure(error: unknown): HandlerResponse {
+  // A busy store is temporary: 503 tells the panel to keep the note and retry.
+  const known = error instanceof HttpError ? error : error instanceof LockBusyError ? new HttpError(503, error.message) : null;
   return {
-    status: error instanceof HttpError ? error.status : 500,
-    headers: { 'content-type': 'application/json; charset=utf-8' },
-    body: { error: error instanceof HttpError ? error.message : 'Could not read or write the local feedback store.' },
+    status: known ? known.status : 500,
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+    body: { error: known ? known.message : 'Could not read or write the local feedback store.' },
   };
 }
 

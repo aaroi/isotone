@@ -12,7 +12,7 @@ import { join, resolve } from 'node:path';
 import { updateNoteText, type UpdateInfo, type UpdateRequest } from '../../core/update';
 import { MAX_UPDATE_NOTE_ROUTE, MAX_UPDATE_NOTED_BYTES } from '../../core/limits';
 import { readJsonBounded, writeJsonAtomic } from '../fs/atomic';
-import { withFileLock } from '../fs/lock';
+import { SERVER_LOCK_WAIT_MS, withFileLock } from '../fs/lock';
 import { readNotes, writeNotes } from '../notes/store';
 import { type HandlerResponse, jsonResponse } from '../http';
 import { changelogUrl, compareVersions, notesProjectRoot, updateRequestOf } from './request';
@@ -45,45 +45,50 @@ export function requestUpdateNote(file: string, info: UpdateInfo, route = '/'): 
   if (!update) return null;
   const where = route.startsWith('/') && route.length <= MAX_UPDATE_NOTE_ROUTE ? route : '/';
   const root = notesProjectRoot(file);
-  return withFileLock(file, () => {
-    const notes = readNotes(file);
-    const open = notes
-      .filter((note) => !note.done && updateRequestOf(note.update, { root }))
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    const current = open[0];
-    if (!current) {
-      const id = randomUUID();
-      notes.push({
-        id,
-        route: where,
-        feedback: updateNoteText(update),
-        element: null,
-        done: false,
-        doneAt: null,
-        createdAt: new Date().toISOString(),
-        update,
-      });
-      writeNotes(file, notes);
-      return { id, created: true };
-    }
-    const existing = updateRequestOf(current.update, { root }) as UpdateRequest;
-    let changed = open.length > 1;
-    // A newer release, or a new command for the same one, replaces the request.
-    // An older snapshot (another server still on yesterday's check) leaves it.
-    if (compareVersions(existing.to, update.to) <= 0 && JSON.stringify(existing) !== JSON.stringify(update)) {
-      // The text is the server's, never the reviewer's, so it follows the request.
-      current.feedback = updateNoteText(update);
-      current.update = update;
-      delete current.workingAt;
-      changed = true;
-    }
-    if (changed)
-      writeNotes(
-        file,
-        notes.filter((note) => note === current || !open.includes(note)),
-      );
-    return { id: current.id, created: false };
-  });
+  return withFileLock(
+    file,
+    () => {
+      const notes = readNotes(file);
+      const open = notes
+        .filter((note) => !note.done && updateRequestOf(note.update, { root }))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      const current = open[0];
+      if (!current) {
+        const id = randomUUID();
+        notes.push({
+          id,
+          route: where,
+          feedback: updateNoteText(update),
+          element: null,
+          done: false,
+          doneAt: null,
+          createdAt: new Date().toISOString(),
+          update,
+        });
+        writeNotes(file, notes);
+        return { id, created: true };
+      }
+      const existing = updateRequestOf(current.update, { root }) as UpdateRequest;
+      let changed = open.length > 1;
+      // A newer release, or a new command for the same one, replaces the request.
+      // An older snapshot (another server still on yesterday's check) leaves it.
+      if (compareVersions(existing.to, update.to) <= 0 && JSON.stringify(existing) !== JSON.stringify(update)) {
+        // The text is the server's, never the reviewer's, so it follows the request.
+        current.feedback = updateNoteText(update);
+        current.update = update;
+        delete current.workingAt;
+        changed = true;
+      }
+      if (changed)
+        writeNotes(
+          file,
+          notes.filter((note) => note === current || !open.includes(note)),
+        );
+      return { id: current.id, created: false };
+    },
+    // Only dev servers file update notes.
+    { waitMs: SERVER_LOCK_WAIT_MS },
+  );
 }
 
 /**

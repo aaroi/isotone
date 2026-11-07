@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import type { IterationElement } from '../../core/types';
 import { MAX_FEEDBACK_LENGTH, MAX_SELECTOR, PAYLOAD_MAX } from '../../core/limits';
 import { updateNoteText } from '../../core/update';
-import { withFileLock } from '../fs/lock';
+import { SERVER_LOCK_WAIT_MS, withFileLock } from '../fs/lock';
 import { type HandlerRequest, type HandlerResponse, jsonResponse } from '../http';
 import { notesProjectRoot, updateRequestOf } from '../update/request';
 import { notesRevision, readNotes, replyView, type StoredNote, writeNotes } from './store';
@@ -30,7 +30,9 @@ export type NotesRequest = HandlerRequest;
  */
 export function notesResponse(file: string, req: NotesRequest): NotesResponse {
   if (req.method === 'POST' || req.method === 'DELETE') {
-    return withFileLock(file, () => handleNotesRequest(file, req));
+    // A server must not freeze on someone else's lock: past a short wait it
+    // answers 503 and the panel keeps the note to retry.
+    return withFileLock(file, () => handleNotesRequest(file, req), { waitMs: SERVER_LOCK_WAIT_MS });
   }
   return handleNotesRequest(file, req);
 }
