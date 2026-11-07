@@ -112,7 +112,7 @@ export function injectHtmlResponse(res: ServerResponse, code: string | null, hea
     const cb = args.find((a): a is () => void => typeof a === 'function');
     buffering = false;
     const body = Buffer.concat(chunks).toString('utf8');
-    if (body.includes('<html') && (body.includes('<head') || body.includes('</body>'))) {
+    if (body.includes('<html') && (HEAD_OPEN.test(body) || body.includes('</body>'))) {
       const script = code === null ? '' : `<script type="module" data-isotone-inject>${code}</script>`;
       // Classic, not a module: it runs during parsing, before any module.
       const store = head();
@@ -134,8 +134,11 @@ export function injectHtmlResponse(res: ServerResponse, code: string | null, hea
  * just before `</head>`, then just before `</body>` for a fragment without a
  * head, then appends, matching what `withNativeFetch` does below.
  */
+/** The opening head tag, and not `<header>`. */
+const HEAD_OPEN = /<head(?=[\s/>])[^>]*>/i;
+
 function injectIntoHead(html: string, script: string): string {
-  const head = html.match(/<head[^>]*>/i);
+  const head = html.match(HEAD_OPEN);
   if (head?.index !== undefined) {
     const at = head.index + head[0].length;
     return `${html.slice(0, at)}${script}${html.slice(at)}`;
@@ -165,7 +168,7 @@ function injectIntoHead(html: string, script: string): string {
 export function withNativeFetch(html: string): string {
   if (html.includes('__isotoneFetch')) return html;
   const capture = '<script data-isotone-native>window.__isotoneFetch=window.fetch.bind(window)</script>';
-  const head = html.match(/<head[^>]*>/i);
+  const head = html.match(HEAD_OPEN);
   if (head?.index !== undefined) {
     const at = head.index + head[0].length;
     return `${html.slice(0, at)}${capture}${html.slice(at)}`;

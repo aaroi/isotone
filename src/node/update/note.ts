@@ -6,7 +6,6 @@
  * the agent. At most one update note is open; a newer release updates it.
  */
 import { randomUUID } from 'node:crypto';
-import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { updateNoteText, type UpdateInfo, type UpdateRequest } from '../../core/update';
@@ -15,6 +14,7 @@ import { readJsonBounded, writeJsonAtomic } from '../fs/atomic';
 import { SERVER_LOCK_WAIT_MS, withFileLock } from '../fs/lock';
 import { readNotes, writeNotes } from '../notes/store';
 import { type HandlerResponse, jsonResponse } from '../http';
+import { UPDATE_STATE_DIR } from './check';
 import { changelogUrl, compareVersions, notesProjectRoot, updateRequestOf } from './request';
 
 /**
@@ -107,7 +107,7 @@ export function updateResponse(file: string | null, info: UpdateInfo, req: { met
   return json(result.created ? 201 : 200, result);
 }
 
-const NOTED_FILE = join(tmpdir(), `isotone-update-notes-${process.getuid?.() ?? 'user'}-v1.json`);
+const NOTED_FILE = join(UPDATE_STATE_DIR, 'update-notes-v1.json');
 const NOTED_LIMIT = 100;
 
 async function readNoted(file: string): Promise<Record<string, string>> {
@@ -118,8 +118,8 @@ async function readNoted(file: string): Promise<Record<string, string>> {
 /**
  * `checkForUpdates: 'note'`: create the update note the first time this notes
  * file sees a release. A user who deletes it is not asked again for that
- * version; a later release asks once more. Remembered per user in the same
- * temporary directory as the daily check.
+ * version; a later release asks once more. Remembered in the same per-user
+ * cache directory as the daily check.
  */
 export async function autoUpdateNote(file: string, info: UpdateInfo, options: { stateFile?: string } = {}): Promise<string | null> {
   const update = updateRequestFrom(info, file);

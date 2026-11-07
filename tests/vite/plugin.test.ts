@@ -347,6 +347,10 @@ describe('withNativeFetch', () => {
       /<head lang="en"><script data-isotone-native>/,
     );
     expect(withNativeFetch('<html><body class="a"><p>x</p></body></html>')).toMatch(/<body class="a"><script data-isotone-native>/);
+    // A document without a head tag: the app's <header> is not one.
+    expect(withNativeFetch('<html><body><header class="top">x</header></body></html>')).toMatch(
+      /<body><script data-isotone-native>.*<\/script><header class="top">/,
+    );
   });
 
   it('is idempotent and leaves a document with neither alone', () => {

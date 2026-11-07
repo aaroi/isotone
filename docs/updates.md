@@ -10,7 +10,7 @@ Moving from the previous package name is a separate [migration](migration.md).
 An update check does not replace a dependency with a differently named package.
 
 The Vite plugin and standalone server check the public npm `latest` tag at most
-once per day while their per-user temporary cache is retained. Checks take at
+once per day while their per-user cache (`~/.cache/isotone`, or `$XDG_CACHE_HOME/isotone`) is retained. Checks take at
 most five seconds, do not delay server startup, and fail quietly offline. Failed
 attempts are cached too. CI and tests skip automatic checks. The registry request
 contains the public package name; it sends no notes, routes, project paths,
@@ -100,7 +100,7 @@ With `checkForUpdates: 'note'` (`serveIteration` takes the same value), the dev
 server files the update note by itself the first time it sees a new version,
 once per version for each notes file. If you don't want that version, delete the
 note; it is not filed again until a newer release. The versions already offered
-are remembered in the same per-user temporary directory as the daily check. The
+are remembered in the same per-user cache directory as the daily check. The
 default stays as it is: a notice, with the button.
 
 There is no mode that installs updates silently. Changing dependencies and the

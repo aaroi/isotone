@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, open, rm, stat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
+import { homedir } from 'node:os';
 import { MAX_REGISTRY_BYTES, MAX_UPDATE_CACHE_BYTES } from '../../core/limits';
 import type { PackageManager, UpdateInfo } from '../../core/update';
 import { readJsonBounded, writeJsonAtomic } from '../fs/atomic';
@@ -11,7 +11,10 @@ export const UPDATE_ENDPOINT = '/api/iteration/update';
 const REGISTRY_URL = `https://registry.npmjs.org/${packageName}/latest`;
 const CHECK_TIMEOUT = 5_000;
 const CACHE_TTL = 24 * 60 * 60 * 1000;
-const CACHE_FILE = join(tmpdir(), `isotone-update-${process.getuid?.() ?? 'user'}-v1.json`);
+/** Per-user state for the update check, out of the shared temporary
+ *  directory where another user could plant or hold it. */
+export const UPDATE_STATE_DIR = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'isotone');
+const CACHE_FILE = join(UPDATE_STATE_DIR, 'update-v1.json');
 
 import { compareVersions, parseVersion, upgradeCommand } from './request';
 
@@ -223,7 +226,7 @@ export function startUpdateCheck(
             info = cache.latestVersion ? updateInfo(cache.latestVersion, cwd) : { ...info, status: 'unavailable' };
             return;
           }
-          await mkdir(dirname(file), { recursive: true });
+          await mkdir(dirname(file), { recursive: true, mode: 0o700 });
           try {
             await (await open(`${file}.lock`, 'wx', 0o600)).close();
             locked = true;
