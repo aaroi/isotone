@@ -197,7 +197,7 @@ function stepContent(step: Step, panel: PanelState, switched: boolean, agent: Ag
           : <p>Say you asked your agent for a few ways to lay out the cards. They show up here. {press} one of the highlighted layouts and watch the page.</p>,
         highlight: switched ? null : {
           key: 'layouts',
-          find: () => allInPanel('fieldset[aria-label="Card layout"] .isotone-thumb[aria-pressed="false"]'),
+          find: () => allInPanel('fieldset[aria-label="Cards › Layout"] .isotone-thumb[aria-pressed="false"]'),
         },
         ready: switched,
       };

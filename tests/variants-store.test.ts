@@ -27,6 +27,7 @@ import {
   removeVariantFile,
   resolveOverride,
   setVariantGroup,
+  setVariantSection,
   syncVariant,
   variantDir,
   variantsDir,
@@ -149,6 +150,20 @@ describe('create / add / list', () => {
     }
     createVariant(opts, { id: 'second' });
     expect(listVariants(opts).map((v) => v.id)).toEqual(['first', 'second']);
+  });
+});
+
+describe('sections', () => {
+  it('stores a selector section on the manifest and rejects one that is not text', () => {
+    const { opts } = tempRepo();
+    createVariant(opts, { id: 'logo-b', group: 'logo', section: 'Header' });
+    expect(readVariant(opts, 'logo-b')?.section).toBe('Header');
+    expect(setVariantSection(opts, 'logo-b', '  Top   bar ').section).toBe('Top bar');
+    expect(setVariantSection(opts, 'logo-b', undefined)).not.toHaveProperty('section');
+    expect(() => setVariantSection(opts, 'nope', 'Header')).toThrow('No variant "nope"');
+    const file = join(variantDir(opts, 'logo-b'), 'variant.json');
+    writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), section: 3 }));
+    expect(readVariant(opts, 'logo-b')).toBeNull();
   });
 });
 

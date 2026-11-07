@@ -59,6 +59,13 @@ step, default, and units. Connect every control to a visible app change and
 keep the source default in sync with the panel. The same [variants guide](docs/variants.md)
 shows the supported shapes.
 
+Once a page has more than a few selectors, put each in a section named after the
+part of the page it changes. Prefix the label with the section and a spaced slash,
+`Header > Logo size`, in host axes, `knobs.json` and `--group-label`; or pass
+`variant new <id> --section Header`. `variant section <id> <text>` moves an
+existing selector. A label that needs a spaced slash of its own takes an explicit
+`section` field instead.
+
 ## Changing Isotone itself
 
 For work on this package, use [development guidance](docs/development.md).

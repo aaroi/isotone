@@ -105,6 +105,23 @@ ${APPEARANCE_CSS}
 /* The footer overlaps only the scroller's bottom padding: content fades beneath
    it while scrolling, but the last control remains fully visible at the end. */
 .isotone-axis { flex: none; }
+/* Sections name the part of the page their selectors change. The header sticks to
+   the top of the scroll area while its own selectors pass beneath and fade into the
+   surface; the next section's header pushes it out. At rest its padding occupies
+   the inset or gap above it, so sticking does not move the text. */
+.isotone-section, .isotone-section-body { flex: none; display: flex; flex-direction: column; gap: var(--iso-space); }
+.isotone-section-body[hidden] { display: none; }
+.isotone-vars-body > * + .isotone-section { padding-top: 8px; }
+/* Sticky offsets start inside the scroller's padding; the negative top reaches its edge. */
+.isotone-section-head { position: sticky; top: calc(0px - var(--iso-space)); z-index: 1; margin: calc(0px - var(--iso-space)) calc(0px - var(--iso-space)) -4px; padding: var(--iso-space) var(--iso-space) 0; background: var(--iso-bg); font: inherit; }
+.isotone-section-head::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 8px; background: linear-gradient(var(--iso-bg), transparent); pointer-events: none; }
+.isotone-section-toggle { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: calc(100% + 7px); min-height: 24px; padding: 2px 7px; margin-left: -7px; border-radius: 6px; text-align: left; color: var(--iso-muted); font-size: 11px; font-weight: 600; }
+.isotone-section-toggle > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.isotone-section-toggle > svg, .isotone-section-toggle > small { flex: none; }
+.isotone-section-toggle > small { color: var(--iso-faint); font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.isotone-section[data-collapsed='true'] .isotone-section-toggle > svg { transform: rotate(-90deg); }
+/* Keyboard focus reveal keeps a focused control clear of the sticky header. */
+.isotone-vars-body:has(> .isotone-section) { scroll-padding-top: 44px; }
 .isotone-axis-head { display: flex; align-items: center; justify-content: space-between; min-height: 24px; gap: 8px; margin-bottom: 6px; }
 .isotone-axis-label { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; min-height: 24px; padding: 2px 7px; margin-left: -7px; border-radius: 6px; text-align: left; }
 .isotone-axis-label, .isotone-menu-title > strong { font: inherit; font-weight: 550; }
@@ -247,7 +264,7 @@ ${FEEDBACK_LAYOUT_CSS}
 .isotone-hover { position: fixed; pointer-events: none; border: 1px solid var(--iso-pick-line); background: var(--iso-pick-fill); border-radius: 5px; z-index: 2147483001; }
 .isotone-selected { border: 2px solid var(--iso-pick-line); background: var(--iso-pick-selected-fill); }
 @media (hover: hover) and (pointer: fine) {
-  .isotone-root :where(.isotone-icon:not(.isotone-x), .isotone-menu-action, .isotone-axis-label):not(:disabled):not([aria-pressed='true']):hover { background: var(--iso-hover); box-shadow: var(--iso-hover-shadow); color: var(--iso-fg); }
+  .isotone-root :where(.isotone-icon:not(.isotone-x), .isotone-menu-action, .isotone-axis-label, .isotone-section-toggle):not(:disabled):not([aria-pressed='true']):hover { background: var(--iso-hover); box-shadow: var(--iso-hover-shadow); color: var(--iso-fg); }
   .isotone-note:not(.isotone-note-editing):hover .isotone-note-hit:not(:disabled) { background: var(--iso-hover); box-shadow: var(--iso-hover-shadow); }
   .isotone-rail-button:not(:disabled):hover { color: var(--iso-fg); }
   .isotone-seg:not(:disabled):hover { color: var(--iso-fg); }
