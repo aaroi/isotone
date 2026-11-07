@@ -27,7 +27,7 @@ use the shared selection recipe; pill buttons use Clean Highlight's simpler
 face, fine border and crisp contact shadow. A selected colour swatch
 keeps its represented colour inside that raised frame.
 
-Save as defaults, Send and other raised actions share their normal and hover
+Make default, Send and other raised actions share their normal and hover
 recipes. Do not create a special Save button material, stack several inset
 borders, or use a brightness filter that also washes out the border. Hover must
 remain less prominent than a persistent selection.
@@ -59,8 +59,12 @@ The layout constants live in `styles.ts`. Current anchors are:
 
 The expanded pill is the same material stretched horizontally. Preserve its
 lower surrounding rim, inset and proportions. Panels stay anchored above it;
-opening one must not move the pill or scale the text in another. Save as defaults
-sits at the bottom left of the variants panel and appears only when needed.
+opening one must not move the pill or scale the text in another. The defaults bar
+sits at the bottom of the variants panel and appears only when a pick differs
+from its default. It counts the changed picks and offers Make default, which
+files a request and keeps every alternative; the count briefly reads “Default
+request saved”. Each option and swatch marks its source default with a small
+dot, and a range draws a tick on its track while the thumb is elsewhere.
 
 Slider label spacing accounts for the thumb's inset within its hit area, so its
 visible edge has the same 6px gap below the header as other controls. Range
@@ -88,8 +92,17 @@ no permanent side padding or dark fade in front of them. Editing and selector
 reference tags follow this same rule.
 
 Selector action dialogs show feedback first, then individual choices without
-an “Options” heading, followed by Reset to default, Keep default only, and
-removal last.
+an “Options” heading, followed by Reset to default and removal last. Each
+choice row carries feedback, Keep only this (which makes that choice the
+default and removes the selector) and removal icons. Range selectors have no
+rows, so their dialog keeps a Keep default only action.
+
+The custom colour swatch opens Isotone's own picker, never the browser's
+native popup. It floats in the action dialog's popup material, below its swatch
+when it fits and above it otherwise, and the panel grows to hold it. It has a
+saturation and brightness field, a hue track, a hex field and, where the browser
+offers one, an eyedropper. Changes apply live; Escape or a press elsewhere
+closes it. A custom pick raises the swatch and shows its colour inside the hue ring.
 
 Selector action dialogs have a 260px minimum height and reserve 360px in their
 parent panel when space allows, even for a selector with only one action. The viewport remains the upper
@@ -179,7 +192,7 @@ the composer must not remeasure unchanged selectors or notes.
 | `src/react/icons.tsx` | Icon choices, optical size and stroke |
 | `src/react/NoteSummary.tsx` | Saved feedback/defaults summaries and their shared tag rendering |
 | `src/react/IterationPanel.tsx` | Dock, composer, feedback and element-picking behavior |
-| `src/react/VariantsView.tsx` | Selectors, action dialogs and Save as defaults |
+| `src/react/VariantsView.tsx` | Selectors, action dialogs and the defaults bar |
 | `src/react/theme.ts` | Theme resolution, observation and cleanup |
 | `src/react/motion.ts` | Motion timing and work limits |
 | `src/react/useDockMotion.ts`, `useLayoutMotion.ts` | Measured movement and interruption handling |

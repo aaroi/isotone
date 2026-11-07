@@ -175,8 +175,8 @@ document.addEventListener('isotone:knob', ({ detail }) => {
 ```
 
 The event only fires while the panel is mounted, so keep the committed default in
-the source. Knob values live in the reviewer's browser, not on the server. "Save as
-defaults" files the moved knobs in the same `[set-defaults]` note as the
+the source. Knob values live in the reviewer's browser, not on the server. "Make
+default" files the moved knobs in the same `[set-defaults]` note as the
 variant picks, as `Knobs: Fade starts 40% (fade-from)` with a `knobs`
 payload of `fade-from:40`; the agent writes the number into the source and
 into the knob file's `defaultValue`.

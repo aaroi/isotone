@@ -97,7 +97,7 @@ export type VariantSelections = Record<string, string>;
 
 export interface VariantAction {
   axisId: string;
-  action: 'remove-option' | 'remove-axis' | 'keep-default';
+  action: 'remove-option' | 'remove-axis' | 'keep-default' | 'keep-option';
   optionId?: string;
 }
 
@@ -303,6 +303,14 @@ export function createVariantsSource(init: {
           next = next.map((a) => a.id === axis.id ? { ...axis, options } : a);
           if (options.length === 1) next = next.filter((a) => a.id !== axis.id);
         }
+      } else if (action.action === 'keep-option') {
+        if (axis.kind === 'range') throw new Error('This selector has no options to keep.');
+        const kept = axis.kind === 'color'
+          ? axis.swatches.find(s => s.id === action.optionId)?.value
+          : axis.options.find(o => o.id === action.optionId)?.id;
+        if (kept === undefined) throw new Error('This option is no longer available.');
+        next = next.filter((a) => a.id !== axis.id);
+        picks[axis.id] = kept;
       } else {
         next = next.filter((a) => a.id !== axis.id);
         if (action.action === 'keep-default') picks[axis.id] = axisDefault(axis);

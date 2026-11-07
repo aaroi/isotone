@@ -498,7 +498,7 @@ export const NOTES_ENDPOINT = '/api/iteration/notes';
 function removalOf(value: unknown): VariantRemoval | undefined {
   if (!value || typeof value !== 'object') return;
   const v = value as Partial<VariantRemoval>;
-  if (typeof v.axisId !== 'string' || !v.axisId || v.axisId.length > 200 || !['remove-option', 'remove-axis', 'keep-default'].includes(v.action ?? '')) return;
-  if (v.action === 'remove-option' && (typeof v.optionId !== 'string' || !v.optionId || v.optionId.length > 200)) return;
+  if (typeof v.axisId !== 'string' || !v.axisId || v.axisId.length > 200 || !['remove-option', 'remove-axis', 'keep-default', 'keep-option'].includes(v.action ?? '')) return;
+  if ((v.action === 'remove-option' || v.action === 'keep-option') && (typeof v.optionId !== 'string' || !v.optionId || v.optionId.length > 200)) return;
   return { axisId: v.axisId, action: v.action as VariantRemoval['action'], ...(typeof v.optionId === 'string' ? { optionId: v.optionId.slice(0, 200) } : {}) };
 }

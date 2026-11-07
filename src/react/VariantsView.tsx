@@ -1,5 +1,5 @@
 import { showOverflowTitle } from './tooltips';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { VariantReference } from '../core/index';
 import {
   axisDefault,
@@ -11,8 +11,8 @@ import {
   type VariantsSource,
   visibleAxes,
 } from '../core/variants';
+import { ColorPicker } from './ColorPicker';
 import { Icon } from './icons';
-import { MOTION } from './motion';
 import { useLayoutMotion } from './useLayoutMotion';
 
 export function refreshSource(source: VariantsSource): void {
@@ -66,6 +66,55 @@ export function VariantsView({
   const [menuId, setMenuId] = useState<string | null>(null);
   const menu = shown.find(axis => axis.id === menuId) ?? null;
   const [menuOpen, setMenuOpen] = useState(false);
+  const [colourOpen, setColourOpen] = useState<string | null>(null);
+  const colourPop = useRef<HTMLFieldSetElement>(null);
+  const colourTrigger = useRef<HTMLButtonElement | null>(null);
+  const [colourTop, setColourTop] = useState<number | null>(null);
+  const closeColour = (refocus = true) => {
+    setColourOpen(null);
+    setColourTop(null);
+    if (refocus) requestAnimationFrame(() => colourTrigger.current?.focus());
+  };
+  // Like the action dialog, the custom colour closes on a press anywhere else;
+  // its own button toggles it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: closeColour only touches state and refs.
+  useEffect(() => {
+    if (!colourOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const path = e.composedPath();
+      if (colourPop.current && !path.includes(colourPop.current) && !(colourTrigger.current && path.includes(colourTrigger.current))) closeColour(false);
+    };
+    window.addEventListener('pointerdown', onPointerDown, true);
+    return () => window.removeEventListener('pointerdown', onPointerDown, true);
+  }, [colourOpen]);
+  // Below its button when it fits in the panel, otherwise above it, and it
+  // follows the button while the selectors scroll.
+  useLayoutEffect(() => {
+    const pop = colourPop.current;
+    const button = colourTrigger.current;
+    const parent = pop?.offsetParent as HTMLElement | null;
+    if (!colourOpen || !pop || !button || !parent) return;
+    // A short panel grows to hold the popover, as it does for the action dialog.
+    parent.style.setProperty('--iso-menu-need', `${pop.offsetHeight + 12}px`);
+    const place = () => {
+      const box = parent.getBoundingClientRect();
+      const anchor = button.getBoundingClientRect();
+      const height = pop.offsetHeight;
+      const below = anchor.bottom - box.top + 6;
+      const above = anchor.top - box.top - height - 6;
+      const top = below + height <= parent.clientHeight - 6 || above < 6 ? below : above;
+      setColourTop(Math.max(6, Math.min(top, parent.clientHeight - height - 6)));
+    };
+    place();
+    const body = bodyRef.current;
+    body?.addEventListener('scroll', place, { passive: true });
+    window.addEventListener('resize', place);
+    return () => {
+      body?.removeEventListener('scroll', place);
+      window.removeEventListener('resize', place);
+      parent.style.removeProperty('--iso-menu-need');
+    };
+  }, [colourOpen]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
@@ -192,7 +241,7 @@ export function VariantsView({
         {showTitle && <h2>{source.title ?? 'Variants'}</h2>}
         <div className="isotone-head-actions">
           {source.saveDefaults && isDirty(shown, selections) && (
-            <SaveDefaults source={source} onSaved={onSaved} />
+            <DefaultsBar source={source} changed={changedCount(shown, selections)} onSaved={onSaved} />
           )}
           {onClose && (
             <button
@@ -246,6 +295,10 @@ export function VariantsView({
               )}
             </div>
             {axis.kind === 'range' ? (
+              <div
+                className="isotone-range-wrap"
+                style={{ '--iso-default-at': String((axis.defaultValue - axis.min) / ((axis.max - axis.min) || 1)) } as CSSProperties}
+              >
               <input
                 type="range"
                 className="isotone-range"
@@ -257,33 +310,40 @@ export function VariantsView({
                 value={Number(value(axis))}
                 onChange={(e) => source.setSelection(axis.id, e.target.value)}
               />
+              {Number(value(axis)) !== axis.defaultValue && <i className="isotone-range-tick" aria-hidden="true" />}
+              </div>
             ) : axis.kind === 'color' ? (
               <fieldset className="isotone-swatches" aria-label={axis.label}>
                 {axis.swatches.map((sw) => (
                   <button
                     key={sw.id}
                     type="button"
-                    title={sw.label}
+                    title={sw.value.toLowerCase() === axis.defaultColor.toLowerCase() ? `${sw.label} (default)` : sw.label}
                     aria-label={sw.label}
                     aria-pressed={
                       value(axis).toLowerCase() === sw.value.toLowerCase()
                     }
-                    className="isotone-swatch"
+                    className={`isotone-swatch${sw.value.toLowerCase() === axis.defaultColor.toLowerCase() ? ' isotone-is-default' : ''}`}
                     style={{ backgroundColor: sw.value }}
                     onClick={() => source.setSelection(axis.id, sw.value)}
                   />
                 ))}
-                <label className="isotone-picker" title="Custom colour">
-                  <input
-                    type="color"
-                    aria-label={`${axis.label}: custom colour`}
-                    value={value(axis)}
-                    onChange={(e) =>
-                      source.setSelection(axis.id, e.target.value)
-                    }
-                  />
-                </label>
+                <button
+                  type="button"
+                  className="isotone-picker"
+                  title="Custom colour"
+                  aria-label={`${axis.label}: custom colour`}
+                  aria-expanded={colourOpen === axis.id}
+                  data-custom={!axis.swatches.some((sw) => sw.value.toLowerCase() === value(axis).toLowerCase())}
+                  style={{ '--iso-custom': value(axis) } as CSSProperties}
+                  onClick={(e) => {
+                    colourTrigger.current = e.currentTarget;
+                    if (colourOpen === axis.id) closeColour();
+                    else setColourOpen(axis.id);
+                  }}
+                />
               </fieldset>
+
             ) : (
               <fieldset
                 aria-label={axis.label}
@@ -299,13 +359,14 @@ export function VariantsView({
                     type="button"
                     aria-label={o.label}
                     aria-pressed={value(axis) === o.id}
-                    className={`${thumbnails ? 'isotone-thumb' : 'isotone-seg'}${value(axis) === o.id ? ' isotone-seg-on' : ''}`}
+                    className={`${thumbnails ? 'isotone-thumb' : 'isotone-seg'}${value(axis) === o.id ? ' isotone-seg-on' : ''}${o.id === axis.defaultOption ? ' isotone-is-default' : ''}`}
                     onClick={() => source.setSelection(axis.id, o.id)}
                   >
                     {thumbnails && (
                       <img src={o.image} alt="" />
                     )}
                     <span onPointerOver={showOverflowTitle}>{o.label}</span>
+                    {o.id === axis.defaultOption && <i className="isotone-default-dot" title="Default" aria-hidden="true" />}
                   </button>
                 ))}
               </fieldset>
@@ -315,6 +376,20 @@ export function VariantsView({
           );
         })}
       </div>
+      {(() => {
+        const axis = shown.find((a) => a.id === colourOpen);
+        if (axis?.kind !== 'color') return null;
+        return (
+          <ColorPicker
+            popRef={colourPop}
+            value={value(axis)}
+            label={axis.label}
+            onChange={(hex) => source.setSelection(axis.id, hex)}
+            onClose={() => closeColour()}
+            style={{ top: colourTop ?? 0, visibility: colourTop === null ? 'hidden' : undefined }}
+          />
+        );
+      })()}
       {menu && (
         <div
           className="isotone-axis-menu"
@@ -373,6 +448,25 @@ export function VariantsView({
                         <Icon name="message" />
                       </button>
                     )}
+                    {onManage && (() => {
+                      // The default keeps its own action, so an agent need not change the source default.
+                      const keep: VariantAction = option.isDefault
+                        ? { axisId: menu.id, action: 'keep-default' }
+                        : { axisId: menu.id, action: 'keep-option', optionId: option.id };
+                      const saved = requested(keep);
+                      return (
+                        <button
+                          type="button"
+                          className="isotone-icon"
+                          aria-label={`Keep only ${option.label}`}
+                          disabled={busy || saved}
+                          title={saved ? 'Keep request saved' : 'Keep only this, as the default'}
+                          onClick={() => void manage(keep)}
+                        >
+                          <Icon name="check" />
+                        </button>
+                      );
+                    })()}
                     {onManage && (
                       <button
                         type="button"
@@ -412,7 +506,7 @@ export function VariantsView({
             </button>
             {onManage && (
               <>
-                <button
+                {menu.kind === 'range' && <button
                   type="button"
                   className="isotone-menu-action"
                   disabled={busy || requested({ axisId: menu.id, action: 'keep-default' })}
@@ -422,7 +516,7 @@ export function VariantsView({
                 >
                   <Icon name="check" />
                   {requested({ axisId: menu.id, action: 'keep-default' }) ? 'Default-only request saved' : 'Keep default only'}
-                </button>
+                </button>}
                 <button
                   type="button"
                   className="isotone-menu-action isotone-danger"
@@ -448,70 +542,58 @@ export function VariantsView({
   );
 }
 
-function SaveDefaults({
+/** How many visible selectors differ from their defaults. */
+function changedCount(axes: VariantAxis[], selections: VariantSelections): number {
+  return axes.filter((a) => selections[a.id] !== undefined && selections[a.id] !== axisDefault(a)).length;
+}
+
+/**
+ * The page's changed picks and the request to make them the defaults. The
+ * other alternatives stay; removing one is its own request.
+ */
+function DefaultsBar({
   source,
+  changed,
   onSaved,
 }: {
   source: VariantsSource;
+  changed: number;
   onSaved?: () => void;
 }) {
   const [state, setState] = useState('');
+  const [busy, setBusy] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
-  async function save() {
-    if (state === 'Saving…') return;
-    setState('Saving…');
+  async function run() {
+    if (busy) return;
+    setBusy(true);
+    setState('');
     const selections: VariantSelections = { ...source.getSelections() };
     try {
       await source.saveDefaults?.(selections);
-      setState('Saved for the agent');
+      setState('Default request saved');
       onSaved?.();
     } catch {
       setState('Could not save. Try again.');
+    } finally {
+      setBusy(false);
     }
     clearTimeout(timer.current);
     timer.current = setTimeout(() => setState(''), 3000);
   }
-  // The button itself carries the result for a few seconds: its label crossfades
-  // and its width eases between the two label widths.
-  const label = state && state !== 'Saving…' ? state : 'Save as defaults';
-  const button = useRef<HTMLButtonElement>(null);
-  const text = useRef<HTMLSpanElement>(null);
-  const width = useRef(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only a label change needs a measurement.
-  useLayoutEffect(() => {
-    const node = button.current;
-    if (!node) return;
-    node.style.width = '';
-    const next = node.offsetWidth;
-    const previous = width.current;
-    width.current = next;
-    const instant = node.closest('[data-instant="true"]') ||
-      (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
-    if (!previous || instant || typeof node.animate !== 'function') return;
-    text.current?.animate(
-      [{ opacity: 0, transform: 'translateY(3px)' }, { opacity: 1, transform: 'translateY(0)' }],
-      { duration: MOTION.enter, easing: MOTION.easeOut },
-    );
-    if (Math.abs(previous - next) < 0.5) return;
-    node.animate(
-      [{ width: `${previous}px` }, { width: `${next}px` }],
-      { duration: MOTION.reflow, easing: MOTION.easeOut },
-    );
-  }, [label]);
+  const picks = `${changed} ${changed === 1 ? 'pick' : 'picks'}`;
   return (
-    <div className="isotone-save-row">
+    <div className="isotone-save-row" aria-busy={busy}>
+      <span className="isotone-save-count" role="status">{state || `${picks} changed`}</span>
       <button
-        ref={button}
         type="button"
         className="isotone-save"
-        disabled={state === 'Saving…'}
-        aria-busy={state === 'Saving…'}
-        onClick={() => void save()}
+        disabled={busy}
+        title={`Ask the agent to make ${changed === 1 ? 'this pick' : 'these picks'} the default. Every option stays available.`}
+        onClick={() => void run()}
       >
-        <span className="isotone-save-label" ref={text}>{label}</span>
+        Make default
       </button>
-      <span className="isotone-save-state" role="status">{state}</span>
     </div>
   );
 }
