@@ -55,14 +55,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run publish.yml --ref main
-      # A GITHUB_TOKEN push triggers no workflows, so demo.yml would stay one
-      # commit behind main. Ask for it at the prepared commit; never block a release.
-      - name: Deploy the demo at the prepared commit
-        if: steps.prepare.outputs.committed == 'true'
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run demo.yml --ref main
 
   check:
     if: github.event_name == 'workflow_dispatch'

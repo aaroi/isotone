@@ -37,12 +37,12 @@ separately before changing it or opening the repository.
 3. Inspect `npm pack --dry-run --json`. Expect the built entries, declarations,
    source maps, documentation and licenses. Check that the README preview image
    exists and uses fictional content.
-4. Try the PR's demo preview (linked in a PR comment by the `Demo` workflow),
+4. Try the PR's demo preview (Vercel links it in a PR comment),
    including on a phone, and confirm the demo shows any user-facing change.
 5. Merge the reviewed PR. Monitor `Publish main` until the npm version and
    GitHub Release appear. A green PR check alone does not prove publication.
-   `Demo` then deploys [isotone.vercel.app](https://isotone.vercel.app) from the
-   prepared commit.
+   Vercel then deploys [isotone.vercel.app](https://isotone.vercel.app) from
+   `main`.
 
 The release check job builds and tests the prepared main commit, then creates an
 archive. A separate job downloads that archive and publishes it with provenance.
@@ -52,11 +52,9 @@ on Node 22 and 24.
 
 ## Demo deployment outside the repository
 
-`demo.yml` deploys the hosted demo with the Vercel CLI. It needs the repository
-secrets `VERCEL_TOKEN`, `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`; without them it
-skips with a notice, and npm publication is unaffected. Connecting the
-repository in the Vercel dashboard instead is the alternative; use only one.
-[The development guide](development.md#hosted-demo) has the steps, including
+The hosted demo deploys through the Vercel project's Git connection to this
+repository; npm publication does not depend on it.
+[The development guide](development.md#hosted-demo) covers previews and
 preview protection.
 
 ## npm setup outside the repository

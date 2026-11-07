@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- chore: the hosted demo deploys from `main` and gives each pull request a preview link (`demo.yml`)
+- chore: the hosted demo deploys from `main` and gives each pull request a preview link, through Vercel's Git connection
 - feat: removing an option from a selector's action dialog keeps the dialog open, marks the row "Removal requested" and moves focus to the next option, so several can be removed in a row
 
 ## 1.1.3
