@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.2.2
+
 - feat: custom colours open a picker in the panel's own popup material instead of the browser's native colour dialog
 - feat: Save as defaults becomes Make default, beside a count of the changed picks, and confirms with “Default request saved”
 - feat: the variants panel marks each selector's source default with a dot on its option or swatch and a tick on its range
