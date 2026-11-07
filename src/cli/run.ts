@@ -22,12 +22,13 @@
  */
 import { resolve } from 'node:path';
 
-import { readNotes, replyView, MAX_REPLY_LENGTH, updateNotes, type StoredNote } from '../store';
-import { noteFingerprint, touchSession } from '../blast';
+import { noteFingerprint, readNotes, replyView, updateNotes, type StoredNote } from '../node/notes/store';
+import { MAX_REPLY_LENGTH } from '../core/limits';
+import { touchSession } from '../node/blast';
 import { BLAST } from '../core/blast';
 import { runBlast } from './blast';
 import { updateNoteText } from '../core/update';
-import { notesProjectRoot, updateRequestOf } from '../update-request';
+import { notesProjectRoot, updateRequestOf } from '../node/update/request';
 import { runInit } from './init';
 import { type CliIO, errOut, findNoteByPrefix, has, makeIo, out, parseArgs, valueFor } from './util';
 import { runVariant } from './variant';

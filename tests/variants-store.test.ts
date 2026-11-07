@@ -25,7 +25,7 @@ import {
   variantsResponse,
   writeActive,
   type VariantsStoreOptions,
-} from '../src/variants-store';
+} from '../src/node/variants/store';
 
 const dirs: string[] = [];
 

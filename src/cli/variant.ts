@@ -1,6 +1,6 @@
 /**
  * isotone — `variant` CLI subcommands, over the node store in
- * `variants-store.ts`. Every subcommand is synchronous: the store does no
+ * `src/node/variants`. Every subcommand is synchronous: the store does no
  * I/O beyond the filesystem and `git`, so there is nothing here to await.
  */
 import { existsSync, readFileSync } from 'node:fs';
@@ -8,7 +8,7 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { knobsFor, overlayGroups, splitSectionLabel, variantAppliesTo } from '../core/variants';
 import { isRouteModule, scanExports } from '../vite/exports';
-import { readNotes } from '../store';
+import { readNotes } from '../node/notes/store';
 import {
   addVariantFile,
   createVariant,
@@ -27,7 +27,7 @@ import {
   variantDir,
   writeActive,
   type VariantsStoreOptions,
-} from '../variants-store';
+} from '../node/variants/store';
 import { type CliIO, errOut, extractBoolFlag, extractFlag, findNoteByPrefix, out, printTable } from './util';
 
 export function runVariant(args: string[], io: CliIO): number {

@@ -1,25 +1,25 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import ts from 'typescript';
 import { expect, it } from 'vitest';
-import { writeJson } from '../src/file-store';
-import { createVariant, readVariant, variantDir } from '../src/variants-store';
+import { writeJson } from '../src/node/fs/atomic';
+import { compileSources } from './helpers/compile';
+import { createVariant, readVariant, variantDir } from '../src/node/variants/store';
 
 it('serializes independent writers while readers only see complete JSON', async () => {
   const writesPerWriter = 20;
   const root = mkdtempSync(join(tmpdir(), 'iso-atomic-'));
   const file = join(root, 'counter.json');
-  // Compile this dependency-free helper so the child test also runs on Node
-  // 20, which has no built-in TypeScript loader.
+  // Compile the helpers so the child test also runs on Node 20, which has
+  // no built-in TypeScript loader.
+  const runtime = mkdtempSync(join(tmpdir(), 'iso-atomic-runtime-'));
+  const compiled = compileSources(['node/fs/lock', 'node/fs/atomic'], runtime);
   const helper = join(root, 'file-store.mjs');
   writeFileSync(
     helper,
-    ts.transpileModule(readFileSync(new URL('../src/file-store.ts', import.meta.url), 'utf8'), {
-      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
-    }).outputText,
+    `export { withFileLock } from ${JSON.stringify(compiled['node/fs/lock'])};\nexport { writeJson } from ${JSON.stringify(compiled['node/fs/atomic'])};\n`,
   );
   writeJson(file, []);
   const errors: unknown[] = [];
@@ -70,6 +70,7 @@ it('serializes independent writers while readers only see complete JSON', async 
   } finally {
     clearInterval(reader);
     rmSync(root, { recursive: true, force: true });
+    rmSync(runtime, { recursive: true, force: true });
   }
 });
 
@@ -93,27 +94,7 @@ it('preserves every file when separate agents add to the same variant', async ()
     const runtime = join(root, 'runtime');
     // Run the current sources in child processes without rebuilding the
     // package or requiring a TypeScript loader in the supported Node versions.
-    for (const source of [
-      'variants-store',
-      'store',
-      'file-store',
-      'core/variants',
-      'core/request',
-      'core/browser-storage',
-      'core/id',
-      'core/limits',
-      'core/update',
-      'update-request',
-    ]) {
-      const output = join(runtime, `${source}.mjs`);
-      mkdirSync(dirname(output), { recursive: true });
-      const compiled = ts
-        .transpileModule(readFileSync(new URL(`../src/${source}.ts`, import.meta.url), 'utf8'), {
-          compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
-        })
-        .outputText.replace(/(from\s+['"])(\.[^'"]+)(['"])/g, '$1$2.mjs$3');
-      writeFileSync(output, compiled);
-    }
+    const store = compileSources(['node/variants/store'], runtime)['node/variants/store'];
     createVariant({ root }, { id: 'shared' });
     const files = Array.from({ length: 20 }, (_, index) => `source-${index}.txt`);
     for (const file of files) writeFileSync(join(root, file), `Contents of ${file}`);
@@ -128,7 +109,7 @@ it('preserves every file when separate agents add to the same variant', async ()
                 '--input-type=module',
                 '-e',
                 `
-        import { addVariantFile } from ${JSON.stringify(pathToFileURL(join(runtime, 'variants-store.mjs')).href)};
+        import { addVariantFile } from ${JSON.stringify(store)};
         for (const file of ${JSON.stringify(files.slice(writer * 5, writer * 5 + 5))}) {
           addVariantFile({ root: ${JSON.stringify(root)} }, 'shared', file);
         }

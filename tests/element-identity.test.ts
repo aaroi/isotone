@@ -13,7 +13,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { runCli } from '../src/cli/run';
 import { describeIterationElement, elementAsNode } from '../src/core';
 import { applyKnobValues, knobDelta } from '../src/core/variants';
-import { notesResponse, readNotes } from '../src/store';
+import { notesResponse } from '../src/node/notes/handler';
+import { readNotes } from '../src/node/notes/store';
 
 const dirs: string[] = [];
 afterEach(() => {

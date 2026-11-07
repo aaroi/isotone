@@ -5,9 +5,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { runCli } from '../src/cli/run';
 import type { UpdateInfo } from '../src/core/update';
-import { notesResponse, readNotes, writeNotes, type StoredNote } from '../src/store';
-import { canonicalUpgradeCommands, updateRequestOf } from '../src/update-request';
-import { autoUpdateNote, requestUpdateNote, updateResponse } from '../src/update-note';
+import { notesResponse } from '../src/node/notes/handler';
+import { readNotes, writeNotes, type StoredNote } from '../src/node/notes/store';
+import { canonicalUpgradeCommands, updateRequestOf } from '../src/node/update/request';
+import { autoUpdateNote, requestUpdateNote, updateResponse } from '../src/node/update/note';
 
 const dirs: string[] = [];
 afterEach(() => {

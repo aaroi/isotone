@@ -5,7 +5,9 @@ import { dirname, join, resolve } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ensureDirIgnored, ensureFileIgnored, excludePattern, hasExcludePattern, notesResponse, readNotes, writeNotes } from '../src/store';
+import { ensureDirIgnored, ensureFileIgnored, excludePattern, hasExcludePattern } from '../src/node/fs/git-exclude';
+import { notesResponse } from '../src/node/notes/handler';
+import { readNotes, writeNotes } from '../src/node/notes/store';
 
 const dirs: string[] = [];
 

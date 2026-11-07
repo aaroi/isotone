@@ -10,7 +10,7 @@ import type { Dirent } from 'node:fs';
 import { join } from 'node:path';
 
 import { guardedScriptTag } from '../serve/tag';
-import { DEFAULT_VARIANTS_DIR, KNOBS_FILE } from '../variants-store';
+import { DEFAULT_VARIANTS_DIR, KNOBS_FILE } from '../node/variants/store';
 import { type CliIO, errOut, extractBoolFlag, extractFlag, out, parseArgs } from './util';
 
 type Host = 'vite' | 'next' | 'other';

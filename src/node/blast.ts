@@ -6,14 +6,12 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 
-import { HEARTBEAT_MS, LIVE_HEARTBEAT_MS, BLAST, type BlastState } from './core/blast';
-import { withFileLock, writeJson } from './file-store';
-import { ensureFileIgnored, noteFingerprint, type StoredNote } from './store';
-import { updateRequestOf } from './update-request';
-
-export { BLAST } from './core/blast';
-export { noteFingerprint } from './store';
-export type { BlastState } from './core/blast';
+import { HEARTBEAT_MS, LIVE_HEARTBEAT_MS, BLAST, type BlastState } from '../core/blast';
+import { writeJson } from './fs/atomic';
+import { withFileLock } from './fs/lock';
+import { ensureFileIgnored } from './fs/git-exclude';
+import { noteFingerprint, type StoredNote } from './notes/store';
+import { updateRequestOf } from './update/request';
 
 /** The stored session. `seen` maps each handed-out note to its fingerprint. */
 export interface BlastSession {

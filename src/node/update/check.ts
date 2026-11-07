@@ -1,10 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, rm, stat } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import { randomUUID } from 'node:crypto';
-import type { UpdateInfo } from './core/update';
-import { name as packageName, version as currentVersion } from '../package.json';
+import { MAX_REGISTRY_BYTES, MAX_UPDATE_CACHE_BYTES } from '../../core/limits';
+import type { PackageManager, UpdateInfo } from '../../core/update';
+import { readJsonBounded, writeJsonAtomic } from '../fs/atomic';
+import { name as packageName, version as currentVersion } from '../../../package.json';
 
 export const UPDATE_ENDPOINT = '/api/iteration/update';
 const REGISTRY_URL = `https://registry.npmjs.org/${packageName}/latest`;
@@ -12,10 +13,7 @@ const CHECK_TIMEOUT = 5_000;
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 const CACHE_FILE = join(tmpdir(), `isotone-update-${process.getuid?.() ?? 'user'}-v1.json`);
 
-type Manager = 'npm' | 'pnpm' | 'yarn';
-export type { UpdateInfo, UpdateRequest } from './core/update';
-export { changelogUrl, compareVersions, updateRequestOf } from './update-request';
-import { compareVersions, parseVersion, upgradeCommand } from './update-request';
+import { compareVersions, parseVersion, upgradeCommand } from './request';
 
 function manifest(directory: string): Record<string, unknown> | null {
   try {
@@ -52,14 +50,14 @@ function dependencyOwner(project: ReturnType<typeof findProject>): ReturnType<ty
   }
 }
 
-export function upgradePlan(cwd: string, latest: string, override?: Manager): Pick<UpdateInfo, 'upgrade' | 'message'> {
+export function upgradePlan(cwd: string, latest: string, override?: PackageManager): Pick<UpdateInfo, 'upgrade' | 'message'> {
   parseVersion(latest); // Only a validated version can enter a copied command.
   const project = dependencyOwner(findProject(cwd));
   if (project.json?.name === packageName)
     return { upgrade: null, message: 'This is the source checkout; update its source instead of adding itself as a dependency.' };
   let manager = override;
   let directory = project.directory;
-  const locks = new Set<Manager>();
+  const locks = new Set<PackageManager>();
   while (!manager) {
     const declared = manifest(directory)?.packageManager;
     if (typeof declared === 'string') {
@@ -69,7 +67,7 @@ export function upgradePlan(cwd: string, latest: string, override?: Manager): Pi
           upgrade: null,
           message: 'The declared package manager is not supported by this command. Upgrade with your project’s package manager.',
         };
-      manager = match[1] as Manager;
+      manager = match[1] as PackageManager;
       break;
     }
     if (['bun.lock', 'bun.lockb'].some((file) => existsSync(join(directory, file))))
@@ -132,7 +130,7 @@ export async function fetchLatest(fetcher: typeof fetch = fetch, signal?: AbortS
         const { value, done } = await reader.read();
         if (done) break;
         bytes += value.byteLength;
-        if (bytes > 64 * 1024) {
+        if (bytes > MAX_REGISTRY_BYTES) {
           await reader.cancel();
           throw new Error('Registry response was too large.');
         }
@@ -151,7 +149,7 @@ export async function fetchLatest(fetcher: typeof fetch = fetch, signal?: AbortS
   }
 }
 
-export function updateInfo(latest: string, cwd: string, manager?: Manager): UpdateInfo {
+export function updateInfo(latest: string, cwd: string, manager?: PackageManager): UpdateInfo {
   const order = compareVersions(latest, currentVersion);
   return {
     currentVersion,
@@ -161,7 +159,12 @@ export function updateInfo(latest: string, cwd: string, manager?: Manager): Upda
   };
 }
 
-export async function checkUpdate(cwd: string, manager?: Manager, fetcher?: typeof fetch, signal?: AbortSignal): Promise<UpdateInfo> {
+export async function checkUpdate(
+  cwd: string,
+  manager?: PackageManager,
+  fetcher?: typeof fetch,
+  signal?: AbortSignal,
+): Promise<UpdateInfo> {
   try {
     return updateInfo(await fetchLatest(fetcher, signal), cwd, manager);
   } catch {
@@ -180,9 +183,8 @@ interface CachedCheck {
   latestVersion: string | null;
 }
 async function readCache(file: string): Promise<CachedCheck | null> {
+  const data = (await readJsonBounded(file, MAX_UPDATE_CACHE_BYTES)) as CachedCheck;
   try {
-    if ((await stat(file)).size > 4096) return null;
-    const data = JSON.parse(await readFile(file, 'utf8'));
     if (!Number.isFinite(data.checkedAt) || data.checkedAt > Date.now() || Date.now() - data.checkedAt >= CACHE_TTL) return null;
     if (data.latestVersion !== null) parseVersion(data.latestVersion);
     return data;
@@ -192,13 +194,7 @@ async function readCache(file: string): Promise<CachedCheck | null> {
 }
 
 async function saveCache(file: string, latestVersion: string | null): Promise<void> {
-  const temporary = `${file}.${randomUUID()}.tmp`;
-  try {
-    await writeFile(temporary, JSON.stringify({ checkedAt: Date.now(), latestVersion }), { mode: 0o600, flag: 'wx' });
-    await rename(temporary, file);
-  } finally {
-    await rm(temporary, { force: true });
-  }
+  await writeJsonAtomic(file, { checkedAt: Date.now(), latestVersion });
 }
 
 /** One bounded request a day, including failed attempts, shared across dev servers. */

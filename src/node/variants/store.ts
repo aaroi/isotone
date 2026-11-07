@@ -12,11 +12,11 @@
  */
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, lstatSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
-import type { IterationElement } from './core/index';
+import type { IterationElement } from '../../core/index';
 import {
   type ColorVariantAxis,
   type KnobAxis,
@@ -26,9 +26,12 @@ import {
   type OverlayVariantStatus,
   type RangeVariantAxis,
   type SelectVariantAxis,
-} from './core/variants';
-import { ensureFileIgnored, type NotesRequest, type NotesResponse } from './store';
-import { withFileLock, writeJson } from './file-store';
+} from '../../core/variants';
+import { ensureFileIgnored } from '../fs/git-exclude';
+import { type HandlerRequest, type HandlerResponse, jsonResponse } from '../http';
+import { writeJson } from '../fs/atomic';
+import { withFileLock } from '../fs/lock';
+import { isEscaping, isWithin, toPosixPath } from '../fs/paths';
 
 /** Default location of the variants tree, relative to the project root. */
 export const DEFAULT_VARIANTS_DIR = '.isotone/variants';
@@ -74,38 +77,6 @@ export function isValidVariantId(id: string): boolean {
   return /^[a-z0-9][a-z0-9-]{0,63}$/.test(id);
 }
 
-/** POSIX-ify a path node gave us as platform-native (a no-op on POSIX,
- *  where `sep` already is `/`; keeps manifest keys portable regardless). */
-function toPosixPath(p: string): string {
-  return p.split(sep).join('/');
-}
-
-/** `relative()` puts you outside the base with a leading `..` (or, on a
- *  different drive on Windows, an absolute path back out) — either way the
- *  caller asked for something outside the tree we're allowed to touch. */
-function isEscaping(rel: string): boolean {
-  return rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
-}
-
-/** Check existing ancestors too: a lexical child may be a symlink outside
- * the tree, including a not-yet-created file beneath a symlinked directory. */
-function staysInside(base: string, file: string): boolean {
-  const canonical = (path: string): string => {
-    let existing = resolve(path);
-    while (dirname(existing) !== existing) {
-      try {
-        lstatSync(existing);
-        break;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-        existing = dirname(existing);
-      }
-    }
-    return resolve(realpathSync(existing), relative(existing, resolve(path)));
-  };
-  return !isEscaping(relative(canonical(base), canonical(file)));
-}
-
 /**
  * Resolve `file` (repo-relative, or absolute inside root) against `root`
  * and return both the absolute path and its POSIX repo-relative manifest
@@ -115,7 +86,7 @@ function staysInside(base: string, file: string): boolean {
 function repoRelativeKey(root: string, file: string): { abs: string; key: string } {
   const abs = isAbsolute(file) ? resolve(file) : resolve(root, file);
   const rel = relative(root, abs);
-  if (!rel || isEscaping(rel) || !isSafeManifestKey(toPosixPath(rel)) || !staysInside(root, abs)) {
+  if (!rel || isEscaping(rel) || !isSafeManifestKey(toPosixPath(rel)) || !isWithin(root, abs, { realpath: true })) {
     throw new Error(`"${file}" escapes the project root`);
   }
   return { abs, key: toPosixPath(rel) };
@@ -174,8 +145,10 @@ export function readVariant(opts: VariantsStoreOptions, id: string): OverlayVari
     const dir = variantDir(opts, id);
     return isPlausibleVariant(data) &&
       data.id === id &&
-      staysInside(variantsDir(opts), file) &&
-      Object.keys(data.files).every((key) => staysInside(opts.root, join(opts.root, key)) && staysInside(dir, join(dir, key)))
+      isWithin(variantsDir(opts), file, { realpath: true }) &&
+      Object.keys(data.files).every(
+        (key) => isWithin(opts.root, join(opts.root, key), { realpath: true }) && isWithin(dir, join(dir, key), { realpath: true }),
+      )
       ? data
       : null;
   } catch {
@@ -187,7 +160,7 @@ export function readVariant(opts: VariantsStoreOptions, id: string): OverlayVari
 export function writeVariant(opts: VariantsStoreOptions, v: OverlayVariant): void {
   if (!isPlausibleVariant(v)) throw new Error('Invalid variant manifest');
   const dir = variantDir(opts, v.id);
-  if (!staysInside(variantsDir(opts), dir)) throw new Error('Variant directory escapes the variants tree');
+  if (!isWithin(variantsDir(opts), dir, { realpath: true })) throw new Error('Variant directory escapes the variants tree');
   mkdirSync(dir, { recursive: true });
   writeJson(join(dir, 'variant.json'), v);
 }
@@ -346,7 +319,7 @@ export function addVariantFile(
     // untouched. Re-adding is a no-op, not a refresh (sync is how you refresh).
     if (Object.hasOwn(manifest.files, key)) return manifest;
     const destAbs = join(variantDir(opts, id), key);
-    if (!staysInside(variantDir(opts, id), destAbs)) throw new Error('Override path escapes the variant directory');
+    if (!isWithin(variantDir(opts, id), destAbs, { realpath: true })) throw new Error('Override path escapes the variant directory');
     if (create) {
       if (existsSync(sourceAbs)) throw new Error(`"${file}" already exists; add it without --new`);
       mkdirSync(dirname(destAbs), { recursive: true });
@@ -852,18 +825,14 @@ export function writeActive(opts: VariantsStoreOptions, ids: string[]): void {
 
 /**
  * The transport-agnostic core of the variants endpoint, mirroring
- * {@link import('./store').notesResponse}. `req.url` is the path relative
+ * {@link import('../notes/store').notesResponse}. `req.url` is the path relative
  * to wherever the caller mounted `VARIANTS_ENDPOINT` ("/", "/active"), so
  * this function never needs to know the mount point.
  */
-export function variantsResponse(opts: VariantsStoreOptions, req: NotesRequest): NotesResponse {
+export function variantsResponse(opts: VariantsStoreOptions, req: HandlerRequest): HandlerResponse {
   const method = req.method ?? '';
   const path = (req.url ?? '/').split('?')[0] || '/';
-  const json = (status: number, body: unknown): NotesResponse => ({
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-    body,
-  });
+  const json = jsonResponse;
 
   if (method === 'GET' && path === '/') {
     return json(200, { variants: listVariants(opts), active: readActive(opts), knobs: readKnobs(opts) });

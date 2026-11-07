@@ -1,18 +1,5 @@
-import { randomUUID } from 'node:crypto';
-import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-
-/** Readers see either the old document or the complete replacement. */
-export function writeJson(file: string, value: unknown): void {
-  mkdirSync(dirname(file), { recursive: true });
-  const temporary = `${file}.${randomUUID()}.tmp`;
-  try {
-    writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
-    renameSync(temporary, file);
-  } finally {
-    rmSync(temporary, { force: true });
-  }
-}
 
 /** Serialize read-modify-write across the CLI and the dev server. A dead
  * process's lock is recoverable; a busy store fails without discarding data. */

@@ -2,7 +2,8 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { checkUpdate, compareVersions, fetchLatest, startUpdateCheck, upgradePlan } from '../src/update';
+import { checkUpdate, fetchLatest, startUpdateCheck, upgradePlan } from '../src/node/update/check';
+import { compareVersions } from '../src/node/update/request';
 import { runCli } from '../src/cli/run';
 
 const directories: string[] = [];

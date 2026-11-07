@@ -1,4 +1,4 @@
-import { checkOrigin, httpFailure, readWebJson } from './http';
+import { checkOrigin, type HandlerResponse, httpFailure, readWebJson } from '../node/http';
 /**
  * isotone — server.
  *
@@ -8,21 +8,13 @@ import { checkOrigin, httpFailure, readWebJson } from './http';
  * keep this subpath framework-free.
  */
 
-export {
-  ensureFileIgnored,
-  notesResponse,
-  readNotes,
-  writeNotes,
-  updateNotes,
-  NOTES_ENDPOINT,
-  PAYLOAD_MAX,
-} from '../store';
-import { notesResponse } from '../store';
-export type {
-  NotesRequest,
-  NotesResponse,
-  StoredNote,
-} from '../store';
+export { ensureFileIgnored } from '../node/fs/git-exclude';
+export { notesResponse, NOTES_ENDPOINT } from '../node/notes/handler';
+export { readNotes, writeNotes, updateNotes } from '../node/notes/store';
+export { PAYLOAD_MAX } from '../core/limits';
+import { notesResponse } from '../node/notes/handler';
+export type { NotesRequest, NotesResponse } from '../node/notes/handler';
+export type { StoredNote } from '../node/notes/store';
 
 export {
   ACTIVE_FILE,
@@ -31,10 +23,10 @@ export {
   readActive,
   variantsResponse,
   writeActive,
-} from '../variants-store';
-import { variantsResponse } from '../variants-store';
-import type { VariantsStoreOptions } from '../variants-store';
-export type { VariantsStoreOptions } from '../variants-store';
+} from '../node/variants/store';
+import { variantsResponse } from '../node/variants/store';
+import type { VariantsStoreOptions } from '../node/variants/store';
+export type { VariantsStoreOptions } from '../node/variants/store';
 export { VARIANTS_ENDPOINT } from '../core/variants';
 import { VARIANTS_ENDPOINT } from '../core/variants';
 
@@ -56,7 +48,7 @@ export interface ServeRequestOptions {
 }
 
 /** The answer a production runtime gets unless the host opted in. */
-function refusedInProduction(options: ServeRequestOptions): { status: number; headers: Record<string, string>; body: unknown } | null {
+function refusedInProduction(options: ServeRequestOptions): HandlerResponse | null {
   if (options.allowProduction || !isProductionRuntime()) return null;
   return {
     status: 404,
@@ -80,11 +72,7 @@ function isProductionRuntime(): boolean {
  * `file`, return a `NextResponse`-shaped `{ status, headers, body }`. Frameworks
  * that expose a `(req, res)` pair call `notesResponse` and render it directly.
  */
-export async function serveNotesRequest(
-  file: string,
-  request: Request,
-  options: ServeRequestOptions = {},
-): Promise<{ status: number; headers: Record<string, string>; body: unknown }> {
+export async function serveNotesRequest(file: string, request: Request, options: ServeRequestOptions = {}): Promise<HandlerResponse> {
   const refused = refusedInProduction(options);
   if (refused) return refused;
   try {
@@ -111,7 +99,7 @@ export async function serveVariantsRequest(
   opts: VariantsStoreOptions,
   request: Request,
   options: ServeRequestOptions = {},
-): Promise<{ status: number; headers: Record<string, string>; body: unknown }> {
+): Promise<HandlerResponse> {
   const refused = refusedInProduction(options);
   if (refused) return refused;
   try {

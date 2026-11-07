@@ -23,16 +23,17 @@ import { dirname, resolve } from 'node:path';
 
 import type { RouteGateOptions } from '../core/index';
 import type { IterationTheme } from '../core/types';
-import { checkOrigin, HttpError, isLoopback, readNodeJson, sendFailure } from '../server/http';
-import { ensureFileIgnored, notesResponse, NOTES_ENDPOINT } from '../store';
+import { checkOrigin, HttpError, isLoopback, readNodeJson, sendFailure, writeResponse } from '../node/http';
+import { ensureFileIgnored } from '../node/fs/git-exclude';
+import { notesResponse, NOTES_ENDPOINT } from '../node/notes/handler';
 import { VARIANTS_ENDPOINT } from '../core/variants';
-import { readKnobs } from '../variants-store';
+import { readKnobs } from '../node/variants/store';
 
 import { readBundle } from '../standalone/bundle';
 import { serveMountOptions } from './mount-config';
 import { guardedScriptTag } from './tag';
-import { startUpdateCheck, UPDATE_ENDPOINT } from '../update';
-import { autoUpdateNote, updateResponse } from '../update-note';
+import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
+import { autoUpdateNote, updateResponse } from '../node/update/note';
 export { readBundle } from '../standalone/bundle';
 
 export const DEFAULT_PORT = 4123;
@@ -231,10 +232,7 @@ export function serveIteration(opts: ServeIterationOptions): Promise<ServedItera
       // POST asks for the update note, built from this server's own check.
       (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined))
         .then((body) => {
-          const out = updateResponse(file, updates.getSnapshot(), { method, body });
-          res.statusCode = out.status;
-          for (const [key, value] of Object.entries(out.headers)) res.setHeader(key, value);
-          res.end(JSON.stringify(out.body));
+          writeResponse(res, () => updateResponse(file, updates.getSnapshot(), { method, body }));
         })
         .catch((error) => sendFailure(res, error));
       return;
@@ -279,10 +277,7 @@ export function serveIteration(opts: ServeIterationOptions): Promise<ServedItera
       }
       (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined))
         .then((body) => {
-          const out = notesResponse(file, { method, url: req.url, body });
-          res.statusCode = out.status;
-          for (const [key, value] of Object.entries(out.headers)) res.setHeader(key, value);
-          res.end(JSON.stringify(out.body));
+          writeResponse(res, () => notesResponse(file, { method, url: req.url, body }));
         })
         .catch((error) => sendFailure(res, error));
       return;

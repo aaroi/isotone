@@ -6,16 +6,16 @@
  * the agent. At most one update note is open; a newer release updates it.
  */
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
-import { updateNoteText, type UpdateInfo, type UpdateRequest } from './core/update';
-import { withFileLock } from './file-store';
-import { readNotes, writeNotes, type NotesResponse } from './store';
-import { changelogUrl, compareVersions, notesProjectRoot, updateRequestOf } from './update-request';
-
-export { updateNoteText } from './core/update';
+import { updateNoteText, type UpdateInfo, type UpdateRequest } from '../../core/update';
+import { MAX_UPDATE_NOTE_ROUTE, MAX_UPDATE_NOTED_BYTES } from '../../core/limits';
+import { readJsonBounded, writeJsonAtomic } from '../fs/atomic';
+import { withFileLock } from '../fs/lock';
+import { readNotes, writeNotes } from '../notes/store';
+import { type HandlerResponse, jsonResponse } from '../http';
+import { changelogUrl, compareVersions, notesProjectRoot, updateRequestOf } from './request';
 
 /**
  * The request a snapshot supports, or null when there is nothing to run. With
@@ -36,8 +36,6 @@ export function updateRequestFrom(info: UpdateInfo, file?: string): UpdateReques
   );
 }
 
-const MAX_ROUTE = 2000;
-
 /**
  * Create the update note, or bring the open one up to date. Returns its id,
  * and whether it is new; null when the snapshot has no update to request.
@@ -45,7 +43,7 @@ const MAX_ROUTE = 2000;
 export function requestUpdateNote(file: string, info: UpdateInfo, route = '/'): { id: string; created: boolean } | null {
   const update = updateRequestFrom(info, file);
   if (!update) return null;
-  const where = route.startsWith('/') && route.length <= MAX_ROUTE ? route : '/';
+  const where = route.startsWith('/') && route.length <= MAX_UPDATE_NOTE_ROUTE ? route : '/';
   const root = notesProjectRoot(file);
   return withFileLock(file, () => {
     const notes = readNotes(file);
@@ -93,12 +91,8 @@ export function requestUpdateNote(file: string, info: UpdateInfo, route = '/'): 
  * update note. Only `route` is read from the body, as context for the note.
  * `file` is null when this server keeps no notes.
  */
-export function updateResponse(file: string | null, info: UpdateInfo, req: { method?: string; body?: unknown }): NotesResponse {
-  const json = (status: number, body: unknown): NotesResponse => ({
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-    body,
-  });
+export function updateResponse(file: string | null, info: UpdateInfo, req: { method?: string; body?: unknown }): HandlerResponse {
+  const json = jsonResponse;
   if (req.method === 'GET') return json(200, info);
   if (req.method !== 'POST') return json(405, { error: 'method not allowed' });
   if (!file) return json(404, { error: 'this server keeps no notes' });
@@ -112,13 +106,8 @@ const NOTED_FILE = join(tmpdir(), `isotone-update-notes-${process.getuid?.() ?? 
 const NOTED_LIMIT = 100;
 
 async function readNoted(file: string): Promise<Record<string, string>> {
-  try {
-    if ((await stat(file)).size > 64 * 1024) return {};
-    const data = JSON.parse(await readFile(file, 'utf8'));
-    return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
-  } catch {
-    return {};
-  }
+  const data = await readJsonBounded(file, MAX_UPDATE_NOTED_BYTES);
+  return data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, string>) : {};
 }
 
 /**
@@ -142,13 +131,6 @@ export async function autoUpdateNote(file: string, info: UpdateInfo, options: { 
   const result = requestUpdateNote(file, info, '/');
   delete noted[key];
   const entries = [...Object.entries(noted).filter(([, value]) => typeof value === 'string'), [key, update.to]].slice(-NOTED_LIMIT);
-  const temporary = `${stateFile}.${randomUUID()}.tmp`;
-  try {
-    await mkdir(dirname(stateFile), { recursive: true });
-    await writeFile(temporary, JSON.stringify(Object.fromEntries(entries)), { mode: 0o600, flag: 'wx' });
-    await rename(temporary, stateFile);
-  } finally {
-    await rm(temporary, { force: true });
-  }
+  await writeJsonAtomic(stateFile, Object.fromEntries(entries));
   return result?.id ?? null;
 }

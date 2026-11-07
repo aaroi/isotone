@@ -4,11 +4,12 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { blastFile, readSession, touchSession } from '../src/blast';
+import { blastFile, readSession, touchSession } from '../src/node/blast';
 import { runBlast, ENDED_EXIT } from '../src/cli/blast';
 import { runCli } from '../src/cli/run';
 import { BLAST, BLAST_CLI, formatDuration, parseDuration, timeLeft } from '../src/core/blast';
-import { notesResponse, readNotes, type StoredNote, updateNotes, writeNotes } from '../src/store';
+import { notesResponse } from '../src/node/notes/handler';
+import { readNotes, type StoredNote, updateNotes, writeNotes } from '../src/node/notes/store';
 
 const dirs: string[] = [];
 afterEach(() => {

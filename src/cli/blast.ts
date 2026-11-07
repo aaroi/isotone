@@ -30,15 +30,14 @@ import {
   isAwaitingAnswer,
   isEnded,
   isLive,
-  noteFingerprint,
   publicState,
   readSession,
   seenOpenNotes,
   unseenNotes,
   updateSession,
-} from '../blast';
-import { notesRevision, readNotes, type StoredNote } from '../store';
-import { notesProjectRoot } from '../update-request';
+} from '../node/blast';
+import { noteFingerprint, notesRevision, readNotes, type StoredNote } from '../node/notes/store';
+import { notesProjectRoot } from '../node/update/request';
 import { noteRecord, printNotes } from './run';
 import { type CliIO, errOut, extractFlag, has, out, parseArgs, valueFor } from './util';
 

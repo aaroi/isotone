@@ -5,7 +5,7 @@
  *
  * Blast has no panel UI: the user starts it by asking their agent, and the
  * agent drives it through the CLI. This module holds the names, the public
- * session shape and durations. The file store lives in `src/blast.ts` and the
+ * session shape and durations. The file store lives in `src/node/blast.ts` and the
  * waiting loop in `src/cli/blast.ts`.
  *
  * The feature's name is likely to change. Every user-facing name, the CLI

@@ -4,7 +4,8 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { notesResponse, readNotes, updateNotes } from '../src/store';
+import { notesResponse } from '../src/node/notes/handler';
+import { readNotes, updateNotes } from '../src/node/notes/store';
 import * as server from '../src/server/index';
 import { PAYLOAD_MAX, serveNotesRequest } from '../src/server/index';
 

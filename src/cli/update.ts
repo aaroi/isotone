@@ -1,4 +1,4 @@
-import { checkUpdate } from '../update';
+import { checkUpdate } from '../node/update/check';
 import { type CliIO, out, parseArgs, valueFor } from './util';
 
 export async function runCheckUpdate(args: string[], io: CliIO): Promise<number> {

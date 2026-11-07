@@ -1,6 +1,6 @@
 /**
  * isotone — CLI helpers shared by the notes, variant and init command
- * groups. Kept free of `store`/`variants-store` imports so any group can
+ * groups. Kept free of notes and variants store imports so any group can
  * pull this in without dragging the others' dependencies along.
  */
 

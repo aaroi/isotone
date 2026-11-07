@@ -46,11 +46,15 @@ same outline.
 
 | Layer | Responsibility |
 | --- | --- |
-| `src/core` | Note descriptors, browser persistence, variant sources and selection rules. No React or Vite. |
+| `src/core` | Note descriptors, browser persistence, variant sources and selection rules, shared config types and size limits. No React, Vite or Node. |
 | `src/react` | Shadow-root panel, shared materials, controls, themes and motion. |
-| `src/store.ts`, `src/file-store.ts` | Validated note storage, atomic writes and serialized updates. |
-| `src/variants-store.ts` | Manifests, file alternatives, path guards, activation and promotion. |
-| `src/server` | Request adapters, bounded bodies and origin checks. |
+| `src/node` | Node-only stores and helpers, used by the adapters and the CLI. No React. |
+| `src/node/fs` | Atomic JSON writes, file locks, path guards and Git exclude entries. |
+| `src/node/notes` | Validated note storage and the notes endpoint. |
+| `src/node/variants` | Manifests, file alternatives, activation and promotion, and the variants endpoint. |
+| `src/node/update`, `src/node/blast.ts` | Update checks and update notes; Blast sessions. |
+| `src/node/http.ts` | Bounded request bodies, origin checks and response writing. |
+| `src/server` | Request adapters for `Request`-based runtimes. |
 | `src/vite`, `src/serve` | Development-server integration and self-contained panel delivery. |
 | `src/cli` | Setup, feedback and variant commands over the same stores. |
 | `src/standalone` | Private bundled React runtime for hosts without React. |

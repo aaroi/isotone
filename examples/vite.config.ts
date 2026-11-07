@@ -3,11 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
-import { notesResponse, updateNotes, writeNotes } from '../src/store';
+import { notesResponse } from '../src/node/notes/handler';
+import { updateNotes, writeNotes } from '../src/node/notes/store';
 import { iteration } from '../src/vite/index';
-import { checkOrigin, readNodeJson, sendFailure } from '../src/server/http';
+import { checkOrigin, readNodeJson, sendFailure } from '../src/node/http';
 import type { UpdateInfo } from '../src/core/update';
-import { updateResponse } from '../src/update-note';
+import { updateResponse } from '../src/node/update/note';
 
 /**
  * Not a real release: the demo never contacts npm or installs anything. The

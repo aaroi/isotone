@@ -21,10 +21,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { createServer, type ViteDevServer } from 'vite';
 
 import { iteration, withNativeFetch, type IterationViteOptions } from '../src/vite/index';
-import { NOTES_ENDPOINT } from '../src/store';
+import { NOTES_ENDPOINT } from '../src/node/notes/handler';
 import { VARIANTS_ENDPOINT } from '../src/core/variants';
-import { UPDATE_ENDPOINT } from '../src/update';
-import { ACTIVE_FILE, addVariantFile, createVariant, readActive, variantDir, writeActive } from '../src/variants-store';
+import { UPDATE_ENDPOINT } from '../src/node/update/check';
+import { ACTIVE_FILE, addVariantFile, createVariant, readActive, variantDir, writeActive } from '../src/node/variants/store';
 
 let server: ViteDevServer;
 let root: string;

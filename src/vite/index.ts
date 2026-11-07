@@ -19,13 +19,15 @@ import {
   type ResolvedConfig,
 } from 'vite';
 
-import { ensureDirIgnored, ensureFileIgnored, notesResponse, NOTES_ENDPOINT } from '../store';
+import { ensureDirIgnored, ensureFileIgnored } from '../node/fs/git-exclude';
+import { notesResponse, NOTES_ENDPOINT } from '../node/notes/handler';
 import type { RouteGateOptions } from '../core/index';
 import type { IterationShortcut, IterationTheme } from '../core/types';
 import { readBundle } from '../standalone/bundle';
-import { startUpdateCheck, UPDATE_ENDPOINT } from '../update';
-import { autoUpdateNote, updateResponse } from '../update-note';
-import { checkOrigin, readNodeJson, sendFailure } from '../server/http';
+import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
+import { autoUpdateNote, updateResponse } from '../node/update/note';
+import { checkOrigin, readNodeJson, sendFailure, writeResponse } from '../node/http';
+import { isWithin } from '../node/fs/paths';
 import { type OverlayVariant, overlayGroups, VARIANTS_ENDPOINT } from '../core/variants';
 import {
   ACTIVE_FILE,
@@ -39,7 +41,7 @@ import {
   variantsDir,
   variantsResponse,
   type VariantsStoreOptions,
-} from '../variants-store';
+} from '../node/variants/store';
 import { isRouteModule, scanExports } from './exports';
 import {
   ACTIVE_EVENT,
@@ -154,13 +156,6 @@ function versionOfId(id: string | null): string | null {
   const at = id?.indexOf('?') ?? -1;
   if (!id || at < 0) return null;
   return new URLSearchParams(id.slice(at + 1)).get(VERSION_QUERY);
-}
-
-/** `dir` itself or a path below it; never a sibling whose name merely
- *  starts the same (`src-old` under `src`). */
-function isInside(dir: string, path: string): boolean {
-  const rel = relative(dir, path);
-  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }
 
 /** The canonical form of a directory, or the path as given when it does not
@@ -316,7 +311,7 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
     const client = env === null || env === 'client';
     // The module graph keys files by their forward-slash form, which is
     // what `join` produces on POSIX and not on Windows.
-    if (isInside(vDir, changed)) {
+    if (isWithin(vDir, changed)) {
       overrides.clear();
       const hit = overrideSourcePath(vopts, changed);
       // The manifest, or a file directly in the variants dir: nothing the
@@ -393,8 +388,8 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
   const overridable = (path: string): boolean =>
     isAbsolute(path) &&
     !path.split(/[\\/]/).includes('node_modules') &&
-    isInside(vopts.root, path) &&
-    !isInside(vDir, path) &&
+    isWithin(vopts.root, path) &&
+    !isWithin(vDir, path) &&
     !isAsset(path);
 
   // `satisfies`, not an annotation: the hooks are checked against vite's
@@ -537,7 +532,7 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
         const method = req.method ?? '';
         (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined))
           .then((body) => {
-            answer(res, () => updateResponse(file, updates.getSnapshot(), { method, body }));
+            writeResponse(res, () => updateResponse(file, updates.getSnapshot(), { method, body }));
           })
           .catch((error) => sendFailure(res, error));
       });
@@ -552,7 +547,7 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
         }
         (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined))
           .then((body) => {
-            answer(res, () => notesResponse(file, { method, url: req.url, body }));
+            writeResponse(res, () => notesResponse(file, { method, url: req.url, body }));
           })
           .catch((error) => sendFailure(res, error));
       });
@@ -714,7 +709,7 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
                 return;
               }
               const send = () => {
-                answer(res, () => result);
+                writeResponse(res, () => result);
               };
               if (result.status === 200 && method === 'POST') {
                 const updated = result.body as { active: string[]; changedFiles?: string[] };
@@ -738,7 +733,7 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
           const path = resolve(changed);
           if (path === activeFile) {
             void activate(readActive(vopts));
-          } else if (isInside(vDir, path)) {
+          } else if (isWithin(vDir, path)) {
             // Covers adds and unlinks, which handleHotUpdate never sees.
             for (const variant of manifests ?? []) {
               for (const key of Object.keys(variant.files)) covered.add(normalizePath(join(vopts.root, key)));
@@ -820,29 +815,6 @@ function parseVariantList(raw: string | undefined): string[] {
 function isJsonRequest(req: IncomingMessage): boolean {
   const type = req.headers['content-type'];
   return typeof type === 'string' && type.toLowerCase().includes('application/json');
-}
-
-/**
- * Write a store response, or a 500 when the store throws. A store that
- * cannot write (permissions, a read-only mount) must still answer, or the
- * panel's request hangs and the reviewer sees nothing; a 500 sends a note
- * to the localStorage fallback. Returns the response so the caller can act
- * on a success, `null` on a throw.
- */
-function answer(
-  res: ServerResponse,
-  respond: () => { status: number; headers: Record<string, string>; body: unknown },
-): { status: number; body: unknown } | null {
-  try {
-    const { status, headers, body } = respond();
-    res.statusCode = status;
-    for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
-    res.end(JSON.stringify(body));
-    return { status, body };
-  } catch (cause) {
-    sendFailure(res, cause);
-    return null;
-  }
 }
 
 /** Load after the host has mounted, without importing its React or HMR runtime. */

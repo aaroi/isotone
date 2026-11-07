@@ -1,6 +1,32 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-const MAX_BODY_BYTES = 1024 * 1024;
+import { MAX_BODY_BYTES } from '../core/limits';
+
+/** The transport-agnostic result of a request — any runtime (Vite
+ *  middleware, Next route handler, Bun serve, Vercel) can render it. */
+export interface HandlerResponse {
+  status: number;
+  /** Response headers object (frameworks set them on their own res). */
+  headers: Record<string, string>;
+  /** The JSON payload to send. */
+  body: unknown;
+}
+
+/** A request the pure handlers understand (framework-neutral). */
+export interface HandlerRequest {
+  method?: string;
+  url?: string;
+  body?: unknown;
+}
+
+/** A JSON answer that no cache keeps. */
+export function jsonResponse(status: number, body: unknown): HandlerResponse {
+  return {
+    status,
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+    body,
+  };
+}
 
 export class HttpError extends Error {
   constructor(
@@ -75,7 +101,7 @@ export async function readWebJson(request: Request): Promise<unknown> {
   }
 }
 
-export function httpFailure(error: unknown): { status: number; headers: Record<string, string>; body: unknown } {
+export function httpFailure(error: unknown): HandlerResponse {
   return {
     status: error instanceof HttpError ? error.status : 500,
     headers: { 'content-type': 'application/json; charset=utf-8' },
@@ -88,4 +114,24 @@ export function sendFailure(res: ServerResponse, error: unknown): void {
   res.statusCode = failure.status;
   for (const [key, value] of Object.entries(failure.headers)) res.setHeader(key, value);
   res.end(JSON.stringify(failure.body));
+}
+
+/**
+ * Write a handler response, or a 500 when the handler throws. A store that
+ * cannot write (permissions, a read-only mount) must still answer, or the
+ * panel's request hangs and the reviewer sees nothing; a 500 sends a note
+ * to the localStorage fallback. Returns the response so the caller can act
+ * on a success, `null` on a throw.
+ */
+export function writeResponse(res: ServerResponse, respond: () => HandlerResponse): { status: number; body: unknown } | null {
+  try {
+    const { status, headers, body } = respond();
+    res.statusCode = status;
+    for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
+    res.end(JSON.stringify(body));
+    return { status, body };
+  } catch (cause) {
+    sendFailure(res, cause);
+    return null;
+  }
 }

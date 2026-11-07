@@ -3,9 +3,10 @@
  * of the package manifest and the network so the notes store can use it.
  */
 import { existsSync, realpathSync, statSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 
-import type { UpdateRequest } from './core/update';
+import type { PackageManager, UpdateRequest } from '../../core/update';
+import { isWithin } from '../fs/paths';
 
 interface Version {
   parts: bigint[];
@@ -64,7 +65,6 @@ const plainText = (value: unknown, max: number): value is string =>
     return code < 32 || code === 127;
   });
 
-type Manager = UpdateRequest['manager'];
 const PACKAGE_NAME = 'isotone';
 /** MAJOR.MINOR.PATCH with an optional prerelease, and no build metadata. */
 const STRICT_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*)?$/;
@@ -80,7 +80,7 @@ export function isStrictVersion(value: unknown): value is string {
  * the workspace-root flag where that manager needs one (pnpm `-w`, Yarn
  * Classic `-W`).
  */
-export function upgradeCommand(manager: Manager, version: string, flags: { dev: boolean; workspace: boolean }): string {
+export function upgradeCommand(manager: PackageManager, version: string, flags: { dev: boolean; workspace: boolean }): string {
   if (!isStrictVersion(version)) throw new Error('Invalid version.');
   const dev = flags.dev ? ' -D' : '';
   if (manager === 'npm') return `npm install${dev} --save-exact ${PACKAGE_NAME}@${version}`;
@@ -89,7 +89,7 @@ export function upgradeCommand(manager: Manager, version: string, flags: { dev: 
 }
 
 /** Every command an update note may carry for this manager and version. */
-export function canonicalUpgradeCommands(manager: Manager, version: string): string[] {
+export function canonicalUpgradeCommands(manager: PackageManager, version: string): string[] {
   if (!isStrictVersion(version)) return [];
   const commands: string[] = [];
   for (const dev of [true, false]) {
@@ -112,13 +112,10 @@ export function notesProjectRoot(file: string): string {
   }
 }
 
-/** Whether `cwd` is an existing directory at or below `root`, after symlinks. */
-export function isInside(cwd: string, root: string): boolean {
+/** Whether `cwd` is an existing directory at or below an existing `root`, after symlinks. */
+function isDirectoryInside(cwd: string, root: string): boolean {
   try {
-    const target = realpathSync(cwd);
-    if (!statSync(target).isDirectory()) return false;
-    const path = relative(realpathSync(root), target);
-    return path === '' || (path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path));
+    return statSync(realpathSync(cwd)).isDirectory() && existsSync(root) && isWithin(root, cwd, { realpath: true });
   } catch {
     return false;
   }
@@ -139,7 +136,7 @@ export function updateRequestOf(value: unknown, context: { root?: string } = {})
   if (!plainText(v.command, 500) || !plainText(v.cwd, 4096)) return null;
   if (!canonicalUpgradeCommands(v.manager, v.to).includes(v.command)) return null;
   if (!isAbsolute(v.cwd)) return null;
-  if (context.root !== undefined && !isInside(v.cwd, context.root)) return null;
+  if (context.root !== undefined && !isDirectoryInside(v.cwd, context.root)) return null;
   if (v.changelog !== undefined && !(plainText(v.changelog, 500) && v.changelog.startsWith('https://'))) return null;
   return {
     from: v.from,
