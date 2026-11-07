@@ -37,6 +37,7 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
       - name: Prepare the next version
+        id: prepare
         if: steps.current.outputs.ready == 'true'
         run: |
           published=$(npm view isotone version)
@@ -47,6 +48,7 @@ jobs:
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
             git commit -m "chore: prepare Isotone $(node -p 'require("./package.json").version')"
             git push origin HEAD:main
+            echo 'committed=true' >> "$GITHUB_OUTPUT"
           fi
       - name: Publish the prepared main commit
         if: steps.current.outputs.ready == 'true'

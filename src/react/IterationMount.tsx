@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { createIterationStore, type RouteGateOptions } from '../core/index';
 import {
   createOverlayVariantsSource,
+  axisSection,
   knobDelta,
   OVERLAY_DEFAULT_OPTION,
   type VariantsSource,
@@ -26,9 +27,14 @@ export interface MountIterationOptions {
   /**
    * Variants for the panel. A `VariantsSource` is rendered as-is; `'overlay'`
    * builds the overlay adapter against the Vite plugin's same-origin
-   * endpoint. With neither this nor `endpoint`, nothing mounts.
+   * endpoint. `'knobs'` is the same adapter for a server that has knobs but no
+   * file variants (`isotone serve`), and its empty list says so. With neither
+   * this nor `endpoint`, nothing mounts.
    */
-  variants?: VariantsSource | 'overlay';
+  variants?: VariantsSource | 'overlay' | 'knobs';
+  /** Where `'overlay'` reads variants and knobs. Defaults to the Vite plugin's
+   *  same-origin endpoint; `isotone serve` passes its own absolute URL. */
+  variantsEndpoint?: string;
   /** Which tab a tabbed panel opens on until the reviewer picks one. */
   defaultTab?: 'variants' | 'notes';
   /** Optional localStorage namespace for multi-app origins. */
@@ -96,11 +102,14 @@ function withDocumentUntouched<T>(create: () => T): T {
  * instance — replaces `<body>` and drops the host, it is re-appended to the
  * new body, shadow root and all, instead of a fresh mount losing panel state.
  */
+/** `isotone serve` cannot swap files, so its empty list asks for knobs. */
+const KNOBS_EMPTY_TEXT = 'No knobs on this page yet. Ask your agent to add knobs for this page to .isotone/knobs.json and they will appear here.';
+
 export function mountIteration(opts: MountIterationOptions): () => void {
   const getRoute = opts.getRoute ?? (() => window.location.pathname);
   const variants =
-    opts.variants === 'overlay'
-      ? overlaySourceWithSave(getRoute, opts.endpoint, opts.key)
+    opts.variants === 'overlay' || opts.variants === 'knobs'
+      ? overlaySourceWithSave(getRoute, opts.endpoint, opts.key, opts.variantsEndpoint)
       : opts.variants;
   // Nothing to show: no notes to write and no variants to pick. A production
   // host that forgot its source gets no empty launcher in the corner.
@@ -152,6 +161,7 @@ export function mountIteration(opts: MountIterationOptions): () => void {
         rule={opts.rule}
         getPayload={opts.getPayload}
         variants={variants}
+        variantsEmptyText={opts.variants === 'knobs' ? KNOBS_EMPTY_TEXT : undefined}
         defaultTab={opts.defaultTab}
         shortcut={opts.shortcut}
         updateEndpoint={opts.updateEndpoint}
@@ -218,7 +228,7 @@ export function mountIteration(opts: MountIterationOptions): () => void {
 }
 
 /**
- * The overlay adapter's source, with "Save as defaults" wired to the notes
+ * The overlay adapter's source, with "Make default" wired to the notes
  * file. Landing an overlay variant means copying files over the real ones,
  * which is the agent's move (`variant promote`), so the button does what the
  * host with its own axes does: it files one `[set-defaults]` note naming the reviewer's picks
@@ -231,8 +241,9 @@ function overlaySourceWithSave(
   getRoute: () => string,
   endpoint: string | undefined,
   key: string | undefined,
+  variantsEndpoint = VARIANTS_ENDPOINT,
 ): VariantsSource {
-  const source = createOverlayVariantsSource({ endpoint: VARIANTS_ENDPOINT, getRoute });
+  const source = createOverlayVariantsSource({ endpoint: variantsEndpoint, getRoute });
   if (!endpoint) return source;
   const notes = createIterationStore({ endpoint, key });
   source.saveDefaults = async (selections) => {
@@ -248,7 +259,9 @@ function overlaySourceWithSave(
         const label = variant?.label ?? id;
         // The group names the element and the variant names the alternative;
         // a lone variant whose group is named after it needs no prefix.
-        const named = axis.label === label ? label : `${axis.label}: ${label}`;
+        // A section the selector sits in leads the name, as the panel groups it.
+        const selector = axisSection(axis).fullLabel;
+        const named = selector === label || axis.label === label ? label : `${selector}: ${label}`;
         return [{ id, named, element: variant?.element ?? null }];
       });
     // Knobs the reviewer moved off their defaults ride in the same note, as
@@ -261,7 +274,7 @@ function overlaySourceWithSave(
       parts.push(`Make the default: ${picked.map((p) => `"${p.named}" (${p.id})`).join('; ')}.`);
     }
     if (moved.length) {
-      parts.push(`Knobs: ${moved.map((m) => `${m.axis.label} ${m.shown} (${m.axis.id})`).join('; ')}.`);
+      parts.push(`Knobs: ${moved.map((m) => `${axisSection(m.axis).fullLabel} ${m.shown} (${m.axis.id})`).join('; ')}.`);
     }
     const feedback = parts.length
       ? `[set-defaults] ${parts.join(' ')}`

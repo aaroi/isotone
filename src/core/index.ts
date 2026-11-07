@@ -11,6 +11,7 @@ import { request } from './request';
 import { FEEDBACK_STORAGE_KEY, readBrowserStorage, writeBrowserStorage } from './browser-storage';
 import { MAX_FEEDBACK_LENGTH } from './limits';
 import { createNoteId } from './id';
+import type { UpdateRequest } from './update';
 
 /** A UI element picked with the panel's selector mode. */
 export interface IterationElement {
@@ -54,6 +55,24 @@ export interface NoteContext {
   variantAction?: VariantRemoval;
   elements?: IterationElement[];
   variant?: VariantReference | null;
+  /** The user's request to upgrade Isotone, built by the local server from
+   *  its own update check. At most one is open at a time. */
+  update?: UpdateRequest;
+  /** The agent's question or remark about the note, written with
+   *  `isotone --reply <id> "<text>"`. Only the CLI writes it; the panel shows it
+   *  under the note, and the reviewer answers by editing the note. */
+  reply?: NoteReply;
+}
+
+export interface NoteReply {
+  text: string;
+  at: string;
+  /** A fingerprint of the note as it was when the agent asked. Until the
+   *  reviewer edits the note, Blast does not hand it out again. */
+  about?: string;
+  /** Set when the note has changed since the agent asked: the reviewer's
+   *  edit answered the question, so it is no longer pending. */
+  answered?: boolean;
 }
 
 /** A note written in the panel, read and answered by the coding agent. */
@@ -647,3 +666,4 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
   };
 }
 export * from './variants';
+export type { UpdateInfo, UpdateRequest } from './update';

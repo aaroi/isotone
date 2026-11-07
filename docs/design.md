@@ -75,6 +75,16 @@ dialog must not make the same label heavier. Selected and unselected options
 use the same font weight; their material and text colour indicate selection. The host's `--font-sans` may provide
 the typeface; component weights and sizing stay in the shared stylesheet.
 
+Selector sections group a long Variants list by the part of the page each
+selector changes. A section header is a quiet disclosure: a chevron, the section
+name in 11px muted text and its selector count in faint tabular figures. It uses
+the axis label's hover face and is never raised. Selectors without a section come
+first, without a header. Section names come from a label prefix (`Header > Logo
+size`) or an explicit `section`; the selector shows only its own name, while its
+controls, its dialog's accessible name and its notes keep the full name. The
+action dialog title shows the short name, like the heading that opened it.
+Folding a section is immediate and keeps its selections.
+
 Saved feedback uses one row with inline references and no extra gap between rows.
 Note text sits 3px outside the composer text inset. References use at most 42%
 of the row, leaving the note the remaining width. The delete action floats over
@@ -104,6 +114,20 @@ saturation and brightness field, a hue track, a hex field and, where the browser
 offers one, an eyedropper. Changes apply live; Escape or a press elsewhere
 closes it. A custom pick raises the swatch and shows its colour inside the hue ring.
 
+An action about one choice keeps the dialog open; an action that settles the
+whole selector, or that moves to another surface, closes it:
+
+| Action | Dialog | Focus afterwards |
+| --- | --- | --- |
+| Remove an option | Stays open; the row reads “Removal requested” and its trash is disabled | The next removable option, else the nearest one above, else Reset to default |
+| Remove an option, failed | Stays open with the error in the footer | The same trash button |
+| Feedback on the selector or an option | Closes | The composer |
+| Reset to default | Closes | The selector's heading |
+| Keep default only, Remove selector & options | Closes | The selector's heading |
+
+Escape, the close button and a pointer outside the dialog close it and return
+focus to the heading.
+
 Selector action dialogs have a 260px minimum height and reserve 360px in their
 parent panel when space allows, even for a selector with only one action. The viewport remains the upper
 bound; short screens scroll instead of pushing controls off-screen.
@@ -115,10 +139,55 @@ disabled in the menu to avoid duplicate requests. Cancelling a pending request
 leaves the preview unchanged. Once an agent applies a source change, deleting the
 request does not undo that change.
 
+The update notice is one quiet line beside the pill ("Isotone 1.2.0 is
+available"). Its dialog has a single line of versions, one raised action, **Ask
+agent to update**, and two quiet text buttons, Copy prompt and Command, the last
+revealing the raw command in a well. No paragraphs of instructions. Once asked,
+the raised action gives way to "Update requested · in Feedback" and the line
+reads "Update requested". The update note is an ordinary saved note with an
+"Update" tag in place of element references, shown on every page; deleting it
+cancels the request, like a removal request.
+
 Native tooltips are reserved for brief icon-only hints and labels that actually
 overflow. Do not put full feedback notes, readable labels or internal selectors
 in `title` attributes. Check label overflow on pointer entry, without observing
 or measuring every row during render. Accessible labels retain the full text.
+
+## Hints and instructions
+
+Instructional and hint text is never truncated. Every hint, such as the
+select-mode cover and the floating composer's line, is fully visible on one
+line by default, in pointer and touch copy, at 375px and desktop widths, in
+both themes. Make it fit with a smaller size, shorter copy or more reserved
+space; never with an ellipsis or a clip. `src/react/hints.ts` holds the panel's
+hints, and `tests/react-hints.test.ts` keeps them within the width a 375px
+viewport leaves. The demo tour follows the same rule: its copy wraps.
+
+User content, such as note text and element names, may still truncate, with
+its full text kept in the accessible name.
+
+## Phones and touch
+
+`viewport.ts` holds the small-screen rules. Below 640px wide or 500px tall the
+variants and feedback panels take turns: opening one closes the other. Below
+640px wide the variants panel stops at half the screen (never below the 360px a
+selector dialog reserves), so the page it changes stays in view. While
+selecting on a small screen, the feedback panel hides its saved notes and keeps
+only the composer, so the page can be reached; they return afterwards.
+
+An on-screen keyboard covers the page without resizing it. The dock rises above
+it and limits its height to what is visible, and the floating composer is
+placed within the same visible area. Pinch zoom is left alone.
+
+Copy follows the last pointer used: a finger reads "Tap", sees no ⌘, Ctrl,
+Shift or ↵, and is told that Done (or the crosshair, beside a pinned element)
+pauses selecting so the page can be used, which is the touch counterpart of
+holding Shift; pins stay. A tapped element gets the floating composer under or
+over the whole element, centred on the tap, because a finger hides the point.
+Selection previews follow hovering pointers only. Coarse pointers get larger
+hit areas around the composer controls, reference removal, note delete and
+panel close without changing their faces. The two-tool pill keeps its
+76 × 44px geometry.
 
 ## Scrolling
 
@@ -126,8 +195,16 @@ Keep native scrolling, wheel/trackpad input and keyboard focus reveal. Hide
 scrollbar chrome without disabling overflow.
 
 Content passing under a fixed area fades into the actual surface. This applies
-to the Save footer, selector action-dialog header, conditional error footer and
-both edges of the saved-note list and the top of scrolled composer text. List
+to the Save footer, selector action-dialog header, sticky section headers,
+conditional error footer and both edges of the saved-note list and the top of
+scrolled composer text.
+
+A section header sticks to the top edge of the Variants scroll area while its own
+selectors pass beneath it, and the next section's header pushes it out. At rest
+its padding fills the inset or gap above it, so sticking does not move its text,
+and its fade sits in the gap below it, so it never covers a control at rest.
+The list reserves scroll padding for the header, so keyboard focus never lands
+beneath it. List
 padding lets its first and last rows scroll fully clear of the fades. The textarea top
 mask appears only after scrolling, preserving its first line at rest. Without
 reference tags, the textarea extends through the field's top inset: that space
@@ -188,13 +265,14 @@ the composer must not remeasure unchanged selectors or notes.
 | `src/react/appearance.ts` | Complete light/dark palettes and the shared material recipe |
 | `src/react/styles.ts` | Geometry, typography, shared control classes and state selectors |
 | `src/react/feedback-layout.ts`, `pill-active.ts` | Small material/layout recipes that can be independently previewed as overlays |
-| `src/react/UpdateNotice.tsx` | Quiet local update snapshot and explicit upgrade instructions |
+| `src/react/UpdateNotice.tsx` | Quiet update line, and the dialog that hands the upgrade to the agent |
 | `src/react/icons.tsx` | Icon choices, optical size and stroke |
 | `src/react/NoteSummary.tsx` | Saved feedback/defaults summaries and their shared tag rendering |
 | `src/react/IterationPanel.tsx` | Dock, composer, feedback and element-picking behavior |
 | `src/react/VariantsView.tsx` | Selectors, action dialogs and the defaults bar |
 | `src/react/theme.ts` | Theme resolution, observation and cleanup |
 | `src/react/motion.ts` | Motion timing and work limits |
+| `src/react/viewport.ts` | Small-screen, touch and on-screen keyboard rules |
 | `src/react/useDockMotion.ts`, `useLayoutMotion.ts` | Measured movement and interruption handling |
 
 To add a control, choose its semantic role first: surface, well, raised action or

