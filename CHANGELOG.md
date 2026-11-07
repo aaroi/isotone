@@ -2,13 +2,18 @@
 
 ## Unreleased
 
+- feat: every select option, thumbnail and colour swatch has its own actions (from #37). A chevron in its corner, shown on hover or keyboard focus and always on touch screens, or a right click opens the selector dialog scoped to that option: Feedback on this option, Keep only this, Remove this option. Opening it never changes the selection, and it opens below the option when it cannot fit above. Its title reads as one line, the option then the selector ("Compact Spacing")
+- change: Keep default only is back in every selector's dialog. On the Default row, Keep only this files the same `keep-default` request
+- fix: a closing selector action dialog keeps its place until its fade ends, instead of jumping to the panel's top mid-fade
+- change: the selector heading chevron is a touch quieter at rest
+- docs: AGENTS.md, the `init` guidance and the variants guide tell agents what a `[keep-option]` note asks for
+
 ## 1.2.2
 
 - feat: custom colours open a picker in the panel's own popup material instead of the browser's native colour dialog
 - feat: Save as defaults becomes Make default, beside a count of the changed picks, and confirms with “Default request saved”
 - feat: the variants panel marks each selector's source default with a dot on its option or swatch and a tick on its range
-- feat: every select option, thumbnail and colour swatch has its own actions: a small chevron in its corner on hover or keyboard focus (always on touch), or a right click opens the selector dialog scoped to that option, with feedback, keep only this and remove, without changing the selection; the dialog opens below the option when it cannot fit above
-- feat: `[keep-option]` request: keep one option, make it the default and remove the selector and the other options. The selector's dialog offers it on each option row too
+- feat: any option or swatch can be kept as the only choice and made the default from its row in the selector dialog, which replaces Keep default only for those selectors. Notes carry a `keep-option` variant action
 
 ## 1.2.1
 
