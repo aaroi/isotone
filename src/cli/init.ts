@@ -535,7 +535,9 @@ function approachParagraph(approach: Approach): string {
       'a winner, `variant promote <id>` lands it over the real files; it refuses a stale',
       'or conflicted override, `variant sync <id>` merges first. A `[set-defaults]` note',
       'carrying `variants=<id>, <id>` means promote each named id and leave the other',
-      'variants alone; `variant drop <id>` only when asked to drop one.',
+      'variants alone; `variant drop <id>` only when asked to drop one. A `[keep-option]`',
+      'note names the winning option: promote that variant, make it the default and',
+      'remove the selector and the other options.',
     ].join('\n');
   }
   if (approach === 'host') {
