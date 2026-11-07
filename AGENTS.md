@@ -62,10 +62,10 @@ keep the source default in sync with the panel. The same [variants guide](docs/v
 shows the supported shapes.
 
 Once a page has more than a few selectors, put each in a section named after the
-part of the page it changes. Prefix the label with the section and a spaced slash,
+part of the page it changes. Prefix the label with the section and a spaced `>`,
 `Header > Logo size`, in host axes, `knobs.json` and `--group-label`; or pass
 `variant new <id> --section Header`. `variant section <id> <text>` moves an
-existing selector. A label that needs a spaced slash of its own takes an explicit
+existing selector. A label that needs a spaced `>` of its own takes an explicit
 `section` field instead.
 
 ## Changing Isotone itself
