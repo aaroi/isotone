@@ -240,6 +240,8 @@ it('makes single choices a radio group with one tab stop and keyboard actions', 
   await render({ variants });
   await act(async () => $('.isotone-fab').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })));
   await act(async () => $<HTMLButtonElement>('.isotone-rail-button[aria-label="Variants"]').click());
+  // Opening from the launcher focuses the composer a frame later; let that land before the keys.
+  await frame();
   const group = $('[role="radiogroup"]');
   const radios = () => Array.from(group.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
   expect(radios().map((r) => [r.getAttribute('aria-checked'), r.tabIndex])).toEqual([
