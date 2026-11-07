@@ -20,6 +20,23 @@ The runtime is TypeScript throughout. The expensive work is DOM traversal, disk
 access, and redundant updates; avoiding that work matters more here than adding
 a second language or runtime.
 
+## Pull requests
+
+Write the description for a person who hasn't followed the work, however
+technical the change is. `.github/pull_request_template.md` has the outline:
+
+- **Before:** what someone using Isotone experiences today, in plain words. Name
+  who that is: the person reviewing their app, their coding agent, or a maintainer.
+- **After:** what changes for them.
+- **Review notes:** only the technical detail a reviewer needs, such as risks,
+  trade-offs, effects on existing users, and what to try in the demo. Leave out
+  file-by-file lists, internal names and implementation narration unless they
+  matter for the review.
+- **Tested:** what was checked, and what wasn't.
+
+Agents that write the description themselves (`gh pr create --body`) follow the
+same outline.
+
 ## Boundaries
 
 | Layer | Responsibility |
