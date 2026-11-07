@@ -1,4 +1,5 @@
 import { type HTMLAttributes, memo, type ReactNode, type RefObject } from 'react';
+import { normalizeRoute } from '../core/routes';
 import type { IterationNote } from '../core/types';
 import { Icon } from './icons';
 import { dotPulse } from './motion';
@@ -88,7 +89,7 @@ export function NotesPanel({
           <NoteRow
             key={note.id}
             note={note}
-            page={note.route !== route ? note.route : undefined}
+            page={normalizeRoute(note.route) !== route ? note.route : undefined}
             editing={editingId === note.id}
             working={working.has(note.id)}
             onEdit={onEdit}

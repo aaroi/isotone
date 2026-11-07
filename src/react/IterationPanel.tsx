@@ -2,7 +2,7 @@ import { FEEDBACK_STORAGE_KEY } from '../core/browser-storage';
 import { createNoteId } from '../core/id';
 import { MAX_FEEDBACK_LENGTH } from '../core/limits';
 import type { IterationStoreConfig } from '../core/notes-client';
-import { isRouteVisible, type RouteGateOptions } from '../core/routes';
+import { isRouteVisible, normalizeRoute, type RouteGateOptions } from '../core/routes';
 import type { IterationElement, IterationNote, IterationShortcut, IterationTheme, VariantReference } from '../core/types';
 import { type VariantAction, type VariantsSource, visibleAxes } from '../core/variants';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
@@ -95,7 +95,7 @@ function shortcutText(shortcut: IterationShortcut | false): string {
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 export function IterationPanel({
-  route,
+  route: pageRoute,
   theme: themePreference = 'auto',
   updateEndpoint,
   store: storeCfg,
@@ -106,6 +106,8 @@ export function IterationPanel({
   defaultTab = 'notes',
   shortcut = DEFAULT_SHORTCUT,
 }: IterationPanelProps) {
+  // One page, however the URL spells it: `/about/` and `/about?tab=2` are `/about`, as for the CLI.
+  const route = normalizeRoute(pageRoute);
   const nsKey = storeCfg.key ?? FEEDBACK_STORAGE_KEY;
   const [mode, dispatch] = useReducer(reduceMode, CLOSED);
   const update = useCallback((change: ModeUpdate) => dispatch({ update: change, compact: isCompactViewport() }), []);
@@ -162,7 +164,10 @@ export function IterationPanel({
   const pages = useMemo(() => {
     const counts = new Map<string, number>();
     // The update note belongs to the project, not a page: it shows everywhere.
-    for (const n of openNotes) if (!n.update) counts.set(n.route, (counts.get(n.route) ?? 0) + 1);
+    for (const n of openNotes) {
+      const page = normalizeRoute(n.route);
+      if (!n.update) counts.set(page, (counts.get(page) ?? 0) + 1);
+    }
     const others = [...counts.keys()].filter((r) => r !== route).sort();
     return { counts, others };
   }, [openNotes, route]);
@@ -172,7 +177,10 @@ export function IterationPanel({
   }, [scope, route, pages]);
   const updateRequested = useMemo(() => openNotes.some((n) => n.update), [openNotes]);
   const visibleNotes = useMemo(
-    () => openNotes.filter((n) => n.update || selectedPages.has(n.route)).sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    () =>
+      openNotes
+        .filter((n) => n.update || selectedPages.has(normalizeRoute(n.route)))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     [openNotes, selectedPages],
   );
   // An agent's claim goes stale: a crashed or abandoned run should not pulse forever.
@@ -181,7 +189,7 @@ export function IterationPanel({
     [visibleNotes, clock],
   );
   const pendingActions = useMemo(
-    () => notes.flatMap((n) => (!n.done && n.route === route && n.variantAction ? [n.variantAction] : [])),
+    () => notes.flatMap((n) => (!n.done && normalizeRoute(n.route) === route && n.variantAction ? [n.variantAction] : [])),
     [notes, route],
   );
 

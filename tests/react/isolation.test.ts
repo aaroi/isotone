@@ -178,6 +178,17 @@ it('never drops focus to the page body when Escape closes a panel opened from th
   expect([$('.isotone-fab'), $('.isotone-rail-button')]).toContain(shadow.activeElement);
 });
 
+it('treats a trailing slash or query as the same page, as the CLI does', async () => {
+  notes = [
+    { id: 'a', route: '/about/', feedback: 'Slash', element: null, done: false, createdAt: '2026-01-01T00:00:00.000Z' },
+    { id: 'b', route: '/about', feedback: 'Bare', element: null, done: false, createdAt: '2026-01-01T00:00:01.000Z' },
+  ];
+  await render({ route: '/about/?tab=2' });
+  await openFeedback();
+  expect(shadow.querySelectorAll('.isotone-note')).toHaveLength(2);
+  expect(shadow.querySelector('.isotone-pages')).toBeNull();
+});
+
 it('names the note count on the launcher and the Feedback button', async () => {
   notes = [
     { id: 'a', route: '/', feedback: 'One', element: null, done: false, createdAt: '2026-01-01T00:00:00.000Z' },
