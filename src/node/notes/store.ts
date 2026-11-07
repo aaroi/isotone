@@ -7,7 +7,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 
-import type { IterationElement, NoteContext, NoteReply } from '../../core/index';
+import type { IterationElement, NoteContext, NoteReply } from '../../core/types';
 import { MAX_REPLY_LENGTH } from '../../core/limits';
 import { writeJson } from '../fs/atomic';
 import { withFileLock } from '../fs/lock';

@@ -3,17 +3,10 @@ import { FEEDBACK_STORAGE_KEY, readBrowserStorage, removeBrowserStorage, writeBr
 import { MAX_FEEDBACK_LENGTH } from '../core/limits';
 import { createNoteId } from '../core/id';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import {
-  createIterationStore,
-  describeIterationElement,
-  elementAsNode,
-  isRouteVisible,
-  type IterationElement,
-  type IterationNote,
-  type IterationStoreConfig,
-  type RouteGateOptions,
-  type VariantReference,
-} from '../core/index';
+import { createIterationStore, type IterationStoreConfig } from '../core/notes-client';
+import { describeIterationElement, elementAsNode } from '../core/element';
+import { isRouteVisible, type RouteGateOptions } from '../core/routes';
+import type { IterationElement, IterationNote, VariantReference } from '../core/types';
 import { type VariantAction, type VariantsSource, visibleAxes } from '../core/variants';
 import { ensurePanelStyles } from './styles';
 import { refreshSource, useVariantsSource, VariantsView } from './VariantsView';

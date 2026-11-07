@@ -21,13 +21,13 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { dirname, resolve } from 'node:path';
 
-import type { RouteGateOptions } from '../core/index';
+import type { RouteGateOptions } from '../core/routes';
 import type { IterationTheme } from '../core/types';
 import { checkOrigin, HttpError, isLoopback, readNodeJson, sendFailure, writeResponse } from '../node/http';
 import { ensureFileIgnored } from '../node/fs/git-exclude';
 import { notesResponse, NOTES_ENDPOINT } from '../node/notes/handler';
 import { VARIANTS_ENDPOINT } from '../core/variants';
-import { readKnobs } from '../node/variants/store';
+import { readKnobs } from '../node/variants';
 
 import { readBundle } from '../standalone/bundle';
 import { serveMountOptions } from './mount-config';

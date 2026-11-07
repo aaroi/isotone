@@ -3,7 +3,7 @@
  * what it keeps and drops anything malformed, so a hostile or buggy page
  * cannot bloat or corrupt the notes file.
  */
-import type { IterationElement, VariantReference, VariantRemoval } from '../../core/index';
+import type { IterationElement, VariantReference, VariantRemoval } from '../../core/types';
 import { MAX_SELECTOR, PAYLOAD_MAX } from '../../core/limits';
 
 export function cap(v: string, max: number): string {

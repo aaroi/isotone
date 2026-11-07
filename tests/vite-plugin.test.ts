@@ -24,7 +24,7 @@ import { iteration, withNativeFetch, type IterationViteOptions } from '../src/vi
 import { NOTES_ENDPOINT } from '../src/node/notes/handler';
 import { VARIANTS_ENDPOINT } from '../src/core/variants';
 import { UPDATE_ENDPOINT } from '../src/node/update/check';
-import { ACTIVE_FILE, addVariantFile, createVariant, readActive, variantDir, writeActive } from '../src/node/variants/store';
+import { ACTIVE_FILE, addVariantFile, createVariant, readActive, variantDir, writeActive } from '../src/node/variants';
 
 let server: ViteDevServer;
 let root: string;

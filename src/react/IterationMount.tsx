@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client';
 
-import { createIterationStore } from '../core/index';
+import { createIterationStore } from '../core/notes-client';
 import {
   createOverlayVariantsSource,
   axisSection,

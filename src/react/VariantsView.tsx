@@ -1,6 +1,6 @@
 import { showOverflowTitle } from './tooltips';
 import { type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { VariantReference } from '../core/index';
+import type { VariantReference } from '../core/types';
 import {
   axisDefault,
   axisSection,

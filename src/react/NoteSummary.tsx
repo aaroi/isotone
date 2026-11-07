@@ -1,5 +1,5 @@
 import { showOverflowTitle } from './tooltips';
-import type { IterationNote } from '../core/index';
+import type { IterationNote } from '../core/types';
 import { updateNoteText } from '../core/update';
 
 /** Pinned references and saved defaults use the same compact tag. */

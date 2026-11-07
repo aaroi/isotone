@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { expect, it } from 'vitest';
 import { writeJson } from '../src/node/fs/atomic';
 import { compileSources } from './helpers/compile';
-import { createVariant, readVariant, variantDir } from '../src/node/variants/store';
+import { createVariant, readVariant, variantDir } from '../src/node/variants';
 
 it('serializes independent writers while readers only see complete JSON', async () => {
   const writesPerWriter = 20;
@@ -94,7 +94,7 @@ it('preserves every file when separate agents add to the same variant', async ()
     const runtime = join(root, 'runtime');
     // Run the current sources in child processes without rebuilding the
     // package or requiring a TypeScript loader in the supported Node versions.
-    const store = compileSources(['node/variants/store'], runtime)['node/variants/store'];
+    const store = compileSources(['node/variants'], runtime)['node/variants'];
     createVariant({ root }, { id: 'shared' });
     const files = Array.from({ length: 20 }, (_, index) => `source-${index}.txt`);
     for (const file of files) writeFileSync(join(root, file), `Contents of ${file}`);

@@ -1,11 +1,94 @@
 /**
- * Configuration types shared by the panel and the server-side adapters.
- *
- * They live in core so the Vite plugin, `isotone/serve` and `isotone/server`
- * can describe the panel's options without importing React.
+ * The note model, and the configuration types shared by the panel and the
+ * server-side adapters. They live in core so the Vite plugin, `isotone/serve`
+ * and `isotone/server` can describe notes and the panel's options without
+ * importing React.
  */
-import type { RouteGateOptions } from './index';
+import type { RouteGateOptions } from './routes';
+import type { UpdateRequest } from './update';
 import type { VariantsSource } from './variants';
+
+/** A UI element picked with the panel's selector mode. */
+export interface IterationElement {
+  /** Lowercase tag name, e.g. "button". */
+  tag: string;
+  /** Trimmed text-content snippet (may be empty for visual elements). */
+  text: string;
+  /** CSS path to the element. A pin made in a browser matches only this element. */
+  selector: string;
+  /** Identifying attributes: role, name, aria-label, data-*, class and so on. */
+  attributes?: Record<string, string>;
+  /** React components around the element, outermost first. */
+  component?: string[];
+  /** `file:line` of the JSX, where the host's React still records it. */
+  source?: string;
+  /** Labelled or headed ancestors, outermost first. */
+  within?: string[];
+  /** The closest ancestor's text, for an element with none of its own. */
+  near?: string;
+  /** Where it sat on the page when pinned, in CSS pixels from the document's corner. */
+  rect?: { x: number; y: number; w: number; h: number };
+}
+
+/** A durable reference to a selector or one of its options, not a DOM path. */
+export interface VariantReference {
+  axisId: string;
+  label: string;
+  optionId?: string;
+  optionLabel?: string;
+  value?: string;
+}
+
+export interface VariantRemoval {
+  axisId: string;
+  action: 'remove-option' | 'remove-axis' | 'keep-default' | 'keep-option';
+  optionId?: string;
+}
+
+export interface NoteContext {
+  /** Pending instruction: deleting its note cancels it before the agent acts. */
+  variantAction?: VariantRemoval;
+  elements?: IterationElement[];
+  variant?: VariantReference | null;
+  /** The user's request to upgrade Isotone, built by the local server from
+   *  its own update check. At most one is open at a time. */
+  update?: UpdateRequest;
+  /** The agent's question or remark about the note, written with
+   *  `isotone --reply <id> "<text>"`. Only the CLI writes it; the panel shows it
+   *  under the note, and the reviewer answers by editing the note. */
+  reply?: NoteReply;
+}
+
+export interface NoteReply {
+  text: string;
+  at: string;
+  /** A fingerprint of the note as it was when the agent asked. Until the
+   *  reviewer edits the note, Blast does not hand it out again. */
+  about?: string;
+  /** Set when the note has changed since the agent asked: the reviewer's
+   *  edit answered the question, so it is no longer pending. */
+  answered?: boolean;
+}
+
+/** A note written in the panel, read and answered by the coding agent. */
+export interface IterationNote extends NoteContext {
+  id: string;
+  /** The route the note was written on, e.g. "/projects". */
+  route: string;
+  feedback: string;
+  element: IterationElement | null;
+  done: boolean;
+  doneAt?: string | null;
+  /** Set while an agent says it is working on the note. Stale after a while. */
+  workingAt?: string | null;
+  createdAt: string;
+  /** The window size the note was written at — layout feedback only means
+   *  something at the breakpoint it was seen on. */
+  viewport?: { w: number; h: number };
+  /** Host-specific context the store round-trips without interpreting — see
+   *  `StoredNote.payload`. */
+  payload?: unknown;
+}
 
 /** Auto follows the page at the dock; system follows the OS preference. */
 export type IterationTheme = 'auto' | 'light' | 'dark' | 'system';

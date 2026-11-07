@@ -1,9 +1,9 @@
-import type { RouteGateOptions } from '../core/index';
+import type { RouteGateOptions } from '../core/routes';
 import { VARIANTS_ENDPOINT } from '../core/variants';
 import type { IterationTheme, MountIterationOptions } from '../core/types';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
 import { UPDATE_ENDPOINT } from '../node/update/check';
-import { readKnobs } from '../node/variants/store';
+import { readKnobs } from '../node/variants';
 
 /**
  * What `isotone serve` hands `mountIteration` in its bundle.

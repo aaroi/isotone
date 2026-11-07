@@ -23,10 +23,10 @@ export {
   readActive,
   variantsResponse,
   writeActive,
-} from '../node/variants/store';
-import { variantsResponse } from '../node/variants/store';
-import type { VariantsStoreOptions } from '../node/variants/store';
-export type { VariantsStoreOptions } from '../node/variants/store';
+} from '../node/variants';
+import { variantsResponse } from '../node/variants';
+import type { VariantsStoreOptions } from '../node/variants';
+export type { VariantsStoreOptions } from '../node/variants';
 export { VARIANTS_ENDPOINT } from '../core/variants';
 import { VARIANTS_ENDPOINT } from '../core/variants';
 

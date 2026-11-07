@@ -4,7 +4,7 @@
  */
 import { randomUUID } from 'node:crypto';
 
-import type { IterationElement } from '../../core/index';
+import type { IterationElement } from '../../core/types';
 import { MAX_FEEDBACK_LENGTH, MAX_SELECTOR, PAYLOAD_MAX } from '../../core/limits';
 import { updateNoteText } from '../../core/update';
 import { withFileLock } from '../fs/lock';

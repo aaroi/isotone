@@ -27,7 +27,7 @@ import {
   variantDir,
   writeActive,
   type VariantsStoreOptions,
-} from '../node/variants/store';
+} from '../node/variants';
 import { type CliIO, errOut, extractBoolFlag, extractFlag, findNoteByPrefix, out, printTable } from './util';
 
 export function runVariant(args: string[], io: CliIO): number {

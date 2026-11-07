@@ -24,7 +24,7 @@ import {
   variantDir,
   variantsResponse,
   writeActive,
-} from '../src/node/variants/store';
+} from '../src/node/variants';
 
 const dirs: string[] = [];
 const servers: ViteDevServer[] = [];
