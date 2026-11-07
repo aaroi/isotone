@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- chore: the hosted demo deploys from `main` and gives each pull request a preview link (`demo.yml`)
+
 ## 1.1.3
 
 - fix: a failed variant switch shows the server's reason, naming the variants, their groups and the shared file
