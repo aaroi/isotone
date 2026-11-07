@@ -314,7 +314,7 @@ the composer must not remeasure unchanged selectors or notes.
 | `src/react/IterationPanel.tsx` | The dock: which surfaces are open, the rail, focus on close, host event fence and shortcut |
 | `src/react/Composer.tsx`, `NotesPanel.tsx` | The composer and its text, and the feedback panel with its saved notes |
 | `src/react/picking.tsx`, `useFloatingComposer.ts` | Select mode, hover and pin outlines, and the composer floating beside a pin |
-| `src/react/useNotes.ts` | Loading, polling and optimistic writes of notes |
+| `src/react/useNotes.ts`, `useDraft.ts` | Loading, polling and optimistic writes of notes; each page's unsent draft |
 | `src/react/VariantsView.tsx` | The selector list, sections, colour popover and the defaults bar |
 | `src/react/AxisControl.tsx`, `AxisActionsDialog.tsx` | One selector's controls, and its action dialog |
 | `src/react/theme.ts` | Theme resolution, observation and cleanup |
