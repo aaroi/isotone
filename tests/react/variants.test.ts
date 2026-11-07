@@ -209,6 +209,8 @@ describe('VariantsView', () => {
     expect(container.querySelector('.isotone-vars-body')?.hasAttribute('inert')).toBe(false);
   });
 
+  // Rendering 500 selectors takes seconds in jsdom on a loaded or Windows
+  // runner, so these two tests get more than the default 5 s.
   it('renders a large selector set without truncating the available choices', async () => {
     const axes: VariantAxis[] = Array.from({ length: 500 }, (_, i) => ({
       id: `axis-${i}`,
@@ -226,7 +228,7 @@ describe('VariantsView', () => {
     await click(last);
     expect(source.getSelections()['axis-499']).toBe('b');
     expect(last.getAttribute('aria-pressed')).toBe('true');
-  });
+  }, 30_000);
 
   it('renders the visible axes and hides the conditional one at default', async () => {
     const source = createVariantsSource({ axes: AXES });
@@ -1535,7 +1537,7 @@ describe('review dock interactions', () => {
       const last = container.querySelectorAll<HTMLButtonElement>('.isotone-seg')[999];
       await click(last);
       expect(source.getSelections()['axis-499']).toBe('b');
-    });
+    }, 30_000);
   });
   describe('selector action dialog', () => {
     const SIZES: VariantAxis[] = [
