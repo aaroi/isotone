@@ -20,7 +20,7 @@ import {
 
 import { ensureDirIgnored, ensureFileIgnored } from '../node/fs/git-exclude';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
-import { readBundle } from '../standalone/bundle';
+import { readBundle } from '../node/bundle';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
 import { autoUpdateNote } from '../node/update/note';
 import { isWithin } from '../node/fs/paths';
@@ -38,7 +38,7 @@ import {
   variantsDir,
   type VariantsStoreOptions,
 } from '../node/variants';
-import { isRouteModule, scanExports } from './exports';
+import { isRouteModule, scanExports } from '../node/variants/exports';
 import { BUNDLE_PATH, injectHtmlResponse, mountModuleSource } from './html-inject';
 import { notesEndpoint, updateEndpoint, variantsEndpoint } from './middleware';
 import type { IterationPlugin, IterationViteOptions } from './options';
@@ -429,6 +429,9 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
           const shownDir = relative(server.config.root, vDir) || vDir;
           const n = listVariants(vopts).length;
           server.config.logger.info(`  isotone  variants → ${shownDir}  (${n} variant${n === 1 ? '' : 's'})`);
+        }
+        if (allowedHosts().network) {
+          server.config.logger.warn('  isotone  exposed with --host: anyone on your network can read and write notes and switch variants');
         }
       });
 

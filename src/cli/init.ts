@@ -92,6 +92,8 @@ export function runInit(args: string[], io: CliIO): number {
               ]
             : [],
           agents: agents.status,
+          // What to put in AGENTS.md by hand when init does not write it.
+          ...(agents.status === 'current' || (yes && 'next' in agents) ? {} : { agentsSection: section }),
           instructions: instructions.map((line) => `${line}\n`).join(''),
         },
         null,
@@ -114,6 +116,7 @@ export function runInit(args: string[], io: CliIO): number {
     current: 'AGENTS.md has the current Isotone section.',
     legacy:
       'AGENTS.md has an Isotone section init cannot safely replace: one from Isotone 1.2.4 or earlier, without its markers. Replace that section (from its "## isotone" heading to the end of what Isotone wrote) with this:',
+    unterminated: `AGENTS.md has \`${AGENTS_START}\` without \`${AGENTS_END}\`, so init left it alone. Restore the end marker, or replace the section with this:`,
   }[agents.status];
   if (message) out(io, message);
   else
@@ -121,7 +124,7 @@ export function runInit(args: string[], io: CliIO): number {
       io,
       `Run \`npx isotone init --yes\` to ${agents.status === 'missing' ? 'add this section to' : 'refresh this section in'} AGENTS.md, or paste it there:`,
     );
-  if (!message || agents.status === 'legacy') {
+  if (!message || agents.status === 'legacy' || agents.status === 'unterminated') {
     out(io);
     for (const line of section.split('\n')) out(io, line);
   }
@@ -525,7 +528,7 @@ function applyApproach(cwd: string, approach: Approach, agents: AgentsState): vo
  */
 function agentsSection(approach: Approach): string {
   return [
-    `${AGENTS_START} ${version} · npx isotone init --yes rewrites this section -->`,
+    `${AGENTS_START} ${version} · npx isotone init --yes replaces everything up to isotone:end; keep your own notes outside -->`,
     '## Isotone',
     '',
     'Isotone is a development-only review panel in this app: the user pins notes to',
@@ -556,7 +559,7 @@ const APPROACH_LINE: Record<Approach, string> = {
     'The panel loads from `npx isotone serve` (or the package.json `isotone` script),\n  which must be running in this directory. Alternatives are knobs in .isotone/knobs.json.',
 };
 
-type AgentsState = { status: 'missing' | 'outdated'; next: string } | { status: 'current' | 'legacy' };
+type AgentsState = { status: 'missing' | 'outdated'; next: string } | { status: 'current' | 'legacy' | 'unterminated' };
 
 function readAgents(cwd: string): string | null {
   const file = join(cwd, 'AGENTS.md');
@@ -574,7 +577,7 @@ function agentsState(existing: string | null, section: string): AgentsState {
   const start = existing.indexOf(AGENTS_START);
   if (start !== -1) {
     const end = existing.indexOf(AGENTS_END, start);
-    if (end === -1) return { status: 'legacy' };
+    if (end === -1) return { status: 'unterminated' };
     const current = existing.slice(start, end + AGENTS_END.length);
     if (current === section) return { status: 'current' };
     return { status: 'outdated', next: existing.slice(0, start) + section + existing.slice(end + AGENTS_END.length) };

@@ -29,12 +29,12 @@ import { notesResponse, NOTES_ENDPOINT } from '../node/notes/handler';
 import { VARIANTS_ENDPOINT } from '../core/variants';
 import { readKnobs } from '../node/variants';
 
-import { readBundle } from '../standalone/bundle';
+import { readBundle } from '../node/bundle';
 import { serveMountOptions } from './mount-config';
 import { guardedScriptTag } from './tag';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
 import { autoUpdateNote, updateResponse } from '../node/update/note';
-export { readBundle } from '../standalone/bundle';
+export { readBundle } from '../node/bundle';
 
 export const DEFAULT_PORT = 4123;
 const BUNDLE_PATH = '/isotone.js';

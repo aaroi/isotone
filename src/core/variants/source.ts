@@ -29,8 +29,6 @@ export interface VariantsSource {
    * out and promotes from the CLI instead.
    */
   saveDefaults?: (selections: VariantSelections) => Promise<void> | void;
-  /** Panel heading; defaults to "Variants". */
-  title?: string;
   /** Optional durable host mutation. Reject to leave the UI unchanged. */
   manage?: (action: VariantAction) => Promise<void> | void;
 }
@@ -46,7 +44,6 @@ export function createVariantsSource(init: {
   selections?: VariantSelections;
   onChange?: (selections: VariantSelections) => void;
   saveDefaults?: VariantsSource['saveDefaults'];
-  title?: string;
   /** Persist edited definitions in a host's own storage, before notifying. */
   onManage?: (axes: VariantAxis[], selections: VariantSelections, action: VariantAction) => Promise<void> | void;
 }): VariantsSource & {
@@ -71,7 +68,6 @@ export function createVariantsSource(init: {
     emit();
   };
   return {
-    title: init.title,
     saveDefaults: init.saveDefaults,
     getAxes: () => axes,
     getSelections: () => selections,

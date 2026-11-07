@@ -381,7 +381,7 @@ type Middleware = (
 ) => void;
 
 interface FakeServer {
-  config: { root: string; logger: { info: ReturnType<typeof vi.fn> } };
+  config: { root: string; logger: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> } };
   httpServer: null;
   middlewares: { use: ReturnType<typeof vi.fn> };
   watcher: {
@@ -436,7 +436,7 @@ function plugin(root: string, command: 'serve' | 'build', options: IterationVite
 
 function fakeServer(root: string): FakeServer {
   return {
-    config: { root, logger: { info: vi.fn() } },
+    config: { root, logger: { info: vi.fn(), warn: vi.fn() } },
     httpServer: null,
     middlewares: { use: vi.fn() },
     watcher: { add: vi.fn(), on: vi.fn(), emit: vi.fn() },
@@ -561,7 +561,7 @@ describe('overlay variants in load()', () => {
     expect(hooks.load(source)?.code).toContain('variant b');
   });
 
-  it('applies overrides when the Vite root is reached through a symlink', () => {
+  it.skipIf(process.platform === 'win32')('applies overrides when the Vite root is reached through a symlink', () => {
     const { root, source } = tempProject();
     writeActive({ root }, ['b']);
     // Vite keeps `config.root` as configured and realpaths every module id,
@@ -748,6 +748,9 @@ describe('overlay variants in the dev server', () => {
     expect(form.status).toBe(415);
     const missing = await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] }, {});
     expect(missing.status).toBe(415);
+    // Only the media type counts: a JSON-looking parameter keeps a form's type.
+    const smuggled = { 'content-type': 'text/plain; x=application/json' };
+    expect((await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] }, smuggled)).status).toBe(415);
     expect(readActive({ root })).toEqual([]);
     expect(server.ws.send).not.toHaveBeenCalled();
     // A charset parameter is still JSON.
@@ -800,6 +803,24 @@ describe('overlay variants in the dev server', () => {
     for (const cb of listeners) cb();
     const lines = server.config.logger.info.mock.calls.map((c) => String(c[0]));
     expect(lines.some((l) => l.includes('variants → .isotone/variants  (2 variants)'))).toBe(true);
+  });
+
+  it('says once at startup when --host makes the endpoints reachable from the network', () => {
+    const { root } = tempProject();
+    const warned = (host?: unknown) => {
+      const server = fakeServer(root);
+      if (host !== undefined) (server.config as { server?: unknown }).server = { host };
+      const listeners: Array<() => void> = [];
+      (server as unknown as { httpServer: unknown }).httpServer = { once: (_event: string, cb: () => void) => listeners.push(cb) };
+      plugin(root, 'serve').configureServer(server);
+      for (const cb of listeners) cb();
+      return server.config.logger.warn.mock.calls.map((c) => String(c[0]));
+    };
+    expect(warned()).toEqual([]);
+    expect(warned('127.0.0.1')).toEqual([]);
+    const lines = warned(true);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('anyone on your network');
   });
 });
 

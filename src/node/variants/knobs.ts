@@ -2,7 +2,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { KnobAxis } from '../../core/variants';
+import type { KnobAxis } from '../../core/variants/overlay';
 import { KNOBS_FILE, type VariantsStoreOptions } from './options';
 import { isValidVariantId } from './paths';
 

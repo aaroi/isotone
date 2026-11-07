@@ -26,6 +26,17 @@ export function blobOf(absPath: string): string | null {
   }
 }
 
+/** Whether git ignores the file (an untracked file a `.gitignore` covers).
+ *  Outside a repository nothing is ignored. */
+export function isGitIgnored(absPath: string): boolean {
+  try {
+    execFileSync('git', ['check-ignore', '-q', absPath], { cwd: dirname(absPath), stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function currentBlob(absPath: string): string | null {
   try {
     return execFileSync('git', ['hash-object', '--no-filters', absPath], {

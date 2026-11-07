@@ -9,7 +9,7 @@ export function readBundle(): string {
     // built: dist/serve.js sits beside the bundle
     resolve(here, 'isotone.global.js'),
     resolve(here, '..', 'dist', 'isotone.global.js'),
-    // from source (tests): src/serve/ -> the repo's dist/
+    // from source (tests): src/node/ -> the repo's dist/
     resolve(here, '..', '..', 'dist', 'isotone.global.js'),
   ]) {
     if (existsSync(candidate)) return readFileSync(candidate, 'utf8');

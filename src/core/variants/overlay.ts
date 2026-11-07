@@ -467,7 +467,6 @@ export function createOverlayVariantsSource(cfg: {
       });
   }
   return {
-    title: 'Variants',
     getError: () => error,
     get list() {
       return list;

@@ -88,7 +88,8 @@ function parseNotesArgs(input: string[], cwd: string): NotesArgs {
     ids,
     replyText,
     route,
-    closed: daysText !== undefined ? days : has(argv, '--all') ? 'all' : 'none',
+    // `--all` already includes what `--days` would add.
+    closed: has(argv, '--all') ? 'all' : daysText !== undefined ? days : 'none',
   };
 }
 
@@ -126,7 +127,7 @@ function reply(io: CliIO, args: NotesArgs, root: string): number {
     return 1;
   }
   touchSession(args.file);
-  if (args.json) out(io, toJson(noteRecord(match, root)));
+  if (args.json) out(io, toJson([noteRecord(match, root)]));
   else {
     out(io, `replied: [${shortId(match)}] ${oneLine(match.route)} — ${oneLine(args.replyText, 60)}`);
     out(io, 'The note stays open. The reviewer sees your reply under it and answers by editing the note.');
@@ -224,22 +225,32 @@ function agentNote<T extends StoredNote>(note: T, root: string): T {
 /**
  * One note as `--json` prints it: pinned elements only under `elements`, no
  * null fields, and on an open note the `doneCommand` that closes it once it is
- * fixed.
+ * fixed. Built from the known fields only: anything else in the file, a
+ * stored `doneCommand` or `updateHint` included, is not passed on.
  */
 export function noteRecord(record: StoredNote, root: string) {
   // A hand-edited, malformed update request or reply is dropped, not passed on.
-  const checked = agentNote(record, root);
+  const n = agentNote(record, root);
   const reply = replyView(record);
-  const { reply: _reply, element, elements, doneAt, workingAt, ...rest } = checked;
-  const pinned = elements?.length ? elements : element ? [element] : undefined;
-  return {
-    ...rest,
-    ...(pinned ? { elements: pinned } : {}),
-    ...(doneAt ? { doneAt } : {}),
-    ...(workingAt ? { workingAt } : {}),
-    ...(reply ? { reply } : {}),
-    ...(rest.done ? {} : { ...(checked.update ? { updateHint: UPDATE_HINT } : {}), doneCommand: doneCommand(rest.id) }),
+  const pinned = n.elements?.length ? n.elements : n.element ? [n.element] : undefined;
+  const fields = {
+    id: n.id,
+    route: n.route,
+    feedback: n.feedback,
+    done: n.done === true,
+    createdAt: n.createdAt,
+    viewport: n.viewport,
+    payload: n.payload,
+    variant: n.variant,
+    variantAction: n.variantAction,
+    update: n.update,
+    elements: pinned,
+    doneAt: n.doneAt,
+    workingAt: n.workingAt,
+    reply,
+    ...(n.done ? {} : { updateHint: n.update ? UPDATE_HINT : undefined, doneCommand: doneCommand(n.id) }),
   };
+  return Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined && value !== null));
 }
 
 /** The shell command that closes a note, quoted so any id is one argument. */

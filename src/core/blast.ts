@@ -10,7 +10,8 @@
  *
  * The feature's name is likely to change. Every user-facing name, the CLI
  * command and the state file come from {@link BLAST}, so a rename is one edit
- * here plus the docs (`docs/blast.md`, AGENTS.md).
+ * here plus the docs (`docs/blast.md`, `docs/agent-guide.md`) and the
+ * section `init` writes (`src/cli/init.ts`).
  */
 export const BLAST = {
   /** The name in CLI output. */
@@ -57,6 +58,9 @@ export interface BlastState {
 
 const UNITS: Record<string, number> = { ms: 1, s: 1000, m: 60_000, h: 3_600_000 };
 
+/** A number and a unit, repeated: what {@link parseDuration} accepts. */
+export const DURATION = /^(\d+(?:\.\d+)?(ms|s|m|h))+$/i;
+
 /**
  * `30s`, `5m`, `1h`, `1h30m` or `90s` → milliseconds. A bare number is
  * rejected: minutes and seconds are both plausible, and a guess is worse
@@ -64,7 +68,7 @@ const UNITS: Record<string, number> = { ms: 1, s: 1000, m: 60_000, h: 3_600_000 
  */
 export function parseDuration(text: string): number {
   const value = text.trim().toLowerCase();
-  if (!/^(\d+(?:\.\d+)?(ms|s|m|h))+$/.test(value)) {
+  if (!DURATION.test(value)) {
     throw new Error(`"${text}" is not a duration. Use a number and a unit, such as 30s, 5m or 1h.`);
   }
   let total = 0;

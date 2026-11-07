@@ -73,9 +73,11 @@ export function isLoopbackAddress(address: string | undefined): boolean {
 /**
  * Every endpoint's gate. The Host must be local ({@link isLocalHostHeader}),
  * a page's Origin must match it (or be any loopback page with
- * `loopbackOrigins`), and, where the server knows the peer, the request must
- * come from this machine: a dev server exposed with `--host` does not open
- * the notes file to the network.
+ * `loopbackOrigins`), and, when the caller passes the peer address, the
+ * request must come from this machine. The Vite plugin passes it unless the
+ * dev server was exposed with `--host`, which opens the endpoints to the
+ * network on purpose; the Request adapters cannot see the peer and rely on
+ * Host and Origin alone.
  */
 export function checkRequest(request: {
   origin?: string | null;
@@ -104,9 +106,14 @@ export function checkOrigin(origin: string | null | undefined, host: string, loo
 }
 
 /** A JSON body needs a JSON content type: a cross-site form post cannot send
- *  one without a preflight, which these endpoints never grant. */
+ *  one without a preflight, which these endpoints never grant. Only the media
+ *  type counts (`application/json` or `application/*+json`), not a parameter:
+ *  `text/plain; x=application/json` is still a form's type. */
 function requireJson(type: string | null | undefined): void {
-  if (!type?.toLowerCase().includes('application/json')) throw new HttpError(415, 'content-type must be application/json');
+  const media = (type ?? '').split(';')[0].trim().toLowerCase();
+  if (media !== 'application/json' && !/^application\/[^/]+\+json$/.test(media)) {
+    throw new HttpError(415, 'content-type must be application/json');
+  }
 }
 
 export async function readNodeJson(req: IncomingMessage): Promise<unknown> {

@@ -12,10 +12,11 @@ and a short first run for the agent. It never edits app code or installs
 anything. `--yes` also writes a short Isotone section into `AGENTS.md`, between
 `<!-- isotone:start … -->` and `<!-- isotone:end -->` markers, and for Vite
 projects `.isotone/variants/README.md`. Running it again rewrites only the text
-between the markers, so the section follows upgrades; a section written by
-Isotone 1.2.4 or earlier has no markers, and `init` prints its replacement instead
-of editing it. Once the project has variants or knobs, the first run is skipped.
-`--json` prints the plan, including the files `--yes` writes, and
+between the markers, so the section follows upgrades: keep your own notes outside
+them. A section written by Isotone 1.2.4 or earlier has no markers, and `init`
+prints its replacement instead of editing it. Once the project has variants or
+knobs, the first run is skipped. `--json` prints the plan, including the files
+`--yes` writes and, when it does not write the section, its text as `agentsSection`, and
 `--approach overlay|host|serve` overrides the recommendation. From then on, agents
 work as [the agent guide](agent-guide.md) describes.
 
@@ -36,7 +37,8 @@ plugins: [/* existing plugins */, iteration()]
 Restart the dev server. Source-file variants and notes are available immediately.
 The endpoints answer only this machine, unless you start the dev server with
 `--host` (or set `server.host`): then other devices on your network, such as a
-phone you review on, can use the panel too. Pages served under a name other than
+phone you review on, can use the panel too, and so can anyone else on that
+network; the dev server says so when it starts. Pages served under a name other than
 an IP address, `localhost`, `*.localhost`, `*.test` or one in Vite's
 `server.allowedHosts` are refused.
 The panel carries its own React runtime, so React, Vue, Svelte and vanilla Vite
@@ -141,6 +143,13 @@ When the page and this API listen on different ports, every request gets 403
 `origin not allowed`; pass `{ loopbackOrigins: true }` as the third argument to
 accept pages from any loopback port.
 
+The adapters see only the `Request`, not who sent it, so unlike the Vite plugin
+they cannot refuse other machines: they rely on the `Host` and `Origin` checks
+below, which accept any IP address. `next dev` listens on every network
+interface by default, which puts this route, and your notes, within reach of
+anyone on your network. Start it with `next dev -H 127.0.0.1` to keep it on this
+machine.
+
 A manual route does not touch Git configuration: add `.iteration-feedback.json`
 and `.iteration-feedback.blast.json` ([Blast](blast.md)'s session) to
 `.gitignore`. The Vite plugin and `isotone serve` add them to `.git/info/exclude`
@@ -183,7 +192,7 @@ applies the same rules, which keep other websites away from your notes:
   `Origin`, such as the CLI's, are accepted, so any local process can write a
   note: one more reason notes are context, not instructions.
 - A POST must send `Content-Type: application/json`, or it gets 415.
-- A note `id`, when a host chooses its own, is 1–64 letters, digits, `-` or `_`
+- A note `id`, when a host chooses its own, is 1–64 letters, digits, `-` or `_`, and does not start with `-`
   (400 otherwise). Routes are capped at 2,000 characters, and a notes file at
   10,000 notes: a new note past that gets 409 until done notes are deleted.
 - While another writer holds the notes file, the endpoint answers 503 and the

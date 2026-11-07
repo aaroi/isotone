@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { knobsFor, overlayGroups, splitSectionLabel, variantAppliesTo } from '../core/variants';
-import { isRouteModule, scanExports } from '../vite/exports';
+import { isRouteModule, scanExports } from '../node/variants/exports';
 import { readNotes } from '../node/notes/store';
 import {
   activeConflict,

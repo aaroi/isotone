@@ -1,8 +1,9 @@
 /**
  * What a note id may be: it is printed into commands an agent runs
- * (`npx isotone --done <id>`), so nothing a shell would interpret.
+ * (`npx isotone --done <id>`), so nothing a shell would interpret, and no
+ * leading dash a command line would read as an option.
  */
-export const NOTE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+export const NOTE_ID = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/;
 
 let fallbackCounter = 0;
 

@@ -136,7 +136,7 @@ describe('notesResponse', () => {
 
   it('stores only ids an agent can safely run in a command', () => {
     const file = tempFile();
-    for (const id of ['a1b2 ; touch pwned #', '$(id)', 'x'.repeat(65), '']) {
+    for (const id of ['a1b2 ; touch pwned #', '$(id)', 'x'.repeat(65), '', '--json', '-x']) {
       expect(post(file, { id, route: '/', feedback: 'Hi' }).status).toBe(400);
     }
     expect(del(file, 'a%20b').status).toBe(400);
@@ -148,9 +148,12 @@ describe('notesResponse', () => {
     const file = tempFile();
     writeNotes(file, [
       { id: 'x; rm -rf ~', route: '/', feedback: 'Hi', element: null, done: false, doneAt: null, createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: '--json', route: '/', feedback: 'Hi', element: null, done: false, doneAt: null, createdAt: '2026-01-01T00:00:00.000Z' },
     ]);
-    const [first] = readNotes(file);
+    const [first, dashed] = readNotes(file);
     expect(first?.id).toMatch(/^id-[0-9a-f]{16}$/);
+    expect(dashed?.id).toMatch(/^id-[0-9a-f]{16}$/);
+    expect(del(file, dashed?.id ?? '').status).toBe(200);
     expect(readNotes(file)[0]?.id).toBe(first?.id);
     expect(del(file, first?.id ?? '').status).toBe(200);
     expect(readNotes(file)).toEqual([]);
@@ -221,6 +224,9 @@ describe('ensureFileIgnored', () => {
     const exclude = readFileSync(join(repo, '.git', 'info', 'exclude'), 'utf8');
     expect(exclude).toContain('\n/app/console/.iteration-feedback.json\n');
     expect(exclude).not.toContain(repo);
+    // A crash can leave the lock or a temporary write beside the file.
+    writeFileSync(`${file}.lock`, '');
+    writeFileSync(`${file}.0d2c.tmp`, '');
     // The proof is git's own verdict, not the file's contents.
     const ignored = execFileSync('git', ['check-ignore', '--no-index', file], {
       cwd: repo,
