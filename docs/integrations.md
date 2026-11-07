@@ -7,11 +7,12 @@ npm install -D isotone
 npx isotone init --yes
 ```
 
-`init` detects the project, prints the development-only integration to add, and
-adds a short guide to `AGENTS.md`. It does not overwrite app code, install
-dependencies, or replace an existing guide. Running it again is safe. `init --json`
-returns a setup plan without writing files; add `--yes` to write the guide.
-`--approach overlay|host|serve` overrides the recommendation.
+`init` detects the project, prints the development-only integration to add and a
+short first run for the agent, and adds a short guide to `AGENTS.md`. It does not
+overwrite app code, install dependencies, or replace an existing guide. Running it
+again is safe; once the project has variants or knobs it skips the first run.
+`init --json` returns a setup plan without writing files; add `--yes` to write the
+guide. `--approach overlay|host|serve` overrides the recommendation.
 
 Isotone is a development tool. Every integration below keeps it out of production
 by default; see [Production](#production) for how each one does that.
@@ -36,7 +37,8 @@ nothing and serves no endpoints, so it needs no guard of its own.
 If the app mounts `IterationPanel` or `mountIteration` itself, use
 `iteration({ panel: false })` to keep local endpoints and source variants without
 injecting a second panel. A manual mount can use
-`updateEndpoint: '/api/iteration/update'` for the optional update notice.
+`updateEndpoint: '/api/iteration/update'` for the optional update notice and
+its update note.
 The adapters check for updates in the background; see [Updates](updates.md) for
 the cache, explicit upgrade commands, and opt-out controls.
 
@@ -88,7 +90,11 @@ import Script from 'next/script';
 ```
 
 Open the printed setup URL for a copyable tag or a bookmarklet. The bundle has no
-host framework dependencies. This path supports notes; source-file switching
+host framework dependencies. This path supports notes and
+[knobs](variants.md#knobs): `.isotone/knobs.json` in the directory where `serve`
+runs is served at `/api/iteration/variants`, and the panel shows its range, colour
+and select knobs. The panel has a Variants tool only while that file holds valid
+knobs; reload the page after adding the first one. Swapping whole source files
 needs the Vite plugin, or a host-owned `VariantsSource`.
 
 `--port 4124` selects another port; use the same port in the tag, and keep both in
@@ -135,7 +141,9 @@ host and every request gets a 403 `origin not allowed`. Pass
 `serveVariantsRequest`) to accept pages served from localhost, 127.0.0.1 or
 [::1] on any port. Non-loopback origins are still rejected.
 
-For this manual route, add `.iteration-feedback.json` to the project's `.gitignore`.
+For this manual route, add `.iteration-feedback.json` to the project's
+`.gitignore`, and `.iteration-feedback.blast.json` if your agent runs
+[Blast mode](blast.md), whose CLI keeps its session there.
 The Vite plugin and standalone server ignore their notes file automatically; the
 transport-only request adapter does not modify Git configuration.
 

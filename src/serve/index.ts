@@ -25,19 +25,25 @@ import type { RouteGateOptions } from '../core/index';
 import type { IterationTheme } from '../react/theme';
 import { checkOrigin, HttpError, isLoopback, readNodeJson, sendFailure } from '../server/http';
 import { ensureFileIgnored, notesResponse, NOTES_ENDPOINT } from '../store';
+import { VARIANTS_ENDPOINT } from '../core/variants';
+import { readKnobs } from '../variants-store';
 
 import { readBundle } from '../standalone/bundle';
+import { serveMountOptions } from './mount-config';
 import { guardedScriptTag } from './tag';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../update';
+import { autoUpdateNote, updateResponse } from '../update-note';
 export { readBundle } from '../standalone/bundle';
 
 export const DEFAULT_PORT = 4123;
 const BUNDLE_PATH = '/isotone.js';
 
 export interface ServeIterationOptions {
-  /** Background npm notice, at most once a day. false disables the check. */
-  checkForUpdates?: boolean;
-  /** Project directory for the suggested update command. Defaults to the notes directory. */
+  /** Background npm notice, at most once a day. false disables the check;
+   *  'note' also files an update note for your agent once per new version. */
+  checkForUpdates?: boolean | 'note';
+  /** Project directory for the suggested update command and for
+   *  `.isotone/knobs.json`. Defaults to the notes directory. */
   projectRoot?: string;
   /** Defaults to auto (page background); system follows the OS preference. */
   theme?: IterationTheme;
@@ -92,14 +98,8 @@ function cors(req: IncomingMessage, res: ServerResponse): void {
 }
 
 /** The bundle plus the mount call, with the config the server itself knows. */
-function bundleWithMount(origin: string, opts: ServeIterationOptions): string {
-  const config = JSON.stringify({
-    endpoint: `${origin}${NOTES_ENDPOINT}`,
-    updateEndpoint: `${origin}${UPDATE_ENDPOINT}`,
-    key: opts.key ?? '',
-    rule: opts.rule ?? {},
-    theme: opts.theme,
-  });
+function bundleWithMount(origin: string, opts: ServeIterationOptions, projectRoot: string): string {
+  const config = JSON.stringify(serveMountOptions(origin, projectRoot, opts));
   return `${readBundle()}\n;window.__isotone&&window.__isotone.mount(${config});\n`;
 }
 
@@ -202,11 +202,13 @@ export function serveIteration(
   opts: ServeIterationOptions,
 ): Promise<ServedIteration> {
   const file = resolve(opts.file);
+  const projectRoot = resolve(opts.projectRoot ?? dirname(file));
   const port = opts.port ?? DEFAULT_PORT;
   const host = opts.host ?? '127.0.0.1';
   if (!isLoopback(host)) throw new Error('isotone serve binds only to localhost, 127.0.0.1 or ::1.');
   ensureFileIgnored(file);
-  const updates = startUpdateCheck(opts.projectRoot ?? dirname(file), opts.checkForUpdates !== false);
+  const updates = startUpdateCheck(projectRoot, opts.checkForUpdates !== false);
+  if (opts.checkForUpdates === 'note') void updates.ready.then(() => autoUpdateNote(file, updates.getSnapshot())).catch(() => {});
 
   // The port we were ASKED for is not necessarily the one we got: 0 means "any
   // free port". The panel's endpoint has to be the bound one or the bundle
@@ -230,17 +232,20 @@ export function serveIteration(
     }
 
     if (path === UPDATE_ENDPOINT) {
-      res.setHeader('content-type', 'application/json; charset=utf-8');
-      res.setHeader('cache-control', 'no-store');
-      res.statusCode = method === 'GET' ? 200 : 405;
-      res.end(JSON.stringify(method === 'GET' ? updates.getSnapshot() : { error: 'method not allowed' }));
+      // POST asks for the update note, built from this server's own check.
+      (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined)).then((body) => {
+        const out = updateResponse(file, updates.getSnapshot(), { method, body });
+        res.statusCode = out.status;
+        for (const [key, value] of Object.entries(out.headers)) res.setHeader(key, value);
+        res.end(JSON.stringify(out.body));
+      }).catch((error) => sendFailure(res, error));
       return;
     }
 
     if (path === BUNDLE_PATH && method === 'GET') {
       let body: string;
       try {
-        body = bundleWithMount(origin, opts);
+        body = bundleWithMount(origin, opts, projectRoot);
       } catch (err) {
         res.statusCode = 500;
         res.setHeader('content-type', 'text/plain; charset=utf-8');
@@ -251,6 +256,19 @@ export function serveIteration(
       res.setHeader('content-type', 'text/javascript; charset=utf-8');
       res.setHeader('cache-control', 'no-store');
       res.end(body);
+      return;
+    }
+
+    if (path === VARIANTS_ENDPOINT || path.startsWith(`${VARIANTS_ENDPOINT}/`)) {
+      res.setHeader('content-type', 'application/json; charset=utf-8');
+      res.setHeader('cache-control', 'no-store');
+      if (path === VARIANTS_ENDPOINT && method === 'GET') {
+        res.statusCode = 200;
+        res.end(JSON.stringify({ variants: [], active: [], knobs: readKnobs({ root: projectRoot }) }));
+      } else {
+        res.statusCode = 405;
+        res.end(JSON.stringify({ error: 'isotone serve has knobs only; file variants need the Vite plugin' }));
+      }
       return;
     }
 

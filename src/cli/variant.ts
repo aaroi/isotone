@@ -6,7 +6,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-import { overlayGroups, splitSectionLabel, variantAppliesTo } from '../core/variants';
+import { knobsFor, overlayGroups, splitSectionLabel, variantAppliesTo } from '../core/variants';
 import { isRouteModule, scanExports } from '../vite/exports';
 import { readNotes } from '../store';
 import {
@@ -14,9 +14,11 @@ import {
   createVariant,
   crossGroupOverlaps,
   dropVariant,
+  KNOBS_FILE,
   listVariants,
   promoteVariant,
   readActive,
+  readKnobs,
   readVariant,
   removeVariantFile,
   setVariantGroup,
@@ -134,7 +136,14 @@ function cmdList(rest: string[], io: CliIO, opts: VariantsStoreOptions): number 
     route && !allRoutes ? variants.filter((v) => variantAppliesTo(v.route, route)) : variants;
 
   if (rows.length === 0) {
-    out(io, route ? `No variants for "${route}".` : 'No variants.');
+    // A knobs-only project (any dev server without the Vite plugin) has no
+    // file variants by design; lead with what it does have.
+    if (!existsSync(join(resolve(opts.root), KNOBS_FILE))) {
+      out(io, route ? `No variants for "${route}".` : 'No variants.');
+      return 0;
+    }
+    out(io, route ? `No file variants for "${route}".` : 'No file variants.');
+    printKnobs(io, opts, route && !allRoutes ? route : undefined);
     return 0;
   }
 
@@ -166,7 +175,64 @@ function cmdList(rest: string[], io: CliIO, opts: VariantsStoreOptions): number 
       active.includes(v.id) ? '*' : '',
     ]),
   );
+  printKnobs(io, opts, route && !allRoutes ? route : undefined);
   return 0;
+}
+
+/**
+ * The knobs in `.isotone/knobs.json`, and every entry the panel will skip.
+ * An invalid knob simply never shows up in the panel, so this is the one
+ * place an agent can see why.
+ */
+function printKnobs(io: CliIO, opts: VariantsStoreOptions, route: string | undefined): void {
+  const file = join(resolve(opts.root), KNOBS_FILE);
+  if (!existsSync(file)) return;
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (error) {
+    out(io);
+    out(io, `${KNOBS_FILE} is not valid JSON, so the panel shows no knobs: ${(error as Error).message}`);
+    return;
+  }
+  if (!Array.isArray(raw)) {
+    out(io);
+    out(io, `${KNOBS_FILE} must be a JSON array of knobs, so the panel shows none.`);
+    return;
+  }
+  const valid = readKnobs(opts);
+  // readKnobs keeps the parsed entries it accepts, in order, so a walk that
+  // matches them back up names every entry it dropped.
+  const skipped: string[] = [];
+  let next = 0;
+  raw.forEach((entry, index) => {
+    if (next < valid.length && JSON.stringify(entry) === JSON.stringify(valid[next])) {
+      next++;
+      return;
+    }
+    const id = entry && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string'
+      ? (entry as { id: string }).id : null;
+    const name = `knob ${index + 1}${id === null ? '' : ` "${id}"`}`;
+    // An earlier knob already took this id; the panel keeps that one.
+    if (id !== null && valid.slice(0, next).some((knob) => knob.id === id)) {
+      skipped.push(`Skipped ${name}: another knob earlier in the file already has this id. Give each knob its own id.`);
+    } else {
+      skipped.push(`Skipped ${name}: not a valid range, color or select knob (see docs/variants.md#knobs).`);
+    }
+  });
+  const shown = route ? knobsFor(valid, route) : valid;
+  out(io);
+  if (shown.length) {
+    printTable(io, ['KNOB', 'KIND', 'LABEL', 'ROUTE'], shown.map((k) => [
+      k.id,
+      k.kind ?? 'select',
+      k.label,
+      k.route === undefined ? '-' : ([] as string[]).concat(k.route).join(', '),
+    ]));
+  } else {
+    out(io, route ? `No knobs for "${route}".` : `No valid knobs in ${KNOBS_FILE}.`);
+  }
+  for (const line of skipped) out(io, line);
 }
 
 function cmdNew(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
