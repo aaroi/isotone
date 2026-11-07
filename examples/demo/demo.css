@@ -131,6 +131,11 @@ h1 { margin: 0; font-size: 26px; font-weight: 650; letter-spacing: -.025em; line
   .overview-cards { grid-template-columns: minmax(0, 1fr); }
   .projects-head, .projects article { grid-template-columns: minmax(0, 1fr) auto; }
   .projects-head span:nth-child(3), .project-progress { display: none; }
+  /* The list layout keeps label, value and chart in one row, without the detail. */
+  :root[data-layout='list'] .overview-cards p { width: auto; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  :root[data-layout='list'] .overview-cards strong { width: auto; }
+  :root[data-layout='list'] .overview-cards small { display: none; }
+  :root[data-layout='list'] .stat-viz { width: 110px; flex: none; }
 }
 
 /* The tour: a card and a ring around what it points at. */
@@ -185,6 +190,16 @@ h1 { margin: 0; font-size: 26px; font-weight: 650; letter-spacing: -.025em; line
 @media (prefers-reduced-motion: reduce) {
   .tour-ring, .tour-pulse, .tour-step, .tour-scrim { animation: none; }
   .tour-card[data-animate='true'] { transition: none; }
+}
+/* Fingers: the same buttons with larger hit areas. */
+@media (pointer: coarse) {
+  .button { height: 36px; }
+  .button-icon { width: 36px; }
+  .tour-button { height: 36px; padding: 0 14px; }
+  .tour-link { align-self: stretch; padding: 0 8px; margin-left: -8px; }
+  .tour-top { margin-top: -4px; margin-bottom: 4px; height: 32px; }
+  .tour-close { width: 36px; height: 36px; margin-right: -12px; }
+  .tour-code button { width: 36px; height: 36px; top: 2px; right: 2px; }
 }
 
 /* Capture treatment belongs to the host only. The actual tool is mounted

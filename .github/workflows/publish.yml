@@ -37,6 +37,7 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
       - name: Prepare the next version
+        id: prepare
         if: steps.current.outputs.ready == 'true'
         run: |
           published=$(npm view isotone version)
@@ -47,12 +48,21 @@ jobs:
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
             git commit -m "chore: prepare Isotone $(node -p 'require("./package.json").version')"
             git push origin HEAD:main
+            echo 'committed=true' >> "$GITHUB_OUTPUT"
           fi
       - name: Publish the prepared main commit
         if: steps.current.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run publish.yml --ref main
+      # A GITHUB_TOKEN push triggers no workflows, so demo.yml would stay one
+      # commit behind main. Ask for it at the prepared commit; never block a release.
+      - name: Deploy the demo at the prepared commit
+        if: steps.prepare.outputs.committed == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run demo.yml --ref main
 
   check:
     if: github.event_name == 'workflow_dispatch'
