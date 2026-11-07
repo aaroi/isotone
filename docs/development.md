@@ -102,8 +102,13 @@ To set it up once:
    To open previews on a phone without signing in, turn it off for previews in
    the project's Settings → Deployment Protection, or sign in to Vercel there.
 
-Pull-request builds run with the token, so only branches in this repository get
-previews; keep the token scoped to the demo's team. Connecting the repository
+Pull-request runs have the token, so only branches in this repository get
+previews. Keep the token scoped to the team or account that owns the demo
+project and nothing wider: a pull request can change what the workflow runs.
+The workflow passes the token only to `vercel pull` and `vercel deploy`; the
+build, which runs the project's own scripts, gets no token, and the checkout
+keeps no GitHub credentials. A preview is built from the pull request merged
+into its base branch, as GitHub tests it, so its comment names both. Connecting the repository
 in the Vercel dashboard (Project → Settings → Git) is an alternative: Vercel then
 deploys `main` and comments on pull requests itself, using `vercel.json`. Use
 one or the other, not both, or every commit deploys twice; if you choose the
