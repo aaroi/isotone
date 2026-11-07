@@ -119,6 +119,17 @@ Selector action dialogs have a 260px minimum height and reserve 360px in their
 parent panel when space allows, even for a selector with only one action. The viewport remains the upper
 bound; short screens scroll instead of pushing controls off-screen.
 
+Each option and thumbnail carries a small chevron, the selector heading's own
+glyph, in its top-right corner, beside its own button rather than inside it. It
+is always shown in the faint ink so the panel says where actions live without
+competing with the labels, and it never takes label width. Swatches are too small
+for that, so theirs floats off the corner on hover. A right click opens the same
+thing. Both open the selector
+action dialog scoped to that option, titled with the option and the selector as
+secondary text: Feedback on this option, Keep only this, then Remove this option
+(disabled for the default). Opening it never changes the selection, and the dialog opens below the option
+when it cannot fit above, so it never covers what opened it.
+
 Removal actions create readable, editable requests for the coding agent. They do
 not hide or mutate selectors, options or dependent controls. Cancel a pending
 request from its feedback note; selectors do not add a status or Undo row. Pending actions are

@@ -142,6 +142,63 @@ describe('VariantsView', () => {
     expect(container.querySelector('[role=alert]')).toBeNull();
   });
 
+  it('opens an option-scoped dialog from the more button or a right click without changing the selection', async () => {
+    const source = createVariantsSource({ axes: AXES });
+    const onManage = vi.fn(async () => {});
+    const onFeedback = vi.fn();
+    await render(createElement(VariantsView, { source, onManage, onFeedback }));
+    expect(source.getSelections().headline).toBe('a');
+    await click(byText('Actions for Bold'));
+    const dialog = () => container.querySelector('[role=dialog]') as HTMLElement;
+    expect(dialog().getAttribute('data-open')).toBe('true');
+    expect(dialog().getAttribute('aria-label')).toBe('Bold option actions');
+    expect(dialog().querySelector('.isotone-menu-heading')?.textContent).toBe('BoldHeadline');
+    expect(source.getSelections().headline).toBe('a');
+    await click(byText('Close selector actions'));
+    await act(async () => {
+      const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+      byText('Plain')?.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+    });
+    expect(dialog().getAttribute('aria-label')).toBe('Plain option actions');
+    // The default option cannot be removed, but it can be the one that is kept.
+    expect(byText('Remove this option')?.hasAttribute('disabled')).toBe(true);
+    expect(byText('Keep only this')?.hasAttribute('disabled')).toBe(false);
+    await click(byText('Close selector actions'));
+    await click(byText('Actions for Bold'));
+    await click(byText('Feedback on this option'));
+    expect(onFeedback).toHaveBeenCalledWith(expect.objectContaining({ axisId: 'headline', optionId: 'b' }));
+    await click(byText('Actions for Bold'));
+    await click(byText('Keep only this'));
+    expect(onManage).toHaveBeenCalledWith(
+      { axisId: 'headline', action: 'keep-option', optionId: 'b' },
+      expect.objectContaining({ axisId: 'headline', optionId: 'b', optionLabel: 'Bold' }),
+    );
+  });
+
+  it('keeps the more button outside the option button', async () => {
+    const source = createVariantsSource({ axes: AXES });
+    await render(createElement(VariantsView, { source }));
+    const more = byText('Actions for Bold');
+    expect(more?.closest('button:not(.isotone-opt-more)')).toBeNull();
+    expect(more?.parentElement?.classList.contains('isotone-opt')).toBe(true);
+  });
+
+  it('keep-option removes the selector and makes the option the pick, colours by swatch value', async () => {
+    const colour: VariantAxis = {
+      kind: 'color', id: 'accent', label: 'Accent', defaultColor: '#111111',
+      swatches: [{ id: 'ink', label: 'Ink', value: '#111111' }, { id: 'sky', label: 'Sky', value: '#3b82f6' }],
+    };
+    const source = createVariantsSource({ axes: [...AXES, colour] });
+    await source.manage?.({ axisId: 'headline', action: 'keep-option', optionId: 'b' });
+    await source.manage?.({ axisId: 'accent', action: 'keep-option', optionId: 'sky' });
+    expect(source.getAxes().map(a => a.id)).toEqual(['haze']);
+    expect(source.getSelections()).toMatchObject({ headline: 'b', accent: '#3b82f6' });
+    await expect(source.manage?.({ axisId: 'haze', action: 'keep-option', optionId: 'x' })).rejects.toThrow();
+    const again = createVariantsSource({ axes: AXES });
+    await expect(again.manage?.({ axisId: 'headline', action: 'keep-option', optionId: 'zzz' })).rejects.toThrow('no longer available');
+  });
+
   it('updates an open menu when its source removes an option', async () => {
     const source = createVariantsSource({ axes: AXES });
     await render(createElement(VariantsView, { source }));

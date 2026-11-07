@@ -132,9 +132,22 @@ ${APPEARANCE_CSS}
 .isotone-axis-label svg { color: var(--iso-muted); }
 .isotone-axis-value { min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--iso-muted); font: 10px var(--iso-sans); font-variant-numeric: tabular-nums; }
 .isotone-segs { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; border-radius: 7px; background: var(--iso-well); box-shadow: var(--iso-segment-track-shadow); }
-.isotone-seg { flex: 1 1 64px; min-width: 0; padding: 5px 8px; line-height: 16px; border-radius: 5px; color: var(--iso-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.isotone-seg { width: 100%; flex: 1 1 64px; min-width: 0; padding: 5px 8px; line-height: 16px; border-radius: 5px; color: var(--iso-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isotone-seg > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isotone-seg[aria-pressed='true'] { color: var(--iso-fg); }
+.isotone-opt { position: relative; display: flex; min-width: 0; }
+/* Never narrower than its label plus the chevron's corner on both sides, so a long label widens its own segment instead of running under the chevron. */
+.isotone-opt-seg { flex: 1 1 64px; min-width: fit-content; }
+.isotone-opt-seg > .isotone-seg { padding-inline: 18px; }
+.isotone-opt-swatch { flex: none; }
+.isotone-opt > .isotone-seg, .isotone-opt > .isotone-thumb { flex: 1 1 auto; }
+/* Always shown but quiet, tucked into the option's corner so it never covers the label. */
+.isotone-opt > .isotone-opt-more { position: absolute; top: 1px; right: 1px; width: 16px; height: 16px; border-radius: 4px; color: var(--iso-faint); background: none; box-shadow: none; }
+.isotone-opt-thumb > .isotone-opt-more { top: 3px; right: 3px; background: var(--iso-well); }
+.isotone-opt-swatch > .isotone-opt-more { top: -8px; right: -8px; width: 24px; height: 24px; }
+.isotone-menu-heading { display: flex; flex-direction: column; min-width: 0; }
+.isotone-menu-heading > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.isotone-menu-heading > small { font-size: 10px; color: var(--iso-muted); }
 .isotone-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
 .isotone-thumb { position: relative; display: block; min-width: 0; border-radius: 5px; overflow: hidden; background: var(--iso-well); box-shadow: var(--iso-thumb-shadow); color: var(--iso-muted); }
 .isotone-thumb img { display: block; width: 100%; height: 72px; object-fit: cover; }
@@ -287,6 +300,9 @@ ${FEEDBACK_LAYOUT_CSS}
   .isotone-x:hover { color: var(--iso-fg); }
   .isotone-x:hover::before { background: var(--iso-control-hover-face); }
   .isotone-note .isotone-x { opacity: 0; }
+  .isotone-opt > .isotone-opt-more:hover { color: var(--iso-fg); }
+  .isotone-opt-swatch > .isotone-opt-more { opacity: 0; }
+  .isotone-opt-swatch:hover > .isotone-opt-more { opacity: 1; }
   .isotone-note:hover .isotone-x, .isotone-note:focus-within .isotone-x, .isotone-note-editing .isotone-x { opacity: 1; }
 }
 /* Phones. Panels take turns (see viewport.ts). Variants stop at about half the

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- feat: every select option, thumbnail and colour swatch has its own actions: a small chevron in its corner, always shown, or a right click opens the selector dialog scoped to that option, with feedback, keep only this and remove, without changing the selection; the dialog opens below the option when it cannot fit above
+- feat: `[keep-option]` request: keep one option, make it the default and remove the selector and the other options. The selector's dialog offers it on each option row too
+
 ## 1.2.0
 
 - chore: the hosted demo deploys from `main` and gives each pull request a preview link, through Vercel's Git connection

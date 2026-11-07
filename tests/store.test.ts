@@ -271,6 +271,11 @@ describe('feedback references', () => {
     post(file, { id, route: '/', feedback: 'Keep the same request' });
     expect(readNotes(file)[0]).toMatchObject({ variantAction });
     expect(post(file, { route: '/', feedback: 'Invalid', variantAction: { axisId: 'layout', action: 'remove-option' } }).status).toBe(400);
+    expect(post(file, { route: '/', feedback: 'Invalid', variantAction: { axisId: 'layout', action: 'keep-option' } }).status).toBe(400);
+    const keep = { axisId: 'layout', action: 'keep-option', optionId: 'stack' };
+    const kept = post(file, { route: '/', feedback: '[keep-option] Stack', variantAction: keep });
+    expect(readNotes(file).find(n => n.id === (kept.body as { id: string }).id)).toMatchObject({ variantAction: keep });
+    del(file, (kept.body as { id: string }).id);
     del(file, id);
     expect(readNotes(file)).toEqual([]);
   });
