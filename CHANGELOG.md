@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.2.4
+
 - feat: drag the dock's left edge to change its width, and the top edge of the top open panel to change that panel's height. With both panels open, the gap between them moves the split. The arrow keys resize a focused edge, Shift takes bigger steps, and Home or a double-click restores the default. Sizes are remembered per browser; phones keep their one-panel layout
 
 ## 1.2.3
