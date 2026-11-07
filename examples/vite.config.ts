@@ -8,6 +8,7 @@ import { iteration } from '../src/vite/index';
 import { checkOrigin, readNodeJson, sendFailure } from '../src/server/http';
 import type { UpdateInfo } from '../src/core/update';
 import { updateResponse } from '../src/update-note';
+import { blastFile, blastResponse, isEnded, updateSession, writeSession } from '../src/blast';
 
 /** Not a real release: the demo never contacts npm or installs anything. */
 const DEMO_UPDATE: UpdateInfo = {
@@ -98,11 +99,43 @@ function demoNotes(): Plugin {
           } catch (error) { sendFailure(res, error); }
           return;
         }
+        // `?blast-preview=1`: the session endpoint, answered by the same server
+        // code over a fictional session the pretend agent keeps alive.
+        const blast = /^\/demo-blast\/([a-z]+)$/.exec((req.url ?? '').split('?')[0]);
+        if (blast) {
+          const notes = files.get(`/demo-notes/${blast[1]}`);
+          if (!notes) { next(); return; }
+          try {
+            checkOrigin(req.headers.origin, req.headers.host ?? '');
+            const body = req.method === 'POST' ? await readNodeJson(req) : undefined;
+            const result = blastResponse(notes, { method: req.method, body });
+            res.writeHead(result.status, result.headers);
+            res.end(JSON.stringify(result.body));
+          } catch (error) { sendFailure(res, error); }
+          return;
+        }
         // The pretend agent: `start` is `isotone --working` on one note, `finish` is `--done`.
         if ((req.url ?? '').startsWith('/demo-agent') && req.method === 'POST') {
           try { checkOrigin(req.headers.origin, req.headers.host ?? ''); } catch (error) { sendFailure(res, error); return; }
           const query = new URL(req.url ?? '', 'http://x').searchParams;
           const action = query.get('action');
+          // `blast-start` is the agent running `isotone blast --for 32m`; `blast-beat`
+          // is its heartbeat while it waits for notes or works through a batch.
+          const notes = files.get(`/demo-notes/${query.get('session') ?? ''}`);
+          if (notes && (action === 'blast-start' || action === 'blast-beat')) {
+            const now = Date.now();
+            if (action === 'blast-start') writeSession(blastFile(notes), {
+              version: 1, startedAt: new Date(now - 13 * 60_000).toISOString(), endsAt: new Date(now + 32 * 60_000).toISOString(),
+              every: 5 * 60_000, route: null, heartbeatAt: new Date(now).toISOString(), waiting: true, seen: {},
+            });
+            else updateSession(blastFile(notes), (current) => ({
+              session: current && !isEnded(current, now) ? { ...current, heartbeatAt: new Date(now).toISOString(), waiting: query.get('waiting') === '1' } : null,
+              result: undefined,
+            }));
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+            return;
+          }
           for (const file of files.values()) updateNotes(file, (notes) => {
             const target = notes.find((n) => n.id === query.get('id') && !n.done);
             if (!target) return notes;

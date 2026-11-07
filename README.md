@@ -50,6 +50,11 @@ Your agent reads the notes with `npx isotone --json`, makes the changes, and
 closes each note when it's done. The panel marks the note the agent is working
 on and updates without a reload, so you can keep adding notes while it works.
 
+For a longer review, **Start Blast** beside the pill copies a prompt for your
+agent: for the time you choose, it keeps picking up each batch of new notes,
+fixing and closing them, without being prompted again. Isotone still never runs
+the agent; it hands your agent the notes. [Blast mode](docs/blast.md).
+
 Comparing design directions one prompt at a time is slow, and so is describing
 UI to an agent in words. Element pickers built into agents such as Claude Code
 only work inside the agent's own browser. Isotone works in the browser you

@@ -3,6 +3,7 @@ import { MOTION } from './motion';
 import { FEEDBACK_LAYOUT_CSS } from './feedback-layout';
 import { PILL_ACTIVE_CSS } from './pill-active';
 import { UPDATE_NOTICE_CSS } from './UpdateNotice';
+import { BLAST_NOTICE_CSS } from './BlastNotice';
 
 /** One shared set of tokens and controls for the shadow-root and inline mounts. */
 const MARKER = 'data-isotone-styles';
@@ -199,6 +200,11 @@ ${PILL_ACTIVE_CSS}
 .isotone-note-hit { text-align: left; display: block; width: 100%; border-radius: 8px; padding: var(--iso-note-padding-y) var(--iso-note-padding-x); line-height: 18px; }
 .isotone-note-hit p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
 .isotone-meta { display: flex; align-items: center; gap: 4px; min-width: 0; margin-top: 4px; }
+/* The agent's question takes a second line under the note, muted, clipped like it. */
+.isotone-note-hit:has(> .isotone-reply) { flex-wrap: wrap; row-gap: 1px; }
+.isotone-note-hit > p.isotone-reply { order: 3; flex: 1 0 100%; color: var(--iso-muted); font-size: 11px; }
+.isotone-reply > span, .isotone-editing-reply > span { color: var(--iso-fg); font-weight: 500; }
+.isotone-editing-reply { flex: none; max-height: 58px; overflow-y: auto; padding: 8px var(--iso-input-padding) 0; color: var(--iso-muted); font-size: 11px; line-height: 16px; overflow-wrap: anywhere; }
 .isotone-meta .isotone-chip { flex: 0 1 auto; min-width: 0; height: 18px; padding: 0 5px; font-size: 9px; }
 /* A lone reference gets all available space; multiple references share the row. */
 .isotone-meta .isotone-chip:not(:only-child) { max-width: 140px; }
@@ -310,6 +316,7 @@ ${FEEDBACK_LAYOUT_CSS}
 /* Instant mode follows any key press, but the corner close only ever appears under the pointer, so it keeps its fade. */
 .isotone-root[data-instant='true'] .isotone-panel > .isotone-panel-close { transition-duration: 220ms, 120ms !important; }
 ${UPDATE_NOTICE_CSS}
+${BLAST_NOTICE_CSS}
 `;
 /**
  * Put the panel's styles in `target`, once. Idempotent: a second call with the

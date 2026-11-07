@@ -23,6 +23,7 @@ import { Icon } from './icons';
 import { useLayoutMotion } from './useLayoutMotion';
 import { useDockMotion } from './useDockMotion';
 import { UpdateNotice } from './UpdateNotice';
+import { BlastNotice } from './BlastNotice';
 import { MOTION } from './motion';
 import { HINTS } from './hints';
 import { isCompactViewport, prefersTouch, useKeyboardInset, visibleBand } from './viewport';
@@ -45,6 +46,8 @@ export interface IterationPanelProps {
   theme?: IterationTheme;
   /** Local adapter endpoint for an optional, nonblocking update notice. */
   updateEndpoint?: string;
+  /** Local adapter endpoint for the Blast session indicator. */
+  blastEndpoint?: string;
   route: string;
   store: IterationStoreConfig;
   rule?: RouteGateOptions;
@@ -147,6 +150,7 @@ export function IterationPanel({
   route,
   theme: themePreference = 'auto',
   updateEndpoint,
+  blastEndpoint,
   store: storeCfg,
   rule,
   getPayload,
@@ -318,6 +322,11 @@ export function IterationPanel({
   const working = useMemo(() => new Set(visibleNotes
     .filter((n) => n.workingAt && clock - Date.parse(n.workingAt) < WORKING_FRESH_MS)
     .map((n) => n.id)), [visibleNotes, clock]);
+  // Every note in progress, on any page: a Blast agent works across routes.
+  const allWorking = useMemo(() => openNotes
+    .filter((n) => n.workingAt && clock - Date.parse(n.workingAt) < WORKING_FRESH_MS).length, [openNotes, clock]);
+  // One notice dialog at a time beside the pill.
+  const [openNotice, setOpenNotice] = useState<'update' | 'blast' | null>(null);
   function togglePage(page: string) {
     const next = new Set(selectedPages);
     if (next.has(page)) next.delete(page); else next.add(page);
@@ -1025,6 +1034,8 @@ export function IterationPanel({
         textareaRef.current?.focus({ preventScroll: true });
       }}
     >
+    {/* The agent's question, in full, while the reviewer edits the note to answer it. */}
+    {editing?.reply?.text && <p className="isotone-editing-reply"><span>Agent asks</span> {editing.reply.text}</p>}
     <div className="isotone-context" aria-live="polite">
       {editing && (
         <span className="isotone-chip">
@@ -1328,8 +1339,14 @@ export function IterationPanel({
           {composer}
         </div>
       )}
-      <UpdateNotice endpoint={updateEndpoint} active={open} route={route}
-        requested={updateRequested} onRequested={notesAvailable ? loadNotes : undefined} />
+      <div className="isotone-notices">
+        {/* Right to left from the pill: the live session first, then the update. */}
+        {notesAvailable && <BlastNotice endpoint={blastEndpoint} active={open} working={allWorking}
+          open={openNotice === 'blast'} onOpenChange={(next) => setOpenNotice((current) => next ? 'blast' : current === 'blast' ? null : current)} />}
+        <UpdateNotice endpoint={updateEndpoint} active={open} route={route}
+          requested={updateRequested} onRequested={notesAvailable ? loadNotes : undefined}
+          open={openNotice === 'update'} onOpenChange={(next) => setOpenNotice((current) => next ? 'update' : current === 'update' ? null : current)} />
+      </div>
       <fieldset
         aria-label="Isotone tools"
         onKeyDown={event => {

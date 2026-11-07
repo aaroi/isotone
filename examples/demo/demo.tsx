@@ -196,10 +196,66 @@ function serveUpdateInPage(path: string) {
     return reply(201, { id, created: true });
   };
 }
+/** `?blast-preview=1`: a fictional Blast session, kept alive by the pretend agent. */
+const blastPreview = !screenshot && params.has('blast-preview');
+const blastEndpoint = `/demo-blast/${session}`;
+const HOSTED_BLAST_KEY = 'isotone-hosted-demo-blast';
+type DemoBlast = { startedAt: string; endsAt: string; every: number; heartbeatAt: string; waiting: boolean; stoppedAt?: string; stoppedBy?: 'panel' };
+let memoryBlast: DemoBlast | null = null;
+function readHostedBlast(): DemoBlast | null {
+  try { return JSON.parse(localStorage.getItem(HOSTED_BLAST_KEY) ?? 'null') as DemoBlast | null; } catch { return memoryBlast; }
+}
+function writeHostedBlast(value: DemoBlast) {
+  memoryBlast = value;
+  try { localStorage.setItem(HOSTED_BLAST_KEY, JSON.stringify(value)); } catch { /* Kept in memory. */ }
+}
+/** The session endpoint for the hosted build: the server's contract, in this page. */
+function serveBlastInPage(path: string) {
+  const network = window.fetch.bind(window);
+  window.fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+    if (url.pathname !== path) return network(input, init);
+    const reply = (status: number, body: unknown) =>
+      new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+    const now = Date.now();
+    const state = (b: DemoBlast | null) => {
+      if (!b) return null;
+      const ended = Boolean(b.stoppedAt) || Date.parse(b.endsAt) <= now;
+      return { ...b, route: null, live: !ended && now - Date.parse(b.heartbeatAt) < 15 * 60_000, ended, waiting: !ended && b.waiting, now: new Date(now).toISOString() };
+    };
+    const current = readHostedBlast();
+    if ((init?.method ?? 'GET').toUpperCase() === 'GET') return reply(200, { session: state(current) });
+    const action = (JSON.parse(String(init?.body ?? '{}')) as { action?: unknown }).action;
+    if (action !== 'extend' && action !== 'stop') return reply(400, { error: 'action must be extend or stop' });
+    if (!current || state(current)?.ended) return reply(409, { error: 'There is no Blast session running.' });
+    const next: DemoBlast = action === 'stop'
+      ? { ...current, endsAt: new Date(now).toISOString(), stoppedAt: new Date(now).toISOString(), stoppedBy: 'panel' }
+      : { ...current, endsAt: new Date(Date.parse(current.endsAt) + 15 * 60_000).toISOString() };
+    writeHostedBlast(next);
+    return reply(200, { session: state(next) });
+  };
+}
+/** The pretend agent's side of a session: start it, and beat while it runs. */
+async function blastSignal(action: 'start' | 'beat', waiting = true) {
+  if (!blastPreview) return;
+  if (hosted) {
+    const now = Date.now();
+    const current = readHostedBlast();
+    if (action === 'start') writeHostedBlast({ startedAt: new Date(now - 13 * 60_000).toISOString(), endsAt: new Date(now + 32 * 60_000).toISOString(), every: 300_000, heartbeatAt: new Date(now).toISOString(), waiting: true });
+    else if (current && !current.stoppedAt && Date.parse(current.endsAt) > now) writeHostedBlast({ ...current, heartbeatAt: new Date(now).toISOString(), waiting });
+    return;
+  }
+  await fetch(`/demo-agent?action=blast-${action}&session=${session}&waiting=${waiting ? 1 : 0}`, { method: 'POST' });
+}
+async function blastLive(): Promise<boolean> {
+  try { return Boolean(((await (await fetch(blastEndpoint)).json()) as { session?: { live?: boolean } | null }).session?.live); }
+  catch { return false; }
+}
 if (hosted && !screenshot) {
   try { if (localStorage.getItem(HOSTED_KEY) === null) seedHostedNotes(); } catch { /* No storage. */ }
   serveNotesInPage(endpoint);
   if (updatePreview) serveUpdateInPage(updateEndpoint);
+  serveBlastInPage(blastEndpoint);
 }
 /**
  * A pretend coding agent. A moment after a note is sent it marks it as being
@@ -217,10 +273,50 @@ function runPretendAgent() {
     const feedback = url.pathname === updateEndpoint ? '[update]'
       : String((JSON.parse(String(init?.body ?? '{}')) as { feedback?: string }).feedback ?? '');
     window.dispatchEvent(new CustomEvent('demo:note', { detail: { id, action: feedback.startsWith('[') } }));
-    setTimeout(() => void agentStep(id, 'working'), 1600);
-    setTimeout(() => void agentStep(id, 'done'), 6400);
+    if (blastPreview) queueForBlast(id);
+    else {
+      setTimeout(() => void agentStep(id, 'working'), 1600);
+      setTimeout(() => void agentStep(id, 'done'), 6400);
+    }
     return response;
   };
+  if (blastPreview) {
+    // Like `isotone blast --for 32m`: start the session, then keep it alive.
+    void blastSignal('start');
+    setInterval(() => void blastSignal('beat', !blastBusy), 30_000);
+  }
+}
+/**
+ * The pretend agent in a Blast session: notes wait for a three-second quiet
+ * time, then the batch is worked through one note at a time. Once the session
+ * is stopped or over, new notes stay open, as with a real agent.
+ */
+const blastQueue: string[] = [];
+let blastTimer: ReturnType<typeof setTimeout> | undefined;
+let blastBusy = false;
+function queueForBlast(id: string) {
+  blastQueue.push(id);
+  clearTimeout(blastTimer);
+  blastTimer = setTimeout(() => void runBlastBatch(), 3000);
+}
+async function runBlastBatch() {
+  if (blastBusy) return;
+  blastBusy = true;
+  try {
+    while (blastQueue.length && await blastLive()) {
+      void blastSignal('beat', false);
+      const id = blastQueue.shift() as string;
+      await agentStep(id, 'working');
+      await new Promise((done) => setTimeout(done, 3500));
+      await agentStep(id, 'done');
+      await new Promise((done) => setTimeout(done, 600));
+    }
+    // Stopped: the rest stay open.
+    blastQueue.length = 0;
+  } finally {
+    blastBusy = false;
+    void blastSignal('beat', true);
+  }
 }
 async function agentStep(id: string, state: 'working' | 'done') {
   if (hosted) {
@@ -267,6 +363,7 @@ function Panel({ theme }: { theme: IterationTheme }) {
   }, []);
   useEffect(() => {
     panel.current?.render(<IterationPanel route={page} theme={theme} updateEndpoint={updatePreview ? updateEndpoint : screenshot || hosted ? undefined : '/api/iteration/update'}
+      blastEndpoint={screenshot ? undefined : blastEndpoint}
       store={{ endpoint, key: `isotone-public-demo-${session}` }}
       variants={source} defaultTab="variants" shortcut={screenshot ? false : undefined} />);
   }, [theme]);

@@ -6,11 +6,18 @@ function SummaryTag({ label }: { label: string }) {
   return <span className="isotone-chip"><span onPointerOver={showOverflowTitle}>{label}</span></span>;
 }
 
+/** The agent's question about a note, from `isotone --reply`; edit the note to answer. */
+function Reply({ note }: { note: IterationNote }) {
+  if (!note.reply?.text) return null;
+  return <p className="isotone-reply" onPointerOver={showOverflowTitle}><span>Agent asks</span> {note.reply.text}</p>;
+}
+
 /** Keep machine-directed requests readable without changing the agent's original text. */
 export function NoteSummary({ note, page }: { note: IterationNote; page?: string }) {
   // The update request names no element: one compact tag says what it is.
   if (note.update) return <>
     <p>{note.feedback}</p>
+    <Reply note={note} />
     <span className="isotone-meta"><SummaryTag label="Update" /></span>
   </>;
   if (!note.feedback.startsWith('[set-defaults]')) {
@@ -25,6 +32,7 @@ export function NoteSummary({ note, page }: { note: IterationNote; page?: string
     ];
     return <>
       <p>{note.feedback}</p>
+      <Reply note={note} />
       {references.length > 0 && <span className="isotone-meta">
         {references.map(reference => <SummaryTag key={reference.key} label={reference.label} />)}
       </span>}
@@ -52,6 +60,7 @@ export function NoteSummary({ note, page }: { note: IterationNote; page?: string
   // Same row as every other note: the text, then compact tags for the picks.
   return <>
     <p>{note.feedback}</p>
+    <Reply note={note} />
     {(page || tags.length > 0) && <span className="isotone-meta">
       {page && <SummaryTag label={page} />}
       {tags.slice(0, 3).map(tag => <SummaryTag key={`${tag.name}-${tag.value}`} label={`${tag.name} ${tag.value}`} />)}

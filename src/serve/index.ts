@@ -32,6 +32,8 @@ import { readBundle } from '../standalone/bundle';
 import { guardedScriptTag } from './tag';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../update';
 import { autoUpdateNote, updateResponse } from '../update-note';
+import { BLAST } from '../core/blast';
+import { blastResponse } from '../blast';
 export { readBundle } from '../standalone/bundle';
 
 export const DEFAULT_PORT = 4123;
@@ -105,6 +107,7 @@ function bundleWithMount(origin: string, opts: ServeIterationOptions): string {
     variants: 'overlay',
     variantsEndpoint: `${origin}${VARIANTS_ENDPOINT}`,
     updateEndpoint: `${origin}${UPDATE_ENDPOINT}`,
+    blastEndpoint: `${origin}${BLAST.endpoint}`,
     key: opts.key ?? '',
     rule: opts.rule ?? {},
     theme: opts.theme,
@@ -244,6 +247,17 @@ export function serveIteration(
       // POST asks for the update note, built from this server's own check.
       (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined)).then((body) => {
         const out = updateResponse(file, updates.getSnapshot(), { method, body });
+        res.statusCode = out.status;
+        for (const [key, value] of Object.entries(out.headers)) res.setHeader(key, value);
+        res.end(JSON.stringify(out.body));
+      }).catch((error) => sendFailure(res, error));
+      return;
+    }
+
+    if (path === BLAST.endpoint) {
+      // Session state for the panel: GET reads it, POST extends or stops it.
+      (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined)).then((body) => {
+        const out = blastResponse(file, { method, body });
         res.statusCode = out.status;
         for (const [key, value] of Object.entries(out.headers)) res.setHeader(key, value);
         res.end(JSON.stringify(out.body));

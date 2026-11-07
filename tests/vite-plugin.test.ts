@@ -33,6 +33,8 @@ import { iteration, withNativeFetch, type IterationViteOptions } from '../src/vi
 import { NOTES_ENDPOINT } from '../src/store';
 import { VARIANTS_ENDPOINT } from '../src/core/variants';
 import { UPDATE_ENDPOINT } from '../src/update';
+import { BLAST } from '../src/core/blast';
+import { blastFile, readSession } from '../src/blast';
 import {
   ACTIVE_FILE,
   addVariantFile,
@@ -112,6 +114,24 @@ afterAll(async () => {
 });
 
 describe('the Vite adapter, served', () => {
+  it('serves the Blast session with the notes endpoint origin checks', async () => {
+    const read = await fetch(`${origin}${BLAST.endpoint}`, { headers: { origin } });
+    expect(read.status).toBe(200);
+    expect(await read.json()).toEqual({ session: null });
+    expect((await fetch(`${origin}${BLAST.endpoint}`, { headers: { origin: 'http://localhost:9' } })).status).toBe(403);
+    const now = Date.now();
+    writeFileSync(blastFile(notesFile), JSON.stringify({ version: 1, startedAt: new Date(now).toISOString(), endsAt: new Date(now + 600_000).toISOString(), every: 300_000, route: null, heartbeatAt: new Date(now).toISOString(), waiting: true, seen: {} }));
+    const post = (from: string, action: string) => fetch(`${origin}${BLAST.endpoint}`, {
+      method: 'POST', headers: { origin: from, 'content-type': 'application/json' }, body: JSON.stringify({ action }),
+    });
+    expect((await post('https://outside.example', 'stop')).status).toBe(403);
+    expect((await post(origin, 'extend')).status).toBe(200);
+    expect(Date.parse(readSession(blastFile(notesFile))?.endsAt ?? '')).toBe(now + 600_000 + 15 * 60_000);
+    expect((await post(origin, 'stop')).status).toBe(200);
+    expect(readSession(blastFile(notesFile))?.stoppedBy).toBe('panel');
+    rmSync(blastFile(notesFile), { force: true });
+  });
+
   it('injects the mount script into the host HTML without a source edit', async () => {
     // A browser navigation asks for text/html; injection is gated on that so
     // module and asset responses are never buffered.
@@ -129,6 +149,7 @@ describe('the Vite adapter, served', () => {
     expect(script).toContain('__isotone.mount');
     expect(script).toContain('"theme":"system"');
     expect(script).toContain(UPDATE_ENDPOINT);
+    expect(script).toContain(`"blastEndpoint":"${BLAST.endpoint}"`);
     expect(script.length).toBeGreaterThan(200);
     // Variants are on by default, so the mount asks for the overlay source.
     expect(script).toContain('overlay');

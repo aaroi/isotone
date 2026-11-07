@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-import type { IterationElement, NoteContext, VariantReference, VariantRemoval } from './core/index';
+import type { IterationElement, NoteContext, NoteReply, VariantReference, VariantRemoval } from './core/index';
 import { MAX_FEEDBACK_LENGTH } from './core/limits';
 import { withFileLock, writeJson } from './file-store';
 import { updateRequestOf } from './update-request';
@@ -204,7 +204,9 @@ function toItem(n: StoredNote) {
     ...(n.variant !== undefined ? { variant: n.variant } : {}),
     ...(n.variantAction !== undefined ? { variantAction: n.variantAction } : {}),
     // Only the server writes an update request; a malformed one is not shown.
-    ...(updateRequestOf(n.update) ? { update: updateRequestOf(n.update) } : {}) };
+    ...(updateRequestOf(n.update) ? { update: updateRequestOf(n.update) } : {}),
+    // Only the CLI writes a reply; a hand-edited, malformed one is not shown.
+    ...(replyOf(n.reply) ? { reply: replyOf(n.reply) } : {}) };
 }
 
 /** The transport-agnostic result of a notes request — any runtime (Vite
@@ -296,6 +298,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     };
     // A body's `update` is never read: only the update endpoint writes one,
     // from the server's own check. Editing an update note keeps its request.
+    // Nor is `reply`: only the agent writes one, with `isotone --reply`.
     const { id, route, feedback, element, payload, viewport } = body;
     if (id !== undefined && id !== null && (typeof id !== 'string' || !id || id.length > 200)) {
       return json(400, { error: 'id must be a non-empty string of at most 200 characters' });
@@ -414,6 +417,17 @@ export function notesRevision(file: string): string {
   } catch {
     return 'none';
   }
+}
+
+/** Longest agent reply `isotone --reply` stores. */
+export const MAX_REPLY_LENGTH = 2000;
+
+/** A stored reply, or null when it is missing or malformed. */
+export function replyOf(value: unknown): NoteReply | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const v = value as Partial<NoteReply>;
+  if (typeof v.text !== 'string' || !v.text.trim() || typeof v.at !== 'string' || !Number.isFinite(Date.parse(v.at))) return null;
+  return { text: v.text.slice(0, MAX_REPLY_LENGTH), at: v.at, ...(typeof v.about === 'string' && v.about.length <= 64 ? { about: v.about } : {}) };
 }
 
 function cap(v: string, max: number): string {

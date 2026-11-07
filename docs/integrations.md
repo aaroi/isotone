@@ -38,7 +38,8 @@ If the app mounts `IterationPanel` or `mountIteration` itself, use
 `iteration({ panel: false })` to keep local endpoints and source variants without
 injecting a second panel. A manual mount can use
 `updateEndpoint: '/api/iteration/update'` for the optional update notice and
-its update note.
+its update note, and `blastEndpoint: '/api/iteration/blast'` for the
+[Blast](blast.md) session line.
 The adapters check for updates in the background; see [Updates](updates.md) for
 the cache, explicit upgrade commands, and opt-out controls.
 
@@ -140,7 +141,12 @@ host and every request gets a 403 `origin not allowed`. Pass
 `serveVariantsRequest`) to accept pages served from localhost, 127.0.0.1 or
 [::1] on any port. Non-loopback origins are still rejected.
 
-For this manual route, add `.iteration-feedback.json` to the project's `.gitignore`.
+For [Blast mode](blast.md)'s session line, add a route at `/api/iteration/blast`
+that calls `serveBlastRequest('.iteration-feedback.json', request)` for GET and
+POST, and pass `blastEndpoint` to the mount. It applies the same checks.
+
+For this manual route, add `.iteration-feedback.json` and
+`.iteration-feedback.blast.json` to the project's `.gitignore`.
 The Vite plugin and standalone server ignore their notes file automatically; the
 transport-only request adapter does not modify Git configuration.
 

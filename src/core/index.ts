@@ -58,6 +58,18 @@ export interface NoteContext {
   /** The user's request to upgrade Isotone, built by the local server from
    *  its own update check. At most one is open at a time. */
   update?: UpdateRequest;
+  /** The agent's question or remark about the note, written with
+   *  `isotone --reply <id> "<text>"`. Only the CLI writes it; the panel shows it
+   *  under the note, and the reviewer answers by editing the note. */
+  reply?: NoteReply;
+}
+
+export interface NoteReply {
+  text: string;
+  at: string;
+  /** A fingerprint of the note as it was when the agent asked. Until the
+   *  reviewer edits the note, Blast does not hand it out again. */
+  about?: string;
 }
 
 /** A note written in the panel, read and answered by the coding agent. */
@@ -652,3 +664,5 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
 }
 export * from './variants';
 export type { UpdateInfo, UpdateRequest } from './update';
+export { formatDuration, parseDuration, BLAST, BLAST_CLI, blastPrompt, timeLeft } from './blast';
+export type { BlastState } from './blast';

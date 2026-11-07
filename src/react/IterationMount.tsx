@@ -18,6 +18,8 @@ export interface MountIterationOptions {
   theme?: IterationTheme;
   /** Local adapter endpoint for automatic update notices. */
   updateEndpoint?: string;
+  /** Local adapter endpoint for the Blast session indicator (`BLAST.endpoint`). */
+  blastEndpoint?: string;
   /** Defaults to Cmd/Ctrl+Shift+Period. false disables keyboard access. */
   shortcut?: IterationShortcut | false;
   /** The notes endpoint the dev plugin serves (or a framework preset). Omit
@@ -159,6 +161,7 @@ export function mountIteration(opts: MountIterationOptions): () => void {
         defaultTab={opts.defaultTab}
         shortcut={opts.shortcut}
         updateEndpoint={opts.updateEndpoint}
+        blastEndpoint={opts.blastEndpoint}
         theme={opts.theme}
       />,
     );

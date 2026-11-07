@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -135,6 +135,37 @@ describe('serveNotesRequest origins', () => {
 
   it('still rejects a non-loopback page when loopback origins are allowed', async () => {
     expect((await serveNotesRequest(tempFile(), page('https://example.com'), { loopbackOrigins: true })).status).toBe(403);
+  });
+});
+
+describe('serveBlastRequest', () => {
+  const live = (file: string) => writeFileSync(server.blastFile(file), JSON.stringify({
+    version: 1, startedAt: new Date().toISOString(), endsAt: new Date(Date.now() + 600_000).toISOString(), every: 300_000,
+    route: null, heartbeatAt: new Date().toISOString(), waiting: true, seen: { secret: 'x' },
+  }));
+  const post = (origin: string, body: unknown) => new Request(`http://127.0.0.1:4101${server.BLAST.endpoint}`, {
+    method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+
+  it('applies the notes endpoint origin checks', async () => {
+    const file = tempFile();
+    live(file);
+    const before = server.readBlastSession(server.blastFile(file))?.endsAt;
+    expect((await server.serveBlastRequest(file, post('https://outside.example', { action: 'stop' }))).status).toBe(403);
+    expect((await server.serveBlastRequest(file, post('http://localhost:4150', { action: 'stop' }))).status).toBe(403);
+    expect(server.readBlastSession(server.blastFile(file))?.endsAt).toBe(before);
+    const extended = await server.serveBlastRequest(file, post('http://localhost:4150', { action: 'extend' }), { loopbackOrigins: true });
+    expect(extended.status).toBe(200);
+    expect((extended.body as { session: Record<string, unknown> }).session).not.toHaveProperty('seen');
+    expect((await server.serveBlastRequest(file, post('http://127.0.0.1:4101', { action: 'stop' }))).status).toBe(200);
+    expect(server.readBlastSession(server.blastFile(file))?.stoppedBy).toBe('panel');
+  });
+
+  it('is off in production', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    try {
+      expect((await server.serveBlastRequest(tempFile(), new Request(`http://127.0.0.1:4101${server.BLAST.endpoint}`))).status).toBe(404);
+    } finally { vi.unstubAllEnvs(); }
   });
 });
 
