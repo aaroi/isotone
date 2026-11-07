@@ -19,7 +19,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       exits.delete(element);
     };
     const measure = () => {
-      const instant = root.dataset.instant === 'true' || reduced?.matches;
+      const instant = root.dataset.instant === 'true' || root.dataset.resizing === 'true' || reduced?.matches;
       // Finish all reads before cancelling animations or adding exit snapshots.
       const panels = Array.from(root.querySelectorAll<HTMLElement>('.isotone-panel:not(.isotone-exit)'), element => {
         const open = element.dataset.open === 'true';
@@ -90,7 +90,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       });
       if (changed) measure();
     });
-    mutations.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-open', 'data-instant'] });
+    mutations.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-open', 'data-instant', 'data-resizing'] });
     // An on-screen keyboard lifts the dock through the root's own style (viewport.ts).
     const lifted = new MutationObserver(measure);
     lifted.observe(root, { attributes: true, attributeFilter: ['style'] });
