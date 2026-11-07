@@ -11,6 +11,7 @@ import { request } from './request';
 import { FEEDBACK_STORAGE_KEY, readBrowserStorage, writeBrowserStorage } from './browser-storage';
 import { MAX_FEEDBACK_LENGTH } from './limits';
 import { createNoteId } from './id';
+import type { UpdateRequest } from './update';
 
 /** A UI element picked with the panel's selector mode. */
 export interface IterationElement {
@@ -54,6 +55,9 @@ export interface NoteContext {
   variantAction?: VariantRemoval;
   elements?: IterationElement[];
   variant?: VariantReference | null;
+  /** The user's request to upgrade Isotone, built by the local server from
+   *  its own update check. At most one is open at a time. */
+  update?: UpdateRequest;
 }
 
 /** A note written in the panel, read and answered by the coding agent. */
@@ -647,3 +651,4 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
   };
 }
 export * from './variants';
+export type { UpdateInfo, UpdateRequest } from './update';

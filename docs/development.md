@@ -164,5 +164,7 @@ images. A host can pass `light` or `dark` when those samples do not represent th
 page. `system` deliberately ignores the host theme.
 
 For notice layout checks, `/?review=1&update-preview=1` supplies a fictional
-update result. It does not contact npm or install anything. `/?review=1` keeps
+update result, in the dev demo and the hosted one. **Ask agent to update** then
+files a demo update note, built by the same server code in the dev demo, which
+the pretend agent picks up and closes. It does not contact npm or install anything. `/?review=1` keeps
 feedback open across variant reloads.

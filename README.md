@@ -108,9 +108,11 @@ you clicked, and you can start typing right away. Once you're done selecting,
 
 ## Updates
 
-The dev server checks npm for a newer version at most once a day and shows the
-upgrade command in the panel. The check sends no project content and stays quiet
-offline. Set `checkForUpdates: false` to turn it off. [Update details](docs/updates.md).
+The dev server checks npm for a newer version at most once a day. When one is out,
+the panel says so, and **Ask agent to update** files a feedback note your agent
+picks up with the others. The check sends no project content and stays quiet
+offline. Nothing installs by itself. Set `checkForUpdates: false` to turn it off.
+[Update details](docs/updates.md).
 
 ## For maintainers
 

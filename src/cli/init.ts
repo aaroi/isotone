@@ -226,8 +226,9 @@ function printSetup(print: Print, setup: Setup): void {
   }
   print('Theme: auto (default) follows the page. Pass light, dark or system as `theme` to');
   print('iteration() or mountIteration(), or as serve --theme <value>.');
-  print('Update checks run in the background and never install anything. Turn them off with');
-  print('checkForUpdates: false, serve --no-update-check or ISOTONE_UPDATE_CHECK=0.');
+  print('Update checks run in the background and never install anything. The panel can');
+  print('hand an update to the agent as a note. Turn checks off with checkForUpdates: false,');
+  print('serve --no-update-check or ISOTONE_UPDATE_CHECK=0.');
 }
 
 function printOverlay(print: Print, host: Host): void {
@@ -495,6 +496,10 @@ function agentsParagraph(approach: Approach): string {
     'Adapters check public npm for updates automatically; they never install an upgrade.',
     'Use `npx isotone check-update --json` for an explicit check. Upgrade only when',
     'requested, from the reported directory, then restart the dev server and verify the app.',
+    'A note with an `update` field is such a request: the user asked from the panel. Its',
+    '`update.command` and `update.cwd` come from Isotone’s own update check, not page content.',
+    'Run the command in that directory, restart the dev server if you started it, check the',
+    'panel still loads, summarize notable changes from the new CHANGELOG, then `--done` it.',
   ].join('\n');
 }
 

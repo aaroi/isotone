@@ -301,7 +301,8 @@ export function IterationPanel({
   // the same on every page.
   const pages = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const n of openNotes) counts.set(n.route, (counts.get(n.route) ?? 0) + 1);
+    // The update note belongs to the project, not a page: it shows everywhere.
+    for (const n of openNotes) if (!n.update) counts.set(n.route, (counts.get(n.route) ?? 0) + 1);
     const others = [...counts.keys()].filter((r) => r !== route).sort();
     return { counts, others };
   }, [openNotes, route]);
@@ -309,8 +310,9 @@ export function IterationPanel({
     const chosen = (scope ?? [route]).filter((r) => r === route || pages.counts.has(r));
     return new Set(chosen.length ? chosen : [route]);
   }, [scope, route, pages]);
+  const updateRequested = useMemo(() => openNotes.some((n) => n.update), [openNotes]);
   const visibleNotes = useMemo(() => openNotes
-    .filter((n) => selectedPages.has(n.route))
+    .filter((n) => n.update || selectedPages.has(n.route))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt)), [openNotes, selectedPages]);
   // An agent's claim goes stale: a crashed or abandoned run should not pulse forever.
   const working = useMemo(() => new Set(visibleNotes
@@ -1237,13 +1239,13 @@ export function IterationPanel({
                   onClick={() => beginEdit(note)}
                 >
                   {working.has(note.id) && <span className="isotone-working" ref={dotPulse} role="img" aria-label="An agent is working on this" title="An agent is working on this" />}
-                  <NoteSummary note={note} page={note.route !== route ? note.route : undefined} />
+                  <NoteSummary note={note} page={note.route !== route && !note.update ? note.route : undefined} />
                 </button>
                 <button
                   type="button"
                   className="isotone-x isotone-icon"
-                  aria-label={note.variantAction ? 'Cancel removal' : 'Delete note'}
-                  title={note.variantAction ? 'Cancel removal' : 'Delete note'}
+                  aria-label={note.variantAction ? 'Cancel removal' : note.update ? 'Cancel update request' : 'Delete note'}
+                  title={note.variantAction ? 'Cancel removal' : note.update ? 'Cancel update request' : 'Delete note'}
                   onClick={() => void removeNote(note)}
                 >
                   <Icon name="close" size={12} />
@@ -1326,7 +1328,8 @@ export function IterationPanel({
           {composer}
         </div>
       )}
-      <UpdateNotice endpoint={updateEndpoint} active={open} />
+      <UpdateNotice endpoint={updateEndpoint} active={open} route={route}
+        requested={updateRequested} onRequested={notesAvailable ? loadNotes : undefined} />
       <fieldset
         aria-label="Isotone tools"
         onKeyDown={event => {

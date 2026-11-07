@@ -13,38 +13,9 @@ const CACHE_TTL = 24 * 60 * 60 * 1000;
 const CACHE_FILE = join(tmpdir(), `isotone-update-${process.getuid?.() ?? 'user'}-v1.json`);
 
 type Manager = 'npm' | 'pnpm' | 'yarn';
-export type { UpdateInfo } from './core/update';
-
-interface Version { parts: bigint[]; prerelease: string[] }
-function parseVersion(value: string): Version {
-  if (value.length > 256) throw new Error('Invalid version.');
-  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*))?(?:\+([\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*))?$/.exec(value);
-  if (!match) throw new Error('Invalid version.');
-  const prerelease = match[4]?.split('.') ?? [];
-  if (prerelease.some((part) => /^0\d+$/.test(part))) throw new Error('Invalid version.');
-  return { parts: match.slice(1, 4).map(BigInt), prerelease };
-}
-
-/** SemVer precedence, including numeric prereleases and ignored build metadata. */
-export function compareVersions(a: string, b: string): number {
-  const left = parseVersion(a), right = parseVersion(b);
-  for (let i = 0; i < 3; i++) {
-    if (left.parts[i] !== right.parts[i]) return left.parts[i] > right.parts[i] ? 1 : -1;
-  }
-  if (!left.prerelease.length || !right.prerelease.length) {
-    return left.prerelease.length === right.prerelease.length ? 0 : left.prerelease.length ? -1 : 1;
-  }
-  for (let i = 0; i < Math.max(left.prerelease.length, right.prerelease.length); i++) {
-    const x = left.prerelease[i], y = right.prerelease[i];
-    if (x === y) continue;
-    if (x === undefined || y === undefined) return x === undefined ? -1 : 1;
-    const nx = /^\d+$/.test(x), ny = /^\d+$/.test(y);
-    if (nx && ny) return BigInt(x) > BigInt(y) ? 1 : -1;
-    if (nx !== ny) return nx ? -1 : 1;
-    return x > y ? 1 : -1;
-  }
-  return 0;
-}
+export type { UpdateInfo, UpdateRequest } from './core/update';
+export { changelogUrl, compareVersions, updateRequestOf } from './update-request';
+import { compareVersions, parseVersion } from './update-request';
 
 function manifest(directory: string): Record<string, unknown> | null {
   try {

@@ -126,6 +126,15 @@ disabled in the menu to avoid duplicate requests. Cancelling a pending request
 leaves the preview unchanged. Once an agent applies a source change, deleting the
 request does not undo that change.
 
+The update notice is one quiet line beside the pill ("Isotone 1.2.0 is
+available"). Its dialog has a single line of versions, one raised action, **Ask
+agent to update**, and two quiet text buttons, Copy prompt and Command, the last
+revealing the raw command in a well. No paragraphs of instructions. Once asked,
+the raised action gives way to "Update requested · in Feedback" and the line
+reads "Update requested". The update note is an ordinary saved note with an
+"Update" tag in place of element references, shown on every page; deleting it
+cancels the request, like a removal request.
+
 Native tooltips are reserved for brief icon-only hints and labels that actually
 overflow. Do not put full feedback notes, readable labels or internal selectors
 in `title` attributes. Check label overflow on pointer entry, without observing
@@ -243,7 +252,7 @@ the composer must not remeasure unchanged selectors or notes.
 | `src/react/appearance.ts` | Complete light/dark palettes and the shared material recipe |
 | `src/react/styles.ts` | Geometry, typography, shared control classes and state selectors |
 | `src/react/feedback-layout.ts`, `pill-active.ts` | Small material/layout recipes that can be independently previewed as overlays |
-| `src/react/UpdateNotice.tsx` | Quiet local update snapshot and explicit upgrade instructions |
+| `src/react/UpdateNotice.tsx` | Quiet update line, and the dialog that hands the upgrade to the agent |
 | `src/react/icons.tsx` | Icon choices, optical size and stroke |
 | `src/react/NoteSummary.tsx` | Saved feedback/defaults summaries and their shared tag rendering |
 | `src/react/IterationPanel.tsx` | Dock, composer, feedback and element-picking behavior |

@@ -37,7 +37,8 @@ nothing and serves no endpoints, so it needs no guard of its own.
 If the app mounts `IterationPanel` or `mountIteration` itself, use
 `iteration({ panel: false })` to keep local endpoints and source variants without
 injecting a second panel. A manual mount can use
-`updateEndpoint: '/api/iteration/update'` for the optional update notice.
+`updateEndpoint: '/api/iteration/update'` for the optional update notice and
+its update note.
 The adapters check for updates in the background; see [Updates](updates.md) for
 the cache, explicit upgrade commands, and opt-out controls.
 

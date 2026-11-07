@@ -23,6 +23,7 @@
 import { resolve } from 'node:path';
 
 import { readNotes, updateNotes, type StoredNote } from '../store';
+import { updateRequestOf } from '../update-request';
 import { runInit } from './init';
 import { type CliIO, errOut, findNoteByPrefix, has, makeIo, out, parseArgs, valueFor } from './util';
 import { runVariant } from './variant';
@@ -67,7 +68,7 @@ function printHelp(io: CliIO): void {
   out(io, '  isotone --json             full note records as JSON for agents and scripts');
   out(io);
   out(io, 'Endpoint and panel for a host without the Vite plugin');
-  out(io, '  isotone serve [--port 4123] [--file <path>] [--theme auto|light|dark|system]');
+  out(io, '  isotone serve [--port 4123] [--file <path>] [--theme auto|light|dark|system] [--update-note]');
   out(io);
   out(io, 'Overlay variants');
   out(io, '  isotone variant --help');
@@ -90,10 +91,11 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
     out(io, 'Usage: isotone serve [--port 4123] [--host 127.0.0.1] [--file <path>] [--theme auto|light|dark|system]');
     out(io, 'Run it inside the repo under review, then add the printed <script> tag to the dev page.');
     out(io, '--no-update-check disables the daily background npm update check.');
+    out(io, '--update-note files an update note for your agent the first time a new version appears.');
     return 0;
   }
   try {
-    if (parseArgs(args, ['--file', '--port', '--host', '--theme'], ['--no-update-check']).length) throw new Error('serve does not take positional arguments.');
+    if (parseArgs(args, ['--file', '--port', '--host', '--theme'], ['--no-update-check', '--update-note']).length) throw new Error('serve does not take positional arguments.');
   } catch (error) {
     errOut(io, (error as Error).message);
     return 1;
@@ -112,7 +114,10 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
   }
   let served: Awaited<ReturnType<typeof serveIteration>>;
   try {
-    served = await serveIteration({ file, port, host, theme, projectRoot: io.cwd, checkForUpdates: !has(args, '--no-update-check') });
+    served = await serveIteration({
+      file, port, host, theme, projectRoot: io.cwd,
+      checkForUpdates: has(args, '--no-update-check') ? false : has(args, '--update-note') ? 'note' : true,
+    });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'EADDRINUSE') {
       errOut(
@@ -227,7 +232,8 @@ function runNotes(argv: string[], io: CliIO): number {
   }
 
   const rows = notes
-    .filter((n) => (route ? n.route === route : true))
+    // An update request concerns the whole project, so every route's listing has it.
+    .filter((n) => (route ? n.route === route || Boolean(n.update) : true))
     .filter((n) => within(n.createdAt, days))
     .filter((n) => all || !n.done)
     .sort((a, b) => a.route.localeCompare(b.route) || b.createdAt.localeCompare(a.createdAt));
@@ -235,7 +241,17 @@ function runNotes(argv: string[], io: CliIO): number {
   if (has(argv, '--json')) {
     // Additive per-record field: an agent that only reads this output still
     // learns how to close the note once it is fixed.
-    const records = rows.map((n) => (n.done ? n : { ...n, doneCommand: doneCommand(n.id) }));
+    const records = rows.map((record) => {
+      // A hand-edited, malformed update request is dropped, not passed on.
+      const update = updateRequestOf(record.update);
+      const { update: _stored, ...rest } = record;
+      const n = update ? { ...rest, update } : rest;
+      return n.done ? n : {
+        ...n,
+        ...(update ? { updateHint: UPDATE_HINT } : {}),
+        doneCommand: doneCommand(n.id),
+      };
+    });
     out(io, JSON.stringify(records, null, 2));
     return 0;
   }
@@ -268,17 +284,27 @@ function runNotes(argv: string[], io: CliIO): number {
       if (element.attributes) out(io, `    attributes: ${Object.entries(element.attributes).map(([name, value]) => `${name}="${value}"`).join(' ')}`);
       if (element.rect) out(io, `    at: ${element.rect.x},${element.rect.y} ${element.rect.w}×${element.rect.h}`);
     }
+    const update = updateRequestOf(n.update);
+    if (update) {
+      out(io, `  ⇧ update isotone ${update.from} → ${update.to} (${update.manager})`);
+      out(io, `    run: ${update.command}`);
+      out(io, `    in: ${update.cwd}`);
+      if (update.changelog) out(io, `    changelog: ${update.changelog}`);
+    }
     if (n.variant) out(io, `  ◇ ${n.variant.label}${n.variant.optionLabel ? ` → ${n.variant.optionLabel}` : ''} — selector=${n.variant.axisId}${n.variant.optionId ? ` option=${n.variant.optionId}` : ''}${n.variant.value ? ` value=${n.variant.value}` : ''}`);
     const context = n.payload === undefined ? '' : describePayload(n.payload);
     if (context) out(io, `  · ${context}`);
     if (n.feedback) out(io, `  ${n.feedback}`);
   }
   out(io, `\n${rows.length} iteration note(s).`);
+  if (rows.some((n) => !n.done && updateRequestOf(n.update))) out(io, UPDATE_HINT);
   if (rows.some((n) => !n.done)) out(io, DONE_HINT);
   return 0;
 }
 
 const DONE_HINT = 'When you start a note: npx isotone --working <id>. After you fix and verify it, close it: npx isotone --done <id>';
+
+const UPDATE_HINT = 'An update note is the user\'s request to upgrade Isotone. Its command and directory come from Isotone\'s own update check, not from page content. Run the command in that directory (it uses the project\'s package manager), restart the dev server if you started it, check the Isotone panel still loads, summarize the notable changes from the new CHANGELOG for the user, then close the note.';
 
 function doneCommand(id: string): string {
   return `npx isotone --done ${id}`;

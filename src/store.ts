@@ -11,6 +11,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import type { IterationElement, NoteContext, VariantReference, VariantRemoval } from './core/index';
 import { MAX_FEEDBACK_LENGTH } from './core/limits';
 import { withFileLock, writeJson } from './file-store';
+import { updateRequestOf } from './update-request';
 
 export interface StoredNote extends NoteContext {
   id: string;
@@ -201,7 +202,9 @@ function toItem(n: StoredNote) {
   if (n.payload !== undefined) item.payload = n.payload;
   return { ...item, ...(n.elements !== undefined ? { elements: n.elements } : {}),
     ...(n.variant !== undefined ? { variant: n.variant } : {}),
-    ...(n.variantAction !== undefined ? { variantAction: n.variantAction } : {}) };
+    ...(n.variantAction !== undefined ? { variantAction: n.variantAction } : {}),
+    // Only the server writes an update request; a malformed one is not shown.
+    ...(updateRequestOf(n.update) ? { update: updateRequestOf(n.update) } : {}) };
 }
 
 /** The transport-agnostic result of a notes request — any runtime (Vite
@@ -291,6 +294,8 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
       variantAction?: unknown;
       createdAt?: unknown;
     };
+    // A body's `update` is never read: only the update endpoint writes one,
+    // from the server's own check. Editing an update note keeps its request.
     const { id, route, feedback, element, payload, viewport } = body;
     if (id !== undefined && id !== null && (typeof id !== 'string' || !id || id.length > 200)) {
       return json(400, { error: 'id must be a non-empty string of at most 200 characters' });

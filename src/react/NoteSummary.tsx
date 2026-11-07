@@ -8,6 +8,11 @@ function SummaryTag({ label }: { label: string }) {
 
 /** Keep machine-directed requests readable without changing the agent's original text. */
 export function NoteSummary({ note, page }: { note: IterationNote; page?: string }) {
+  // The update request names no element: one compact tag says what it is.
+  if (note.update) return <>
+    <p>{note.feedback}</p>
+    <span className="isotone-meta"><SummaryTag label="Update" /></span>
+  </>;
   if (!note.feedback.startsWith('[set-defaults]')) {
     const elements = note.elements ?? (note.element ? [note.element] : []);
     const references = [

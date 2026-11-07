@@ -57,6 +57,7 @@ export type {
   IterationElement,
   IterationNote,
   NoteContext,
+  UpdateRequest,
   VariantRemoval,
   VariantReference,
   IterationStoreConfig,
