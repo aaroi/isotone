@@ -15,7 +15,12 @@ import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { mountIteration } from '../src/react/index';
+import { serveMountOptions } from '../src/serve/mount-config';
 
 beforeEach(() => {
   // React's act() warns unless the environment declares itself.
@@ -93,5 +98,96 @@ describe('mountIteration next to a document-level host root', () => {
     expect(host?.shadowRoot).not.toBeNull();
 
     dispose(off);
+  });
+});
+
+describe('mountIteration with a cross-origin variants endpoint', () => {
+  it('reads overlay knobs from the endpoint it is given, as isotone serve passes it', async () => {
+    vi.useRealTimers();
+    const knobsEndpoint = 'http://127.0.0.1:4123/api/iteration/variants';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).startsWith(knobsEndpoint)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            variants: [],
+            active: [],
+            knobs: [{ kind: 'range', id: 'card-radius', label: 'Card radius', min: 0, max: 24, step: 1, defaultValue: 12, unit: 'px' }],
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => [] };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const tick = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+    const off = mountIteration({
+      endpoint: 'http://127.0.0.1:4123/api/iteration/notes',
+      variants: 'overlay',
+      variantsEndpoint: knobsEndpoint,
+    });
+    await tick();
+    const shadow = document.querySelector('[data-isotone="root"]')?.shadowRoot;
+    if (!shadow) throw new Error('no shadow root');
+    await act(async () => {
+      shadow.querySelector('.isotone-fab')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await tick();
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(urls).toContain(knobsEndpoint);
+    expect(urls.some((url) => url.startsWith('/api/iteration/variants'))).toBe(false);
+
+    off();
+    await tick();
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('the panel isotone serve mounts', () => {
+  const origin = 'http://127.0.0.1:4123';
+  let root: string;
+  beforeEach(() => { root = mkdtempSync(join(tmpdir(), 'iso-serve-mount-')); });
+  afterEach(() => { rmSync(root, { recursive: true, force: true }); vi.unstubAllGlobals(); });
+
+  /** Mount what serve's bundle would mount for `root`, answering knobs with `knobs`. */
+  async function mountServe(knobs: unknown[]) {
+    vi.useRealTimers();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      status: 200,
+      json: async () => (String(input).includes('/api/iteration/variants') ? { variants: [], active: [], knobs } : []),
+    })));
+    const tick = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    const off = mountIteration(serveMountOptions(origin, root, {}));
+    await tick();
+    const shadow = document.querySelector('[data-isotone="root"]')?.shadowRoot;
+    if (!shadow) throw new Error('no shadow root');
+    const tools = () => Array.from(shadow.querySelectorAll('.isotone-rail-button')).map((b) => b.getAttribute('aria-label'));
+    return { shadow, tools, tick, off: async () => { off(); await tick(); } };
+  }
+
+  it('has a single tool, Feedback, when the project has no knobs', async () => {
+    const panel = await mountServe([]);
+    expect(panel.tools()).toEqual(['Feedback']);
+    await panel.off();
+  });
+
+  it('adds Variants for knobs, and its empty list asks for knobs rather than file variants', async () => {
+    // A knob for another page leaves this page's list empty.
+    const knob = { kind: 'range', id: 'card-radius', label: 'Card radius', route: '/elsewhere', min: 0, max: 24, step: 1, defaultValue: 12, unit: 'px' };
+    mkdirSync(join(root, '.isotone'));
+    writeFileSync(join(root, '.isotone', 'knobs.json'), JSON.stringify([knob]));
+    const panel = await mountServe([knob]);
+    expect(panel.tools()).toEqual(['Variants', 'Feedback']);
+    await act(async () => {
+      panel.shadow.querySelector('[aria-label="Variants"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await panel.tick();
+    const empty = panel.shadow.querySelector('.isotone-variants-panel .isotone-empty')?.textContent ?? '';
+    expect(empty).toContain('No knobs on this page yet');
+    expect(empty).toContain('.isotone/knobs.json');
+    expect(empty).not.toContain('variants');
+    await panel.off();
   });
 });

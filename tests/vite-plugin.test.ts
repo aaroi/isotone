@@ -129,6 +129,8 @@ describe('the Vite adapter, served', () => {
     expect(script).toContain('__isotone.mount');
     expect(script).toContain('"theme":"system"');
     expect(script).toContain(UPDATE_ENDPOINT);
+    // Blast is a CLI feature: the panel gets no session endpoint.
+    expect(script).not.toContain('blast');
     expect(script.length).toBeGreaterThan(200);
     // Variants are on by default, so the mount asks for the overlay source.
     expect(script).toContain('overlay');
@@ -290,7 +292,11 @@ describe('the Vite adapter, served', () => {
       const update = await fetch(`${url}${UPDATE_ENDPOINT}`);
       expect(update.headers.get('cache-control')).toBe('no-store');
       expect(await update.json()).toMatchObject({ status: 'disabled', upgrade: null });
-      expect((await fetch(`${url}${UPDATE_ENDPOINT}`, { method: 'POST' })).status).toBe(405);
+      expect((await fetch(`${url}${UPDATE_ENDPOINT}`, { method: 'PUT' })).status).toBe(405);
+      // With no update to request, asking for the note changes nothing.
+      expect((await fetch(`${url}${UPDATE_ENDPOINT}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ route: '/', to: '9.9.9', command: 'rm -rf /' }) })).status).toBe(409);
+      expect((await fetch(`${url}${UPDATE_ENDPOINT}`, { method: 'POST', headers: { origin: 'https://outside.example' } })).status).toBe(403);
+      expect(await (await fetch(`${url}${NOTES_ENDPOINT}`)).json()).toEqual([]);
       expect((await fetch(`${url}${UPDATE_ENDPOINT}`, { headers: { origin: 'https://outside.example' } })).status).toBe(403);
     } finally {
       (manual.httpServer as import('node:http').Server | null)?.closeAllConnections?.();
