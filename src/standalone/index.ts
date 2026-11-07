@@ -8,7 +8,8 @@
  * point rather than mounting on load — the config lives with the server that
  * owns the notes file, not baked into the bundle.
  */
-import { mountIteration, type MountIterationOptions } from '../react/IterationMount';
+import type { MountIterationOptions } from '../core/types';
+import { mountIteration } from '../react/IterationMount';
 
 interface IsotoneGlobal {
   mount(options: MountIterationOptions): void;

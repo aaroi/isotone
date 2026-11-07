@@ -22,7 +22,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { dirname, resolve } from 'node:path';
 
 import type { RouteGateOptions } from '../core/index';
-import type { IterationTheme } from '../react/theme';
+import type { IterationTheme } from '../core/types';
 import { checkOrigin, HttpError, isLoopback, readNodeJson, sendFailure } from '../server/http';
 import { ensureFileIgnored, notesResponse, NOTES_ENDPOINT } from '../store';
 import { VARIANTS_ENDPOINT } from '../core/variants';

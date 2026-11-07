@@ -1,9 +1,8 @@
 export { IterationPanel } from './IterationPanel';
 export { mountIteration } from './IterationMount';
 export { VariantsView } from './VariantsView';
-export type { IterationPanelProps, IterationShortcut } from './IterationPanel';
-export type { IterationTheme } from './theme';
-export type { MountIterationOptions } from './IterationMount';
+export type { IterationPanelProps } from './IterationPanel';
+export type { IterationShortcut, IterationTheme, MountIterationOptions } from '../core/types';
 export { PANEL_CSS, ensurePanelStyles } from './styles';
 export { describeIterationElement, elementAsNode, isRouteVisible } from '../core/index';
 export {

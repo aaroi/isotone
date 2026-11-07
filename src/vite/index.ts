@@ -21,8 +21,7 @@ import {
 
 import { ensureDirIgnored, ensureFileIgnored, notesResponse, NOTES_ENDPOINT } from '../store';
 import type { RouteGateOptions } from '../core/index';
-import type { IterationShortcut } from '../react/IterationPanel';
-import type { IterationTheme } from '../react/theme';
+import type { IterationShortcut, IterationTheme } from '../core/types';
 import { readBundle } from '../standalone/bundle';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../update';
 import { autoUpdateNote, updateResponse } from '../update-note';

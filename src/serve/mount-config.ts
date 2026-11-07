@@ -1,7 +1,6 @@
 import type { RouteGateOptions } from '../core/index';
 import { VARIANTS_ENDPOINT } from '../core/variants';
-import type { MountIterationOptions } from '../react/IterationMount';
-import type { IterationTheme } from '../react/theme';
+import type { IterationTheme, MountIterationOptions } from '../core/types';
 import { NOTES_ENDPOINT } from '../store';
 import { UPDATE_ENDPOINT } from '../update';
 import { readKnobs } from '../variants-store';

@@ -17,7 +17,8 @@ import {
 import { type VariantAction, type VariantsSource, visibleAxes } from '../core/variants';
 import { ensurePanelStyles } from './styles';
 import { refreshSource, useVariantsSource, VariantsView } from './VariantsView';
-import { detectTheme, observeTheme, type IterationTheme } from './theme';
+import { detectTheme, observeTheme } from './theme';
+import type { IterationShortcut, IterationTheme } from '../core/types';
 import { NoteSummary } from './NoteSummary';
 import { Icon } from './icons';
 import { useLayoutMotion } from './useLayoutMotion';
@@ -33,13 +34,6 @@ export interface Rect {
   left: number;
   width: number;
   height: number;
-}
-export interface IterationShortcut {
-  /** Physical key code, stable across keyboard layouts. Default: Period. */
-  code: string;
-  mod?: boolean;
-  shift?: boolean;
-  alt?: boolean;
 }
 export interface IterationPanelProps {
   /** Auto follows the page at the dock. System follows the OS preference. */

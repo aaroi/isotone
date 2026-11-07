@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest';
 import { readBundle } from '../src/standalone/bundle';
-import type { MountIterationOptions } from '../src/react/IterationMount';
+import type { MountIterationOptions } from '../src/core/types';
 
 type PanelGlobal = { mount(options: MountIterationOptions): void; unmount(): void; mounted: boolean };
 const panel = () => (window as unknown as { __isotone: PanelGlobal }).__isotone;

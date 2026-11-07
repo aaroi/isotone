@@ -1,5 +1,5 @@
-/** Auto follows the page at the dock; system follows the OS preference. */
-export type IterationTheme = 'auto' | 'light' | 'dark' | 'system';
+import type { IterationTheme } from '../core/types';
+
 type ResolvedTheme = 'light' | 'dark';
 type Color = { r: number; g: number; b: number; a: number };
 
