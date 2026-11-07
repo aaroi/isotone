@@ -180,10 +180,13 @@ ${PILL_ACTIVE_CSS}
 .isotone-menu-action { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 34px; border-radius: 6px; text-align: left; padding: 7px; font-size: 11px; }
 .isotone-menu-options { padding: 7px 0; margin: 5px 0; border-top: 1px solid var(--iso-line); border-bottom: 1px solid var(--iso-line); }
 .isotone-option-row { display: flex; align-items: center; padding: 2px 4px 2px 7px; gap: 4px; }
-.isotone-option-row > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.isotone-option-row small { font-size: 9px; color: var(--iso-muted); margin-left: 6px; }
+.isotone-option-name { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; }
+.isotone-option-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Tags never shrink, so a long label truncates before them instead of hiding them. */
+.isotone-option-tags { flex: none; display: flex; gap: 6px; white-space: nowrap; }
+.isotone-option-tags small { font-size: 9px; color: var(--iso-muted); }
 /* A pending removal stays listed and readable; only its text quietens. */
-.isotone-option-row[data-requested] > span { color: var(--iso-muted); }
+.isotone-option-row[data-requested] .isotone-option-label { color: var(--iso-muted); }
 .isotone-menu-footer { flex-shrink: 0; padding: 9px 12px; border-top: 1px solid var(--iso-line); font-size: 10px; color: var(--iso-muted); min-height: 0; }
 .isotone-confirm { display: flex; justify-content: flex-end; gap: 6px; margin-top: 7px; }
 .isotone-danger { color: var(--iso-danger); }

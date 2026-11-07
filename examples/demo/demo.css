@@ -43,7 +43,11 @@ svg { flex: none; }
 /* The demo's own bar, outside the pretend app. */
 .demo-bar { height: 44px; display: flex; align-items: center; gap: 14px; padding: 0 10px 0 18px; }
 .brand { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 600; letter-spacing: -.01em; }
-.demo-bar-note { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.demo-bar-note { flex: 1 1 0; min-width: 0; height: 44px; display: flex; flex-wrap: wrap; align-items: center; overflow: hidden; color: var(--muted); font-size: 12.5px; }
+/* The note shows whole or not at all: when it does not fit beside this
+   zero-width strut it wraps onto a second line, which the bar's height clips. */
+.demo-bar-note::before { content: ''; height: 44px; }
+.demo-bar-note > span { white-space: nowrap; }
 .demo-bar-actions { margin-left: auto; display: flex; align-items: center; gap: 2px; }
 .demo-select { display: inline-flex; align-items: center; gap: 6px; margin-right: 6px; color: var(--muted); font-size: 12.5px; }
 .demo-select select { height: 26px; padding: 0 6px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); }
