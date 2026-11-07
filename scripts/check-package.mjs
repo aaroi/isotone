@@ -42,7 +42,7 @@ try {
     `
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { runCli } from 'isotone/cli';
 import * as core from 'isotone/core';
 import { readNotes } from 'isotone/server';
@@ -74,6 +74,13 @@ assert.equal(JSON.parse(output).approach, 'serve');
 assert.equal(existsSync('AGENTS.md'), true);
 assert.match(execFileSync(process.execPath, ['node_modules/isotone/dist/cli.js', '--help'], { encoding: 'utf8' }), /--json/);
 assert.match(execFileSync(process.execPath, ['node_modules/isotone/dist/cli.js', 'blast', 'status'], { encoding: 'utf8' }), /No Blast session/);
+// A reader that stops early (\`| head\`) ends the output quietly, not with a stack trace.
+const early = spawn(process.execPath, ['node_modules/isotone/dist/cli.js', '--help'], { stdio: ['ignore', 'pipe', 'pipe'] });
+early.stdout.destroy();
+let earlyErr = '';
+early.stderr.on('data', (chunk) => { earlyErr += chunk; });
+assert.equal(await new Promise((resolve) => early.on('close', resolve)), 0, earlyErr);
+assert.equal(earlyErr, '');
 const app = await serveIteration({ file: 'notes.json', port: 0, theme: 'system', checkForUpdates: false });
 try {
   const bundle = await (await fetch(app.bundleUrl)).text();

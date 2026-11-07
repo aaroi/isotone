@@ -41,6 +41,7 @@ function isHelp(arg: string | undefined): boolean {
 
 function printHelp(io: CliIO): void {
   out(io, 'isotone — notes and variants between a reviewer’s browser and a coding agent');
+  out(io, 'Agent guide: node_modules/isotone/docs/agent-guide.md');
   out(io);
   out(io, `Notes (in ${NOTES_FILE} in the current directory)`);
   out(io, '  isotone [<route>]              open notes, of every route or one: /items is that page,');

@@ -13,4 +13,12 @@ try {
 } catch {
   /* Imported by a runtime without an on-disk entry point. */
 }
-if (isMain) process.exitCode = await runCli(process.argv.slice(2));
+if (isMain) {
+  // A reader that stops early (`| head`) closes the pipe: that is the end of
+  // the output, not a crash.
+  process.stdout.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code === 'EPIPE') process.exit(0);
+    throw error;
+  });
+  process.exitCode = await runCli(process.argv.slice(2));
+}

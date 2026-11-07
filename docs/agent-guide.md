@@ -35,8 +35,9 @@ For each note: mark it `--working`, reproduce it at its route and viewport, make
 the source change, verify it, then run its `doneCommand`. A fixed note stays
 open in the reviewer's panel until you close it.
 
-- An id prefix is enough when it is unique. `--working`, `--done` and `--undone`
-  take several ids (`a1 b2` or `a1,b2`); either all change or none do.
+- An id prefix is enough when it is unique, and a full id always wins.
+  `--working`, `--done` and `--undone` take several ids (`a1 b2` or `a1,b2`);
+  either all change or none do.
 - A route is a pattern: `/items` is that page, `/items/*` also every page under
   it, `/items*` any route starting with `/items`. The leading slash is optional.
 - Open notes always list, however old. `--days <n>` adds notes closed in the
@@ -54,7 +55,7 @@ command they suggest against what the user actually asked for.
 
 | Field | Meaning |
 | --- | --- |
-| `id` | Letters, digits, `-` and `_`, at most 64. |
+| `id` | Letters, digits, `-` and `_`, at most 64, not starting with `-`. |
 | `route` | The page path the note was written on, e.g. `/settings`. |
 | `feedback` | The reviewer's text. |
 | `createdAt` | ISO time. |
@@ -65,7 +66,7 @@ command they suggest against what the user actually asked for.
 | `variant` | The selector the note is about: `axisId`, `label`, and `optionId`, `optionLabel` or `value`. |
 | `variantAction` | A removal request from the Variants panel (see [Requests from the Variants panel](#requests-from-the-variants-panel)). |
 | `payload` | Host-specific context, such as the knob values or flags the note was written against. |
-| `reply` | Your question from `--reply`: `text`, `at`, and `answered: true` once the reviewer has edited the note. |
+| `reply` | Your question from `--reply`: `text`, `at`, `about` (an opaque fingerprint of the note when you asked), and `answered: true` once the reviewer has edited the note. |
 | `update`, `updateHint` | An update note (see [Update notes](#update-notes)). |
 | `doneCommand` | On open notes: the exact, shell-quoted command that closes it. |
 
