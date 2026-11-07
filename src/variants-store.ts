@@ -314,7 +314,7 @@ export function setVariantGroup(
 /**
  * Put an existing variant's selector in a panel section, or take it out of
  * every section with `''`. `undefined` removes the field, so the group label's
- * prefix (`"Header / Logo"`) decides again.
+ * prefix (`"Header > Logo"`) decides again.
  */
 export function setVariantSection(
   opts: VariantsStoreOptions,
