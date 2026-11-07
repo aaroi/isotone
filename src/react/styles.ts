@@ -162,6 +162,8 @@ ${PILL_ACTIVE_CSS}
 .isotone-option-row { display: flex; align-items: center; padding: 2px 4px 2px 7px; gap: 4px; }
 .isotone-option-row > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isotone-option-row small { font-size: 9px; color: var(--iso-muted); margin-left: 6px; }
+/* A pending removal stays listed and readable; only its text quietens. */
+.isotone-option-row[data-requested] > span { color: var(--iso-muted); }
 .isotone-menu-footer { flex-shrink: 0; padding: 9px 12px; border-top: 1px solid var(--iso-line); font-size: 10px; color: var(--iso-muted); min-height: 0; }
 .isotone-confirm { display: flex; justify-content: flex-end; gap: 6px; margin-top: 7px; }
 .isotone-danger { color: var(--iso-danger); }

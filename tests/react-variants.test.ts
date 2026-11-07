@@ -3,11 +3,11 @@
  * The variants surface: the view on its own, and the panel deciding between
  * a Variants / Notes tab bar, variants only, or nothing at all.
  */
-import { act, createElement } from 'react';
+import { act, createElement, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { VariantAxis } from '../src/core/variants';
+import type { VariantAction, VariantAxis } from '../src/core/variants';
 import {
   createVariantsSource,
   IterationPanel,
@@ -1113,6 +1113,72 @@ describe('review dock interactions', () => {
     expect(source.getAxes()).toHaveLength(3);
     expect(container.textContent).toContain('Disk unavailable');
     expect(source.getAxes()).toHaveLength(3);
+    // The dialog stays open and the same option can be tried again.
+    expect(container.querySelector('.isotone-axis-menu')?.getAttribute('data-open')).toBe('true');
+    expect(document.activeElement).toBe(byText('Remove Bold'));
+  });
+  describe('selector action dialog', () => {
+    const SIZES: VariantAxis[] = [{
+      id: 'size', label: 'Size', defaultOption: 's',
+      options: ['s', 'm', 'l', 'xl'].map(id => ({ id, label: id.toUpperCase() })),
+    }];
+    /** A host that records requests the way the panel does: as pending actions. */
+    function Host({ onFeedback = () => {}, axes = SIZES }: { onFeedback?: () => void; axes?: VariantAxis[] }) {
+      const [source] = useState(() => createVariantsSource({ axes }));
+      const [pending, setPending] = useState<VariantAction[]>([]);
+      return createElement(VariantsView, {
+        source, pendingActions: pending, onFeedback,
+        onManage: async (action: VariantAction) => { setPending(list => [...list, action]); },
+      });
+    }
+    const dialog = () => container.querySelector('.isotone-axis-menu');
+    const row = (id: string) => container.querySelector(`.isotone-option-row[data-option-id="${id}"]`);
+
+    it('stays open while options are removed one after another, moving focus on', async () => {
+      await render(createElement(Host));
+      await click(byText('Size actions'));
+      await click(byText('Remove M'));
+      expect(dialog()?.getAttribute('data-open')).toBe('true');
+      expect(row('m')?.textContent).toContain('Removal requested');
+      expect(row('m')?.hasAttribute('data-requested')).toBe(true);
+      expect(byText('Remove M')?.hasAttribute('disabled')).toBe(true);
+      expect(document.activeElement).toBe(byText('Remove L'));
+      await click(byText('Remove L'));
+      expect(document.activeElement).toBe(byText('Remove XL'));
+      // The last one has nothing below it and nothing removable above it.
+      await click(byText('Remove XL'));
+      expect(dialog()?.getAttribute('data-open')).toBe('true');
+      expect(document.activeElement).toBe(byText('Reset to default'));
+      expect(['m', 'l', 'xl'].every(id => row(id)?.textContent?.includes('Removal requested'))).toBe(true);
+      expect(row('s')?.textContent).not.toContain('Removal requested');
+    });
+
+    it('moves focus back up the list after removing the last removable option', async () => {
+      await render(createElement(Host));
+      await click(byText('Size actions'));
+      await click(byText('Remove XL'));
+      expect(document.activeElement).toBe(byText('Remove L'));
+    });
+
+    it('closes for decisions about the whole selector and for writing feedback', async () => {
+      const onFeedback = vi.fn();
+      await render(createElement(Host, { onFeedback }));
+      const trigger = byText('Size actions');
+      await click(trigger);
+      await click(byText('Keep default only'));
+      expect(dialog()?.getAttribute('data-open')).toBe('false');
+      await click(trigger);
+      expect(byText('Default-only request saved')?.hasAttribute('disabled')).toBe(true);
+      await click(byText('Remove selector & options'));
+      expect(dialog()?.getAttribute('data-open')).toBe('false');
+      await click(trigger);
+      await click(byText('Reset to default'));
+      expect(dialog()?.getAttribute('data-open')).toBe('false');
+      await click(trigger);
+      await click(byText('Feedback on L'));
+      expect(dialog()?.getAttribute('data-open')).toBe('false');
+      expect(onFeedback).toHaveBeenCalledWith(expect.objectContaining({ axisId: 'size', optionId: 'l' }));
+    });
   });
   it('does not expose destructive source actions without a feedback handler', async () => {
     const mutate = vi.fn();

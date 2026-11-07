@@ -69,6 +69,7 @@ export function VariantsView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
+  const pendingFocus = useRef<{ optionId: string; retry: boolean } | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   useLayoutMotion(bodyRef, shown, active);
   const trigger = useRef<HTMLButtonElement | null>(null);
@@ -85,9 +86,12 @@ export function VariantsView({
             isDefault: o.id === menu.defaultOption,
           }))
         : [];
-  const closeMenu = () => {
+  // Composing feedback moves focus to the composer instead of the selector.
+  const closeMenu = (restoreFocus = true) => {
     setMenuOpen(false);
     setError('');
+    pendingFocus.current = null;
+    if (!restoreFocus) return;
     requestAnimationFrame(() => {
       if (trigger.current?.isConnected) trigger.current.focus();
       else
@@ -96,6 +100,25 @@ export function VariantsView({
           ?.focus();
     });
   };
+  // A removal request keeps the dialog open. Its trash button is disabled while
+  // the request saves and stays disabled once it is pending, so focus moves on
+  // to the next option that can still be removed, then back up the list, then
+  // to Reset to default. A failed request returns focus to the same button.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs after the request settles and the pending state has rendered.
+  useEffect(() => {
+    const target = pendingFocus.current;
+    const dialog = menuRef.current;
+    if (busy || !target || !dialog || !menuOpen) return;
+    pendingFocus.current = null;
+    const rows = Array.from(dialog.querySelectorAll<HTMLElement>('.isotone-option-row'));
+    const at = rows.findIndex(row => row.dataset.optionId === target.optionId);
+    const removable = (row: HTMLElement | undefined) =>
+      row?.querySelector<HTMLButtonElement>('button[data-remove]:not(:disabled)') ?? null;
+    const next = target.retry
+      ? removable(rows[at])
+      : [...rows.slice(at + 1), ...rows.slice(0, Math.max(at, 0)).reverse()].map(removable).find(Boolean);
+    (next ?? dialog.querySelector<HTMLButtonElement>('[data-reset]'))?.focus();
+  }, [busy, pendingActions, menuOpen]);
 
   useEffect(() => {
     if (!menu) setMenuOpen(false);
@@ -155,7 +178,7 @@ export function VariantsView({
         : (axis.kind === 'color' ? axis.swatches : axis.options).find(
             (o) => o.id === optionId,
           );
-    closeMenu();
+    closeMenu(false);
     onFeedback?.({
       axisId: axis.id,
       label: axis.label,
@@ -165,19 +188,23 @@ export function VariantsView({
   }
   const requested = (action: VariantAction) => pendingActions.some(pending =>
     pending.axisId === action.axisId && pending.action === action.action && pending.optionId === action.optionId);
+  // Removing one option keeps the dialog open, so several can be requested in a
+  // row. Keep default only and Remove selector decide the whole selector and close it.
   async function manage(action: VariantAction) {
     if (!menu || busy || !onManage || requested(action)) return;
+    const option = action.action === 'remove-option' ? action.optionId : undefined;
     setBusy(true);
     setError('');
     try {
-      const option = menuOptions.find(o => o.id === action.optionId);
+      const chosen = menuOptions.find(o => o.id === action.optionId);
       await onManage(action, {
         axisId: menu.id, label: menu.label, value: value(menu),
-        ...(option ? { optionId: option.id, optionLabel: option.label } : {}),
+        ...(chosen ? { optionId: chosen.id, optionLabel: chosen.label } : {}),
       });
-
-      closeMenu();
+      if (option !== undefined) pendingFocus.current = { optionId: option, retry: false };
+      else closeMenu();
     } catch (e) {
+      if (option !== undefined) pendingFocus.current = { optionId: option, retry: true };
       setError(
         e instanceof Error ? e.message : 'Could not update this selector.',
       );
@@ -338,7 +365,7 @@ export function VariantsView({
               className="isotone-icon"
               aria-label="Close selector actions"
               title="Close selector actions"
-              onClick={closeMenu}
+              onClick={() => closeMenu()}
             >
               <Icon name="close" />
             </button>
@@ -356,11 +383,14 @@ export function VariantsView({
             )}
             {menu.kind !== 'range' && (
               <div className="isotone-menu-options">
-                {menuOptions.map((option) => (
-                  <div className="isotone-option-row" key={option.id}>
+                {menuOptions.map((option) => {
+                  const pending = requested({ axisId: menu.id, action: 'remove-option', optionId: option.id });
+                  return (
+                  <div className="isotone-option-row" key={option.id} data-option-id={option.id} data-requested={pending || undefined}>
                     <span>
                       {option.label}
                       {option.isDefault && <small>Default</small>}
+                      {pending && <small>Removal requested</small>}
                     </span>
                     {onFeedback && (
                       <button
@@ -377,12 +407,15 @@ export function VariantsView({
                       <button
                         type="button"
                         className="isotone-icon"
+                        data-remove=""
                         aria-label={`Remove ${option.label}`}
-                        disabled={option.isDefault || busy || requested({ axisId: menu.id, action: 'remove-option', optionId: option.id })}
+                        disabled={option.isDefault || busy || pending}
                         title={
                           option.isDefault
                             ? 'Default option'
-                            : 'Request option removal'
+                            : pending
+                              ? 'Removal requested'
+                              : 'Request option removal'
                         }
                         onClick={() =>
                           void manage({
@@ -396,12 +429,14 @@ export function VariantsView({
                       </button>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             <button
               type="button"
               className="isotone-menu-action"
+              data-reset=""
               onClick={() => {
                 source.setSelection(menu.id, axisDefault(menu));
                 closeMenu();

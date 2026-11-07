@@ -91,6 +91,20 @@ Selector action dialogs show feedback first, then individual choices without
 an “Options” heading, followed by Reset to default, Keep default only, and
 removal last.
 
+An action about one choice keeps the dialog open; an action that settles the
+whole selector, or that moves to another surface, closes it:
+
+| Action | Dialog | Focus afterwards |
+| --- | --- | --- |
+| Remove an option | Stays open; the row reads “Removal requested” and its trash is disabled | The next removable option, else the nearest one above, else Reset to default |
+| Remove an option, failed | Stays open with the error in the footer | The same trash button |
+| Feedback on the selector or an option | Closes | The composer |
+| Reset to default | Closes | The selector's heading |
+| Keep default only, Remove selector & options | Closes | The selector's heading |
+
+Escape, the close button and a pointer outside the dialog close it and return
+focus to the heading.
+
 Selector action dialogs have a 260px minimum height and reserve 360px in their
 parent panel when space allows, even for a selector with only one action. The viewport remains the upper
 bound; short screens scroll instead of pushing controls off-screen.
