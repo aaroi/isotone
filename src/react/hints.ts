@@ -2,7 +2,7 @@
  * Instructional copy shown in the panel while selecting, for a hovering pointer
  * and for touch. Hints are never truncated: each one fits on a single line at
  * a 375px-wide viewport, so keep new copy within the same length.
- * `tests/react-hints.test.ts` holds the budget.
+ * `tests/react/hints.test.ts` holds the budget.
  */
 export const HINTS = {
   /** The select-mode cover over the docked composer: what to do, then how to pause. */

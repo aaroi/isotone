@@ -45,7 +45,7 @@ ${APPEARANCE_CSS}
   text-align: left; letter-spacing: normal; color-scheme: dark;
   /* Inherited text properties cross the shadow boundary: an RTL or styled host must not mirror or restyle the panel. */
   direction: ltr; writing-mode: horizontal-tb; word-spacing: normal; text-indent: 0; text-transform: none;
-  text-shadow: none; white-space: normal; font-feature-settings: normal; font-variation-settings: normal;
+  text-shadow: none; white-space: normal; font-feature-settings: normal; font-variation-settings: normal; -webkit-text-fill-color: currentColor;
 }
 .isotone-root :where(button, input, textarea):focus-visible { outline: 2px solid var(--iso-focus); outline-offset: 3px; }
 .isotone-root button { transition: transform var(--iso-fast) var(--iso-ease-out), opacity var(--iso-fast) var(--iso-ease-out); }
@@ -355,6 +355,8 @@ ${FEEDBACK_LAYOUT_CSS}
   .isotone-opt:is(:hover, :has(:focus-visible)) .isotone-default-dot { opacity: 0; }
   .isotone-note:hover .isotone-x, .isotone-note:focus-within .isotone-x, .isotone-note-editing .isotone-x { opacity: 1; }
 }
+/* Without a hovering fine pointer the chevron always shows, so it always has the dot's corner. */
+@media not all and (hover: hover) and (pointer: fine) { .isotone-opt .isotone-default-dot { opacity: 0; } }
 @media (max-width: 640px), (max-height: 500px) { .isotone-resize { display: none; } }
 /* The dock's size is the reviewer's choice on a window with room for it. */
 @media (min-width: 641px) and (min-height: 501px) {
