@@ -129,7 +129,10 @@ existing selector. A label that needs a spaced `>` of its own takes an explicit
 ## Changing Isotone itself
 
 For work on this package, use [development guidance](docs/development.md).
-That document links the maintainer's design language and release checks.
+That document links the maintainer's design language and release checks, and
+says how to write a pull request description for a reader who doesn't know the
+codebase: what the user experiences today, what changes for them, then only the
+technical detail a reviewer needs.
 Every user-facing change also updates the demo (`examples/demo`) so it shows
 the change, at phone sizes too; the hosted demo redeploys when the change
 merges, and each pull request gets a preview link.
