@@ -128,6 +128,17 @@ describe('variant', () => {
     expect(broken.text.out).toContain('is not valid JSON');
   });
 
+  it('names a duplicate knob id as a duplicate, not as an invalid knob', async () => {
+    const root = tempRepo();
+    mkdirSync(join(root, '.isotone'), { recursive: true });
+    const radius = { kind: 'range', id: 'card-radius', label: 'Card radius', min: 0, max: 24, step: 1, defaultValue: 12, unit: 'px' };
+    writeFileSync(join(root, '.isotone', 'knobs.json'), JSON.stringify([radius, { ...radius, label: 'Radius again' }]));
+    const io = makeIo(root);
+    expect(await runCli(['variant', 'list'], io)).toBe(0);
+    expect(io.text.out).toContain('Skipped knob 2 "card-radius": another knob earlier in the file already has this id');
+    expect(io.text.out).not.toContain('not a valid range');
+  });
+
   it('runs new -> add -> list -> use -> sync (noop) -> path -> promote', async () => {
     const root = tempRepo();
     commit(root, 'src/Hero.tsx', 'export const Hero = () => "hello";\n');

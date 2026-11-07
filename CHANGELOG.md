@@ -20,8 +20,8 @@
 - fix: the generated AGENTS.md section states the development-only rule
 - feat: the README starts with a prompt for your coding agent, and says up front that Isotone is not an agent, an MCP server or an AI product
 - feat: `init` prints a first run for the agent: two real, opt-in variants on the user's page and a short message telling them what to open and try. It is skipped once the project has variants or knobs
-- feat: `isotone serve` serves `.isotone/knobs.json`, so range, colour and select knobs work on Next, static sites and any other dev server, not only Vite
-- feat: `variant list` lists knobs and names every knobs.json entry the panel would skip
+- feat: `isotone serve` serves `.isotone/knobs.json`, so range, colour and select knobs work on Next, static sites and any other dev server, not only Vite. Its panel has a Variants tool only while that file holds valid knobs, and an empty list there asks for knobs, not file variants
+- feat: `variant list` lists knobs and names every knobs.json entry the panel would skip, and says when one is skipped for repeating an earlier knob's id
 - fix: the generated AGENTS.md section names `variant use default` for going back
 - chore: the demo tour ends with the same agent prompt as the README, with a Copy button, and keeps the install commands under "Or set it up yourself"
 
