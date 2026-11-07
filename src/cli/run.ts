@@ -74,8 +74,8 @@ function printHelp(io: CliIO): void {
   out(io, '  isotone --json             full note records as JSON for agents and scripts');
   out(io);
   out(io, `${BLAST.name}: keep acting on notes for a set time (see ${BLAST.doc})`);
-  out(io, `  isotone ${BLAST.command} --for 45m        wait for new notes, print each batch, exit`);
-  out(io, `  isotone ${BLAST.command}                  continue the session after each batch or check-in`);
+  out(io, `  isotone ${BLAST.command} start 45m         start a session and print how to run it`);
+  out(io, `  isotone ${BLAST.command}                   wait for new notes, print each batch, exit`);
   out(io, `  isotone ${BLAST.command} --help`);
   out(io);
   out(io, 'Endpoint and panel for a host without the Vite plugin');
