@@ -12,23 +12,6 @@ Nothing is added to production.
 
 Try it in your browser at [isotone.vercel.app](https://isotone.vercel.app). Nothing to install.
 
-## Start with your agent
-
-In your project, give this to Claude Code, Cursor, Codex or any agent that can
-run commands. Name the page you're working on:
-
-```text
-Set up Isotone (https://github.com/aaroi/isotone) in this project, for development
-only. Install the `isotone` package as a dev dependency, run `npx isotone init --yes`,
-apply the setup it prints and do its first run on <the page I'm working on>. Then
-tell me what to open and try.
-```
-
-The agent adds the panel behind your framework's development check, makes two
-real variants of something on that page, and tells you where to look. Switch them
-in the panel, pin a note on anything you want changed, then tell the agent to
-check your Isotone notes.
-
 ## How it works
 
 Isotone adds a small panel to your app while it runs in development.
@@ -55,7 +38,28 @@ UI to an agent in words. Element pickers built into agents such as Claude Code
 only work inside the agent's own browser. Isotone works in the browser you
 already use, with any agent that can run a command.
 
-## Set it up yourself
+## Get started
+
+Isotone needs Node.js 20 or later. Pick one of these ways to start.
+
+### Start with your agent
+
+The quickest way. In your project, give this to Claude Code, Cursor, Codex or any
+agent that can run commands. Name the page you're working on:
+
+```text
+Set up Isotone (https://github.com/aaroi/isotone) in this project, for development
+only. Install the `isotone` package as a dev dependency, run `npx isotone init --yes`,
+apply the setup it prints and do its first run on <the page I'm working on>. Then
+tell me what to open and try.
+```
+
+The agent adds the panel behind your framework's development check, makes two
+real variants of something on that page, and tells you where to look. Switch them
+in the panel, pin a note on anything you want changed, then tell the agent to
+check your Isotone notes.
+
+### Set it up yourself
 
 ```sh
 npm install -D isotone
@@ -91,9 +95,8 @@ nothing if the page ships:
 
 On Next, `init` prints the same panel as a `next/script` tag behind
 `process.env.NODE_ENV === 'development'`. The [integration guide](docs/integrations.md)
-covers route handlers, React embeds, themes and the production guards. Node.js 20
-or later is required. Coming from the previous package? See the
-[migration guide](docs/migration.md).
+covers route handlers, React embeds, themes and the production guards. Coming
+from the previous package? See the [migration guide](docs/migration.md).
 
 ## Keys
 
