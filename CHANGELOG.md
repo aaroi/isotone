@@ -39,6 +39,14 @@
 - `variant new --note` takes the element from a note's `elements` when it has no legacy `element`.
 - `variant list` names the field that makes a knob invalid, for example `min must be below max.`
 - `init` prints the install command for your package manager (and none once Isotone is installed), says that pages must come from localhost because a `file://` page never loads the panel, and no longer mentions the old 14-day window.
+- Keys typed in Isotone's feedback box no longer trigger the app's own keyboard shortcuts, and focus, input and wheel events inside Isotone no longer reach the app's focus traps, outside-click handlers or scroll handlers.
+- Pressing Escape in one of the app's own fields or dialogs no longer closes Isotone or moves focus; Escape still closes Isotone when focus is in Isotone or nowhere in particular.
+- In select mode, clicking an element no longer sends the press to the app, so menus and popovers that open on press are pinned without opening and focus stays put; hold Shift to use the page, as before.
+- Closing a panel with its own close button now returns keyboard focus to that panel's button in the pill (or to the launcher) instead of dropping it on the page.
+- On right-to-left pages, and pages that style inherited text (uppercase, word spacing, indents), Isotone's panel no longer mirrors or picks up those styles.
+- On React 19 apps, a pinned element's note now records its source file and line again (React 19 removed the field Isotone used); the line is mapped through the dev server's source map to the line in your file.
+- Unmounting the panel (for example on a hot reload) no longer removes a `history.pushState`/`replaceState` wrapper that a router or devtool added after Isotone.
+- Pin and hover outlines, and the floating composer, now follow their element when it moves without a scroll (an accordion opening, data reloading), and the hover outline updates while scrolling.
 
 ### Changed
 
@@ -52,8 +60,12 @@
 - Every `isotone/*` subpath has a `default` export condition, and `isotone/package.json` can be imported, so `require.resolve('isotone/server')` and tools that read the manifest work. `require()` loads the package where Node can require ES modules (Node 22 and later) and otherwise fails with a clear ES-module error.
 - The type declarations for `isotone/vite`, `isotone/serve` and `isotone/server` no longer import React, so a project without `@types/react` can typecheck against them.
 - The docs are shorter and each topic lives in one place: the README for trying Isotone, the [agent guide](docs/agent-guide.md) for agents, the [integration guide](docs/integrations.md) for wiring it in, including the endpoint rules above.
-
-<!-- stream C entries -->
+- Typing in the feedback box no longer slows down on pages with many selectors: on the 500-selector stress page a keystroke now takes about 1–2 ms instead of about 100 ms, and moving the pointer in select mode no longer re-renders the panel.
+- Single-choice selector options (segments, thumbnails, colour swatches) are now radio groups: Tab reaches the group once, and the arrow keys, Home and End move between options and pick them.
+- An option's actions chevron is no longer a separate Tab stop; press Shift+F10 or the context-menu key on a focused option to open its actions (a right click and the visible chevron still work).
+- The launcher and the Feedback button now include the note count in their accessible names (for example "Isotone, 3 notes"), so screen readers hear what the badge shows.
+- The automatic theme now ignores text updates on the host page and re-checks the page at most five times a second while it keeps changing, so a ticking clock or an animation no longer costs a layout on every frame. A theme change made only by page mutations can take up to 200 ms to show.
+- Drafts in the feedback box are saved to the browser once typing pauses (about 300 ms), not on every keystroke; leaving the page still saves what is pending.
 
 ## 1.2.4
 
