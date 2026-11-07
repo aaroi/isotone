@@ -13,7 +13,11 @@
     "noEmit": true,
     "resolveJsonModule": true,
     "useDefineForClassFields": true,
-    "types": ["node", "vite/client"]
+    "types": ["node", "vite/client"],
+    "verbatimModuleSyntax": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitOverride": true
   },
-  "include": ["src", "tests", "tsup.config.ts"]
+  "include": ["src", "tests", "examples", "tsup.config.ts", "vitest.config.ts"]
 }
