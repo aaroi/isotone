@@ -13,38 +13,9 @@ const CACHE_TTL = 24 * 60 * 60 * 1000;
 const CACHE_FILE = join(tmpdir(), `isotone-update-${process.getuid?.() ?? 'user'}-v1.json`);
 
 type Manager = 'npm' | 'pnpm' | 'yarn';
-export type { UpdateInfo } from './core/update';
-
-interface Version { parts: bigint[]; prerelease: string[] }
-function parseVersion(value: string): Version {
-  if (value.length > 256) throw new Error('Invalid version.');
-  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*))?(?:\+([\da-zA-Z-]+(?:\.[\da-zA-Z-]+)*))?$/.exec(value);
-  if (!match) throw new Error('Invalid version.');
-  const prerelease = match[4]?.split('.') ?? [];
-  if (prerelease.some((part) => /^0\d+$/.test(part))) throw new Error('Invalid version.');
-  return { parts: match.slice(1, 4).map(BigInt), prerelease };
-}
-
-/** SemVer precedence, including numeric prereleases and ignored build metadata. */
-export function compareVersions(a: string, b: string): number {
-  const left = parseVersion(a), right = parseVersion(b);
-  for (let i = 0; i < 3; i++) {
-    if (left.parts[i] !== right.parts[i]) return left.parts[i] > right.parts[i] ? 1 : -1;
-  }
-  if (!left.prerelease.length || !right.prerelease.length) {
-    return left.prerelease.length === right.prerelease.length ? 0 : left.prerelease.length ? -1 : 1;
-  }
-  for (let i = 0; i < Math.max(left.prerelease.length, right.prerelease.length); i++) {
-    const x = left.prerelease[i], y = right.prerelease[i];
-    if (x === y) continue;
-    if (x === undefined || y === undefined) return x === undefined ? -1 : 1;
-    const nx = /^\d+$/.test(x), ny = /^\d+$/.test(y);
-    if (nx && ny) return BigInt(x) > BigInt(y) ? 1 : -1;
-    if (nx !== ny) return nx ? -1 : 1;
-    return x > y ? 1 : -1;
-  }
-  return 0;
-}
+export type { UpdateInfo, UpdateRequest } from './core/update';
+export { changelogUrl, compareVersions, updateRequestOf } from './update-request';
+import { compareVersions, parseVersion, upgradeCommand } from './update-request';
 
 function manifest(directory: string): Record<string, unknown> | null {
   try {
@@ -104,16 +75,18 @@ export function upgradePlan(cwd: string, latest: string, override?: Manager): Pi
   const optional = project.json?.optionalDependencies as Record<string, unknown> | undefined;
   const peers = project.json?.peerDependencies as Record<string, unknown> | undefined;
   if (optional?.[packageName] || peers?.[packageName]) return { upgrade: null, message: 'Review this optional/peer dependency manually with your package manager.' };
-  const dev = production?.[packageName] ? '' : ' -D';
-  let workspace = manager === 'pnpm' && existsSync(join(project.directory, 'pnpm-workspace.yaml')) ? ' -w' : '';
+  const dev = !production?.[packageName];
+  let workspace = manager === 'pnpm' && existsSync(join(project.directory, 'pnpm-workspace.yaml'));
   if (manager === 'yarn' && project.json?.workspaces) {
     const declared = project.json.packageManager;
     if (typeof declared !== 'string' || !/^yarn@\d+\./.test(declared)) return { upgrade: null, message: 'Declare the Yarn version in packageManager before updating a workspace-root dependency; Yarn Classic and modern Yarn use different root flags.' };
-    if (declared.startsWith('yarn@1.')) workspace = ' -W';
+    workspace = declared.startsWith('yarn@1.');
   }
-  const command = manager === 'npm'
-    ? `npm install${dev} --save-exact ${packageName}@${latest}`
-    : `${manager} add${dev}${workspace} --exact ${packageName}@${latest}`;
+  // One builder for the suggestion and for checking a stored update note.
+  let command: string;
+  try { command = upgradeCommand(manager, latest, { dev, workspace }); } catch {
+    return { upgrade: null, message: 'This release has a version the upgrade command does not name. Upgrade with your project’s package manager.' };
+  }
   return { upgrade: { manager, command, cwd: project.directory } };
 }
 

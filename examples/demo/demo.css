@@ -43,7 +43,11 @@ svg { flex: none; }
 /* The demo's own bar, outside the pretend app. */
 .demo-bar { height: 44px; display: flex; align-items: center; gap: 14px; padding: 0 10px 0 18px; }
 .brand { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 600; letter-spacing: -.01em; }
-.demo-bar-note { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.demo-bar-note { flex: 1 1 0; min-width: 0; height: 44px; display: flex; flex-wrap: wrap; align-items: center; overflow: hidden; color: var(--muted); font-size: 12.5px; }
+/* The note shows whole or not at all: when it does not fit beside this
+   zero-width strut it wraps onto a second line, which the bar's height clips. */
+.demo-bar-note::before { content: ''; height: 44px; }
+.demo-bar-note > span { white-space: nowrap; }
 .demo-bar-actions { margin-left: auto; display: flex; align-items: center; gap: 2px; }
 .demo-select { display: inline-flex; align-items: center; gap: 6px; margin-right: 6px; color: var(--muted); font-size: 12.5px; }
 .demo-select select { height: 26px; padding: 0 6px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); }
@@ -126,11 +130,18 @@ h1 { margin: 0; font-size: 26px; font-weight: 650; letter-spacing: -.025em; line
 }
 @media (max-width: 640px) {
   .demo-bar-note, .app-tabs { display: none; }
+  /* The local-only links (Screenshot view, Stress test) would widen the page past a phone. */
+  .demo-bar-actions a.button-ghost { display: none; }
   .content { padding: 24px 16px 96px; }
   .page-heading { align-items: flex-start; }
   .overview-cards { grid-template-columns: minmax(0, 1fr); }
   .projects-head, .projects article { grid-template-columns: minmax(0, 1fr) auto; }
   .projects-head span:nth-child(3), .project-progress { display: none; }
+  /* The list layout keeps label, value and chart in one row, without the detail. */
+  :root[data-layout='list'] .overview-cards p { width: auto; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  :root[data-layout='list'] .overview-cards strong { width: auto; }
+  :root[data-layout='list'] .overview-cards small { display: none; }
+  :root[data-layout='list'] .stat-viz { width: 110px; flex: none; }
 }
 
 /* The tour: a card and a ring around what it points at. */
@@ -176,6 +187,15 @@ h1 { margin: 0; font-size: 26px; font-weight: 650; letter-spacing: -.025em; line
 .tour-primary:hover { background: var(--fg); opacity: .88; }
 .tour-link { margin-right: auto; padding: 0; border: 0; background: none; color: var(--muted); font-size: 12.5px; cursor: pointer; }
 .tour-link:hover { color: var(--fg); }
+/* The agent prompt wraps inside the card at any width, with its Copy button below it. */
+.tour-prompt { display: flex; flex-direction: column; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--code); }
+.tour-step .tour-prompt p { margin: 0 0 10px; color: var(--fg); font: 12px/1.6 ui-monospace, 'SF Mono', Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tour-prompt .tour-button { align-self: flex-end; }
+.tour-prompt .tour-token { white-space: nowrap; }
+.tour-manual { margin-top: 10px; color: var(--muted); font-size: 12.5px; }
+.tour-manual summary { width: fit-content; cursor: pointer; }
+.tour-manual summary:hover { color: var(--fg); }
+.tour-manual .tour-code { margin-top: 8px; }
 @keyframes tour-fade { from { opacity: 0; } }
 @keyframes tour-step { from { opacity: 0; transform: translateY(3px); } }
 @keyframes tour-pulse { 50% { opacity: .35; transform: scale(.8); } }
@@ -185,6 +205,16 @@ h1 { margin: 0; font-size: 26px; font-weight: 650; letter-spacing: -.025em; line
 @media (prefers-reduced-motion: reduce) {
   .tour-ring, .tour-pulse, .tour-step, .tour-scrim { animation: none; }
   .tour-card[data-animate='true'] { transition: none; }
+}
+/* Fingers: the same buttons with larger hit areas. */
+@media (pointer: coarse) {
+  .button { height: 36px; }
+  .button-icon { width: 36px; }
+  .tour-button { height: 36px; padding: 0 14px; }
+  .tour-link { align-self: stretch; padding: 0 8px; margin-left: -8px; }
+  .tour-top { margin-top: -4px; margin-bottom: 4px; height: 32px; }
+  .tour-close { width: 36px; height: 36px; margin-right: -12px; }
+  .tour-code button { width: 36px; height: 36px; top: 2px; right: 2px; }
 }
 
 /* Capture treatment belongs to the host only. The actual tool is mounted

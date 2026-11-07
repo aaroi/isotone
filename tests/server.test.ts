@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { notesResponse, readNotes, updateNotes } from '../src/store';
 import * as server from '../src/server/index';
@@ -135,6 +135,46 @@ describe('serveNotesRequest origins', () => {
 
   it('still rejects a non-loopback page when loopback origins are allowed', async () => {
     expect((await serveNotesRequest(tempFile(), page('https://example.com'), { loopbackOrigins: true })).status).toBe(403);
+  });
+});
+
+describe('Request adapters in a production runtime', () => {
+  const post = () => new Request('http://localhost:3000/api/iteration/notes', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ route: '/', feedback: 'from a deployed app' }),
+  });
+  afterEach(() => { vi.unstubAllEnvs(); });
+
+  it('answer 404 and leave the notes file alone when NODE_ENV is production', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const file = tempFile();
+    const notes = await serveNotesRequest(file, post());
+    expect(notes.status).toBe(404);
+    expect(readNotes(file)).toEqual([]);
+    const variants = await server.serveVariantsRequest(
+      { root: join(file, '..') },
+      new Request('http://localhost:3000/api/iteration/variants/active', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ active: [] }),
+      }),
+    );
+    expect(variants.status).toBe(404);
+  });
+
+  it('serve a deliberate review deployment that opts in', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const file = tempFile();
+    expect((await serveNotesRequest(file, post(), { allowProduction: true })).status).toBe(201);
+    expect(readNotes(file)).toHaveLength(1);
+  });
+
+  it('keep working in development, test and unset environments', async () => {
+    for (const env of ['development', 'test', '']) {
+      vi.stubEnv('NODE_ENV', env);
+      expect((await serveNotesRequest(tempFile(), post())).status, env || 'unset').toBe(201);
+    }
   });
 });
 

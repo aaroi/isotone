@@ -2,6 +2,7 @@ node_modules
 dist
 *.tsbuildinfo
 .iteration-feedback.json
+.iteration-feedback.blast.json
 .tmp-vite-*/
 demo-dist
 .vercel
