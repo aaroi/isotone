@@ -38,13 +38,13 @@
   "files": [
     "dist",
     "docs/assets/preview.png",
+    "docs/agent-guide.md",
     "docs/integrations.md",
     "docs/migration.md",
     "docs/updates.md",
     "docs/blast.md",
     "docs/variants.md",
     "docs/third-party-notices.md",
-    "AGENTS.md",
     "CHANGELOG.md"
   ],
   "bin": {
