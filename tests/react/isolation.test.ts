@@ -266,4 +266,12 @@ it('makes single choices a radio group with one tab stop and keyboard actions', 
   await key(radios()[1], { key: 'F10', shiftKey: true });
   expect($('.isotone-axis-menu').getAttribute('aria-label')).toBe('Comfy option actions');
   expect($('.isotone-axis-menu').dataset.open).toBe('true');
+  // Closing it returns focus to the option, where the arrow keys still work, not to its off-tab-order chevron.
+  await act(async () => {
+    $('.isotone-axis-menu').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  });
+  await frame();
+  await frame();
+  expect($('.isotone-axis-menu').dataset.open).toBe('false');
+  expect(shadow.activeElement).toBe(radios()[1]);
 });

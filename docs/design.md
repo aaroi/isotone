@@ -123,7 +123,7 @@ whole selector, or that moves to another surface, closes it:
 | Remove an option, failed | Stays open with the error in the footer | The same trash button |
 | Feedback on the selector or an option | Closes | The composer |
 | Reset to default | Closes | The selector's heading |
-| Keep only this, Keep default only, Remove selector & options | Closes | The selector's heading, or the option's chevron in an option-scoped dialog |
+| Keep only this, Keep default only, Remove selector & options | Closes | The selector's heading, or whatever opened an option-scoped dialog: its chevron, or the option itself after a right click, Shift+F10 or the context-menu key |
 
 Escape, the close button and a pointer outside the dialog close it and return
 focus to the heading.
