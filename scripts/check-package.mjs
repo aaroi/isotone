@@ -5,15 +5,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { npm } from './npm.mjs';
+
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const run = (args, cwd) =>
-  execFileSync(npm, args, {
-    cwd,
-    encoding: 'utf8',
-    env: { ...process.env, npm_config_cache: join(scratch, 'cache') },
-  });
+const run = (args, cwd) => npm(args, { cwd, env: { ...process.env, npm_config_cache: join(scratch, 'cache') } });
 
 try {
   const [packed] = JSON.parse(run(['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], root));
