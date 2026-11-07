@@ -12,6 +12,13 @@
 - chore: the hosted demo deploys from `main` and gives each pull request a preview link (`demo.yml`), and works better on phones
 - feat (experimental): a visual style editor in select mode, behind `experimental: { styleEditor: true }` on the Vite plugin, `serveIteration`, `mountIteration` and `IterationPanel`, or `isotone serve --style-editor`. A docked inspector reads the pinned elements' computed styles (layout, spacing, size, typography, fill and border), previews edits through one scoped stylesheet and reverts them on close. Several elements show Mixed values, edits can be narrowed to one element or to elements with the same style, a breadcrumb moves the selection to a parent or child, and dragging across the page selects an area
 - feat (experimental): notes can carry `styleEdits`, a per-element style diff with the rule, written value and tokens behind each old value. `isotone --json` returns it with a `styleHint`, the text output prints each change under its element, and the guidance tells agents to apply it with the project's own styling
+- feat: the README starts with a prompt for your coding agent, and says up front that Isotone is not an agent, an MCP server or an AI product
+- feat: `init` prints a first run for the agent: two real, opt-in variants on the user's page and a short message telling them what to open and try. It is skipped once the project has variants or knobs
+- feat: `isotone serve` serves `.isotone/knobs.json`, so range, colour and select knobs work on Next, static sites and any other dev server, not only Vite
+- feat: `variant list` lists knobs and names every knobs.json entry the panel would skip
+- fix: `serveNotesRequest` and `serveVariantsRequest` answer 404 when `NODE_ENV` is `production`. A deliberate review deployment can pass `{ allowProduction: true }`
+- fix: `init` and the serve setup page give static HTML a script loader that requests nothing outside localhost, and give Next a `next/script` tag behind `NODE_ENV === 'development'` in the root layout, instead of a plain tag that would make visitors' browsers request their own localhost if it shipped
+- fix: the generated AGENTS.md section states the development-only rule, and names `variant use default` for going back
 
 ## 1.1.3
 

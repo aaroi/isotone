@@ -181,8 +181,25 @@ optional `route` (a pattern like a variant's, or a list of them):
 ]
 ```
 
+A colour knob takes a `defaultColor` and named `swatches`, all as hex values:
+
+```json
+{
+  "kind": "color",
+  "id": "accent",
+  "label": "Accent colour",
+  "defaultColor": "#2f6f4e",
+  "swatches": [
+    { "id": "forest", "label": "Forest", "value": "#2f6f4e" },
+    { "id": "clay", "label": "Clay", "value": "#b4532a" }
+  ]
+}
+```
+
 The panel renders range knobs as sliders and colour knobs as swatches with a
-custom picker, on their configured routes. A value reaches the
+custom picker, on their configured routes. An entry with a missing or invalid
+field is skipped; `npx isotone variant list` names each one. Knobs also work with
+`isotone serve`, so any dev server gets them, not only Vite. A value reaches the
 page as a custom property on `<html>`, `--knob-<id>`, with the unit
 appended, so the source reads it with the committed default as the
 fallback:

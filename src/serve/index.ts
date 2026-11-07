@@ -26,8 +26,11 @@ import type { IterationTheme } from '../react/theme';
 import type { IterationExperiments } from '../react/IterationPanel';
 import { checkOrigin, HttpError, isLoopback, readNodeJson, sendFailure } from '../server/http';
 import { ensureFileIgnored, notesResponse, NOTES_ENDPOINT } from '../store';
+import { VARIANTS_ENDPOINT } from '../core/variants';
+import { readKnobs } from '../variants-store';
 
 import { readBundle } from '../standalone/bundle';
+import { guardedScriptTag } from './tag';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../update';
 export { readBundle } from '../standalone/bundle';
 
@@ -37,7 +40,8 @@ const BUNDLE_PATH = '/isotone.js';
 export interface ServeIterationOptions {
   /** Background npm notice, at most once a day. false disables the check. */
   checkForUpdates?: boolean;
-  /** Project directory for the suggested update command. Defaults to the notes directory. */
+  /** Project directory for the suggested update command and for
+   *  `.isotone/knobs.json`. Defaults to the notes directory. */
   projectRoot?: string;
   /** Defaults to auto (page background); system follows the OS preference. */
   theme?: IterationTheme;
@@ -97,6 +101,10 @@ function cors(req: IncomingMessage, res: ServerResponse): void {
 function bundleWithMount(origin: string, opts: ServeIterationOptions): string {
   const config = JSON.stringify({
     endpoint: `${origin}${NOTES_ENDPOINT}`,
+    // Knobs only: file variants need a bundler to swap modules, which a
+    // script tag on another dev server does not have.
+    variants: 'overlay',
+    variantsEndpoint: `${origin}${VARIANTS_ENDPOINT}`,
     updateEndpoint: `${origin}${UPDATE_ENDPOINT}`,
     key: opts.key ?? '',
     rule: opts.rule ?? {},
@@ -121,7 +129,7 @@ function escapeHtml(v: string): string {
 }
 
 function indexPage(origin: string, file: string): string {
-  const tag = `<script src="${origin}${BUNDLE_PATH}" defer></script>`;
+  const tag = guardedScriptTag(`${origin}${BUNDLE_PATH}`);
   const mark = bookmarklet(origin);
   return `<!doctype html>
 <html lang="en">
@@ -145,7 +153,7 @@ function indexPage(origin: string, file: string): string {
          box-shadow: 0 0 10px rgba(74,222,128,.5); }
   h1 { font-family: var(--mono); font-size: 14px; font-weight: 500; letter-spacing: .02em; }
   .sub { color: var(--muted); font-size: 13px; margin-bottom: 40px; }
-  .sub code { font-family: var(--mono); font-size: 11.5px; color: var(--fg); }
+  .sub code, p.note code { font-family: var(--mono); font-size: 11.5px; color: var(--fg); }
   h2 { font-family: var(--mono); font-size: 10.5px; font-weight: 500;
        letter-spacing: .08em; text-transform: uppercase; color: var(--faint);
        margin: 32px 0 10px; }
@@ -178,12 +186,14 @@ function indexPage(origin: string, file: string): string {
   <header><span class="dot"></span><h1>Isotone</h1></header>
   <p class="sub">Serving the feedback loop on <code>${escapeHtml(origin)}</code>.</p>
 
-  <h2>Script tag for your dev page</h2>
+  <h2>Script for your dev pages</h2>
   <div class="card row">
     <pre>${escapeHtml(tag)}</pre>
     <button type="button" class="copy" data-c="${escapeHtml(tag)}"
       onclick="navigator.clipboard.writeText(this.dataset.c);this.textContent='copied';setTimeout(()=>this.textContent='copy',1200)">copy</button>
   </div>
+  <p class="note">It loads the panel only on localhost, so it stays inert if the page ships.
+  Behind a development flag, a plain <code>&lt;script src="${escapeHtml(origin + BUNDLE_PATH)}" defer&gt;</code> works too.</p>
 
   <h2>Bookmarklet — drag to your bookmarks bar</h2>
   <a class="bm" href="${escapeHtml(mark)}">✎ Iteration</a>
@@ -203,11 +213,12 @@ export function serveIteration(
   opts: ServeIterationOptions,
 ): Promise<ServedIteration> {
   const file = resolve(opts.file);
+  const projectRoot = resolve(opts.projectRoot ?? dirname(file));
   const port = opts.port ?? DEFAULT_PORT;
   const host = opts.host ?? '127.0.0.1';
   if (!isLoopback(host)) throw new Error('isotone serve binds only to localhost, 127.0.0.1 or ::1.');
   ensureFileIgnored(file);
-  const updates = startUpdateCheck(opts.projectRoot ?? dirname(file), opts.checkForUpdates !== false);
+  const updates = startUpdateCheck(projectRoot, opts.checkForUpdates !== false);
 
   // The port we were ASKED for is not necessarily the one we got: 0 means "any
   // free port". The panel's endpoint has to be the bound one or the bundle
@@ -252,6 +263,19 @@ export function serveIteration(
       res.setHeader('content-type', 'text/javascript; charset=utf-8');
       res.setHeader('cache-control', 'no-store');
       res.end(body);
+      return;
+    }
+
+    if (path === VARIANTS_ENDPOINT || path.startsWith(`${VARIANTS_ENDPOINT}/`)) {
+      res.setHeader('content-type', 'application/json; charset=utf-8');
+      res.setHeader('cache-control', 'no-store');
+      if (path === VARIANTS_ENDPOINT && method === 'GET') {
+        res.statusCode = 200;
+        res.end(JSON.stringify({ variants: [], active: [], knobs: readKnobs({ root: projectRoot }) }));
+      } else {
+        res.statusCode = 405;
+        res.end(JSON.stringify({ error: 'isotone serve has knobs only; file variants need the Vite plugin' }));
+      }
       return;
     }
 

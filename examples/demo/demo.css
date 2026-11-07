@@ -126,6 +126,8 @@ h1 { margin: 0; font-size: 26px; font-weight: 650; letter-spacing: -.025em; line
 }
 @media (max-width: 640px) {
   .demo-bar-note, .app-tabs { display: none; }
+  /* The local-only links (Screenshot view, Stress test) would widen the page past a phone. */
+  .demo-bar-actions a.button-ghost { display: none; }
   .content { padding: 24px 16px 96px; }
   .page-heading { align-items: flex-start; }
   .overview-cards { grid-template-columns: minmax(0, 1fr); }
