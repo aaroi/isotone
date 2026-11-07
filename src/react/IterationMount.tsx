@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { createIterationStore, type RouteGateOptions } from '../core/index';
 import {
   createOverlayVariantsSource,
+  axisSection,
   knobDelta,
   OVERLAY_DEFAULT_OPTION,
   type VariantsSource,
@@ -248,7 +249,9 @@ function overlaySourceWithSave(
         const label = variant?.label ?? id;
         // The group names the element and the variant names the alternative;
         // a lone variant whose group is named after it needs no prefix.
-        const named = axis.label === label ? label : `${axis.label}: ${label}`;
+        // A section the selector sits in leads the name, as the panel groups it.
+        const selector = axisSection(axis).fullLabel;
+        const named = selector === label || axis.label === label ? label : `${selector}: ${label}`;
         return [{ id, named, element: variant?.element ?? null }];
       });
     // Knobs the reviewer moved off their defaults ride in the same note, as
@@ -261,7 +264,7 @@ function overlaySourceWithSave(
       parts.push(`Make the default: ${picked.map((p) => `"${p.named}" (${p.id})`).join('; ')}.`);
     }
     if (moved.length) {
-      parts.push(`Knobs: ${moved.map((m) => `${m.axis.label} ${m.shown} (${m.axis.id})`).join('; ')}.`);
+      parts.push(`Knobs: ${moved.map((m) => `${axisSection(m.axis).fullLabel} ${m.shown} (${m.axis.id})`).join('; ')}.`);
     }
     const feedback = parts.length
       ? `[set-defaults] ${parts.join(' ')}`

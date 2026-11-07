@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- feat: selector sections. A label prefix such as `Header / Logo size`, or a `section` field, puts the selector under a sticky, foldable Header heading with a count in the Variants panel, for host axes, knobs and file variants. `variant new --section` and `variant section` set it, and `variant list` has a SECTION column
 - feat: removing an option from a selector's action dialog keeps the dialog open, marks the row "Removal requested" and moves focus to the next option, so several can be removed in a row
 
 ## 1.1.3

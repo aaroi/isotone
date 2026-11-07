@@ -6,7 +6,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-import { overlayGroups, variantAppliesTo } from '../core/variants';
+import { overlayGroups, splitSectionLabel, variantAppliesTo } from '../core/variants';
 import { isRouteModule, scanExports } from '../vite/exports';
 import { readNotes } from '../store';
 import {
@@ -20,6 +20,7 @@ import {
   readVariant,
   removeVariantFile,
   setVariantGroup,
+  setVariantSection,
   syncVariant,
   variantDir,
   writeActive,
@@ -64,6 +65,8 @@ export function runVariant(args: string[], io: CliIO): number {
         return cmdOff(rest, io, opts);
       case 'group':
         return cmdGroup(rest, io, opts);
+      case 'section':
+        return cmdSection(rest, io, opts);
       case 'sync':
         return cmdSync(rest, io, opts);
       case 'promote':
@@ -94,14 +97,18 @@ function printVariantHelp(io: CliIO): void {
   out(io, '  variant list [<route>] [--all-routes]    every variant; * marks the active ones');
   out(io, '  variant new <id> [--note <prefix>] [--route <path>] [--label <text>]');
   out(io, '                   [--description <text>] [--group <id>] [--group-label <text>]');
+  out(io, '                   [--section <text>]');
   out(io, '                                           start one; --note copies route and element from a note,');
-  out(io, '                                           --group makes it one alternative of a shared selector');
+  out(io, '                                           --group makes it one alternative of a shared selector,');
+  out(io, '                                           --section names the part of the page it sits under');
   out(io, '  variant add <id> [--new] <file...>       copy real files into it, then edit the copies;');
   out(io, '                                           --new starts a file the project does not have');
   out(io, '  variant path <id> <file>                 where the copy of <file> lives');
   out(io, '  variant rm <id> <file>                   stop overriding one file');
   out(io, '  variant group <id> <groupId> [--label <text>]');
   out(io, '                                           put an existing variant into a group');
+  out(io, '  variant section <id> [<text> | --none]   put its selector (every variant in its group) in a');
+  out(io, '                                           panel section; no text goes back to the label prefix');
   out(io, '  variant use <id>                         activate it on every dev server on this root, in');
   out(io, '                                           place of its group siblings; other groups stay');
   out(io, '  variant use default [<groupId>]          back to the real files, for every group or one');
@@ -114,6 +121,8 @@ function printVariantHelp(io: CliIO): void {
   out(io);
   out(io, 'Variants that override the same file are alternatives of one selector without a');
   out(io, '--group; use one when the alternatives touch different files.');
+  out(io, 'With more than a few selectors on a page, give each a section: --section "Header",');
+  out(io, 'or a group label prefix such as --group-label "Header / Logo".');
 }
 
 function cmdList(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
@@ -132,15 +141,23 @@ function cmdList(rest: string[], io: CliIO, opts: VariantsStoreOptions): number 
   // Grouped over every variant, not the filtered rows: a sibling on another
   // route still decides which selector this one belongs to.
   const groupOf = new Map<string, string>();
+  const sectionOf = new Map<string, string>();
   for (const group of overlayGroups(variants)) {
-    for (const member of group.members) groupOf.set(member.id, group.id);
+    // The same rule as the panel: a member's `section`, else the label prefix.
+    const explicit = group.members.find((m) => m.section !== undefined)?.section;
+    const section = splitSectionLabel(group.label, explicit).section;
+    for (const member of group.members) {
+      groupOf.set(member.id, group.id);
+      if (section) sectionOf.set(member.id, section);
+    }
   }
   printTable(
     io,
-    ['ID', 'LABEL', 'GROUP', 'ROUTE', 'FILES', 'STALE', 'MISSING', 'ACTIVE'],
+    ['ID', 'LABEL', 'SECTION', 'GROUP', 'ROUTE', 'FILES', 'STALE', 'MISSING', 'ACTIVE'],
     rows.map((v) => [
       v.id,
       v.label,
+      sectionOf.get(v.id) ?? '-',
       groupOf.get(v.id) ?? '-',
       v.route || '-',
       String(Object.keys(v.files).length),
@@ -160,7 +177,8 @@ function cmdNew(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
   const { value: notesFile, rest: r5 } = extractFlag(r4, '--file');
   const { value: group, rest: r6 } = extractFlag(r5, '--group');
   const { value: groupLabel, rest: r7 } = extractFlag(r6, '--group-label');
-  const id = r7[0];
+  const { value: section, rest: r8 } = extractFlag(r7, '--section');
+  const id = r8[0];
   if (!id) {
     errOut(io, 'Give a variant id: isotone variant new <id>');
     return 1;
@@ -189,12 +207,13 @@ function cmdNew(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
     ...(description !== undefined ? { description } : {}),
     ...(group !== undefined ? { group } : {}),
     ...(groupLabel !== undefined ? { groupLabel } : {}),
+    ...(section !== undefined ? { section: section.replace(/\s+/g, ' ').trim() } : {}),
   });
   out(
     io,
     `created "${variant.id}"${variant.route ? ` for ${variant.route}` : ''}${
       variant.group ? ` in group ${variant.group}` : ''
-    }`,
+    }${variant.section ? ` in section "${variant.section}"` : ''}`,
   );
   return 0;
 }
@@ -319,6 +338,30 @@ function cmdGroup(rest: string[], io: CliIO, opts: VariantsStoreOptions): number
   setVariantGroup(opts, id, groupId, label);
   out(io, `"${id}" is now in group ${groupId}${label !== undefined ? ` ("${label}")` : ''}`);
   warnOverlaps(io, opts, id);
+  return 0;
+}
+
+/** A section belongs to the selector, so every variant in the group gets it. */
+function cmdSection(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const { present: none, rest: r1 } = extractBoolFlag(rest, '--none');
+  const [id, ...words] = r1;
+  if (!id || (none && words.length)) {
+    errOut(io, 'Usage: isotone variant section <id> [<text> | --none]');
+    return 1;
+  }
+  if (!readVariant(opts, id)) {
+    errOut(io, `No variant "${id}"`);
+    return 1;
+  }
+  const text = words.join(' ').replace(/\s+/g, ' ').trim();
+  const members = overlayGroups(listVariants(opts)).find((g) => g.members.some((m) => m.id === id))?.members
+    .map((m) => m.id) ?? [id];
+  // No text hands the decision back to the label prefix; --none keeps the
+  // selector out of every section even when its label has a " / ".
+  for (const member of members) setVariantSection(opts, member, none ? '' : text || undefined);
+  const others = members.length > 1 ? ` (with ${members.filter((m) => m !== id).map((m) => `"${m}"`).join(', ')})` : '';
+  out(io, text ? `"${id}"${others} is now in section "${text}"`
+    : none ? `"${id}"${others} is in no section` : `"${id}"${others} takes its section from its label`);
   return 0;
 }
 

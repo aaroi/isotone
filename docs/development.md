@@ -47,8 +47,9 @@ remembers when it was closed; `/?tour=1` starts it regardless. A pretend agent m
 is sent and closes it a few seconds later, the way `--working` and `--done`
 would.
 
-The sample app's Spacing, Accent colour, Card radius and Card padding selectors
-remain inside the panel. Clean Highlight is the product default; there is no
+The sample app's selectors sit in two sections: Cards (layout, spacing, corner
+radius and padding) and Theme (accent colour). `/?stress=1` puts its 500 selectors
+in sections of a dozen, one of them with a long name. Clean Highlight is the product default; there is no
 active-pill design switcher.
 
 `/preview.html` frames the live demo for the README image. The README image is

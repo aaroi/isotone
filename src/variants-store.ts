@@ -152,6 +152,7 @@ function isPlausibleVariant(v: unknown): v is OverlayVariant {
     (o.description === undefined || typeof o.description === 'string') &&
     (o.group === undefined || (typeof o.group === 'string' && OVERLAY_GROUP_ID.test(o.group))) &&
     (o.groupLabel === undefined || typeof o.groupLabel === 'string') &&
+    (o.section === undefined || typeof o.section === 'string') &&
     !!o.files &&
     typeof o.files === 'object' &&
     !Array.isArray(o.files) &&
@@ -255,6 +256,7 @@ export function createVariant(
     description?: string;
     group?: string;
     groupLabel?: string;
+    section?: string;
   },
 ): OverlayVariant {
   return mutateVariants(opts, () => {
@@ -276,6 +278,7 @@ export function createVariant(
       ...(input.description !== undefined ? { description: input.description } : {}),
       ...(input.group !== undefined ? { group: input.group } : {}),
       ...(input.groupLabel !== undefined ? { groupLabel: input.groupLabel } : {}),
+      ...(input.section !== undefined ? { section: input.section } : {}),
     };
     writeVariant(opts, variant);
     return variant;
@@ -303,6 +306,26 @@ export function setVariantGroup(
     assertGroupId(group);
     manifest.group = group;
     if (groupLabel !== undefined) manifest.groupLabel = groupLabel;
+    writeVariant(opts, manifest);
+    return manifest;
+  });
+}
+
+/**
+ * Put an existing variant's selector in a panel section, or take it out of
+ * every section with `''`. `undefined` removes the field, so the group label's
+ * prefix (`"Header / Logo"`) decides again.
+ */
+export function setVariantSection(
+  opts: VariantsStoreOptions,
+  id: string,
+  section: string | undefined,
+): OverlayVariant {
+  return mutateVariants(opts, () => {
+    const manifest = readVariant(opts, id);
+    if (!manifest) throw new Error(`No variant "${id}"`);
+    if (section === undefined) delete manifest.section;
+    else manifest.section = section.replace(/\s+/g, ' ').trim();
     writeVariant(opts, manifest);
     return manifest;
   });

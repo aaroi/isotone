@@ -29,36 +29,49 @@ function layoutThumb(cards: [number, number, number, number][]): string {
     `<rect x="${x + 4}" y="${y + 4}" width="${Math.min(14, w - 8)}" height="2.5" rx="1.25" fill="#8b8e99"/>`).join('');
   return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 72">${shapes}</svg>`)}`;
 }
+/** Selectors sit in sections named by a label prefix ("Cards / Layout"). The README
+ *  capture keeps its two plain selectors for a compact composition. */
+const named = (section: string, label: string, plain: string) => screenshot ? plain : `${section} / ${label}`;
 const axes: VariantAxis[] = [
-  { id: 'layout', label: 'Card layout', defaultOption: 'row', options: [
+  { id: 'layout', label: named('Cards', 'Layout', 'Card layout'), defaultOption: 'row', options: [
     { id: 'row', label: 'Row', image: layoutThumb([[33, 12, 26, 32], [62, 12, 26, 32], [91, 12, 26, 32]]) },
     { id: 'feature', label: 'Feature', image: layoutThumb([[33, 9, 84, 18], [33, 30, 41, 15], [76, 30, 41, 15]]) },
     { id: 'sidebar', label: 'Sidebar', image: layoutThumb([[33, 9, 41, 36], [76, 9, 41, 16.5], [76, 28.5, 41, 16.5]]) },
     { id: 'list', label: 'List', image: layoutThumb([[33, 9, 84, 10], [33, 22, 84, 10], [33, 35, 84, 10]]) },
   ] },
-  { id: 'spacing', label: 'Spacing', defaultOption: 'compact', options: [
+  { id: 'spacing', label: named('Cards', 'Spacing', 'Spacing'), defaultOption: 'compact', options: [
     { id: 'compact', label: 'Compact' }, { id: 'comfy', label: 'Comfy' }, { id: 'spacious', label: 'Spacious' },
   ] },
-  { id: 'accent', label: 'Accent colour', kind: 'color', defaultColor: '#6687ff', swatches: [
+  { id: 'accent', label: named('Theme', 'Accent colour', 'Accent colour'), kind: 'color', defaultColor: '#6687ff', swatches: [
     { id: 'blue', label: 'Blue', value: '#6687ff' }, { id: 'green', label: 'Green', value: '#63b990' },
     { id: 'amber', label: 'Amber', value: '#dfae5e' }, { id: 'rose', label: 'Rose', value: '#dd7f9a' },
     { id: 'violet', label: 'Violet', value: '#a18be0' },
   ] },
 ];
-axes.push({ id: 'card-radius', label: 'Card radius', kind: 'range', min: 0, max: 24, step: 1, defaultValue: 11, unit: 'px' });
+axes.push({ id: 'card-radius', label: named('Cards', 'Corner radius', 'Card radius'), kind: 'range', min: 0, max: 24, step: 1, defaultValue: 11, unit: 'px' });
 if (!screenshot) axes.push(
-  { id: 'card-padding', label: 'Card padding', kind: 'range', min: 8, max: 32, step: 2, defaultValue: 18, unit: 'px' },
+  { id: 'card-padding', label: 'Cards / Padding', kind: 'range', min: 8, max: 32, step: 2, defaultValue: 18, unit: 'px' },
 );
 if (stress) {
   const startingAxes = axes.length;
-  for (let index = startingAxes; index < 500; index++) axes.push({
-    id: `decision-${index}`, label: index === startingAxes ? `Long label ${'without any room to wrap '.repeat(40)}` : `Decision ${index + 1}`,
-    defaultOption: 'option-0',
-    options: Array.from({ length: index % 25 === 0 ? 50 : 4 }, (_, option) => ({
-      id: `option-${option}`,
-      label: option === 3 ? `Alternative ${'withaverylongunbrokenlabel'.repeat(8)}` : `Option ${option + 1}`,
-    })),
-  });
+  // Sections of a dozen, one written as an explicit `section` with a long name;
+  // the long label stays unsectioned, so it sits above every section.
+  for (let index = startingAxes; index < 500; index++) {
+    const area = Math.floor((index - startingAxes - 1) / 12);
+    axes.push({
+      id: `decision-${index}`,
+      ...(index === startingAxes
+        ? { label: `Long label ${'without any room to wrap '.repeat(40)}` }
+        : area === 1
+          ? { label: `Decision ${index + 1}`, section: `Section with a long name ${'that keeps on going '.repeat(12)}` }
+          : { label: `Area ${area + 1} / Decision ${index + 1}` }),
+      defaultOption: 'option-0',
+      options: Array.from({ length: index % 25 === 0 ? 50 : 4 }, (_, option) => ({
+        id: `option-${option}`,
+        label: option === 3 ? `Alternative ${'withaverylongunbrokenlabel'.repeat(8)}` : `Option ${option + 1}`,
+      })),
+    });
+  }
 }
 const source = createVariantsSource({
   axes, selections: { spacing: 'comfy' },

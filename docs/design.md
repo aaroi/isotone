@@ -71,6 +71,16 @@ dialog must not make the same label heavier. Selected and unselected options
 use the same font weight; their material and text colour indicate selection. The host's `--font-sans` may provide
 the typeface; component weights and sizing stay in the shared stylesheet.
 
+Selector sections group a long Variants list by the part of the page each
+selector changes. A section header is a quiet disclosure: a chevron, the section
+name in 11px muted text and its selector count in faint tabular figures. It uses
+the axis label's hover face and is never raised. Selectors without a section come
+first, without a header. Section names come from a label prefix (`Header / Logo
+size`) or an explicit `section`; the selector shows only its own name, while its
+controls, its dialog's accessible name and its notes keep the full name. The
+action dialog title shows the short name, like the heading that opened it.
+Folding a section is immediate and keeps its selections.
+
 Saved feedback uses one row with inline references and no extra gap between rows.
 Note text sits 3px outside the composer text inset. References use at most 42%
 of the row, leaving the note the remaining width. The delete action floats over
@@ -127,8 +137,16 @@ Keep native scrolling, wheel/trackpad input and keyboard focus reveal. Hide
 scrollbar chrome without disabling overflow.
 
 Content passing under a fixed area fades into the actual surface. This applies
-to the Save footer, selector action-dialog header, conditional error footer and
-both edges of the saved-note list and the top of scrolled composer text. List
+to the Save footer, selector action-dialog header, sticky section headers,
+conditional error footer and both edges of the saved-note list and the top of
+scrolled composer text.
+
+A section header sticks to the top edge of the Variants scroll area while its own
+selectors pass beneath it, and the next section's header pushes it out. At rest
+its padding fills the inset or gap above it, so sticking does not move its text,
+and its fade sits in the gap below it, so it never covers a control at rest.
+The list reserves scroll padding for the header, so keyboard focus never lands
+beneath it. List
 padding lets its first and last rows scroll fully clear of the fades. The textarea top
 mask appears only after scrolling, preserving its first line at rest. Without
 reference tags, the textarea extends through the field's top inset: that space

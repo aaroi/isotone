@@ -32,6 +32,11 @@ function tempRepo(): string {
   return root;
 }
 
+function readVariant(root: string, id: string): Record<string, unknown> | null {
+  const file = join(root, '.isotone/variants', id, 'variant.json');
+  return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null;
+}
+
 function commit(root: string, file: string, contents: string): void {
   const abs = join(root, file);
   mkdirSync(join(abs, '..'), { recursive: true });
@@ -201,6 +206,40 @@ describe('variant', () => {
     ).toEqual([]);
   });
 
+  it('puts selectors in sections from --section, a group label prefix or `variant section`', async () => {
+    const root = tempRepo();
+    let io = makeIo(root);
+    expect(await runCli(['variant', 'new', 'logo-bold', '--group', 'logo', '--section', '  Header  '], io)).toBe(0);
+    expect(io.text.out).toContain('created "logo-bold" in group logo in section "Header"');
+    await runCli(['variant', 'new', 'logo-thin', '--group', 'logo'], makeIo(root));
+    await runCli(['variant', 'new', 'links-a', '--group-label', 'Footer / Links'], makeIo(root));
+    await runCli(['variant', 'new', 'theme-a', '--group-label', 'Light / Dark'], makeIo(root));
+    await runCli(['variant', 'new', 'loose'], makeIo(root));
+    const sections = async () => {
+      const list = makeIo(root);
+      expect(await runCli(['variant', 'list'], list)).toBe(0);
+      const [head, ...rows] = list.text.out.trim().split('\n');
+      const at = head.indexOf('SECTION');
+      return Object.fromEntries(rows.map((row) => [row.split(/\s+/)[0], row.slice(at).split(/\s{2,}/)[0]]));
+    };
+    expect(await sections()).toEqual({
+      'logo-bold': 'Header', 'logo-thin': 'Header', 'links-a': 'Footer', 'theme-a': 'Light', loose: '-',
+    });
+    // A section belongs to the whole selector, so its siblings move with it.
+    io = makeIo(root);
+    expect(await runCli(['variant', 'section', 'logo-thin', 'Top', 'bar'], io)).toBe(0);
+    expect(io.text.out).toContain('"logo-thin" (with "logo-bold") is now in section "Top bar"');
+    expect(readVariant(root, 'logo-bold')?.section).toBe('Top bar');
+    expect(await runCli(['variant', 'section', 'theme-a', '--none'], makeIo(root))).toBe(0);
+    expect(readVariant(root, 'theme-a')?.section).toBe('');
+    expect(await runCli(['variant', 'section', 'logo-bold'], makeIo(root))).toBe(0);
+    expect(readVariant(root, 'logo-bold')).not.toHaveProperty('section');
+    expect(await sections()).toMatchObject({ 'logo-bold': '-', 'theme-a': '-', 'links-a': 'Footer' });
+    io = makeIo(root);
+    expect(await runCli(['variant', 'section', 'missing', 'Header'], io)).toBe(1);
+    expect(io.text.err).toContain('No variant "missing"');
+  });
+
   it('use activates alongside other groups and replaces only its own siblings', async () => {
     const root = tempRepo();
     commit(root, 'src/Table.tsx', 'export const Table = () => "rows";\n');
@@ -237,7 +276,7 @@ describe('variant', () => {
     io = makeIo(root);
     expect(await runCli(['variant', 'list'], io)).toBe(0);
     const rows = io.text.out.trim().split('\n');
-    expect(rows[0]).toMatch(/^ID\s+LABEL\s+GROUP\s+ROUTE/);
+    expect(rows[0]).toMatch(/^ID\s+LABEL\s+SECTION\s+GROUP\s+ROUTE/);
     expect(rows.filter((r) => r.trimEnd().endsWith('*')).map((r) => r.split(/\s+/)[0])).toEqual([
       'table-striped',
       'settings-side',
