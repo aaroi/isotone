@@ -224,6 +224,9 @@ describe('ensureFileIgnored', () => {
     const exclude = readFileSync(join(repo, '.git', 'info', 'exclude'), 'utf8');
     expect(exclude).toContain('\n/app/console/.iteration-feedback.json\n');
     expect(exclude).not.toContain(repo);
+    // A crash can leave the lock or a temporary write beside the file.
+    writeFileSync(`${file}.lock`, '');
+    writeFileSync(`${file}.0d2c.tmp`, '');
     // The proof is git's own verdict, not the file's contents.
     const ignored = execFileSync('git', ['check-ignore', '--no-index', file], {
       cwd: repo,

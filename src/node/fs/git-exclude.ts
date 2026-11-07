@@ -9,7 +9,8 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { isEscaping } from './paths';
 
 /**
- * Ensure the feedback file path is ignored by git via the repo-local
+ * Ensure the feedback file path, and the lock and temporary files written
+ * beside it, are ignored by git via the repo-local
  * `.git/info/exclude` (never committed), so a consumer needs no `.gitignore`
  * edit. Idempotent and non-destructive; never fails the dev server.
  */
@@ -32,13 +33,15 @@ export function ensureFileIgnored(file: string): void {
     if (!pattern) return;
     const infoExclude = excludeFile(dir);
     const existing = existsSync(infoExclude) ? readFileSync(infoExclude, 'utf8') : '';
-    if (hasExcludePattern(existing, pattern)) return;
+    // The file and its side files: `.lock`, a takeover's lock, a crashed write's `.tmp`.
+    const missing = [pattern, `${pattern}.*`].filter((p) => !hasExcludePattern(existing, p));
+    if (!missing.length) return;
     const marker = existing && !existing.endsWith('\n') ? '\n' : '';
     // One comment header per exclude file, however many patterns land under it.
     const heading = '# isotone (local dev feedback loop)';
     const comment = existing.includes(heading) ? '' : `${heading}\n`;
     mkdirSync(dirname(infoExclude), { recursive: true });
-    writeFileSync(infoExclude, `${existing}${marker}${comment}${pattern}\n`);
+    writeFileSync(infoExclude, `${existing}${marker}${comment}${missing.map((p) => `${p}\n`).join('')}`);
   } catch {
     // A stray dev-only feedback file is non-fatal if we can't ignore it.
   }
