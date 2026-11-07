@@ -11,6 +11,11 @@ import {
   knobsFor,
   knobVar,
   type KnobAxis,
+  parseVariantParam,
+  sectionAxes,
+  serializeVariantParam,
+  splitSectionLabel,
+  type VariantAxis,
 } from '../src/core/variants';
 
 function variant(
@@ -216,5 +221,91 @@ describe('knobs', () => {
   it('reports only the knobs off their default, as the panel showed them', () => {
     const moved = knobDelta([fade, dots], { 'fade-from': '40', 'dot-alpha': '0.1' });
     expect(moved.map((m) => [m.axis.id, m.value, m.shown])).toEqual([['fade-from', '40', '40%']]);
+  });
+});
+
+describe('sections', () => {
+  it('reads a spaced > (or ›) as the section separator, and nothing else', () => {
+    expect(splitSectionLabel('Header > Logo size')).toEqual({ section: 'Header', label: 'Logo size', fullLabel: 'Header › Logo size' });
+    expect(splitSectionLabel('  Header   ›   Logo  size ')).toEqual({ section: 'Header', label: 'Logo size', fullLabel: 'Header › Logo size' });
+    // Only the first separator splits; the rest belongs to the name.
+    expect(splitSectionLabel('Header > Nav > Gap')).toMatchObject({ section: 'Header', label: 'Nav > Gap' });
+    // A slash never makes a section: binary selectors are named this way.
+    for (const label of ['Light / Dark', 'Grid / List', 'Light/Dark', 'Aspect 16 / 9', 'a>b', '> Logo', 'Header >', 'A >B', 'Logo size']) {
+      expect(splitSectionLabel(label), label).toMatchObject({ section: null, label: label.replace(/\s+/g, ' ').trim() });
+    }
+    expect(splitSectionLabel('Header\t>\nLogo')).toMatchObject({ section: 'Header', label: 'Logo' });
+  });
+
+  it('lets an explicit section override the prefix', () => {
+    expect(splitSectionLabel('Light / Dark', 'Theme')).toEqual({ section: 'Theme', label: 'Light / Dark', fullLabel: 'Theme › Light / Dark' });
+    // A prefix that repeats the section is not printed twice.
+    expect(splitSectionLabel('header > Logo', 'Header')).toMatchObject({ section: 'Header', label: 'Logo' });
+    // An empty section opts out of the prefix entirely.
+    expect(splitSectionLabel('Before > After', '')).toEqual({ section: null, label: 'Before > After', fullLabel: 'Before > After' });
+    expect(splitSectionLabel('Logo', '  ')).toMatchObject({ section: null, label: 'Logo' });
+  });
+
+  const select = (id: string, label: string, extra: Partial<VariantAxis> = {}): VariantAxis => ({
+    id, label, defaultOption: 'a', options: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], ...extra,
+  } as VariantAxis);
+
+  it('puts loose selectors first, then sections in order of first appearance', () => {
+    const sections = sectionAxes([
+      select('logo', 'Header > Logo'),
+      select('layout', 'Layout'),
+      { kind: 'range', id: 'gap', label: 'Gap', min: 0, max: 4, step: 1, defaultValue: 0, section: 'Footer' },
+      { kind: 'color', id: 'ink', label: 'header › Ink', defaultColor: '#000000', swatches: [] },
+      select('links', 'Footer > Links'),
+      select('theme', 'Before > After', { section: '' }),
+    ]);
+    expect(sections.map((s) => [s.name, s.axes.map((entry) => entry.axis.id)])).toEqual([
+      [null, ['layout', 'theme']],
+      ['Header', ['logo', 'ink']],
+      ['Footer', ['gap', 'links']],
+    ]);
+    expect(sections[1].axes.map((entry) => entry.label)).toEqual(['Logo', 'Ink']);
+    expect(sections[2].axes[0].fullLabel).toBe('Footer › Gap');
+  });
+
+  it('keeps a dependent selector with the control that reveals it', () => {
+    const sections = sectionAxes([
+      select('nav', 'Header > Navigation'),
+      select('layout', 'Layout'),
+      select('sticky', 'Sticky', { showWhen: { axis: 'nav', equals: 'b' } }),
+      select('shadow', 'Shadow', { showWhen: { axis: 'sticky', equals: 'b' } }),
+      select('own', 'Body > Own', { showWhen: { axis: 'nav', equals: 'b' } }),
+      select('loop-a', 'Loop A', { showWhen: { axis: 'loop-b', equals: 'b' } }),
+      select('loop-b', 'Loop B', { showWhen: { axis: 'loop-a', equals: 'b' } }),
+    ]);
+    expect(sections.map((s) => [s.name, s.axes.map((entry) => entry.axis.id)])).toEqual([
+      [null, ['layout', 'loop-a', 'loop-b']],
+      ['Header', ['nav', 'sticky', 'shadow']],
+      ['Body', ['own']],
+    ]);
+    expect(sections[1].axes[2]).toMatchObject({ label: 'Shadow', fullLabel: 'Header › Shadow' });
+  });
+
+  it('groups a large selector set in linear passes without reordering it', () => {
+    const axes = Array.from({ length: 5000 }, (_, i) => select(`axis-${i}`, `Area ${i % 7} > Decision ${i}`));
+    const sections = sectionAxes(axes);
+    expect(sections).toHaveLength(7);
+    expect(sections.flatMap((s) => s.axes).length).toBe(5000);
+    expect(sections[0].axes.slice(0, 2).map((entry) => entry.axis.id)).toEqual(['axis-0', 'axis-7']);
+  });
+
+  it('leaves ids, and so ?v= links, untouched', () => {
+    const axes = [select('logo', 'Header > Logo'), select('links', 'Links', { section: 'Footer' })];
+    expect(serializeVariantParam(axes, { logo: 'b', links: 'b' })).toBe('logo:b,links:b');
+    expect(parseVariantParam(axes, 'logo:b,links:a')).toEqual({ logo: 'b', links: 'a' });
+  });
+
+  it('gives an overlay selector the section any member carries', () => {
+    const list = {
+      variants: [variant('logo-a', { files: ['Logo.tsx'] }), variant('logo-b', { files: ['Logo.tsx'], section: 'Header' })],
+      active: [],
+    };
+    expect(overlayAxes(list, '/')[0]).toMatchObject({ label: 'Logo.tsx', section: 'Header' });
+    expect(overlayAxes({ variants: [variant('plain', { files: ['A.tsx'] })], active: [] }, '/')[0]).not.toHaveProperty('section');
   });
 });

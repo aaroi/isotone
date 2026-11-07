@@ -31,3 +31,22 @@ port, or browser profile has separate storage. Custom keys stay unchanged.
 Use `isotone@0.4.1` or newer. The older 0.4.0 package includes a one-time
 `migrate` command but also has note-saving bugs fixed in 0.4.1; use this guide
 for the work repositories. Existing `iso-iterate` versions remain installable.
+
+## Request handlers are off in production
+
+From the release after 1.1.3, `serveNotesRequest` and `serveVariantsRequest`
+from `isotone/server` answer 404 when `NODE_ENV` is `production`, without
+reading or writing any file. Development servers, test runners and runtimes
+that leave `NODE_ENV` unset are unaffected.
+
+Most projects need no change, because their route already returns early outside
+development. A project that deliberately serves the panel from a production
+build, such as an access-controlled review deployment, passes
+`{ allowProduction: true }` as the third argument to each handler:
+
+```ts
+const result = await serveNotesRequest('.iteration-feedback.json', req, { allowProduction: true });
+```
+
+Keep that deployment behind its own access control; anyone who reaches the
+endpoint can read and change the notes file.

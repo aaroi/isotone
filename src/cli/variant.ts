@@ -6,7 +6,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-import { overlayGroups, variantAppliesTo } from '../core/variants';
+import { knobsFor, overlayGroups, splitSectionLabel, variantAppliesTo } from '../core/variants';
 import { isRouteModule, scanExports } from '../vite/exports';
 import { readNotes } from '../store';
 import {
@@ -14,12 +14,15 @@ import {
   createVariant,
   crossGroupOverlaps,
   dropVariant,
+  KNOBS_FILE,
   listVariants,
   promoteVariant,
   readActive,
+  readKnobs,
   readVariant,
   removeVariantFile,
   setVariantGroup,
+  setVariantSection,
   syncVariant,
   variantDir,
   writeActive,
@@ -64,6 +67,8 @@ export function runVariant(args: string[], io: CliIO): number {
         return cmdOff(rest, io, opts);
       case 'group':
         return cmdGroup(rest, io, opts);
+      case 'section':
+        return cmdSection(rest, io, opts);
       case 'sync':
         return cmdSync(rest, io, opts);
       case 'promote':
@@ -94,14 +99,18 @@ function printVariantHelp(io: CliIO): void {
   out(io, '  variant list [<route>] [--all-routes]    every variant; * marks the active ones');
   out(io, '  variant new <id> [--note <prefix>] [--route <path>] [--label <text>]');
   out(io, '                   [--description <text>] [--group <id>] [--group-label <text>]');
+  out(io, '                   [--section <text>]');
   out(io, '                                           start one; --note copies route and element from a note,');
-  out(io, '                                           --group makes it one alternative of a shared selector');
+  out(io, '                                           --group makes it one alternative of a shared selector,');
+  out(io, '                                           --section names the part of the page it sits under');
   out(io, '  variant add <id> [--new] <file...>       copy real files into it, then edit the copies;');
   out(io, '                                           --new starts a file the project does not have');
   out(io, '  variant path <id> <file>                 where the copy of <file> lives');
   out(io, '  variant rm <id> <file>                   stop overriding one file');
   out(io, '  variant group <id> <groupId> [--label <text>]');
   out(io, '                                           put an existing variant into a group');
+  out(io, '  variant section <id> [<text> | --none]   put its selector (every variant in its group) in a');
+  out(io, '                                           panel section; no text goes back to the label prefix');
   out(io, '  variant use <id>                         activate it on every dev server on this root, in');
   out(io, '                                           place of its group siblings; other groups stay');
   out(io, '  variant use default [<groupId>]          back to the real files, for every group or one');
@@ -114,6 +123,8 @@ function printVariantHelp(io: CliIO): void {
   out(io);
   out(io, 'Variants that override the same file are alternatives of one selector without a');
   out(io, '--group; use one when the alternatives touch different files.');
+  out(io, 'With more than a few selectors on a page, give each a section: --section "Header",');
+  out(io, 'or a group label prefix such as --group-label "Header > Logo".');
 }
 
 function cmdList(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
@@ -125,22 +136,37 @@ function cmdList(rest: string[], io: CliIO, opts: VariantsStoreOptions): number 
     route && !allRoutes ? variants.filter((v) => variantAppliesTo(v.route, route)) : variants;
 
   if (rows.length === 0) {
-    out(io, route ? `No variants for "${route}".` : 'No variants.');
+    // A knobs-only project (any dev server without the Vite plugin) has no
+    // file variants by design; lead with what it does have.
+    if (!existsSync(join(resolve(opts.root), KNOBS_FILE))) {
+      out(io, route ? `No variants for "${route}".` : 'No variants.');
+      return 0;
+    }
+    out(io, route ? `No file variants for "${route}".` : 'No file variants.');
+    printKnobs(io, opts, route && !allRoutes ? route : undefined);
     return 0;
   }
 
   // Grouped over every variant, not the filtered rows: a sibling on another
   // route still decides which selector this one belongs to.
   const groupOf = new Map<string, string>();
+  const sectionOf = new Map<string, string>();
   for (const group of overlayGroups(variants)) {
-    for (const member of group.members) groupOf.set(member.id, group.id);
+    // The same rule as the panel: a member's `section`, else the label prefix.
+    const explicit = group.members.find((m) => m.section !== undefined)?.section;
+    const section = splitSectionLabel(group.label, explicit).section;
+    for (const member of group.members) {
+      groupOf.set(member.id, group.id);
+      if (section) sectionOf.set(member.id, section);
+    }
   }
   printTable(
     io,
-    ['ID', 'LABEL', 'GROUP', 'ROUTE', 'FILES', 'STALE', 'MISSING', 'ACTIVE'],
+    ['ID', 'LABEL', 'SECTION', 'GROUP', 'ROUTE', 'FILES', 'STALE', 'MISSING', 'ACTIVE'],
     rows.map((v) => [
       v.id,
       v.label,
+      sectionOf.get(v.id) ?? '-',
       groupOf.get(v.id) ?? '-',
       v.route || '-',
       String(Object.keys(v.files).length),
@@ -149,7 +175,64 @@ function cmdList(rest: string[], io: CliIO, opts: VariantsStoreOptions): number 
       active.includes(v.id) ? '*' : '',
     ]),
   );
+  printKnobs(io, opts, route && !allRoutes ? route : undefined);
   return 0;
+}
+
+/**
+ * The knobs in `.isotone/knobs.json`, and every entry the panel will skip.
+ * An invalid knob simply never shows up in the panel, so this is the one
+ * place an agent can see why.
+ */
+function printKnobs(io: CliIO, opts: VariantsStoreOptions, route: string | undefined): void {
+  const file = join(resolve(opts.root), KNOBS_FILE);
+  if (!existsSync(file)) return;
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (error) {
+    out(io);
+    out(io, `${KNOBS_FILE} is not valid JSON, so the panel shows no knobs: ${(error as Error).message}`);
+    return;
+  }
+  if (!Array.isArray(raw)) {
+    out(io);
+    out(io, `${KNOBS_FILE} must be a JSON array of knobs, so the panel shows none.`);
+    return;
+  }
+  const valid = readKnobs(opts);
+  // readKnobs keeps the parsed entries it accepts, in order, so a walk that
+  // matches them back up names every entry it dropped.
+  const skipped: string[] = [];
+  let next = 0;
+  raw.forEach((entry, index) => {
+    if (next < valid.length && JSON.stringify(entry) === JSON.stringify(valid[next])) {
+      next++;
+      return;
+    }
+    const id = entry && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string'
+      ? (entry as { id: string }).id : null;
+    const name = `knob ${index + 1}${id === null ? '' : ` "${id}"`}`;
+    // An earlier knob already took this id; the panel keeps that one.
+    if (id !== null && valid.slice(0, next).some((knob) => knob.id === id)) {
+      skipped.push(`Skipped ${name}: another knob earlier in the file already has this id. Give each knob its own id.`);
+    } else {
+      skipped.push(`Skipped ${name}: not a valid range, color or select knob (see docs/variants.md#knobs).`);
+    }
+  });
+  const shown = route ? knobsFor(valid, route) : valid;
+  out(io);
+  if (shown.length) {
+    printTable(io, ['KNOB', 'KIND', 'LABEL', 'ROUTE'], shown.map((k) => [
+      k.id,
+      k.kind ?? 'select',
+      k.label,
+      k.route === undefined ? '-' : ([] as string[]).concat(k.route).join(', '),
+    ]));
+  } else {
+    out(io, route ? `No knobs for "${route}".` : `No valid knobs in ${KNOBS_FILE}.`);
+  }
+  for (const line of skipped) out(io, line);
 }
 
 function cmdNew(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
@@ -160,7 +243,8 @@ function cmdNew(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
   const { value: notesFile, rest: r5 } = extractFlag(r4, '--file');
   const { value: group, rest: r6 } = extractFlag(r5, '--group');
   const { value: groupLabel, rest: r7 } = extractFlag(r6, '--group-label');
-  const id = r7[0];
+  const { value: section, rest: r8 } = extractFlag(r7, '--section');
+  const id = r8[0];
   if (!id) {
     errOut(io, 'Give a variant id: isotone variant new <id>');
     return 1;
@@ -189,12 +273,13 @@ function cmdNew(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
     ...(description !== undefined ? { description } : {}),
     ...(group !== undefined ? { group } : {}),
     ...(groupLabel !== undefined ? { groupLabel } : {}),
+    ...(section !== undefined ? { section: section.replace(/\s+/g, ' ').trim() } : {}),
   });
   out(
     io,
     `created "${variant.id}"${variant.route ? ` for ${variant.route}` : ''}${
       variant.group ? ` in group ${variant.group}` : ''
-    }`,
+    }${variant.section ? ` in section "${variant.section}"` : ''}`,
   );
   return 0;
 }
@@ -319,6 +404,30 @@ function cmdGroup(rest: string[], io: CliIO, opts: VariantsStoreOptions): number
   setVariantGroup(opts, id, groupId, label);
   out(io, `"${id}" is now in group ${groupId}${label !== undefined ? ` ("${label}")` : ''}`);
   warnOverlaps(io, opts, id);
+  return 0;
+}
+
+/** A section belongs to the selector, so every variant in the group gets it. */
+function cmdSection(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const { present: none, rest: r1 } = extractBoolFlag(rest, '--none');
+  const [id, ...words] = r1;
+  if (!id || (none && words.length)) {
+    errOut(io, 'Usage: isotone variant section <id> [<text> | --none]');
+    return 1;
+  }
+  if (!readVariant(opts, id)) {
+    errOut(io, `No variant "${id}"`);
+    return 1;
+  }
+  const text = words.join(' ').replace(/\s+/g, ' ').trim();
+  const members = overlayGroups(listVariants(opts)).find((g) => g.members.some((m) => m.id === id))?.members
+    .map((m) => m.id) ?? [id];
+  // No text hands the decision back to the label prefix; --none keeps the
+  // selector out of every section even when its label has a " > ".
+  for (const member of members) setVariantSection(opts, member, none ? '' : text || undefined);
+  const others = members.length > 1 ? ` (with ${members.filter((m) => m !== id).map((m) => `"${m}"`).join(', ')})` : '';
+  out(io, text ? `"${id}"${others} is now in section "${text}"`
+    : none ? `"${id}"${others} is in no section` : `"${id}"${others} takes its section from its label`);
   return 0;
 }
 

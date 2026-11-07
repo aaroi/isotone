@@ -1,14 +1,17 @@
 import { showOverflowTitle } from './tooltips';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { VariantReference } from '../core/index';
 import {
   axisDefault,
+  axisSection,
   formatRangeValue,
   isDirty,
   type VariantAction,
   type VariantAxis,
+  type VariantSection,
   type VariantSelections,
   type VariantsSource,
+  sectionAxes,
   visibleAxes,
 } from '../core/variants';
 import { Icon } from './icons';
@@ -29,6 +32,8 @@ export function useVariantsSource(source: VariantsSource | undefined) {
 
 const NO_PENDING_ACTIONS: VariantAction[] = [];
 
+const DEFAULT_EMPTY_TEXT = 'No variants on this page yet. Ask your agent to create variants of any design and they will appear here.';
+
 export function VariantsView({
   source,
   showTitle = true,
@@ -38,6 +43,7 @@ export function VariantsView({
   onSaved,
   onManage,
   pendingActions = NO_PENDING_ACTIONS,
+  emptyText = DEFAULT_EMPTY_TEXT,
 }: {
   source: VariantsSource;
   showTitle?: boolean;
@@ -47,6 +53,8 @@ export function VariantsView({
   onSaved?: () => void;
   onManage?: (action: VariantAction, reference: VariantReference) => Promise<void>;
   pendingActions?: VariantAction[];
+  /** What the list says when this page has no selectors. */
+  emptyText?: string;
 }) {
   const revision = useVariantsSource(source);
   useEffect(() => {
@@ -55,16 +63,24 @@ export function VariantsView({
   // The source notifies through its revision; typing in the composer does not
   // need another selector graph walk or another layout measurement.
   // biome-ignore lint/correctness/useExhaustiveDependencies: revision represents external source updates.
-  const { selections, shown, sourceError } = useMemo(() => {
+  const { selections, shown, sections, names, sourceError } = useMemo(() => {
     const selections = source.getSelections();
+    const shown = visibleAxes(source.getAxes(), selections);
+    const sections = sectionAxes(shown);
     return {
       selections,
-      shown: visibleAxes(source.getAxes(), selections),
+      shown,
+      sections,
+      names: new Map(sections.flatMap(section => section.axes).map(entry => [entry.axis.id, entry])),
       sourceError: source.getError?.(),
     };
   }, [source, revision]);
+  // Collapsed sections, by case-insensitive name; kept while the panel closes.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
   const [menuId, setMenuId] = useState<string | null>(null);
   const menu = shown.find(axis => axis.id === menuId) ?? null;
+  const nameOf = (axis: VariantAxis) => names.get(axis.id) ?? axisSection(axis);
+  const menuName = menu ? nameOf(menu) : null;
   const [menuOpen, setMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -181,7 +197,7 @@ export function VariantsView({
     closeMenu(false);
     onFeedback?.({
       axisId: axis.id,
-      label: axis.label,
+      label: nameOf(axis).fullLabel,
       value: value(axis),
       ...(option ? { optionId: option.id, optionLabel: option.label } : {}),
     });
@@ -198,7 +214,7 @@ export function VariantsView({
     try {
       const chosen = menuOptions.find(o => o.id === action.optionId);
       await onManage(action, {
-        axisId: menu.id, label: menu.label, value: value(menu),
+        axisId: menu.id, label: menuName?.fullLabel ?? menu.label, value: value(menu),
         ...(chosen ? { optionId: chosen.id, optionLabel: chosen.label } : {}),
       });
       if (option !== undefined) pendingFocus.current = { optionId: option, retry: false };
@@ -211,6 +227,109 @@ export function VariantsView({
     } finally {
       setBusy(false);
     }
+  }
+
+  function renderAxis({ axis, label, fullLabel }: VariantSection['axes'][number]) {
+    const thumbnails = axis.kind !== 'range' && axis.kind !== 'color' && axis.options.length > 0 && axis.options.every(option => option.image);
+    return (
+      <div
+        className="isotone-axis"
+        key={axis.id}
+        data-motion-key={axis.id}
+      >
+        <div className="isotone-axis-head">
+          <button
+            type="button"
+            className="isotone-axis-label"
+            aria-label={`${fullLabel} actions`}
+            aria-haspopup="dialog"
+            aria-expanded={menuOpen && menu?.id === axis.id}
+            onClick={(e) => {
+              trigger.current = e.currentTarget;
+              setMenuId(axis.id);
+              setError('');
+              setMenuOpen(true);
+            }}
+          >
+            <span onPointerOver={showOverflowTitle}>{label}</span>
+            <Icon name="chevron" size={12} />
+          </button>
+          {(axis.kind === 'range' || axis.kind === 'color') && (
+            <span className="isotone-axis-value">
+              {axis.kind === 'range'
+                ? formatRangeValue(axis, value(axis))
+                : value(axis).toUpperCase()}
+            </span>
+          )}
+        </div>
+        {axis.kind === 'range' ? (
+          <input
+            type="range"
+            className="isotone-range"
+            aria-label={fullLabel}
+            aria-valuetext={formatRangeValue(axis, value(axis))}
+            min={axis.min}
+            max={axis.max}
+            step={axis.step}
+            value={Number(value(axis))}
+            onChange={(e) => source.setSelection(axis.id, e.target.value)}
+          />
+        ) : axis.kind === 'color' ? (
+          <fieldset className="isotone-swatches" aria-label={fullLabel}>
+            {axis.swatches.map((sw) => (
+              <button
+                key={sw.id}
+                type="button"
+                title={sw.label}
+                aria-label={sw.label}
+                aria-pressed={
+                  value(axis).toLowerCase() === sw.value.toLowerCase()
+                }
+                className="isotone-swatch"
+                style={{ backgroundColor: sw.value }}
+                onClick={() => source.setSelection(axis.id, sw.value)}
+              />
+            ))}
+            <label className="isotone-picker" title="Custom colour">
+              <input
+                type="color"
+                aria-label={`${fullLabel}: custom colour`}
+                value={value(axis)}
+                onChange={(e) =>
+                  source.setSelection(axis.id, e.target.value)
+                }
+              />
+            </label>
+          </fieldset>
+        ) : (
+          <fieldset
+            aria-label={fullLabel}
+            className={
+              thumbnails
+                ? 'isotone-grid'
+                : 'isotone-segs'
+            }
+          >
+            {axis.options.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                aria-label={o.label}
+                aria-pressed={value(axis) === o.id}
+                className={`${thumbnails ? 'isotone-thumb' : 'isotone-seg'}${value(axis) === o.id ? ' isotone-seg-on' : ''}`}
+                onClick={() => source.setSelection(axis.id, o.id)}
+              >
+                {thumbnails && (
+                  <img src={o.image} alt="" />
+                )}
+                <span onPointerOver={showOverflowTitle}>{o.label}</span>
+              </button>
+            ))}
+          </fieldset>
+        )}
+
+      </div>
+      );
   }
 
   return (
@@ -237,117 +356,31 @@ export function VariantsView({
       <div className="isotone-vars-body" ref={node => { bodyRef.current = node; node?.toggleAttribute('inert', menuOpen); }}>
         {sourceError && <p className="isotone-danger" role="alert">{sourceError}</p>}
         {shown.length === 0 && (
-          <p className="isotone-empty">No variants on this page yet. Ask your agent to create variants of any design and they will appear here.</p>
+          <p className="isotone-empty">{emptyText}</p>
         )}
-        {shown.map((axis) => {
-          const thumbnails = axis.kind !== 'range' && axis.kind !== 'color' && axis.options.length > 0 && axis.options.every(option => option.image);
-          return (
-          <div
-            className="isotone-axis"
-            key={axis.id}
-            data-motion-key={axis.id}
-          >
-            <div className="isotone-axis-head">
-              <button
-                type="button"
-                className="isotone-axis-label"
-                aria-label={`${axis.label} actions`}
-                aria-haspopup="dialog"
-                aria-expanded={menuOpen && menu?.id === axis.id}
-                onClick={(e) => {
-                  trigger.current = e.currentTarget;
-                  setMenuId(axis.id);
-                  setError('');
-                  setMenuOpen(true);
-                }}
-              >
-                <span onPointerOver={showOverflowTitle}>{axis.label}</span>
-                <Icon name="chevron" size={12} />
-              </button>
-              {(axis.kind === 'range' || axis.kind === 'color') && (
-                <span className="isotone-axis-value">
-                  {axis.kind === 'range'
-                    ? formatRangeValue(axis, value(axis))
-                    : value(axis).toUpperCase()}
-                </span>
-              )}
-            </div>
-            {axis.kind === 'range' ? (
-              <input
-                type="range"
-                className="isotone-range"
-                aria-label={axis.label}
-                aria-valuetext={formatRangeValue(axis, value(axis))}
-                min={axis.min}
-                max={axis.max}
-                step={axis.step}
-                value={Number(value(axis))}
-                onChange={(e) => source.setSelection(axis.id, e.target.value)}
-              />
-            ) : axis.kind === 'color' ? (
-              <fieldset className="isotone-swatches" aria-label={axis.label}>
-                {axis.swatches.map((sw) => (
-                  <button
-                    key={sw.id}
-                    type="button"
-                    title={sw.label}
-                    aria-label={sw.label}
-                    aria-pressed={
-                      value(axis).toLowerCase() === sw.value.toLowerCase()
-                    }
-                    className="isotone-swatch"
-                    style={{ backgroundColor: sw.value }}
-                    onClick={() => source.setSelection(axis.id, sw.value)}
-                  />
-                ))}
-                <label className="isotone-picker" title="Custom colour">
-                  <input
-                    type="color"
-                    aria-label={`${axis.label}: custom colour`}
-                    value={value(axis)}
-                    onChange={(e) =>
-                      source.setSelection(axis.id, e.target.value)
-                    }
-                  />
-                </label>
-              </fieldset>
-            ) : (
-              <fieldset
-                aria-label={axis.label}
-                className={
-                  thumbnails
-                    ? 'isotone-grid'
-                    : 'isotone-segs'
-                }
-              >
-                {axis.options.map((o) => (
-                  <button
-                    key={o.id}
-                    type="button"
-                    aria-label={o.label}
-                    aria-pressed={value(axis) === o.id}
-                    className={`${thumbnails ? 'isotone-thumb' : 'isotone-seg'}${value(axis) === o.id ? ' isotone-seg-on' : ''}`}
-                    onClick={() => source.setSelection(axis.id, o.id)}
-                  >
-                    {thumbnails && (
-                      <img src={o.image} alt="" />
-                    )}
-                    <span onPointerOver={showOverflowTitle}>{o.label}</span>
-                  </button>
-                ))}
-              </fieldset>
-            )}
-
-          </div>
-          );
-        })}
+        {sections.map(section => section.name === null
+          ? section.axes.map(renderAxis)
+          : <SectionBlock
+              key={`section:${section.key}`}
+              name={section.name}
+              sectionKey={section.key}
+              count={section.axes.length}
+              collapsed={collapsed.has(section.key)}
+              onToggle={() => setCollapsed(previous => {
+                const next = new Set(previous);
+                if (!next.delete(section.key)) next.add(section.key);
+                return next;
+              })}
+            >
+              {section.axes.map(renderAxis)}
+            </SectionBlock>)}
       </div>
       {menu && (
         <div
           className="isotone-axis-menu"
           ref={node => { menuRef.current = node; node?.toggleAttribute('inert', !menuOpen); }}
           role="dialog"
-          aria-label={`${menu.label} actions`}
+          aria-label={`${menuName?.fullLabel ?? menu.label} actions`}
           aria-hidden={!menuOpen}
           data-open={menuOpen}
           onKeyDown={(e) => {
@@ -359,7 +392,7 @@ export function VariantsView({
           }}
         >
           <div className="isotone-menu-title">
-            <strong>{menu.label}</strong>
+            <strong>{menuName?.label ?? menu.label}</strong>
             <button
               type="button"
               className="isotone-icon"
@@ -484,6 +517,53 @@ export function VariantsView({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * A section of selectors: a sticky header that names the part of the page and
+ * can fold the section away, then its selectors. The header stays at the top of
+ * the scroll area while its own selectors pass beneath it, and the next
+ * section's header pushes it out.
+ */
+function SectionBlock({
+  name,
+  sectionKey,
+  count,
+  collapsed,
+  onToggle,
+  children,
+}: {
+  name: string;
+  sectionKey: string;
+  count: number;
+  collapsed: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  const id = useId();
+  return (
+    // The heading carries the structure (heading navigation, a disclosure button);
+    // a region or group per section would only add landmarks to a long list.
+    <div className="isotone-section" data-collapsed={collapsed}>
+      <h3 className="isotone-section-head" data-motion-key={`section:${sectionKey}`}>
+        <button
+          type="button"
+          className="isotone-section-toggle"
+          aria-label={`${name}, ${count} ${count === 1 ? 'selector' : 'selectors'}`}
+          aria-expanded={!collapsed}
+          aria-controls={`${id}-body`}
+          onClick={onToggle}
+        >
+          <Icon name="chevron" size={12} />
+          <span onPointerOver={showOverflowTitle}>{name}</span>
+          <small>{count}</small>
+        </button>
+      </h3>
+      <div className="isotone-section-body" id={`${id}-body`} hidden={collapsed}>
+        {collapsed ? null : children}
+      </div>
     </div>
   );
 }

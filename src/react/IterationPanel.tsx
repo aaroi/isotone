@@ -24,6 +24,8 @@ import { useLayoutMotion } from './useLayoutMotion';
 import { useDockMotion } from './useDockMotion';
 import { UpdateNotice } from './UpdateNotice';
 import { MOTION } from './motion';
+import { HINTS } from './hints';
+import { isCompactViewport, prefersTouch, useKeyboardInset, visibleBand } from './viewport';
 
 export interface Rect {
   top: number;
@@ -48,6 +50,8 @@ export interface IterationPanelProps {
   rule?: RouteGateOptions;
   getPayload?: () => unknown;
   variants?: VariantsSource;
+  /** What the Variants list says on a page without selectors. */
+  variantsEmptyText?: string;
   /** Initial surface. Kept for compatibility; surfaces can now open together. */
   defaultTab?: 'variants' | 'notes';
   /** Default: Cmd/Ctrl+Shift+Period. false disables the shortcut. */
@@ -66,6 +70,8 @@ interface Anchor {
   dy: number;
   x: number;
   y: number;
+  /** Pinned by touch: open beside the element, since a finger hides the point. */
+  beside?: boolean;
 }
 /** Space between the clicked point and the floating composer, and its viewport margin. */
 const FLOAT_GAP = 12;
@@ -147,6 +153,7 @@ export function IterationPanel({
   rule,
   getPayload,
   variants,
+  variantsEmptyText,
   defaultTab = 'notes',
   shortcut = DEFAULT_SHORTCUT,
 }: IterationPanelProps) {
@@ -201,6 +208,9 @@ export function IterationPanel({
   const [notice, setNotice] = useState('');
   const [theme, setTheme] = useState(() => detectTheme(themePreference));
   const [instant, setInstant] = useState(false);
+  // Hints follow the last pointer used, so a hybrid device gets the right words.
+  const [touch, setTouch] = useState(prefersTouch);
+  const touchRef = useRef(touch);
   const rootRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const focusFrame = useRef(0);
@@ -268,6 +278,19 @@ export function IterationPanel({
     };
   }, [visible]);
   useDockMotion(rootRef, visible);
+  useKeyboardInset(rootRef, visible);
+  // A small screen has room for one panel: the one just opened stays.
+  const wasOpen = useRef({ notes: notesOpen, variants: variantsOpen });
+  useLayoutEffect(() => {
+    const was = wasOpen.current;
+    wasOpen.current = { notes: notesOpen, variants: variantsOpen };
+    if (!notesOpen || !variantsOpen || !isCompactViewport()) return;
+    if (was.variants) setVariantsOpen(false);
+    else {
+      setNotesOpen(false);
+      setPicking(false);
+    }
+  }, [notesOpen, variantsOpen]);
   const open = notesOpen || variantsOpen;
   const railOpen = expanded || hovered || (focused && instant) || open || picking;
   useEffect(() => {
@@ -281,7 +304,8 @@ export function IterationPanel({
   // the same on every page.
   const pages = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const n of openNotes) counts.set(n.route, (counts.get(n.route) ?? 0) + 1);
+    // The update note belongs to the project, not a page: it shows everywhere.
+    for (const n of openNotes) if (!n.update) counts.set(n.route, (counts.get(n.route) ?? 0) + 1);
     const others = [...counts.keys()].filter((r) => r !== route).sort();
     return { counts, others };
   }, [openNotes, route]);
@@ -289,8 +313,9 @@ export function IterationPanel({
     const chosen = (scope ?? [route]).filter((r) => r === route || pages.counts.has(r));
     return new Set(chosen.length ? chosen : [route]);
   }, [scope, route, pages]);
+  const updateRequested = useMemo(() => openNotes.some((n) => n.update), [openNotes]);
   const visibleNotes = useMemo(() => openNotes
-    .filter((n) => selectedPages.has(n.route))
+    .filter((n) => n.update || selectedPages.has(n.route))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt)), [openNotes, selectedPages]);
   // An agent's claim goes stale: a crashed or abandoned run should not pulse forever.
   const working = useMemo(() => new Set(visibleNotes
@@ -652,9 +677,13 @@ export function IterationPanel({
         startFeedback(true);
       }
     };
-    const onPointer = () => {
+    const onPointer = (e: PointerEvent) => {
       rootRef.current?.setAttribute('data-instant', 'false');
       setInstant(false);
+      if (e.pointerType) {
+        touchRef.current = e.pointerType === 'touch';
+        setTouch(touchRef.current);
+      }
     };
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('pointerdown', onPointer, true);
@@ -687,7 +716,9 @@ export function IterationPanel({
         : document.elementFromPoint(e.clientX, e.clientY);
       return el && !el.closest('[data-isotone]') ? el : null;
     };
-    const onMove = (e: MouseEvent) => {
+    // Only a hovering pointer previews; a finger has nothing to preview before it taps.
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') return;
       cancelAnimationFrame(frame);
       const deferred = e.shiftKey;
       frame = requestAnimationFrame(() => {
@@ -724,7 +755,7 @@ export function IterationPanel({
         const y = pointed ? e.clientY : r.bottom;
         if (!anchorRef.current)
           slotHeight.current = rootRef.current?.querySelector<HTMLElement>('.isotone-notes-panel .isotone-input')?.offsetHeight ?? 0;
-        setAnchor({ selector: added.selector, dx: x - r.left, dy: y - r.top, x, y });
+        setAnchor({ selector: added.selector, dx: x - r.left, dy: y - r.top, x, y, beside: touchRef.current && pointed });
         setNotesOpen(true);
         focusWhilePicking();
       }
@@ -769,14 +800,14 @@ export function IterationPanel({
       setNotesOpen(true);
       focusComposer();
     };
-    window.addEventListener('mousemove', onMove, true);
+    window.addEventListener('pointermove', onMove, true);
     window.addEventListener('click', onClick, true);
     window.addEventListener('keydown', onKey, true);
     return () => {
       document.body.style.cursor = cursor;
       cancelAnimationFrame(frame);
       setHoverRect(null);
-      window.removeEventListener('mousemove', onMove, true);
+      window.removeEventListener('pointermove', onMove, true);
       window.removeEventListener('click', onClick, true);
       window.removeEventListener('keydown', onKey, true);
     };
@@ -814,35 +845,49 @@ export function IterationPanel({
       frame = undefined;
       let { x, y } = anchor;
       const el = locate(anchor.selector);
-      if (el) {
-        const r = el.getBoundingClientRect();
+      const r = el?.getBoundingClientRect();
+      if (r) {
         x = r.left + anchor.dx;
         y = r.top + anchor.dy;
       }
       const vw = document.documentElement.clientWidth || innerWidth;
       const vh = innerHeight;
+      // Above an on-screen keyboard, when one is open.
+      const band = visibleBand();
+      const minY = band.top + FLOAT_MARGIN;
+      const maxY = band.bottom - FLOAT_MARGIN;
       const w = float.offsetWidth;
       const h = float.offsetHeight;
+      const fits = (below: number, above: number) =>
+        [below + FLOAT_GAP + h <= maxY, above - FLOAT_GAP - h >= minY] as const;
+      // A touch pin opens under or over the whole element, centred on the tap,
+      // unless the element is too tall for either; a pointer pin opens at the point.
+      let belowY = y;
+      let aboveY = y;
       let left = x + FLOAT_GAP;
-      if (left + w > vw - FLOAT_MARGIN) left = x - FLOAT_GAP - w;
+      if (anchor.beside && r && fits(r.bottom, r.top).some(Boolean)) {
+        belowY = r.bottom;
+        aboveY = r.top;
+        left = x - w / 2;
+      } else if (left + w > vw - FLOAT_MARGIN) left = x - FLOAT_GAP - w;
       left = Math.max(FLOAT_MARGIN, Math.min(left, vw - w - FLOAT_MARGIN));
-      const fitsBelow = y + FLOAT_GAP + h <= vh - FLOAT_MARGIN;
-      const fitsAbove = y - FLOAT_GAP - h >= FLOAT_MARGIN;
+      const [fitsBelow, fitsAbove] = fits(belowY, aboveY);
       if (side === null || (side === 'below' ? !fitsBelow && fitsAbove : !fitsAbove && fitsBelow))
         side = fitsBelow || !fitsAbove ? 'below' : 'above';
       float.style.left = `${left}px`;
+      let top: number;
       if (side === 'below') {
-        const top = Math.max(FLOAT_MARGIN, Math.min(y + FLOAT_GAP, vh - h - FLOAT_MARGIN));
+        top = Math.max(minY, Math.min(belowY + FLOAT_GAP, maxY - h));
         float.style.top = `${top}px`;
         float.style.bottom = 'auto';
-        float.style.transformOrigin = `${x - left}px ${y - top}px`;
       } else {
-        const bottom = Math.max(FLOAT_MARGIN, Math.min(vh - y + FLOAT_GAP, vh - h - FLOAT_MARGIN));
+        const bottom = Math.max(vh - maxY, Math.min(vh - aboveY + FLOAT_GAP, vh - h - minY));
         float.style.bottom = `${bottom}px`;
         float.style.top = 'auto';
-        float.style.transformOrigin = `${x - left}px ${y - (vh - bottom - h)}px`;
+        top = vh - bottom - h;
       }
-      lastFloat.current = { left, top: side === 'below' ? Number.parseFloat(float.style.top) : vh - Number.parseFloat(float.style.bottom) - h };
+      float.style.transformOrigin = `${x - left}px ${y - top}px`;
+      lastFloat.current = { left, top };
     };
     const schedule = () => { frame ??= requestAnimationFrame(place); };
     place();
@@ -865,12 +910,18 @@ export function IterationPanel({
     observer?.observe(float);
     window.addEventListener('scroll', schedule, { capture: true, passive: true });
     window.addEventListener('resize', schedule);
+    // An on-screen keyboard opening or closing changes the visible area.
+    const viewport = window.visualViewport;
+    viewport?.addEventListener('resize', schedule);
+    viewport?.addEventListener('scroll', schedule);
     return () => {
       if (frame !== undefined) cancelAnimationFrame(frame);
       glide?.cancel();
       observer?.disconnect();
       window.removeEventListener('scroll', schedule, true);
       window.removeEventListener('resize', schedule);
+      viewport?.removeEventListener('resize', schedule);
+      viewport?.removeEventListener('scroll', schedule);
     };
   }, [anchor, locate]);
   // Leaving the page, the floating composer fades where it was instead of
@@ -956,6 +1007,7 @@ export function IterationPanel({
             onSaved={loadNotes}
             onManage={notesAvailable ? queueRemoval : undefined}
             pendingActions={pendingActions}
+            emptyText={variantsEmptyText}
           />
         </section>
       );
@@ -977,6 +1029,8 @@ export function IterationPanel({
         textareaRef.current?.focus({ preventScroll: true });
       }}
     >
+    {/* The agent's question, in full, while the reviewer edits the note to answer it. */}
+    {editing?.reply?.text && !editing.reply.answered && <p className="isotone-editing-reply"><span>Agent asks</span> {editing.reply.text}</p>}
     <div className="isotone-context" aria-live="polite">
       {editing && (
         <span className="isotone-chip">
@@ -1083,7 +1137,9 @@ export function IterationPanel({
         <Icon name="pin" size={14} />
       </button>
       {floating && picking && (
-        <span ref={fadeIn} className="isotone-float-hint">Click to pin more · hold ⇧ to use the page</span>
+        <span ref={fadeIn} className="isotone-float-hint">
+          {HINTS.floating[touch ? 'touch' : 'pointer']}
+        </span>
       )}
       <button
         type="button"
@@ -1100,8 +1156,9 @@ export function IterationPanel({
       <div ref={fadeIn} className="isotone-picking" data-still={pickingWithPanel}>
         <Icon name="pin" size={14} />
         <p>
-          <span>{targets.length ? `${targets.length} selected` : 'Click elements on the page'}</span>
-          <small>Hold ⇧ to use the page normally</small>
+          <span>{targets.length ? `${targets.length} selected` : HINTS.picking[touch ? 'touch' : 'pointer'].title}</span>
+          {/* Touch has no Shift: Done leaves select mode with the pins kept, and the crosshair resumes it. */}
+          <small>{HINTS.picking[touch ? 'touch' : 'pointer'].pause}</small>
         </p>
         <button
           type="button"
@@ -1111,7 +1168,7 @@ export function IterationPanel({
             focusComposer();
           }}
         >
-          Done <kbd>↵</kbd>
+          Done{!touch && <kbd>↵</kbd>}
         </button>
       </div>
     )}
@@ -1181,20 +1238,29 @@ export function IterationPanel({
                 data-motion-key={note.id}
                 className={`isotone-note${editing?.id === note.id ? ' isotone-note-editing' : ''}`}
               >
-                <button
-                  type="button"
-                  className="isotone-note-hit"
-                  aria-current={editing?.id === note.id ? true : undefined}
-                  onClick={() => beginEdit(note)}
-                >
-                  {working.has(note.id) && <span className="isotone-working" ref={dotPulse} role="img" aria-label="An agent is working on this" title="An agent is working on this" />}
-                  <NoteSummary note={note} page={note.route !== route ? note.route : undefined} />
-                </button>
+                {note.update ? (
+                  // Isotone writes an update note's text from its request, so
+                  // there is nothing to edit; its corner action cancels it.
+                  <div className="isotone-note-hit" data-static="">
+                    {working.has(note.id) && <span className="isotone-working" ref={dotPulse} role="img" aria-label="An agent is working on this" title="An agent is working on this" />}
+                    <NoteSummary note={note} />
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="isotone-note-hit"
+                    aria-current={editing?.id === note.id ? true : undefined}
+                    onClick={() => beginEdit(note)}
+                  >
+                    {working.has(note.id) && <span className="isotone-working" ref={dotPulse} role="img" aria-label="An agent is working on this" title="An agent is working on this" />}
+                    <NoteSummary note={note} page={note.route !== route ? note.route : undefined} />
+                  </button>
+                )}
                 <button
                   type="button"
                   className="isotone-x isotone-icon"
-                  aria-label={note.variantAction ? 'Cancel removal' : 'Delete note'}
-                  title={note.variantAction ? 'Cancel removal' : 'Delete note'}
+                  aria-label={note.variantAction ? 'Cancel removal' : note.update ? 'Cancel update request' : 'Delete note'}
+                  title={note.variantAction ? 'Cancel removal' : note.update ? 'Cancel update request' : 'Delete note'}
                   onClick={() => void removeNote(note)}
                 >
                   <Icon name="close" size={12} />
@@ -1234,6 +1300,7 @@ export function IterationPanel({
       data-tools={Number(Boolean(variants)) + Number(notesAvailable)}
       data-instant={instant}
       data-notes-open={notesOpen}
+      data-selecting={picking || floating}
       data-working={working.size > 0}
       data-open={open}
       className="isotone-root"
@@ -1276,7 +1343,10 @@ export function IterationPanel({
           {composer}
         </div>
       )}
-      <UpdateNotice endpoint={updateEndpoint} active={open} />
+      <div className="isotone-notices">
+        <UpdateNotice endpoint={updateEndpoint} active={open} route={route}
+          requested={updateRequested} onRequested={notesAvailable ? loadNotes : undefined} />
+      </div>
       <fieldset
         aria-label="Isotone tools"
         onKeyDown={event => {
