@@ -102,7 +102,7 @@ export type VariantSelections = Record<string, string>;
 
 export interface VariantAction {
   axisId: string;
-  action: 'remove-option' | 'remove-axis' | 'keep-default';
+  action: 'remove-option' | 'remove-axis' | 'keep-default' | 'keep-option';
   optionId?: string;
 }
 
@@ -218,6 +218,14 @@ export function sectionAxes<T extends VariantAxis>(axes: T[]): VariantSection<T>
 }
 
 /* ── Pure helpers ─────────────────────────────────────────────────────── */
+
+/** The selection a `keep-option` action makes permanent; colours keep the swatch value. */
+function keptValue(axis: VariantAxis, optionId: string | undefined): string {
+  if (axis.kind === 'range') throw new Error('This selector has no options to keep.');
+  const option = (axis.kind === 'color' ? axis.swatches : axis.options).find((o) => o.id === optionId);
+  if (!option) throw new Error('This option is no longer available.');
+  return 'value' in option ? option.value : option.id;
+}
 
 /** The primary value of an axis, as the selection string. */
 export function axisDefault(axis: VariantAxis): string {
@@ -420,9 +428,10 @@ export function createVariantsSource(init: {
           if (options.length === 1) next = next.filter((a) => a.id !== axis.id);
         }
       } else {
-        next = next.filter((a) => a.id !== axis.id);
-        if (action.action === 'keep-default') picks[axis.id] = axisDefault(axis);
+        if (action.action === 'keep-option') picks[axis.id] = keptValue(axis, action.optionId);
+        else if (action.action === 'keep-default') picks[axis.id] = axisDefault(axis);
         else delete picks[axis.id];
+        next = next.filter((a) => a.id !== axis.id);
       }
       // A dependent control cannot outlive the decision that reveals it.
       const kept = new Set(next.map((a) => a.id));
