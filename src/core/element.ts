@@ -85,6 +85,7 @@ function reactContext(el: Element): Pick<IterationElement, 'component' | 'source
     type?: unknown;
     return?: Fiber | null;
     _debugSource?: { fileName?: string; lineNumber?: number };
+    _debugStack?: { stack?: string } | string | null;
   };
   type Named = { displayName?: string; name?: string; render?: Named; type?: Named };
   const key = Object.keys(el).find((name) => name.startsWith('__reactFiber$'));
@@ -95,6 +96,7 @@ function reactContext(el: Element): Pick<IterationElement, 'component' | 'source
     if (!source && fiber._debugSource?.fileName) {
       source = `${fiber._debugSource.fileName}:${fiber._debugSource.lineNumber ?? 0}`;
     }
+    source ??= stackSource(fiber._debugStack);
     const type = fiber.type as Named | string | null | undefined;
     const named = type && typeof type !== 'string' ? (type.render ?? type.type ?? type) : null;
     const name = named?.displayName ?? named?.name;
@@ -103,6 +105,33 @@ function reactContext(el: Element): Pick<IterationElement, 'component' | 'source
     fiber = fiber.return;
   }
   return { ...(names.length ? { component: names } : {}), ...(source ? { source } : {}) };
+}
+
+/**
+ * React 19 dropped `_debugSource`; its `_debugStack` is an Error created where
+ * the JSX ran. The first frame outside React's own runtime is that callsite.
+ * The stack names the served module (no source maps), which for Vite, Next and
+ * webpack dev servers is the source path with a query or loader prefix.
+ */
+function stackSource(stack: { stack?: string } | string | null | undefined): string | undefined {
+  const text = typeof stack === 'string' ? stack : stack?.stack;
+  if (!text) return undefined;
+  for (const line of text.split('\n').slice(1)) {
+    const match = line.match(/(?:\(|@|\bat )((?:[a-z-]+:\/\/\/?|\/)\S+?):(\d+):\d+\)?\s*$/i);
+    if (!match) continue;
+    const [, location, lineNumber] = match;
+    if (/react[-_]jsx|react-dom|react\.development|\/react\/|jsx-dev-runtime|jsx-runtime/i.test(location)) continue;
+    let path = location.replace(/[?#].*$/, '').replace(/^webpack-internal:\/\/\/(?:\([^)]*\)\/)?/, '');
+    try {
+      const url = new URL(path);
+      path = url.protocol === 'file:' ? url.pathname : url.pathname.replace(/^\/@fs(?=\/)/, '');
+    } catch {}
+    try {
+      path = decodeURIComponent(path);
+    } catch {}
+    return `${path.replace(/^\.\//, '')}:${lineNumber}`;
+  }
+  return undefined;
 }
 
 /** Everything about a pinned element that says which one it is, for the agent

@@ -87,6 +87,41 @@ it('names the React components around it, skipping internal names', () => {
   expect(described.source).toBe('src/tabs.tsx:12');
 });
 
+it('reads the JSX callsite from React 19 debug stacks', () => {
+  document.body.innerHTML = '<button>Changes</button>';
+  const button = document.querySelector('button') as Element;
+  function TabButton() {}
+  const vite = [
+    'Error: react-stack-top-frame',
+    '    at exports.jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=1a2b:250:33)',
+    '    at TabButton (http://localhost:5173/src/tabs.tsx?t=1700000000:12:7)',
+    '    at renderWithHooks (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=1a2b:4100:24)',
+  ].join('\n');
+  Object.assign(button, { __reactFiber$abc: { type: 'button', _debugStack: { stack: vite }, return: { type: TabButton, return: null } } });
+  expect(describeIterationElement(elementAsNode(button)).source).toBe('/src/tabs.tsx:12');
+
+  const next = ['Error: react-stack-top-frame', '    at TabButton (webpack-internal:///(app-pages-browser)/./src/app/tabs.tsx:30:5)'].join(
+    '\n',
+  );
+  Object.assign(button, { __reactFiber$abc: { type: 'button', _debugStack: { stack: next }, return: null } });
+  expect(describeIterationElement(elementAsNode(button)).source).toBe('src/app/tabs.tsx:30');
+
+  const fs = ['Error', 'TabButton@http://localhost:5173/@fs/Users/me/app/src/tabs.tsx:8:3'].join('\n');
+  Object.assign(button, { __reactFiber$abc: { type: 'button', _debugStack: fs, return: null } });
+  expect(describeIterationElement(elementAsNode(button)).source).toBe('/Users/me/app/src/tabs.tsx:8');
+
+  // React 18's field still wins when present.
+  Object.assign(button, {
+    __reactFiber$abc: {
+      type: 'button',
+      _debugSource: { fileName: 'src/old.tsx', lineNumber: 3 },
+      _debugStack: { stack: vite },
+      return: null,
+    },
+  });
+  expect(describeIterationElement(elementAsNode(button)).source).toBe('src/old.tsx:3');
+});
+
 it('keeps the context through the store and prints it for the agent', async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-element-')));
   dirs.push(root);
