@@ -7,6 +7,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 
 import { HEARTBEAT_MS, LIVE_HEARTBEAT_MS, BLAST, type BlastState } from '../core/blast';
+import { matchRoute } from '../core/routes';
 import { writeJson } from './fs/atomic';
 import { withFileLock } from './fs/lock';
 import { ensureFileIgnored } from './fs/git-exclude';
@@ -109,7 +110,7 @@ export function unseenNotes(notes: StoredNote[], session: BlastSession): StoredN
     notes
       .filter((note) => !note.done)
       // An update request concerns the whole project, as in `npx isotone <route>`.
-      .filter((note) => !session.route || note.route === session.route || Boolean(updateRequestOf(note.update)))
+      .filter((note) => !session.route || matchRoute(session.route, note.route) || Boolean(updateRequestOf(note.update)))
       // A question the reviewer has not answered yet (by editing the note) waits for them.
       .filter((note) => session.seen[note.id] !== noteFingerprint(note) && !isAwaitingAnswer(note))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
@@ -129,14 +130,23 @@ export function isAwaitingAnswer(note: StoredNote): boolean {
 /**
  * A sign of life from the agent outside the waiting command: `--working`,
  * `--done` and `--reply` call this, so a session stays live while the agent
- * works through a long batch. Never starts or revives a session.
+ * works through a long batch. Never starts or revives a session. `forget`
+ * names notes just closed or reopened: once open again, they are handed out
+ * again even though their content did not change.
  */
-export function touchSession(notesFile: string, now = Date.now()): void {
+export function touchSession(notesFile: string, now = Date.now(), forget: string[] = []): void {
   const file = blastFile(notesFile);
   if (!existsSync(file)) return;
   try {
     updateSession(file, (session) => ({
-      session: session && !isEnded(session, now) ? { ...session, heartbeatAt: new Date(now).toISOString() } : null,
+      session:
+        session && !isEnded(session, now)
+          ? {
+              ...session,
+              heartbeatAt: new Date(now).toISOString(),
+              seen: Object.fromEntries(Object.entries(session.seen).filter(([id]) => !forget.includes(id))),
+            }
+          : null,
       result: undefined,
     }));
   } catch {

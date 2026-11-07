@@ -38,7 +38,8 @@ import {
 } from '../node/blast';
 import { noteFingerprint, notesRevision, readNotes, type StoredNote } from '../node/notes/store';
 import { notesProjectRoot } from '../node/update/request';
-import { noteRecord, printNotes } from './run';
+import { noteRecord, printNotes } from './notes';
+import { oneLine, shellQuote, toJson } from './text';
 import { type CliIO, errOut, extractFlag, has, out, parseArgs, valueFor } from './util';
 
 /** Exit status once the session is over, so an agent or script can tell it apart. */
@@ -66,7 +67,7 @@ type Outcome =
   | { type: 'interrupted' };
 
 function help(io: CliIO): void {
-  out(io, `Usage: isotone ${BLAST.command} start [30m] [</route>]   start a session and print how to run it`);
+  out(io, `Usage: isotone ${BLAST.command} start [30m] [<route>]    start a session and print how to run it`);
   out(io, `       isotone ${BLAST.command} [--every 5m|off]           wait for the next batch of notes`);
   out(io, `       isotone ${BLAST.command} status | stop | extend <duration>`);
   out(io);
@@ -75,7 +76,7 @@ function help(io: CliIO): void {
   out(io, `check-in and exits 0. At the deadline it prints "${BLAST.name} session over" and exits ${ENDED_EXIT}.`);
   out(io);
   out(io, '  start [duration]    session length, e.g. 45m or 1h (default 30m, at most 8h)');
-  out(io, "  </route>            with start: hand out only this page's notes");
+  out(io, '  <route>             with start: hand out only these notes (/items, /items/*)');
   out(io, '  --every <duration>  check-in interval (default 5m, at most 9m); keep it under your');
   out(io, '                      command timeout. `off` waits for a batch or the end only');
   out(io, '  --stream            stay running and print one JSON line per batch until the end');
@@ -119,11 +120,11 @@ export async function runBlast(argv: string[], io: CliIO, timingOverrides: Parti
     if (!waits && (has(rest, '--every') || has(rest, '--stream')))
       throw new Error('--every and --stream apply to the waiting run, `npx isotone blast`.');
     for (const arg of positionals) {
-      if (arg.startsWith('/') && command === 'start' && !route) route = arg;
-      else if (/^\d/.test(arg) && (command === 'start' || command === 'extend') && durationMs === undefined)
-        durationMs = parseDuration(arg);
-      else if (arg.startsWith('/') && command === 'wait')
-        throw new Error(`A route is set when the session starts: \`${BLAST_CLI} start 30m ${arg}\`.`);
+      const duration = /^\d/.test(arg);
+      if (duration && (command === 'start' || command === 'extend') && durationMs === undefined) durationMs = parseDuration(arg);
+      else if (!duration && command === 'start' && !route) route = arg;
+      else if (!duration && command === 'wait')
+        throw new Error(`A route is set when the session starts: \`${BLAST_CLI} start 30m ${shellQuote(arg)}\`.`);
       else throw new Error(`Unexpected "${arg}". Run \`${BLAST_CLI} --help\`.`);
     }
     if (command === 'extend' && durationMs === undefined) throw new Error('Say how much time to add, such as `extend 15m`.');
@@ -145,7 +146,7 @@ export async function runBlast(argv: string[], io: CliIO, timingOverrides: Parti
   const fileText = valueFor(rest, '--file');
   const notesFile = resolve(io.cwd, fileText ?? '.iteration-feedback.json');
   const file = blastFile(notesFile);
-  const fileFlag = fileText ? ` --file ${fileText}` : '';
+  const fileFlag = fileText ? ` --file ${shellQuote(fileText)}` : '';
 
   switch (command) {
     case 'status':
@@ -192,10 +193,13 @@ function start(io: CliIO, file: string, durationMs: number, route: string | null
   const { started } = result;
   const next = `${BLAST_CLI}${json ? ' --json' : ''}${fileFlag}`;
   if (json) {
-    out(io, JSON.stringify({ type: 'started', endsAt: started.endsAt, route, next, loop: blastLoop(next), guardrails: BLAST_GUARDRAILS }));
+    out(io, toJson({ type: 'started', endsAt: started.endsAt, route, next, loop: blastLoop(next), guardrails: BLAST_GUARDRAILS }));
     return 0;
   }
-  out(io, `${BLAST.name} session started: ${formatDuration(durationMs)}, ${route ?? 'all routes'}, until ${clock(started.endsAt)}.`);
+  out(
+    io,
+    `${BLAST.name} session started: ${formatDuration(durationMs)}, ${route === null ? 'all routes' : oneLine(route)}, until ${clock(started.endsAt)}.`,
+  );
   for (const line of blastLoop(next)) out(io, line);
   out(io, 'While you act on notes by yourself:');
   for (const rule of BLAST_GUARDRAILS) out(io, `- ${rule}`);
@@ -230,7 +234,7 @@ async function wait(io: CliIO, notesFile: string, file: string, options: WaitOpt
       if (outcome.type === 'batch') {
         out(
           io,
-          JSON.stringify({
+          toJson({
             type: 'batch',
             notes: outcome.notes.map((n) => noteRecord(n, root)),
             timeLeft: timeLeft(Date.parse(outcome.session.endsAt) - Date.now()),
@@ -250,7 +254,7 @@ async function wait(io: CliIO, notesFile: string, file: string, options: WaitOpt
     if (options.json) {
       out(
         io,
-        JSON.stringify({
+        toJson({
           type: 'batch',
           notes: outcome.notes.map((n) => noteRecord(n, root)),
           timeLeft: left,
@@ -271,7 +275,7 @@ async function wait(io: CliIO, notesFile: string, file: string, options: WaitOpt
   if (options.json) {
     out(
       io,
-      JSON.stringify({
+      toJson({
         type: 'checkin',
         notes: [],
         timeLeft: left,
@@ -300,8 +304,9 @@ function endReason(session: BlastSession | null): EndReason {
 
 const WHY: Record<EndReason, string> = { time: 'time is up', stopped: `stopped with \`${BLAST_CLI} stop\``, none: 'there is no session' };
 
+/** Local time with its zone, such as `14:30 GMT+2`, so no one reads it as UTC. */
 function clock(iso: string): string {
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
 }
 
 function reportEnded(io: CliIO, notesFile: string, session: BlastSession | null, json: boolean): number {
@@ -317,7 +322,7 @@ function reportEnded(io: CliIO, notesFile: string, session: BlastSession | null,
   if (json) {
     out(
       io,
-      JSON.stringify({
+      toJson({
         type: 'ended',
         reason,
         stillOpen: open.map((n) => ({
@@ -340,7 +345,7 @@ function reportEnded(io: CliIO, notesFile: string, session: BlastSession | null,
     for (const n of open)
       out(
         io,
-        `- [${n.id.slice(0, 8)}] ${n.route} — ${n.feedback.slice(0, 80)}${isAwaitingAnswer(n) ? ' (you asked; waiting for the reviewer)' : ''}`,
+        `- [${oneLine(n.id.slice(0, 8))}] ${oneLine(n.route)} — ${oneLine(n.feedback, 80)}${isAwaitingAnswer(n) ? ' (you asked; waiting for the reviewer)' : ''}`,
       );
   }
   return ENDED_EXIT;
@@ -350,7 +355,7 @@ function status(io: CliIO, file: string, json: boolean, fileFlag: string): numbe
   const session = readSession(file);
   const state = session ? publicState(session) : null;
   if (json) {
-    out(io, JSON.stringify({ session: state }));
+    out(io, toJson({ session: state }));
     return 0;
   }
   const startHint = `Start one with \`${BLAST_CLI} start 30m${fileFlag}\`.`;
@@ -365,7 +370,7 @@ function status(io: CliIO, file: string, json: boolean, fileFlag: string): numbe
   const beat = session.heartbeatAt ? `${Math.round((Date.now() - Date.parse(session.heartbeatAt)) / 1000)}s ago` : 'never';
   out(
     io,
-    `${BLAST.name} · ${timeLeft(Date.parse(session.endsAt) - Date.now())} · ends ${clock(session.endsAt)} · ${session.route ?? 'all routes'}`,
+    `${BLAST.name} · ${timeLeft(Date.parse(session.endsAt) - Date.now())} · ends ${clock(session.endsAt)} · ${session.route === null ? 'all routes' : oneLine(session.route)}`,
   );
   out(
     io,
@@ -382,7 +387,7 @@ function stop(io: CliIO, file: string, json: boolean, fileFlag: string): number 
     return { session: next, result: next };
   });
   if (json) {
-    out(io, JSON.stringify({ stopped: Boolean(stopped), session: stopped ? publicState(stopped, now) : null }));
+    out(io, toJson({ stopped: Boolean(stopped), session: stopped ? publicState(stopped, now) : null }));
     return 0;
   }
   out(
@@ -400,7 +405,7 @@ function extend(io: CliIO, file: string, ms: number, json: boolean): number {
     return { session: next, result: next };
   });
   if (json) {
-    out(io, JSON.stringify({ extended: Boolean(extended), session: extended ? publicState(extended, now) : null }));
+    out(io, toJson({ extended: Boolean(extended), session: extended ? publicState(extended, now) : null }));
     return 0;
   }
   if (!extended) {

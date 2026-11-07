@@ -330,6 +330,43 @@ describe(`isotone ${BLAST.command}`, () => {
     expect(p.text.err).toContain('A route is set when the session starts');
   });
 
+  it('takes a route pattern, with or without its slash', async () => {
+    const p = project();
+    add(
+      p.notes,
+      note('one', { route: '/items/1', createdAt: old() }),
+      note('list', { route: '/items', createdAt: old() }),
+      note('home', { createdAt: old() }),
+    );
+    expect(await start(p, '10s', 'items/*')).toBe(0);
+    expect(await runBlast(['--every', '300ms', '--json'], p.io, FAST)).toBe(0);
+    expect(
+      JSON.parse(p.take())
+        .notes.map((n: StoredNote) => n.id)
+        .sort(),
+    ).toEqual(['list', 'one']);
+  });
+
+  it('hands a reopened note out again', async () => {
+    const p = project();
+    add(p.notes, note('abcd1234', { createdAt: old() }));
+    await start(p, '10s');
+    expect(await runBlast(['--every', '300ms', '--json'], p.io, FAST)).toBe(0);
+    expect(JSON.parse(p.take()).type).toBe('batch');
+    await runCli(['--done', 'abcd'], p.io);
+    await runCli(['--undone', 'abcd'], p.io);
+    p.take();
+    expect(await runBlast(['--every', '300ms', '--json'], p.io, FAST)).toBe(0);
+    expect(JSON.parse(p.take())).toMatchObject({ type: 'batch', notes: [{ id: 'abcd1234' }] });
+  });
+
+  it('quotes a --file path in the commands it prints', async () => {
+    const p = project();
+    writeNotes(join(p.cwd, 'my notes.json'), []);
+    expect(await runBlast(['start', '--json', '--file', 'my notes.json'], p.io, FAST)).toBe(0);
+    expect(JSON.parse(p.take()).next).toBe(`${BLAST_CLI} --json --file 'my notes.json'`);
+  });
+
   it('ends at the deadline with a distinct status, and keeps saying so', async () => {
     const p = project();
     add(p.notes, note('left', { createdAt: old() }));
