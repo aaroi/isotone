@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { isRouteModule, scanExports } from '../../src/vite/exports';
+import { isRouteModule, scanExports } from '../../src/node/variants/exports';
 
 describe('scanExports', () => {
   it('lists declarations, defaults and export clauses', () => {

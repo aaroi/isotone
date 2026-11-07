@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest';
-import { readBundle } from '../../src/standalone/bundle';
+import { readBundle } from '../../src/node/bundle';
 import type { MountIterationOptions } from '../../src/core/types';
 
 type PanelGlobal = { mount(options: MountIterationOptions): void; unmount(): void; mounted: boolean };
