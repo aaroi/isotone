@@ -26,6 +26,7 @@
 - chore: the demo tour ends with the same agent prompt as the README, with a Copy button, and keeps the install commands under "Or set it up yourself"
 - feat: the update notice is one quiet line, "Isotone x.y.z is available". Its dialog shows the versions and **Ask agent to update**, with Copy prompt (a ready-to-paste agent request) and the raw command one click away
 - feat: **Ask agent to update** files an update note in Feedback that the agent reads with `npx isotone --json`. The dev server builds it from its own update check (versions, command, directory, changelog) under an `update` field; the browser cannot supply them. At most one is open, a newer release updates it, and deleting it cancels the request. The CLI prints it with an `updateHint`, and AGENTS.md tells agents how to carry it out
+- fix: an update note's request is checked wherever it is read: the command must be exactly the canonical `npm`, `pnpm` or `yarn` command for that version, and its directory inside the notes file's project, or the request is dropped. Its text is always rebuilt as "Update Isotone a → b", and the notes endpoint refuses edits to it
 - feat: `checkForUpdates: 'note'` and `isotone serve --update-note` file the update note by themselves, once per version. There is deliberately no silent auto-install; `docs/updates.md` explains why
 - feat: the demo's `?update-preview=1` works in the hosted demo too, and the pretend agent picks up the update note like any other
 
