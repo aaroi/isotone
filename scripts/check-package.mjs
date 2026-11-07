@@ -15,6 +15,7 @@ const run = (args, cwd) => execFileSync(npm, args, {
 try {
   const [packed] = JSON.parse(run(['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], root));
   assert.ok(packed.files.some(({ path }) => path === 'dist/isotone.global.js'), 'build before checking the package');
+  assert.ok(packed.files.some(({ path }) => path === 'docs/blast.md'), 'the Blast guide ships with the package');
   const consumer = join(scratch, 'consumer');
   mkdirSync(consumer);
   writeFileSync(join(consumer, 'package.json'), '{"private":true,"type":"module"}\n');
@@ -37,6 +38,7 @@ assert.equal(await runCli(['init', '--yes', '--json'], io), 0);
 assert.equal(JSON.parse(output).approach, 'serve');
 assert.equal(existsSync('AGENTS.md'), true);
 assert.match(execFileSync(process.execPath, ['node_modules/isotone/dist/cli.js', '--help'], { encoding: 'utf8' }), /--json/);
+assert.match(execFileSync(process.execPath, ['node_modules/isotone/dist/cli.js', 'blast', '--status'], { encoding: 'utf8' }), /No Blast session/);
 const app = await serveIteration({ file: 'notes.json', port: 0, theme: 'system', checkForUpdates: false });
 try {
   const bundle = await (await fetch(app.bundleUrl)).text();
@@ -45,6 +47,8 @@ try {
   const note = await fetch(app.url + '/api/iteration/notes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ route: '/', feedback: 'Package smoke test' }) });
   assert.equal(note.status, 201);
   assert.equal(readNotes('notes.json').length, 1);
+  // Blast is a CLI feature: no HTTP endpoint serves its session.
+  assert.equal((await fetch(app.url + '/api/iteration/blast')).status, 404);
 } finally { await app.close(); }
 console.log('Packed package: isolated install, public imports, CLI, bundle and notes endpoint passed.');
 `);

@@ -13,12 +13,34 @@ Run `pnpm check` for types, lint, build, and tests. For package or adapter
 changes, also run `pnpm check:package`. Inspect both themes, keyboard use,
 reduced motion, scrolling, and long content when changing UI.
 
+[Onboarding](onboarding.md) explains how the README prompt, `init` and its first
+run fit together, and the simulations behind them. Re-run one when changing them.
+
 Merging into `main` publishes automatically. Follow [the release guide](releasing.md)
 before merging; use a development branch until the change is ready for npm.
 
 The runtime is TypeScript throughout. The expensive work is DOM traversal, disk
 access, and redundant updates; avoiding that work matters more here than adding
 a second language or runtime.
+
+## Pull requests
+
+Write the description for a person who hasn't followed the work and doesn't
+know the codebase well, however technical the change is. When the review depends
+on a part of Isotone (the dock, knobs, overlay variants, the notes file), say in a
+sentence what it is. `.github/pull_request_template.md` has the outline:
+
+- **Before:** what someone using Isotone experiences today, in plain words. Name
+  who that is: the person reviewing their app, their coding agent, or a maintainer.
+- **After:** what changes for them.
+- **Review notes:** only the technical detail a reviewer needs, such as risks,
+  trade-offs, effects on existing users, and what to try in the demo. Leave out
+  file-by-file lists, internal names and implementation narration unless they
+  matter for the review.
+- **Tested:** what was checked, and what wasn't.
+
+Agents that write the description themselves (`gh pr create --body`) follow the
+same outline.
 
 ## Boundaries
 
@@ -43,7 +65,10 @@ standalone consumers. The build bundles only the icons used by the panel.
 has a Panel theme select (automatic page detection, system preference, or an
 explicit theme), a light and dark toggle for the page, and a Tour button. The
 tour (`examples/demo/tour.tsx`) starts by itself on a browser's first visit and
-remembers when it was closed; `/?tour=1` starts it regardless. A pretend agent marks each new note as being worked on a moment after it
+remembers when it was closed; `/?tour=1` starts it regardless. Its last step
+hands visitors the README's "Start with your agent" prompt, kept in
+`examples/demo/agent-prompt.ts`; `tests/agent-prompt.test.ts` keeps the two the
+same, so change both together. A pretend agent marks each new note as being worked on a moment after it
 is sent and closes it a few seconds later, the way `--working` and `--done`
 would.
 
@@ -148,7 +173,9 @@ Follow [the design language](design.md). Use shared semantic materials and
 components rather than selector-specific theme overrides. Check both themes,
 selected/hover/focus/disabled states, long labels, empty and populated feedback,
 sticky fades, narrow viewports, and reduced motion. Context must remain accessible
-even when a label is visually truncated.
+even when a label is visually truncated. On touch, copy names taps rather than
+keys or Shift, and nothing depends on hover; see "Phones and touch" in
+[the design language](design.md).
 
 `src/react/feedback-layout.ts` holds the accepted inline-reference layout.
 `src/react/pill-active.ts` holds the accepted Clean Highlight recipe. Future
@@ -161,5 +188,10 @@ images. A host can pass `light` or `dark` when those samples do not represent th
 page. `system` deliberately ignores the host theme.
 
 For notice layout checks, `/?review=1&update-preview=1` supplies a fictional
-update result. It does not contact npm or install anything. `/?review=1` keeps
+update result, in the dev demo and the hosted one. **Ask agent to update** then
+files a demo update note, built by the same server code in the dev demo, which
+the pretend agent picks up and closes. It does not contact npm or install anything. `/?review=1` keeps
 feedback open across variant reloads.
+
+Reloading the demo clears any note the pretend agent had marked as being worked
+on, since it never finishes it.

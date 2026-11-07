@@ -126,10 +126,55 @@ disabled in the menu to avoid duplicate requests. Cancelling a pending request
 leaves the preview unchanged. Once an agent applies a source change, deleting the
 request does not undo that change.
 
+The update notice is one quiet line beside the pill ("Isotone 1.2.0 is
+available"). Its dialog has a single line of versions, one raised action, **Ask
+agent to update**, and two quiet text buttons, Copy prompt and Command, the last
+revealing the raw command in a well. No paragraphs of instructions. Once asked,
+the raised action gives way to "Update requested · in Feedback" and the line
+reads "Update requested". The update note is an ordinary saved note with an
+"Update" tag in place of element references, shown on every page; deleting it
+cancels the request, like a removal request.
+
 Native tooltips are reserved for brief icon-only hints and labels that actually
 overflow. Do not put full feedback notes, readable labels or internal selectors
 in `title` attributes. Check label overflow on pointer entry, without observing
 or measuring every row during render. Accessible labels retain the full text.
+
+## Hints and instructions
+
+Instructional and hint text is never truncated. Every hint, such as the
+select-mode cover and the floating composer's line, is fully visible on one
+line by default, in pointer and touch copy, at 375px and desktop widths, in
+both themes. Make it fit with a smaller size, shorter copy or more reserved
+space; never with an ellipsis or a clip. `src/react/hints.ts` holds the panel's
+hints, and `tests/react-hints.test.ts` keeps them within the width a 375px
+viewport leaves. The demo tour follows the same rule: its copy wraps.
+
+User content, such as note text and element names, may still truncate, with
+its full text kept in the accessible name.
+
+## Phones and touch
+
+`viewport.ts` holds the small-screen rules. Below 640px wide or 500px tall the
+variants and feedback panels take turns: opening one closes the other. Below
+640px wide the variants panel stops at half the screen (never below the 360px a
+selector dialog reserves), so the page it changes stays in view. While
+selecting on a small screen, the feedback panel hides its saved notes and keeps
+only the composer, so the page can be reached; they return afterwards.
+
+An on-screen keyboard covers the page without resizing it. The dock rises above
+it and limits its height to what is visible, and the floating composer is
+placed within the same visible area. Pinch zoom is left alone.
+
+Copy follows the last pointer used: a finger reads "Tap", sees no ⌘, Ctrl,
+Shift or ↵, and is told that Done (or the crosshair, beside a pinned element)
+pauses selecting so the page can be used, which is the touch counterpart of
+holding Shift; pins stay. A tapped element gets the floating composer under or
+over the whole element, centred on the tap, because a finger hides the point.
+Selection previews follow hovering pointers only. Coarse pointers get larger
+hit areas around the composer controls, reference removal, note delete and
+panel close without changing their faces. The two-tool pill keeps its
+76 × 44px geometry.
 
 ## Scrolling
 
@@ -207,13 +252,14 @@ the composer must not remeasure unchanged selectors or notes.
 | `src/react/appearance.ts` | Complete light/dark palettes and the shared material recipe |
 | `src/react/styles.ts` | Geometry, typography, shared control classes and state selectors |
 | `src/react/feedback-layout.ts`, `pill-active.ts` | Small material/layout recipes that can be independently previewed as overlays |
-| `src/react/UpdateNotice.tsx` | Quiet local update snapshot and explicit upgrade instructions |
+| `src/react/UpdateNotice.tsx` | Quiet update line, and the dialog that hands the upgrade to the agent |
 | `src/react/icons.tsx` | Icon choices, optical size and stroke |
 | `src/react/NoteSummary.tsx` | Saved feedback/defaults summaries and their shared tag rendering |
 | `src/react/IterationPanel.tsx` | Dock, composer, feedback and element-picking behavior |
 | `src/react/VariantsView.tsx` | Selectors, action dialogs and Save as defaults |
 | `src/react/theme.ts` | Theme resolution, observation and cleanup |
 | `src/react/motion.ts` | Motion timing and work limits |
+| `src/react/viewport.ts` | Small-screen, touch and on-screen keyboard rules |
 | `src/react/useDockMotion.ts`, `useLayoutMotion.ts` | Measured movement and interruption handling |
 
 To add a control, choose its semantic role first: surface, well, raised action or
