@@ -212,8 +212,8 @@ describe('variant', () => {
     expect(await runCli(['variant', 'new', 'logo-bold', '--group', 'logo', '--section', '  Header  '], io)).toBe(0);
     expect(io.text.out).toContain('created "logo-bold" in group logo in section "Header"');
     await runCli(['variant', 'new', 'logo-thin', '--group', 'logo'], makeIo(root));
-    await runCli(['variant', 'new', 'links-a', '--group-label', 'Footer / Links'], makeIo(root));
-    await runCli(['variant', 'new', 'theme-a', '--group-label', 'Light / Dark'], makeIo(root));
+    await runCli(['variant', 'new', 'links-a', '--group-label', 'Footer > Links'], makeIo(root));
+    await runCli(['variant', 'new', 'theme-a', '--group-label', 'Before > After'], makeIo(root));
     await runCli(['variant', 'new', 'loose'], makeIo(root));
     const sections = async () => {
       const list = makeIo(root);
@@ -223,7 +223,7 @@ describe('variant', () => {
       return Object.fromEntries(rows.map((row) => [row.split(/\s+/)[0], row.slice(at).split(/\s{2,}/)[0]]));
     };
     expect(await sections()).toEqual({
-      'logo-bold': 'Header', 'logo-thin': 'Header', 'links-a': 'Footer', 'theme-a': 'Light', loose: '-',
+      'logo-bold': 'Header', 'logo-thin': 'Header', 'links-a': 'Footer', 'theme-a': 'Before', loose: '-',
     });
     // A section belongs to the whole selector, so its siblings move with it.
     io = makeIo(root);

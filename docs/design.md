@@ -75,7 +75,7 @@ Selector sections group a long Variants list by the part of the page each
 selector changes. A section header is a quiet disclosure: a chevron, the section
 name in 11px muted text and its selector count in faint tabular figures. It uses
 the axis label's hover face and is never raised. Selectors without a section come
-first, without a header. Section names come from a label prefix (`Header / Logo
+first, without a header. Section names come from a label prefix (`Header > Logo
 size`) or an explicit `section`; the selector shows only its own name, while its
 controls, its dialog's accessible name and its notes keep the full name. The
 action dialog title shows the short name, like the heading that opened it.
