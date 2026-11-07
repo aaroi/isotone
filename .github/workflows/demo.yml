@@ -58,6 +58,9 @@ jobs:
 
       - uses: actions/checkout@v4
         if: steps.vercel.outputs.ready == 'true'
+        with:
+          # Later steps run the project's scripts; keep the GitHub token out of .git/config.
+          persist-credentials: false
       - uses: pnpm/action-setup@v4
         if: steps.vercel.outputs.ready == 'true'
         with:
@@ -77,17 +80,40 @@ jobs:
       - name: Check this is still main
         if: steps.target.outputs.environment == 'production'
         id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git fetch --depth=1 origin main
-          if [ "$(git rev-parse FETCH_HEAD)" = "$GITHUB_SHA" ]; then
+          if [ "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$GITHUB_SHA" ]; then
             echo 'ready=true' >> "$GITHUB_OUTPUT"
           else
             echo '::notice title=Demo not deployed::main has moved on; the newer commit deploys instead.'
           fi
 
-      - name: Build and deploy
-        id: deploy
+      # Only the steps that talk to Vercel get the token. The build runs the
+      # project's own scripts, so it gets just the settings `vercel pull` saved
+      # in .vercel/; `vercel build` needs no token once they exist.
+      - name: Pull the Vercel project settings
+        id: pull
         if: steps.target.outputs.environment == 'preview' || steps.current.outputs.ready == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          ENVIRONMENT: ${{ steps.target.outputs.environment }}
+        run: vercel pull --yes --environment="$ENVIRONMENT" --token="$VERCEL_TOKEN"
+
+      - name: Build
+        if: steps.pull.outcome == 'success'
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          PROD: ${{ steps.target.outputs.prod }}
+        # Runs vercel.json's buildCommand (pnpm build:demo) into .vercel/output.
+        run: vercel build $PROD
+
+      - name: Deploy
+        id: deploy
+        if: steps.pull.outcome == 'success'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -95,9 +121,6 @@ jobs:
           ENVIRONMENT: ${{ steps.target.outputs.environment }}
           PROD: ${{ steps.target.outputs.prod }}
         run: |
-          vercel pull --yes --environment="$ENVIRONMENT" --token="$VERCEL_TOKEN"
-          # Runs vercel.json's buildCommand (pnpm build:demo) into .vercel/output.
-          vercel build $PROD --token="$VERCEL_TOKEN"
           url=$(vercel deploy --prebuilt $PROD --token="$VERCEL_TOKEN")
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Demo ($ENVIRONMENT): $url" >> "$GITHUB_STEP_SUMMARY"
@@ -108,13 +131,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           URL: ${{ steps.deploy.outputs.url }}
           PR: ${{ github.event.pull_request.number }}
-          SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           marker='<!-- isotone-demo-preview -->'
           body="$marker
           **Demo preview:** $URL
 
-          Built from ${SHA:0:7}. Open it on a phone to try this change; this comment updates on every push."
+          Built from ${HEAD_SHA:0:7} merged into \`$BASE_REF\`, the commit GitHub tests for this pull request. Open it on a phone to try this change; this comment updates on every push."
           id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
             --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -n 1)
           if [ -n "$id" ]; then
