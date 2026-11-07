@@ -1,5 +1,6 @@
 import { showOverflowTitle } from './tooltips';
 import type { IterationNote } from '../core/index';
+import { updateNoteText } from '../core/update';
 
 /** Pinned references and saved defaults use the same compact tag. */
 function SummaryTag({ label }: { label: string }) {
@@ -10,7 +11,7 @@ function SummaryTag({ label }: { label: string }) {
 export function NoteSummary({ note, page }: { note: IterationNote; page?: string }) {
   // The update request names no element: one compact tag says what it is.
   if (note.update) return <>
-    <p>{note.feedback}</p>
+    <p>{updateNoteText(note.update)}</p>
     <span className="isotone-meta"><SummaryTag label="Update" /></span>
   </>;
   if (!note.feedback.startsWith('[set-defaults]')) {

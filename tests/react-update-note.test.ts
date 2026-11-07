@@ -94,6 +94,12 @@ describe('asking the agent to update from the panel', () => {
     // note on another page stays there.
     expect(container.querySelector('.isotone-pages')).toBeNull();
     expect(container.textContent).not.toContain('Plan names are too similar.');
+    // Isotone writes its text, so it offers no edit: clicking it leaves the composer alone.
+    const hit = row?.querySelector('.isotone-note-hit');
+    expect(hit?.tagName).toBe('DIV');
+    await click(hit as Element);
+    expect((find('textarea') as HTMLTextAreaElement).value).toBe('');
+    expect(container.querySelector('.isotone-note-editing')).toBeNull();
 
     await click(button('Cancel update request'));
     await settle();

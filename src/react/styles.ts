@@ -272,7 +272,7 @@ ${FEEDBACK_LAYOUT_CSS}
 .isotone-selected { border: 2px solid var(--iso-pick-line); background: var(--iso-pick-selected-fill); }
 @media (hover: hover) and (pointer: fine) {
   .isotone-root :where(.isotone-icon:not(.isotone-x), .isotone-menu-action, .isotone-axis-label, .isotone-section-toggle):not(:disabled):not([aria-pressed='true']):hover { background: var(--iso-hover); box-shadow: var(--iso-hover-shadow); color: var(--iso-fg); }
-  .isotone-note:not(.isotone-note-editing):hover .isotone-note-hit:not(:disabled) { background: var(--iso-hover); box-shadow: var(--iso-hover-shadow); }
+  .isotone-note:not(.isotone-note-editing):hover .isotone-note-hit:not(:disabled):not([data-static]) { background: var(--iso-hover); box-shadow: var(--iso-hover-shadow); }
   .isotone-rail-button:not(:disabled):hover { color: var(--iso-fg); }
   .isotone-seg:not(:disabled):hover { color: var(--iso-fg); }
   .isotone-seg[aria-pressed='false']:not(:disabled):hover { box-shadow: var(--iso-hover-shadow); }

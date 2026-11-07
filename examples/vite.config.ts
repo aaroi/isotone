@@ -9,11 +9,15 @@ import { checkOrigin, readNodeJson, sendFailure } from '../src/server/http';
 import type { UpdateInfo } from '../src/core/update';
 import { updateResponse } from '../src/update-note';
 
-/** Not a real release: the demo never contacts npm or installs anything. */
-const DEMO_UPDATE: UpdateInfo = {
+/**
+ * Not a real release: the demo never contacts npm or installs anything. The
+ * directory is the demo's own notes directory, since an update note may only
+ * name one inside its notes file's project.
+ */
+const demoUpdate = (cwd: string): UpdateInfo => ({
   currentVersion: '1.1.3', latestVersion: '1.2.0', status: 'available',
-  upgrade: { manager: 'pnpm', command: 'pnpm add -D --exact isotone@1.2.0', cwd: '/workspace/example-app' },
-};
+  upgrade: { manager: 'pnpm', command: 'pnpm add -D --exact isotone@1.2.0', cwd },
+});
 
 /** Real notes transport, isolated from every project's review data. */
 function demoNotes(): Plugin {
@@ -92,7 +96,7 @@ function demoNotes(): Plugin {
           try {
             checkOrigin(req.headers.origin, req.headers.host ?? '');
             const body = req.method === 'POST' ? await readNodeJson(req) : undefined;
-            const result = updateResponse(files.get(`/demo-notes/${preview[1]}`) ?? null, DEMO_UPDATE, { method: req.method, body });
+            const result = updateResponse(files.get(`/demo-notes/${preview[1]}`) ?? null, demoUpdate(directory), { method: req.method, body });
             res.writeHead(result.status, result.headers);
             res.end(JSON.stringify(result.body));
           } catch (error) { sendFailure(res, error); }
