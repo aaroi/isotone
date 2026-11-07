@@ -150,8 +150,8 @@ them when you pick the second, and `variant add` warns when the overlap is creat
 
 **The loop.** Pin an element and write the ask. The agent starts a variant
 from the note and edits the copy. You switch between Default and the
-alternatives in the panel; the switch applies in place. **Save as
-defaults** files your picks as a note, and the agent lands the named
+alternatives in the panel; the switch applies in place. **Make
+default** files your picks as a note, and the agent lands the named
 variants over the real files with `variant promote`. Nothing else changes:
 other variants stay until you ask for one to be dropped.
 
@@ -233,8 +233,8 @@ document.addEventListener('isotone:knob', ({ detail }) => {
 ```
 
 The event only fires while the panel is mounted, so keep the committed default in
-the source. Knob values live in the reviewer's browser, not on the server. "Save as
-defaults" files the moved knobs in the same `[set-defaults]` note as the
+the source. Knob values live in the reviewer's browser, not on the server. "Make
+default" files the moved knobs in the same `[set-defaults]` note as the
 variant picks, as `Knobs: Hero › Fade starts 40% (fade-from)` with a `knobs`
 payload of `fade-from:40`; the agent writes the number into the source and
 into the knob file's `defaultValue`.

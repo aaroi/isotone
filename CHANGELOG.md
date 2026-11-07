@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- feat: custom colours open a picker in the panel's own popup material instead of the browser's native colour dialog
+- feat: Save as defaults becomes Make default, beside a count of the changed picks, and confirms with “Default request saved”
+- feat: the variants panel marks each selector's source default with a dot on its option or swatch and a tick on its range
+- feat: any option or swatch can be kept as the only choice and made the default from its row in the selector dialog, which replaces Keep default only for those selectors. Notes carry a `keep-option` variant action
+
 ## 1.2.1
 
 - change: Blast commands are subcommands. `npx isotone blast start 45m [</route>]` starts a session, prints the loop and the guardrails, and exits, so the user's prompt is one line and the agent reads no guide. Bare `npx isotone blast` waits for the next batch and never starts a session. `status`, `stop` and `extend 15m` replace the flags. The 1.2.0 flags still work: `--for 45m --new` starts and waits in one run

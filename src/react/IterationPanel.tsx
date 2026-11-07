@@ -425,6 +425,8 @@ export function IterationPanel({
   async function queueRemoval(action: VariantAction, reference: VariantReference) {
     const description = action.action === 'remove-option'
       ? `Remove “${reference.optionLabel}” from ${reference.label}.`
+      : action.action === 'keep-option'
+        ? `Keep only “${reference.optionLabel}” for ${reference.label} and make it the default; remove its selector and other alternatives.`
       : action.action === 'keep-default'
         ? `Keep only the default for ${reference.label}; remove its selector and alternatives.`
         : `Remove ${reference.label}, its selector and all alternatives.`;

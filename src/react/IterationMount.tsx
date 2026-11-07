@@ -228,7 +228,7 @@ export function mountIteration(opts: MountIterationOptions): () => void {
 }
 
 /**
- * The overlay adapter's source, with "Save as defaults" wired to the notes
+ * The overlay adapter's source, with "Make default" wired to the notes
  * file. Landing an overlay variant means copying files over the real ones,
  * which is the agent's move (`variant promote`), so the button does what the
  * host with its own axes does: it files one `[set-defaults]` note naming the reviewer's picks

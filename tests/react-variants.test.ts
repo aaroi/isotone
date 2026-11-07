@@ -212,30 +212,48 @@ describe('VariantsView', () => {
     expect(container.querySelector('.isotone-axis-value')?.textContent).toBe('70%');
   });
 
-  it('Save as defaults hands the selections to the source and reports back', async () => {
+  it('Make default hands the selections to the source and reports back', async () => {
     const saveDefaults = vi.fn(async () => {});
     const source = createVariantsSource({ axes: AXES, saveDefaults });
     await render(createElement(VariantsView, { source }));
     await click(byText('Bold'));
 
-    await click(byText('Save as defaults'));
+    await click(byText('Make default'));
     expect(saveDefaults).toHaveBeenCalledTimes(1);
     expect(saveDefaults).toHaveBeenCalledWith({ headline: 'b', haze: '0.3', tagline: 'x' });
-    expect(container.querySelector('.isotone-save-state')?.textContent).toBe(
-      'Saved for the agent',
-    );
+    expect(container.querySelector('.isotone-save-count')?.textContent).toBe('Default request saved');
+  });
+
+  it('counts the changed picks beside Make default', async () => {
+    const source = createVariantsSource({ axes: AXES, saveDefaults: async () => {} });
+    await render(createElement(VariantsView, { source }));
+    await click(byText('Bold'));
+    expect(container.querySelector('.isotone-save-count')?.textContent).toBe('1 pick changed');
+    await act(async () => source.setSelection('haze', '0.6'));
+    expect(container.querySelector('.isotone-save-count')?.textContent).toBe('2 picks changed');
+  });
+
+  it('marks the source default where each choice is made', async () => {
+    const source = createVariantsSource({ axes: AXES });
+    await render(createElement(VariantsView, { source }));
+    expect(byText('Plain')?.classList.contains('isotone-is-default')).toBe(true);
+    expect(byText('Bold')?.classList.contains('isotone-is-default')).toBe(false);
+    expect(container.querySelector<HTMLElement>('.isotone-range-wrap')?.style.getPropertyValue('--iso-default-at')).toBe('0.3');
+    expect(container.querySelector('.isotone-range-tick')).toBeNull();
+    await act(async () => source.setSelection('haze', '0.6'));
+    expect(container.querySelector('.isotone-range-tick')).not.toBeNull();
   });
 
   it('shows Save only while visible choices differ from defaults', async () => {
     const source = createVariantsSource({ axes: AXES, saveDefaults: async () => {} });
     await render(createElement(VariantsView, { source }));
-    expect(byText('Save as defaults')).toBeUndefined();
+    expect(byText('Make default')).toBeUndefined();
     await click(byText('Bold'));
-    expect(byText('Save as defaults')).toBeDefined();
+    expect(byText('Make default')).toBeDefined();
     await click(byText('Plain'));
-    expect(byText('Save as defaults')).toBeUndefined();
+    expect(byText('Make default')).toBeUndefined();
     await act(async () => source.setSelection('tagline', 'y'));
-    expect(byText('Save as defaults')).toBeUndefined();
+    expect(byText('Make default')).toBeUndefined();
   });
 
   it('a failed save says so', async () => {
@@ -247,14 +265,14 @@ describe('VariantsView', () => {
     });
     await render(createElement(VariantsView, { source }));
     await click(byText('Bold'));
-    await click(byText('Save as defaults'));
-    expect(container.querySelector('.isotone-save-state')?.textContent).toBe('Could not save. Try again.');
+    await click(byText('Make default'));
+    expect(container.querySelector('.isotone-save-count')?.textContent).toBe('Could not save. Try again.');
   });
 
   it('omits the save row when the source cannot save', async () => {
     const source = createVariantsSource({ axes: AXES });
     await render(createElement(VariantsView, { source }));
-    expect(byText('Save as defaults')).toBeUndefined();
+    expect(byText('Make default')).toBeUndefined();
   });
 
   it('calls refresh() once on mount when the source has one', async () => {
@@ -302,12 +320,36 @@ describe('VariantsView', () => {
     await render(createElement(VariantsView, { source }));
     expect(container.querySelectorAll('.isotone-swatch')).toHaveLength(2);
     expect(container.querySelector('.isotone-swatch[aria-pressed=true]')?.getAttribute('aria-label')).toBe('Red');
-    expect(container.querySelector('.isotone-picker input[type=color]')).not.toBeNull();
+    expect(container.querySelector('input[type=color]')).toBeNull();
     expect(container.querySelector('.isotone-axis-value')?.textContent).toBe('#EA382E');
 
     await click(byText('Blue'));
     expect(source.getSelections().accent).toBe('#3b82f6');
     expect(container.querySelector('.isotone-swatch[aria-pressed=true]')?.getAttribute('aria-label')).toBe('Blue');
+  });
+
+  it('picks a custom colour in the panel, not the native popup', async () => {
+    const source = createVariantsSource({
+      axes: [{ kind: 'color', id: 'accent', label: 'Accent', defaultColor: '#ea382e',
+        swatches: [{ id: 'red', label: 'Red', value: '#ea382e' }, { id: 'blue', label: 'Blue', value: '#3b82f6' }] }],
+    });
+    await render(createElement(VariantsView, { source }));
+    const picker = container.querySelector<HTMLButtonElement>('.isotone-picker');
+    await click(picker);
+    expect(picker?.getAttribute('aria-expanded')).toBe('true');
+    const hex = container.querySelector<HTMLInputElement>('.isotone-colour-hex');
+    if (!hex) throw new Error('no hex field');
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    await act(async () => { set?.call(hex, '12ab34'); hex.dispatchEvent(new Event('input', { bubbles: true })); });
+    await act(async () => { hex.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    expect(source.getSelections().accent).toBe('#12ab34');
+    expect(picker?.getAttribute('data-custom')).toBe('true');
+    const handle = container.querySelector<HTMLElement>('.isotone-colour-handle');
+    await act(async () => { handle?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', shiftKey: true, bubbles: true })); });
+    expect(source.getSelections().accent).not.toBe('#12ab34');
+    await act(async () => { handle?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    expect(container.querySelector('.isotone-colour')).toBeNull();
+    expect(picker?.getAttribute('aria-expanded')).toBe('false');
   });
 });
 
@@ -711,8 +753,8 @@ describe('mountIteration variants options', () => {
     await clickIn(button('Striped'));
     expect(posts().at(-1)).toEqual({ active: ['settings-tabs', 'table-striped'] });
 
-    // Save as defaults names every pick, in panel order, and pins the first.
-    await clickIn(button('Save as defaults'));
+    // Make default names every pick, in panel order, and pins the first.
+    await clickIn(button('Make default'));
     const calls = fetchMock.mock.calls as unknown as [RequestInfo | URL, RequestInit?][];
     const note = calls.find(
       (c) => String(c[0]) === '/api/iteration/notes' && c[1]?.method === 'POST',
@@ -723,6 +765,7 @@ describe('mountIteration variants options', () => {
     );
     expect(body.payload).toEqual({ variants: 'table-striped, settings-tabs' });
     expect(body.route).toBe('/projects');
+
 
     // Default in one selector drops that group and leaves the other.
     const defaults = Array.from(shadow.querySelectorAll('button')).filter(
@@ -827,6 +870,31 @@ describe('review dock interactions', () => {
     expect(source.getAxes()).toHaveLength(3);
   });
 
+  it('saves a keep-only request from any option row, keeping the default action for the default', async () => {
+    const saved: Record<string, unknown>[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        saved.push({ ...JSON.parse(String(init.body)), id: `keep-${saved.length}`, done: false, createdAt: new Date().toISOString() });
+        return { ok: true, json: async () => ({ id: `keep-${saved.length - 1}` }) };
+      }
+      return { ok: true, json: async () => saved };
+    }));
+    const source = createVariantsSource({ axes: AXES });
+    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, variants: source, defaultTab: 'variants' as const }));
+    await click(container.querySelector('.isotone-fab'));
+    await click(byText('Headline actions'));
+    expect(byText('Keep default only')).toBeUndefined();
+    await click(byText('Keep only Bold'));
+    expect(saved[0].variantAction).toEqual({ axisId: 'headline', action: 'keep-option', optionId: 'b' });
+    expect(saved[0].feedback).toContain('Keep only “Bold” for Headline and make it the default');
+    await click(byText('Headline actions'));
+    expect(byText('Keep only Bold')?.hasAttribute('disabled')).toBe(true);
+    const defaultRow = [...container.querySelectorAll('.isotone-option-row')].find(row => row.querySelector('small'));
+    await click(defaultRow?.querySelector('[aria-label^="Keep only"]') ?? null);
+    expect(saved[1].variantAction).toEqual({ axisId: 'headline', action: 'keep-default' });
+    expect(source.getAxes()).toHaveLength(3);
+  });
+
   async function typeFeedback(text: string) {
     const input = container.querySelector('textarea');
     if (!input) throw new Error('no composer');
@@ -883,7 +951,7 @@ describe('review dock interactions', () => {
       expect(container.querySelector('.isotone-variants-panel')).toBe(variants);
       expect(container.querySelector('.isotone-rail-track')).toBe(rail);
       expect(source.getSelections().headline).toBe('b');
-      expect(byText('Save as defaults')).toBeDefined();
+      expect(byText('Make default')).toBeDefined();
       await click(byText('Headline actions'));
       expect(container.querySelector('.isotone-axis-menu')?.getAttribute('data-open')).toBe('true');
       expect(byText('Remove Plain')?.hasAttribute('disabled')).toBe(true);
@@ -1283,10 +1351,10 @@ describe('review dock interactions', () => {
       await render(createElement(Host, { onFeedback }));
       const trigger = byText('Size actions');
       await click(trigger);
-      await click(byText('Keep default only'));
+      await click(byText('Keep only L'));
       expect(dialog()?.getAttribute('data-open')).toBe('false');
       await click(trigger);
-      expect(byText('Default-only request saved')?.hasAttribute('disabled')).toBe(true);
+      expect(byText('Keep only L')?.hasAttribute('disabled')).toBe(true);
       await click(byText('Remove selector & options'));
       expect(dialog()?.getAttribute('data-open')).toBe('false');
       await click(trigger);

@@ -102,7 +102,7 @@ export type VariantSelections = Record<string, string>;
 
 export interface VariantAction {
   axisId: string;
-  action: 'remove-option' | 'remove-axis' | 'keep-default';
+  action: 'remove-option' | 'remove-axis' | 'keep-default' | 'keep-option';
   optionId?: string;
 }
 
@@ -345,7 +345,7 @@ export interface VariantsSource {
   /** A recoverable transport error; notify subscribers when it changes. */
   getError?: () => string | null;
   /**
-   * When present, the panel shows "Save as defaults" and calls this with the
+   * When present, the panel shows "Make default" and calls this with the
    * current selections. A host that promotes by editing source (one that
    * files a `[set-defaults]` note for the agent) implements it; a host
    * whose variants are whole alternatives (the overlay adapter) leaves it
@@ -419,6 +419,14 @@ export function createVariantsSource(init: {
           next = next.map((a) => a.id === axis.id ? { ...axis, options } : a);
           if (options.length === 1) next = next.filter((a) => a.id !== axis.id);
         }
+      } else if (action.action === 'keep-option') {
+        if (axis.kind === 'range') throw new Error('This selector has no options to keep.');
+        const kept = axis.kind === 'color'
+          ? axis.swatches.find(s => s.id === action.optionId)?.value
+          : axis.options.find(o => o.id === action.optionId)?.id;
+        if (kept === undefined) throw new Error('This option is no longer available.');
+        next = next.filter((a) => a.id !== axis.id);
+        picks[axis.id] = kept;
       } else {
         next = next.filter((a) => a.id !== axis.id);
         if (action.action === 'keep-default') picks[axis.id] = axisDefault(axis);
@@ -542,7 +550,7 @@ export interface OverlayVariantStatus extends OverlayVariant {
  * pick) on the routes it names, and the value reaches the page as a CSS
  * custom property on `<html>`, `--knob-<id>`, with the axis unit appended
  * (`--knob-fade-from: 40%`). The host reads it with a fallback that is the
- * committed default: `var(--knob-fade-from, 0%)`. "Save as defaults" files
+ * committed default: `var(--knob-fade-from, 0%)`. "Make default" files
  * the moved knobs in the same `[set-defaults]` note as the variant picks, so
  * the agent writes the numbers into the source and the knob file.
  *

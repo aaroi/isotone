@@ -382,7 +382,7 @@ function printFirstRun(print: Print, approach: Approach): void {
   print('   - what you made: open Variants and switch them on the live page;');
   print('   - in one line: ⌘/Ctrl + Shift + . (or the pin button), click an element, type');
   print('     the change and press Enter, then say “check my Isotone notes”;');
-  print('   - last, a short list of the files you changed. Save as defaults turns their');
+  print('   - last, a short list of the files you changed. Make default turns their');
   print('     picks into a note for you.');
 }
 
