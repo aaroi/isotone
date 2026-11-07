@@ -89,6 +89,10 @@ function demoNotes(): Plugin {
         writeNotes(file, notes);
       }
       server.httpServer?.once('close', () => rmSync(directory, { recursive: true, force: true }));
+      // `?blast-preview=1` keeps its fictional session in a state file of its
+      // own, so the demo without the parameter never shows it as running.
+      const previewBlastNotes = (name: string) =>
+        files.has(`/demo-notes/${name}`) ? join(directory, `${name}-blast-preview.json`) : undefined;
       server.middlewares.use(async (req, res, next) => {
         // `?update-preview=1`: a fictional update. Asking the agent files a real
         // update note in the session's notes, built by the same server code.
@@ -105,9 +109,9 @@ function demoNotes(): Plugin {
         }
         // `?blast-preview=1`: the session endpoint, answered by the same server
         // code over a fictional session the pretend agent keeps alive.
-        const blast = /^\/demo-blast\/([a-z]+)$/.exec((req.url ?? '').split('?')[0]);
+        const blast = /^\/demo-blast\/([a-z]+)(-preview)?$/.exec((req.url ?? '').split('?')[0]);
         if (blast) {
-          const notes = files.get(`/demo-notes/${blast[1]}`);
+          const notes = blast[2] ? previewBlastNotes(blast[1]) : files.get(`/demo-notes/${blast[1]}`);
           if (!notes) { next(); return; }
           try {
             checkOrigin(req.headers.origin, req.headers.host ?? '');
@@ -125,7 +129,16 @@ function demoNotes(): Plugin {
           const action = query.get('action');
           // `blast-start` is the agent running `isotone blast --for 32m`; `blast-beat`
           // is its heartbeat while it waits for notes or works through a batch.
-          const notes = files.get(`/demo-notes/${query.get('session') ?? ''}`);
+          const sessionNotes = files.get(`/demo-notes/${query.get('session') ?? ''}`);
+          // A reload forgets what the pretend agent was doing, so nothing it
+          // marked as being worked on will ever finish: clear it.
+          if (sessionNotes && action === 'reset') {
+            updateNotes(sessionNotes, (notes) => notes.map(({ workingAt: _stale, ...note }) => note));
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+            return;
+          }
+          const notes = previewBlastNotes(query.get('session') ?? '');
           if (notes && (action === 'blast-start' || action === 'blast-beat')) {
             const now = Date.now();
             if (action === 'blast-start') writeSession(blastFile(notes), {

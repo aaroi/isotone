@@ -178,4 +178,6 @@ feedback open across variant reloads.
 real session endpoint code) and the hosted one: the line beside the pill reads
 "Blast · 32 min left", Extend and Stop work, and the pretend agent works through
 notes in batches after a three-second quiet time, one at a time, until the
-session is stopped. Without it the line offers Start Blast.
+session is stopped. The session belongs to that parameter: without it the line
+offers Start Blast, even right after a preview. Reloading the demo clears any
+note the pretend agent had marked as being worked on, since it never finishes it.

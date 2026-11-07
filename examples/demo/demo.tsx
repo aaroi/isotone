@@ -196,13 +196,20 @@ function serveUpdateInPage(path: string) {
     return reply(201, { id, created: true });
   };
 }
-/** `?blast-preview=1`: a fictional Blast session, kept alive by the pretend agent. */
+/**
+ * `?blast-preview=1`: a fictional Blast session, kept alive by the pretend
+ * agent. It has an endpoint and storage of its own, so leaving the parameter
+ * leaves the session behind instead of showing it as running.
+ */
 const blastPreview = !screenshot && params.has('blast-preview');
-const blastEndpoint = `/demo-blast/${session}`;
-const HOSTED_BLAST_KEY = 'isotone-hosted-demo-blast';
+const blastEndpoint = `/demo-blast/${session}${blastPreview ? '-preview' : ''}`;
+const HOSTED_BLAST_KEY = 'isotone-hosted-demo-blast-preview';
+// Earlier builds kept the preview's session here, where every page read it.
+try { localStorage.removeItem('isotone-hosted-demo-blast'); } catch { /* No storage. */ }
 type DemoBlast = { startedAt: string; endsAt: string; every: number; heartbeatAt: string; waiting: boolean; stoppedAt?: string; stoppedBy?: 'panel' };
 let memoryBlast: DemoBlast | null = null;
 function readHostedBlast(): DemoBlast | null {
+  if (!blastPreview) return null;
   try { return JSON.parse(localStorage.getItem(HOSTED_BLAST_KEY) ?? 'null') as DemoBlast | null; } catch { return memoryBlast; }
 }
 function writeHostedBlast(value: DemoBlast) {
@@ -263,6 +270,7 @@ if (hosted && !screenshot) {
  * `--done`. The tour listens to the same events.
  */
 function runPretendAgent() {
+  void clearStaleWorking();
   const network = window.fetch.bind(window);
   window.fetch = async (input, init) => {
     const response = await network(input, init);
@@ -317,6 +325,18 @@ async function runBlastBatch() {
     blastBusy = false;
     void blastSignal('beat', true);
   }
+}
+/**
+ * The pretend agent lives in this page, so a note it was working on when the
+ * page last closed will never be finished. On load, nothing is in progress.
+ */
+async function clearStaleWorking() {
+  if (hosted) {
+    const notes = readHostedNotes();
+    if (notes.some((note) => note.workingAt)) writeHostedNotes(notes.map(({ workingAt: _stale, ...note }) => note));
+    return;
+  }
+  await fetch(`/demo-agent?action=reset&session=${session}`, { method: 'POST' });
 }
 async function agentStep(id: string, state: 'working' | 'done') {
   if (hosted) {
