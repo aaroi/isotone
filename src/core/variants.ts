@@ -219,6 +219,14 @@ export function sectionAxes<T extends VariantAxis>(axes: T[]): VariantSection<T>
 
 /* ── Pure helpers ─────────────────────────────────────────────────────── */
 
+/** The selection a `keep-option` action makes permanent; colours keep the swatch value. */
+function keptValue(axis: VariantAxis, optionId: string | undefined): string {
+  if (axis.kind === 'range') throw new Error('This selector has no options to keep.');
+  const option = (axis.kind === 'color' ? axis.swatches : axis.options).find((o) => o.id === optionId);
+  if (!option) throw new Error('This option is no longer available.');
+  return 'value' in option ? option.value : option.id;
+}
+
 /** The primary value of an axis, as the selection string. */
 export function axisDefault(axis: VariantAxis): string {
   if (axis.kind === 'range') return String(axis.defaultValue);
@@ -419,18 +427,11 @@ export function createVariantsSource(init: {
           next = next.map((a) => a.id === axis.id ? { ...axis, options } : a);
           if (options.length === 1) next = next.filter((a) => a.id !== axis.id);
         }
-      } else if (action.action === 'keep-option') {
-        if (axis.kind === 'range') throw new Error('This selector has no options to keep.');
-        const kept = axis.kind === 'color'
-          ? axis.swatches.find(s => s.id === action.optionId)?.value
-          : axis.options.find(o => o.id === action.optionId)?.id;
-        if (kept === undefined) throw new Error('This option is no longer available.');
-        next = next.filter((a) => a.id !== axis.id);
-        picks[axis.id] = kept;
       } else {
-        next = next.filter((a) => a.id !== axis.id);
-        if (action.action === 'keep-default') picks[axis.id] = axisDefault(axis);
+        if (action.action === 'keep-option') picks[axis.id] = keptValue(axis, action.optionId);
+        else if (action.action === 'keep-default') picks[axis.id] = axisDefault(axis);
         else delete picks[axis.id];
+        next = next.filter((a) => a.id !== axis.id);
       }
       // A dependent control cannot outlive the decision that reveals it.
       const kept = new Set(next.map((a) => a.id));

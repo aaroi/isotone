@@ -428,7 +428,7 @@ export function IterationPanel({
     const description = action.action === 'remove-option'
       ? `Remove “${reference.optionLabel}” from ${reference.label}.`
       : action.action === 'keep-option'
-        ? `Keep only “${reference.optionLabel}” for ${reference.label} and make it the default; remove its selector and other alternatives.`
+        ? `Keep only “${reference.optionLabel}” for ${reference.label}; make it the default and remove the selector and the other options.`
       : action.action === 'keep-default'
         ? `Keep only the default for ${reference.label}; remove its selector and alternatives.`
         : `Remove ${reference.label}, its selector and all alternatives.`;

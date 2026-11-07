@@ -102,10 +102,10 @@ no permanent side padding or dark fade in front of them. Editing and selector
 reference tags follow this same rule.
 
 Selector action dialogs show feedback first, then individual choices without
-an “Options” heading, followed by Reset to default and removal last. Each
-choice row carries feedback, Keep only this (which makes that choice the
-default and removes the selector) and removal icons. Range selectors have no
-rows, so their dialog keeps a Keep default only action.
+an “Options” heading, followed by Reset to default, Keep default only and
+removal last. Each choice row carries feedback, Keep only this (which makes that
+choice the default and removes the selector) and removal icons. On the Default
+row, Keep only this files the same `keep-default` request as Keep default only.
 
 The custom colour swatch opens Isotone's own picker, never the browser's
 native popup. It floats in the action dialog's popup material, below its swatch
@@ -123,7 +123,7 @@ whole selector, or that moves to another surface, closes it:
 | Remove an option, failed | Stays open with the error in the footer | The same trash button |
 | Feedback on the selector or an option | Closes | The composer |
 | Reset to default | Closes | The selector's heading |
-| Keep default only, Remove selector & options | Closes | The selector's heading |
+| Keep only this, Keep default only, Remove selector & options | Closes | The selector's heading, or the option's chevron in an option-scoped dialog |
 
 Escape, the close button and a pointer outside the dialog close it and return
 focus to the heading.
@@ -131,6 +131,18 @@ focus to the heading.
 Selector action dialogs have a 260px minimum height and reserve 360px in their
 parent panel when space allows, even for a selector with only one action. The viewport remains the upper
 bound; short screens scroll instead of pushing controls off-screen.
+
+Each option and thumbnail carries a small chevron, the selector heading's own
+glyph, in its top-right corner, beside its own button rather than inside it. With
+a pointer it appears only on hover or keyboard focus, and while its dialog is
+open; hidden, it takes no clicks. Touch screens always show it. It replaces the
+default dot in that corner while it shows, and it never takes label width. On a
+swatch it is a 16px badge just off the corner, overlapping only the rounded
+corner outside the paint, so a press anywhere on the colour picks it. A right click opens the same thing. Both open the selector
+action dialog scoped to that option, titled with the option and the selector as
+secondary text: Feedback on this option, Keep only this, then Remove this option
+(disabled for the default). Opening it never changes the selection, and the dialog opens below the option
+when it cannot fit above, so it never covers what opened it.
 
 Removal actions create readable, editable requests for the coding agent. They do
 not hide or mutate selectors, options or dependent controls. Cancel a pending
