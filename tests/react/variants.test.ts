@@ -127,7 +127,7 @@ describe('VariantsView', () => {
     let message: string | null = 'Could not activate this variant';
     const source = { ...base, getError: () => message };
     await render(createElement(VariantsView, { source }));
-    expect(container.querySelector('fieldset')?.getAttribute('aria-label')).toBe('Headline');
+    expect(container.querySelector('[role="radiogroup"]')?.getAttribute('aria-label')).toBe('Headline');
     expect(container.querySelector('input[type=range]')?.getAttribute('aria-valuetext')).toBe('30%');
     expect(container.querySelector('[role=alert]')?.textContent).toBe(message);
     message = null;
@@ -225,7 +225,7 @@ describe('VariantsView', () => {
     const last = container.querySelectorAll<HTMLButtonElement>('.isotone-seg')[999];
     await click(last);
     expect(source.getSelections()['axis-499']).toBe('b');
-    expect(last.getAttribute('aria-pressed')).toBe('true');
+    expect(last.getAttribute('aria-checked')).toBe('true');
   });
 
   it('renders the visible axes and hides the conditional one at default', async () => {
@@ -361,7 +361,7 @@ describe('VariantsView', () => {
     });
     await render(createElement(VariantsView, { source }));
     expect(container.querySelectorAll('.isotone-grid .isotone-thumb')).toHaveLength(2);
-    expect(container.querySelector('.isotone-thumb[aria-pressed=true]')?.textContent).toBe('Left');
+    expect(container.querySelector('.isotone-thumb[aria-checked=true]')?.textContent).toBe('Left');
     expect(container.querySelector('.isotone-segs')).toBeNull();
   });
 
@@ -382,13 +382,13 @@ describe('VariantsView', () => {
     });
     await render(createElement(VariantsView, { source }));
     expect(container.querySelectorAll('.isotone-swatch')).toHaveLength(2);
-    expect(container.querySelector('.isotone-swatch[aria-pressed=true]')?.getAttribute('aria-label')).toBe('Red');
+    expect(container.querySelector('.isotone-swatch[aria-checked=true]')?.getAttribute('aria-label')).toBe('Red');
     expect(container.querySelector('input[type=color]')).toBeNull();
     expect(container.querySelector('.isotone-axis-value')?.textContent).toBe('#EA382E');
 
     await click(byText('Blue'));
     expect(source.getSelections().accent).toBe('#3b82f6');
-    expect(container.querySelector('.isotone-swatch[aria-pressed=true]')?.getAttribute('aria-label')).toBe('Blue');
+    expect(container.querySelector('.isotone-swatch[aria-checked=true]')?.getAttribute('aria-label')).toBe('Blue');
   });
 
   it('picks a custom colour in the panel, not the native popup', async () => {
@@ -995,7 +995,8 @@ describe('review dock interactions', () => {
     await render(createElement(IterationPanel, props));
     await click(container.querySelector('.isotone-fab'));
     expect(labels()).toEqual(['Headline', 'Tagline', 'Haze']);
-    await click(byText('Feedback'));
+    // The rail button's name carries the count the badge shows.
+    await click(byText('Feedback, 1 note'));
     await click(byText('Cancel removal'));
     expect(labels()).toEqual(['Headline', 'Tagline', 'Haze']);
     expect(source.getSelections().headline).toBe('b');
@@ -1084,6 +1085,8 @@ describe('review dock interactions', () => {
       await act(async () => {
         document.body.style.backgroundColor = theme === 'dark' ? 'black' : 'white';
         root?.render(createElement(IterationPanel, props));
+        // Page mutations are sampled at most every 200ms.
+        await new Promise((resolve) => setTimeout(resolve, 250));
         await new Promise((resolve) => requestAnimationFrame(resolve));
       });
       expect(container.querySelector('.isotone-root')?.getAttribute('data-theme')).toBe(theme);
@@ -1471,7 +1474,7 @@ describe('review dock interactions', () => {
       // Controls keep their full name for assistive technology.
       expect(container.querySelector('input[type=range]')?.getAttribute('aria-label')).toBe('Header › Logo size');
       expect(byText('Header › Ink actions')).toBeDefined();
-      expect(container.querySelector('fieldset.isotone-swatches')?.getAttribute('aria-label')).toBe('Header › Ink');
+      expect(container.querySelector('.isotone-swatches[role="radiogroup"]')?.getAttribute('aria-label')).toBe('Header › Ink');
       expect(byText('Before > After actions')).toBeDefined();
     });
 
@@ -1495,7 +1498,7 @@ describe('review dock interactions', () => {
       await click(toggle);
       expect(labels()).toContain('Links');
       expect(source.getSelections().links).toBe('b');
-      expect(byText('Bold')?.getAttribute('aria-pressed')).toBe('true');
+      expect(byText('Bold')?.getAttribute('aria-checked')).toBe('true');
     });
 
     it('titles the dialog with the short name and references the full one', async () => {

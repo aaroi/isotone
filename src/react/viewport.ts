@@ -22,7 +22,7 @@ export function prefersTouch(): boolean {
   return media(TOUCH_QUERY);
 }
 
-export interface VisibleBand {
+interface VisibleBand {
   top: number;
   bottom: number;
 }

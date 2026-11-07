@@ -3,7 +3,7 @@ import { Icon } from './icons';
 
 /* ── Colour maths ─────────────────────────────────────────────────────── */
 
-export interface Hsv {
+interface Hsv {
   h: number;
   s: number;
   v: number;
