@@ -65,7 +65,9 @@ describe('durations and copy', () => {
 
   it('builds the prompt the panel copies from the shared name', () => {
     const prompt = blastPrompt(45);
-    expect(prompt).toContain(`${BLAST_CLI} --for 45m`);
+    // The first run says --new, so it starts a session even right after one ended.
+    expect(prompt).toContain(`${BLAST_CLI} --for 45m --new\``);
+    expect(prompt).toContain(`run \`${BLAST_CLI}\` again, without --for or --new`);
     expect(prompt).toContain(`Isotone ${BLAST.name} session for 45 minutes`);
     expect(prompt).toContain('--working');
     expect(prompt).toContain('--reply');
@@ -155,6 +157,8 @@ describe(`isotone ${BLAST.command}`, () => {
     p.take();
     expect(await runBlast(['--for', '10s', '--every', '300ms', '--json'], p.io, FAST)).toBe(0);
     expect(JSON.parse(p.take()).notes.map((n: StoredNote) => n.id)).toEqual(['plain']);
+    await runBlast(['--stop'], p.io, FAST);
+    p.take();
     expect(await runBlast(['--new', '--for', '10s', '--every', '300ms', '--json'], p.io, FAST)).toBe(0);
     const checkin = JSON.parse(p.take());
     expect(checkin.notes.map((n: StoredNote) => n.id)).toEqual(['plain']);
@@ -186,16 +190,65 @@ describe(`isotone ${BLAST.command}`, () => {
     expect(over).toContain(`${BLAST.name} session over (time is up)`);
     expect(over).toContain('do not run `npx isotone blast` again');
     expect(over).toContain('[left');
-    // The same start command right after the end does not start another.
-    expect(await runBlast(['--for', '10s', '--json'], p.io, FAST)).toBe(ENDED_EXIT);
+    // Right after the end, the agent's bare run is only told to stop.
+    expect(over).not.toContain('To start a new session');
+    expect(await runBlast(['--json'], p.io, FAST)).toBe(ENDED_EXIT);
     expect(JSON.parse(p.take())).toMatchObject({ type: 'ended', ended: true, reason: 'time', stillOpen: [{ id: 'left' }] });
-    // A while later, or with --new, it does.
+    // A bare run a while later still never starts one, but says how to.
     await later(FAST.endedGraceMs + 50, () => {});
-    add(p.notes, note('fresh', { createdAt: new Date(Date.now() - 5_000).toISOString() }));
+    expect(await runBlast([], p.io, FAST)).toBe(ENDED_EXIT);
+    expect(p.take()).toContain(`To start a new session: \`${BLAST_CLI} --for 30m --new\``);
+    expect(p.state()?.stoppedAt ?? p.state()?.endsAt).toBeDefined();
+  });
+
+  it('starts again from Start Blast\'s prompt right after Stop', async () => {
+    const p = project();
+    add(p.notes, note('first', { createdAt: new Date(Date.now() - 5_000).toISOString() }));
+    const waiting = runBlast(['--for', '10m', '--every', '5s', '--json'], p.io, FAST);
+    await later(150, () => {});
+    // Stop in the panel ends the waiting command.
+    expect(blastResponse(p.notes, { method: 'POST', body: { action: 'stop' } }).status).toBe(200);
+    await waiting;
+    p.take();
+    // The copied prompt's first run, at once: a new session, not "over".
+    const command = /`npx isotone blast ([^`]+)`/.exec(blastPrompt(10))?.[1].split(' ') ?? [];
+    expect(command).toEqual(['--for', '10m', '--new']);
+    const started = runBlast([...command, '--every', '300ms', '--json'], p.io, FAST);
+    expect(await started).toBe(0);
+    const batch = JSON.parse(p.take());
+    expect(batch).toMatchObject({ type: 'batch', started: true });
+    expect(batch.notes.map((n: StoredNote) => n.id)).toEqual(['first']);
+    expect(p.state()?.stoppedAt).toBeUndefined();
+  });
+
+  it('starts again from Start Blast\'s prompt right after the time runs out', async () => {
+    const p = project();
+    await runBlast(['--for', '300ms', '--every', '5s'], p.io, FAST);
+    p.take();
+    expect(await runBlast([], p.io, FAST)).toBe(ENDED_EXIT);
+    p.take();
+    add(p.notes, note('next', { createdAt: new Date(Date.now() - 5_000).toISOString() }));
     await later(FAST.debounceMs, () => {});
-    expect(await runBlast(['--for', '10s', '--every', '300ms', '--json'], p.io, FAST)).toBe(0);
-    // A new session hands out what is open, including what the last one saw.
-    expect(JSON.parse(p.take()).notes.map((n: StoredNote) => n.id)).toEqual(['left', 'fresh']);
+    expect(await runBlast(['--for', '10m', '--new', '--every', '300ms', '--json'], p.io, FAST)).toBe(0);
+    expect(JSON.parse(p.take())).toMatchObject({ type: 'batch', started: true, notes: [{ id: 'next' }] });
+    expect(Date.parse(p.state()?.endsAt ?? '') - Date.now()).toBeGreaterThan(9 * 60_000);
+  });
+
+  it('refuses --new while an agent is in a live session, and replaces an abandoned one', async () => {
+    const p = project();
+    await runBlast(['--for', '10m', '--every', '200ms'], p.io, FAST);
+    const before = p.state();
+    p.take();
+    expect(await runBlast(['--for', '30m', '--new'], p.io, FAST)).toBe(1);
+    expect(p.text.err).toContain('session is already running');
+    expect(p.text.err).toContain(`${BLAST_CLI} --stop`);
+    expect(p.state()?.startedAt).toBe(before?.startedAt);
+    // No agent for longer than a live session allows: it is abandoned.
+    const stale = new Date(Date.now() - 16 * 60_000).toISOString();
+    writeFileSync(blastFile(p.notes), JSON.stringify({ ...before, heartbeatAt: stale, waiting: false }));
+    expect(await runBlast(['--for', '30m', '--new', '--every', '200ms', '--json'], p.io, FAST)).toBe(0);
+    expect(JSON.parse(p.take()).started).toBe(true);
+    expect(p.state()?.startedAt).not.toBe(before?.startedAt);
   });
 
   it('picks up Extend and Stop from the endpoint while it waits', async () => {

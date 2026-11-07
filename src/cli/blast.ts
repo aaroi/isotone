@@ -33,7 +33,11 @@ export interface BlastTiming {
   /** Fallback poll, for file systems where watching misses events. */
   pollMs: number;
   heartbeatMs: number;
-  /** A session that ended this recently still answers "over" to `--for`. */
+  /**
+   * A bare run (an agent continuing) this soon after the end is told only to
+   * stop; a later one is also told how to start a new session. Runs with
+   * `--for` or `--new` start a new session whenever the last one is over.
+   */
   endedGraceMs: number;
 }
 
@@ -63,7 +67,8 @@ function help(io: CliIO): void {
   out(io, '  --stream            stay running and print one JSON line per batch until the end');
   out(io, '  --json              print the batch, check-in or end as JSON');
   out(io, '  --status            show the session; --stop ends it; --extend adds time');
-  out(io, '  --new               start a new session even if one just ended');
+  out(io, '  --new               start a new session: the first run of a session, with --for.');
+  out(io, '                      It replaces an abandoned session, and refuses a live one.');
   out(io, '  --file <path>       another notes file');
 }
 
@@ -115,20 +120,29 @@ export async function runBlast(args: string[], io: CliIO, timingOverrides: Parti
         version: 1, startedAt: new Date(now).toISOString(), endsAt: new Date(now + (forMs ?? DEFAULT_FOR_MS)).toISOString(),
         every: everyMs ?? DEFAULT_EVERY_MS, route, heartbeatAt: new Date(now).toISOString(), waiting: true, seen: {},
       });
-      if (has(args, '--new') || !session) return { session: fresh(), result: { session: fresh(), started: true } };
+      const starting = forMs !== undefined || has(args, '--new');
+      if (!session) {
+        const started = fresh();
+        return { session: started, result: { session: started, started: true } };
+      }
       if (isEnded(session, now)) {
-        const endedAt = Date.parse(session.stoppedAt ?? session.endsAt);
-        // An agent that runs the same command again after the end must stop
-        // too; a person starting a new session a while later does not have to.
-        if (forMs !== undefined && now - endedAt > timing.endedGraceMs) {
+        // A first run (`--for`, as Start Blast's prompt has it with `--new`)
+        // starts the next session, however recently the last one ended. A bare
+        // run is an agent continuing a session that is over: it stops.
+        if (starting) {
           const started = fresh();
           return { session: started, result: { session: started, started: true } };
         }
         return { session: null, result: { ended: session } };
       }
+      // `--new` never takes over a session an agent is still in: two agents
+      // would share one session, each handed half the notes.
+      if (has(args, '--new') && isLive(session, now)) {
+        return { session: null, result: { error: `A ${BLAST.name} session is already running (${timeLeft(Date.parse(session.endsAt) - now)}, agent seen ${Math.max(0, Math.round((now - Date.parse(session.heartbeatAt ?? session.startedAt)) / 1000))}s ago). Run \`${BLAST_CLI}\` to continue it, or stop it first (Stop in the panel, or \`${BLAST_CLI} --stop\`) and run this again.` } };
+      }
       // A session no agent has touched for a while is abandoned: a new `--for`
-      // replaces it, so notes the last agent saw are handed out again.
-      if (forMs !== undefined && !isLive(session, now)) {
+      // or `--new` replaces it, so notes the last agent saw are handed out again.
+      if (starting && !isLive(session, now)) {
         const started = fresh();
         return { session: started, result: { session: started, started: true } };
       }
@@ -144,7 +158,7 @@ export async function runBlast(args: string[], io: CliIO, timingOverrides: Parti
     return 1;
   }
   if ('error' in begun) { errOut(io, begun.error); return 1; }
-  if ('ended' in begun) return reportEnded(io, notesFile, begun.ended, json, false);
+  if ('ended' in begun) return reportEnded(io, notesFile, begun.ended, json, false, timing.endedGraceMs);
 
   if (!json && !has(args, '--stream')) {
     if (begun.started) {
@@ -218,7 +232,7 @@ function endReason(session: BlastSession | null): 'time' | 'stopped-panel' | 'st
   return 'time';
 }
 
-function reportEnded(io: CliIO, notesFile: string, session: BlastSession | null, json: boolean, justNow: boolean): number {
+function reportEnded(io: CliIO, notesFile: string, session: BlastSession | null, json: boolean, justNow: boolean, graceMs = 0): number {
   if (session) {
     try { updateSession(blastFile(notesFile), (s) => ({ session: s?.waiting ? { ...s, waiting: false } : null, result: undefined })); } catch { /* Reporting the end matters more. */ }
   }
@@ -235,8 +249,10 @@ function reportEnded(io: CliIO, notesFile: string, session: BlastSession | null,
     out(io, 'Still open:');
     for (const n of open) out(io, `- [${n.id.slice(0, 8)}] ${n.route} — ${n.feedback.slice(0, 80)}${isAwaitingAnswer(n) ? ' (you asked; waiting for the reviewer)' : ''}`);
   }
-  if (!justNow && session) {
-    const ago = Date.now() - Date.parse(session.stoppedAt ?? session.endsAt);
+  // Right after the end, a bare run is the agent's own next step: it only needs
+  // to stop. Later, it is more likely someone looking to start again.
+  const ago = session ? Date.now() - Date.parse(session.stoppedAt ?? session.endsAt) : 0;
+  if (!justNow && session && ago > graceMs) {
     out(io, `(It ended ${ago < 60_000 ? 'under a minute' : `${Math.round(ago / 60_000)} min`} ago. To start a new session: \`${BLAST_CLI} --for 30m --new\`.)`);
   }
   return ENDED_EXIT;
@@ -246,7 +262,7 @@ function status(io: CliIO, file: string, json: boolean): number {
   const session = readSession(file);
   const state = session ? publicState(session) : null;
   if (json) { out(io, JSON.stringify({ session: state }, null, 2)); return 0; }
-  if (!session || !state) { out(io, `No ${BLAST.name} session. Start one with \`${BLAST_CLI} --for 30m\`.`); return 0; }
+  if (!session || !state) { out(io, `No ${BLAST.name} session. Start one with \`${BLAST_CLI} --for 30m --new\`.`); return 0; }
   if (state.ended) { out(io, `${BLAST.name} session over (${endReason(session).replace('-', ' by ')}). Ended ${new Date(session.stoppedAt ?? session.endsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`); return 0; }
   const beat = session.heartbeatAt ? `${Math.round((Date.now() - Date.parse(session.heartbeatAt)) / 1000)}s ago` : 'never';
   out(io, `${BLAST.name} · ${timeLeft(Date.parse(session.endsAt) - Date.now())} · ends ${new Date(session.endsAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · check-ins every ${formatDuration(session.every)} · ${session.route ?? 'all routes'}`);

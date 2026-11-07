@@ -59,16 +59,18 @@ answers by editing the note.
 
 ## Blast mode
 
-When the user asks for a Blast session ("run `npx isotone blast --for 45m`"), keep
-acting on notes by yourself until the session is over:
+When the user asks for a Blast session ("run `npx isotone blast --for 45m --new`"),
+keep acting on notes by yourself until the session is over:
 
-1. Run `npx isotone blast --for <duration>` once. It blocks until new notes
+1. Run `npx isotone blast --for <duration> --new` once. `--new` starts a session
+   even right after the last one ended, and refuses to take over one another
+   agent is still in (stop that one first). It blocks until new notes
    arrive, prints them as one batch (the `--json` record shape, with `doneCommand`)
    and exits 0. It can wait up to five minutes, so give it a 10-minute command
    timeout; if you cannot, add `--every 90s`.
 2. Act on the batch one note at a time: `--working`, fix, verify, `--done`.
-3. Run `npx isotone blast` again (no `--for`) after every batch and every
-   check-in ("No new notes · 32 min left").
+3. Run `npx isotone blast` again (no `--for`, no `--new`) after every batch and
+   every check-in ("No new notes · 32 min left").
 4. When it prints "Blast session over" (exit status 3), stop. Do not run it
    again. Give the user a short summary of what changed and what is still open.
 
@@ -84,7 +86,7 @@ Acting without being prompted for each note, keep to these guardrails:
 
 The user can extend or stop the session from the panel; the command picks that
 up. If you can watch a background process (Claude Code's background tasks or
-Monitor), `npx isotone blast --for 45m --stream` instead prints one JSON line per
+Monitor), `npx isotone blast --for 45m --new --stream` instead prints one JSON line per
 batch until the end. See [Blast mode](docs/blast.md).
 
 If the reviewer asks for alternatives, keep the original source intact while

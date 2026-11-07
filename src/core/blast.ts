@@ -101,9 +101,9 @@ export function timeLeft(ms: number): string {
 export function blastPrompt(minutes: number): string {
   const duration = minutes % 60 === 0 ? `${minutes / 60}h` : `${minutes}m`;
   const label = minutes % 60 === 0 ? `${minutes / 60} hour${minutes === 60 ? '' : 's'}` : `${minutes} minutes`;
-  return `Run an Isotone ${BLAST.name} session for ${label}: run \`${BLAST_CLI} --for ${duration}\` (it waits up to 5 minutes for notes, so give it a 10-minute command timeout). ` +
+  return `Run an Isotone ${BLAST.name} session for ${label}: run \`${BLAST_CLI} --for ${duration} --new\` (it waits up to 5 minutes for notes, so give it a 10-minute command timeout). ` +
     `For each batch of notes it prints, act on one note at a time: \`npx isotone --working <id>\`, fix it, verify it, then \`npx isotone --done <id>\`. ` +
-    `After each batch or check-in, run \`${BLAST_CLI}\` again. Stop when it says the session is over, and give me a short summary of what changed. ` +
+    `After each batch or check-in, run \`${BLAST_CLI}\` again, without --for or --new. Stop when it says the session is over, and give me a short summary of what changed. ` +
     `Follow the guardrails it prints when the session starts: act only on what notes ask, one small change at a time, never install packages, push or deploy, ` +
     `and ask with \`npx isotone --reply <id> "<question>"\` when a note is unclear.`;
 }

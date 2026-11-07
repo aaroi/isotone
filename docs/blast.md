@@ -14,12 +14,12 @@ Open the panel and choose **Start Blast** beside the pill. Pick a duration and
 **Copy prompt**, then paste the prompt into your coding agent. Isotone can't
 start the agent for you; the prompt is how the session begins. It reads like:
 
-> Run an Isotone Blast session for 45 minutes: run `npx isotone blast --for 45m`
+> Run an Isotone Blast session for 45 minutes: run `npx isotone blast --for 45m --new`
 > (it waits up to 5 minutes for notes, so give it a 10-minute command timeout).
 > For each batch of notes it prints, act on one note at a time …
 
-Or tell your agent yourself: "Run `npx isotone blast --for 45m` and keep acting
-on my notes until it says the session is over."
+Or tell your agent yourself: "Run `npx isotone blast --for 45m --new` and keep
+acting on my notes until it says the session is over."
 
 While a session is live, the line beside the pill reads **Blast · 32 min left**.
 Its dot fills while the agent is working on a note. The dialog shows when the
@@ -31,11 +31,11 @@ start one or send the agent a command.
 ## The loop
 
 ```sh
-npx isotone blast --for 45m      # start: waits for notes, prints a batch, exits 0
+npx isotone blast --for 45m --new  # start: waits for notes, prints a batch, exits 0
 npx isotone --working <id>       # one note at a time
 # … fix, verify …
 npx isotone --done <id>
-npx isotone blast                # continue: no --for needed
+npx isotone blast                  # continue: no --for, no --new
 ```
 
 Each run ends one of three ways:
@@ -61,19 +61,27 @@ out again, unless the reviewer edits it (to answer a question, say) or reopens i
 | `--status` | | Show the session |
 | `--stop` | | End the session |
 | `--extend <duration>` | | Add time |
-| `--new` | | Start a new session even if one just ended |
+| `--new` | | Start a new session: the first run's flag. Refuses while an agent is in a live session |
 
 An agent whose command timeout cannot be raised above a few minutes (Claude
 Code's default is two) passes `--every 90s` so each wait ends in a check-in
 first. A command cut off by a timeout loses nothing: notes are only marked as
 handed out when they are printed.
 
-Running `npx isotone blast` again continues the live session; a `--for` on a
-live session is ignored (use `--extend`). Once a session is over, the same
-command keeps answering "over" for two minutes, so an agent that runs it again
-stops too. After that, or with `--new`, `--for` starts a new session. A session
-whose agent has not been seen for 15 minutes counts as abandoned: a new `--for`
-replaces it and hands out what is still open.
+The first run of a session is `npx isotone blast --for <duration> --new`, and
+every later run is bare `npx isotone blast`:
+
+- A bare run continues the live session. Once the session is over, a bare run
+  only ever answers "over" (exit 3), so an agent that runs it again stops too; it
+  never starts a session. More than two minutes after the end, it also says how to
+  start a new one.
+- A run with `--for` or `--new` starts a new session whenever the last one is
+  over, however recently it ended, so Stop followed by Start Blast works at once.
+- On a live session, `--for` alone is ignored with a notice (use `--extend`), and
+  `--new` is refused with a clear error rather than taking over a session another
+  agent is in: stop it first, from the panel or with `--stop`. A session whose
+  agent has not been seen for 15 minutes counts as abandoned, and `--for` or `--new`
+  replaces it and hands out what is still open.
 
 The command costs nothing while it waits. It watches the notes directory and
 polls a file's metadata every two seconds as a fallback; it reads the notes only
@@ -110,7 +118,7 @@ An agent that can watch a background process can run the session as one
 stream instead of re-running the command:
 
 ```sh
-npx isotone blast --for 45m --stream
+npx isotone blast --for 45m --new --stream
 ```
 
 It prints one JSON line when it starts, one per batch (`{"type":"batch","notes":[…]}`)
