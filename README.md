@@ -98,6 +98,21 @@ On Next, `init` prints the same panel as a `next/script` tag behind
 covers route handlers, React embeds, themes and the production guards. Coming
 from the previous package? See the [migration guide](docs/migration.md).
 
+## Blast mode
+
+Once Isotone is set up, you can ask your agent for a Blast session. For the time
+you choose, it keeps picking up each batch of new notes, fixing and closing them,
+without being prompted again. Paste this into your agent:
+
+```text
+Run an Isotone Blast session for 45 minutes: `npx isotone blast --for 45m --new`.
+Follow node_modules/isotone/docs/blast.md until it says the session is over.
+```
+
+Blast has no button in the panel; you start, extend and stop it through your
+agent. Isotone still never runs the agent; it hands your agent the notes.
+[Blast mode](docs/blast.md).
+
 ## Keys
 
 **Enter** sends a note and **Shift + Enter** adds a newline. Click a saved note

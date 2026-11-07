@@ -23,6 +23,25 @@ The runtime is TypeScript throughout. The expensive work is DOM traversal, disk
 access, and redundant updates; avoiding that work matters more here than adding
 a second language or runtime.
 
+## Pull requests
+
+Write the description for a person who hasn't followed the work and doesn't
+know the codebase well, however technical the change is. When the review depends
+on a part of Isotone (the dock, knobs, overlay variants, the notes file), say in a
+sentence what it is. `.github/pull_request_template.md` has the outline:
+
+- **Before:** what someone using Isotone experiences today, in plain words. Name
+  who that is: the person reviewing their app, their coding agent, or a maintainer.
+- **After:** what changes for them.
+- **Review notes:** only the technical detail a reviewer needs, such as risks,
+  trade-offs, effects on existing users, and what to try in the demo. Leave out
+  file-by-file lists, internal names and implementation narration unless they
+  matter for the review.
+- **Tested:** what was checked, and what wasn't.
+
+Agents that write the description themselves (`gh pr create --body`) follow the
+same outline.
+
 ## Boundaries
 
 | Layer | Responsibility |
@@ -173,3 +192,6 @@ update result, in the dev demo and the hosted one. **Ask agent to update** then
 files a demo update note, built by the same server code in the dev demo, which
 the pretend agent picks up and closes. It does not contact npm or install anything. `/?review=1` keeps
 feedback open across variant reloads.
+
+Reloading the demo clears any note the pretend agent had marked as being worked
+on, since it never finishes it.

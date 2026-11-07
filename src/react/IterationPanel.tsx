@@ -1029,6 +1029,8 @@ export function IterationPanel({
         textareaRef.current?.focus({ preventScroll: true });
       }}
     >
+    {/* The agent's question, in full, while the reviewer edits the note to answer it. */}
+    {editing?.reply?.text && !editing.reply.answered && <p className="isotone-editing-reply"><span>Agent asks</span> {editing.reply.text}</p>}
     <div className="isotone-context" aria-live="polite">
       {editing && (
         <span className="isotone-chip">
@@ -1341,8 +1343,10 @@ export function IterationPanel({
           {composer}
         </div>
       )}
-      <UpdateNotice endpoint={updateEndpoint} active={open} route={route}
-        requested={updateRequested} onRequested={notesAvailable ? loadNotes : undefined} />
+      <div className="isotone-notices">
+        <UpdateNotice endpoint={updateEndpoint} active={open} route={route}
+          requested={updateRequested} onRequested={notesAvailable ? loadNotes : undefined} />
+      </div>
       <fieldset
         aria-label="Isotone tools"
         onKeyDown={event => {

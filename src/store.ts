@@ -4,11 +4,11 @@
  * database. The path comes from the plugin/CLI options.
  */
 import { execFileSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-import type { IterationElement, NoteContext, VariantReference, VariantRemoval } from './core/index';
+import type { IterationElement, NoteContext, NoteReply, VariantReference, VariantRemoval } from './core/index';
 import { MAX_FEEDBACK_LENGTH } from './core/limits';
 import { withFileLock, writeJson } from './file-store';
 import { updateNoteText } from './core/update';
@@ -208,7 +208,9 @@ function toItem(n: StoredNote, root: string) {
     ...(n.variantAction !== undefined ? { variantAction: n.variantAction } : {}),
     // Only the server writes an update request; a malformed one, or one whose
     // directory is outside the project, is not shown.
-    ...(update ? { update } : {}) };
+    ...(update ? { update } : {}),
+    // Only the CLI writes a reply; a hand-edited, malformed one is not shown.
+    ...(replyView(n) ? { reply: replyView(n) } : {}) };
 }
 
 /** The transport-agnostic result of a notes request — any runtime (Vite
@@ -301,6 +303,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     };
     // A body's `update` is never read: only the update endpoint writes one,
     // from the server's own check, and an update note cannot be edited.
+    // Nor is `reply`: only the agent writes one, with `isotone --reply`.
     const { id, route, feedback, element, payload, viewport } = body;
     if (id !== undefined && id !== null && (typeof id !== 'string' || !id || id.length > 200)) {
       return json(400, { error: 'id must be a non-empty string of at most 200 characters' });
@@ -422,6 +425,43 @@ export function notesRevision(file: string): string {
   } catch {
     return 'none';
   }
+}
+
+/** Longest agent reply `isotone --reply` stores. */
+export const MAX_REPLY_LENGTH = 2000;
+
+/** A stored reply, or null when it is missing or malformed. */
+export function replyOf(value: unknown): NoteReply | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const v = value as Partial<NoteReply>;
+  if (typeof v.text !== 'string' || !v.text.trim() || typeof v.at !== 'string' || !Number.isFinite(Date.parse(v.at))) return null;
+  return { text: v.text.slice(0, MAX_REPLY_LENGTH), at: v.at, ...(typeof v.about === 'string' && v.about.length <= 64 ? { about: v.about } : {}) };
+}
+
+/**
+ * What the agent was given for a note. A reviewer who edits a handed-out note
+ * (to answer the agent's question, say) changes it, and the note is handed out
+ * again.
+ */
+export function noteFingerprint(note: StoredNote): string {
+  const update = updateRequestOf(note.update);
+  const content = JSON.stringify([
+    note.feedback, note.route,
+    (note.elements ?? (note.element ? [note.element] : [])).map((element) => element.selector),
+    note.variant ?? null, note.variantAction ?? null, update?.to ?? null,
+  ]);
+  return createHash('sha256').update(content).digest('base64url').slice(0, 16);
+}
+
+/**
+ * A note's reply as readers see it. Once the note has changed since the agent
+ * asked (the reviewer answers by editing it), the question is no longer
+ * pending: it comes back marked `answered`.
+ */
+export function replyView(note: StoredNote): NoteReply | null {
+  const reply = replyOf(note.reply);
+  if (!reply) return null;
+  return reply.about !== undefined && reply.about !== noteFingerprint(note) ? { ...reply, answered: true } : reply;
 }
 
 function cap(v: string, max: number): string {

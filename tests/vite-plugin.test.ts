@@ -129,6 +129,8 @@ describe('the Vite adapter, served', () => {
     expect(script).toContain('__isotone.mount');
     expect(script).toContain('"theme":"system"');
     expect(script).toContain(UPDATE_ENDPOINT);
+    // Blast is a CLI feature: the panel gets no session endpoint.
+    expect(script).not.toContain('blast');
     expect(script.length).toBeGreaterThan(200);
     // Variants are on by default, so the mount asks for the overlay source.
     expect(script).toContain('overlay');

@@ -207,6 +207,7 @@ if (hosted && !screenshot) {
  * `--done`. The tour listens to the same events.
  */
 function runPretendAgent() {
+  void clearStaleWorking();
   const network = window.fetch.bind(window);
   window.fetch = async (input, init) => {
     const response = await network(input, init);
@@ -221,6 +222,18 @@ function runPretendAgent() {
     setTimeout(() => void agentStep(id, 'done'), 6400);
     return response;
   };
+}
+/**
+ * The pretend agent lives in this page, so a note it was working on when the
+ * page last closed will never be finished. On load, nothing is in progress.
+ */
+async function clearStaleWorking() {
+  if (hosted) {
+    const notes = readHostedNotes();
+    if (notes.some((note) => note.workingAt)) writeHostedNotes(notes.map(({ workingAt: _stale, ...note }) => note));
+    return;
+  }
+  await fetch(`/demo-agent?action=reset&session=${session}`, { method: 'POST' });
 }
 async function agentStep(id: string, state: 'working' | 'done') {
   if (hosted) {

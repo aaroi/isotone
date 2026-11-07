@@ -111,6 +111,14 @@ describe('the update endpoint', () => {
   });
 });
 
+describe('Blast', () => {
+  it('has no HTTP endpoint and no panel wiring: it is a CLI feature', async () => {
+    expect((await fetch(`${served.url}/api/iteration/blast`, { headers: { origin: 'http://localhost:3000' } })).status).toBe(404);
+    const js = await (await fetch(served.bundleUrl)).text();
+    expect(js.includes('blastEndpoint')).toBe(false);
+  });
+});
+
 describe('the notes endpoint', () => {
   it('round-trips a note against the configured file', async () => {
     const created = await fetch(`${served.url}${NOTES_ENDPOINT}`, {

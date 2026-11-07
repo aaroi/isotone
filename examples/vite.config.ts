@@ -107,6 +107,15 @@ function demoNotes(): Plugin {
           try { checkOrigin(req.headers.origin, req.headers.host ?? ''); } catch (error) { sendFailure(res, error); return; }
           const query = new URL(req.url ?? '', 'http://x').searchParams;
           const action = query.get('action');
+          const sessionNotes = files.get(`/demo-notes/${query.get('session') ?? ''}`);
+          // A reload forgets what the pretend agent was doing, so nothing it
+          // marked as being worked on will ever finish: clear it.
+          if (sessionNotes && action === 'reset') {
+            updateNotes(sessionNotes, (notes) => notes.map(({ workingAt: _stale, ...note }) => note));
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+            return;
+          }
           for (const file of files.values()) updateNotes(file, (notes) => {
             const target = notes.find((n) => n.id === query.get('id') && !n.done);
             if (!target) return notes;

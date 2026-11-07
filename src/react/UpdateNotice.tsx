@@ -89,7 +89,7 @@ export function UpdateNotice({ endpoint, active, route = '/', requested = false,
   const canAsk = Boolean(onRequested && info.upgrade);
   return <div className="isotone-update">
     <button ref={trigger} type="button" className="isotone-update-trigger"
-      aria-expanded={open} aria-controls={id} onClick={() => setOpen(value => !value)}>
+      aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
       {pending ? 'Update requested' : `Isotone ${info.latestVersion} is available`}
     </button>
     {open && <div id={id} role="dialog" aria-label="Update Isotone" className="isotone-update-dialog"
@@ -117,8 +117,9 @@ export function UpdateNotice({ endpoint, active, route = '/', requested = false,
 }
 
 export const UPDATE_NOTICE_CSS = `
-.isotone-update { position: absolute; z-index: 5; bottom: 10px; right: calc(var(--iso-rail-length) + 10px); pointer-events: auto; }
-.isotone-root[data-tools='1'] .isotone-update { right: calc(var(--iso-rail-size) + 10px); }
+.isotone-notices { position: absolute; z-index: 5; bottom: 10px; right: calc(var(--iso-rail-length) + 10px); display: flex; flex-direction: row-reverse; flex-wrap: wrap-reverse; align-items: center; justify-content: flex-start; gap: 6px; width: max-content; max-width: calc(100vw - var(--iso-rail-length) - 36px); pointer-events: none; }
+.isotone-root[data-tools='1'] .isotone-notices { right: calc(var(--iso-rail-size) + 10px); max-width: calc(100vw - var(--iso-rail-size) - 36px); }
+.isotone-notices > * { pointer-events: auto; }
 .isotone-update-trigger { white-space: nowrap; color: var(--iso-muted); font-size: 10px; padding: 4px 6px; border-radius: 5px; background: var(--iso-bg); box-shadow: 0 0 0 1px var(--iso-line); }
 .isotone-update-dialog { position: absolute; right: calc(0px - var(--iso-rail-length) - 10px); bottom: 40px; width: min(var(--iso-dock-width), 260px); max-width: calc(100vw - 32px); max-height: calc(100dvh - 100px); overflow: auto; padding: 10px var(--iso-space) var(--iso-space); display: grid; gap: 8px; border-radius: 8px; background: var(--iso-bg); box-shadow: var(--iso-popup-shadow); font-size: 11px; }
 .isotone-root[data-tools='1'] .isotone-update-dialog { right: calc(0px - var(--iso-rail-size) - 10px); }

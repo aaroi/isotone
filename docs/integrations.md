@@ -141,7 +141,9 @@ host and every request gets a 403 `origin not allowed`. Pass
 `serveVariantsRequest`) to accept pages served from localhost, 127.0.0.1 or
 [::1] on any port. Non-loopback origins are still rejected.
 
-For this manual route, add `.iteration-feedback.json` to the project's `.gitignore`.
+For this manual route, add `.iteration-feedback.json` to the project's
+`.gitignore`, and `.iteration-feedback.blast.json` if your agent runs
+[Blast mode](blast.md), whose CLI keeps its session there.
 The Vite plugin and standalone server ignore their notes file automatically; the
 transport-only request adapter does not modify Git configuration.
 
