@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Copy, X } from 'lucide-react';
+import { AGENT_PROMPT, SETUP_COMMANDS } from './agent-prompt';
+import { prefersTouch } from '../../src/react/viewport';
 
 /**
  * A short guided tour for first-time visitors. It never blocks the page: each
@@ -45,8 +47,37 @@ function rememberTour() {
 }
 
 const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-const touch = matchMedia('(pointer: coarse)').matches;
-const press = touch ? 'Tap' : 'Click';
+/**
+ * Touch gets no keyboard shortcuts or keys in the copy. Same rule as the panel:
+ * a first guess from the media query, then whichever pointer was used last.
+ */
+function useTouch() {
+  const [touch, setTouch] = useState(prefersTouch);
+  useEffect(() => {
+    const onPointer = (event: PointerEvent) => { if (event.pointerType) setTouch(event.pointerType === 'touch'); };
+    window.addEventListener('pointerdown', onPointer, true);
+    return () => window.removeEventListener('pointerdown', onPointer, true);
+  }, []);
+  return touch;
+}
+/** On a phone the open panel covers most of the page. */
+const narrow = () => matchMedia('(max-width: 640px)').matches;
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * Scroll the overview cards into the strip between the tour card and the
+ * panel, so a phone shows what a variant or a pin changes. Leaves the page
+ * alone when they are already in view or there is no room.
+ */
+function revealCards() {
+  const cards = document.getElementById('overview-cards')?.getBoundingClientRect();
+  const dock = inPanel('.isotone-root')?.getBoundingClientRect();
+  if (!cards || !dock) return;
+  const top = (document.querySelector('.tour-card')?.getBoundingClientRect().bottom ?? 0) + 12;
+  const room = dock.top - top;
+  if (room < 96 || (cards.top >= top && cards.top <= top + 24)) return;
+  window.scrollBy({ top: cards.top - top, behavior: reducedMotion() ? 'auto' : 'smooth' });
+}
 
 type AgentState = 'waiting' | 'working' | 'done';
 /** What to highlight: a key that changes whenever the highlighted things change, and how to find them. */
@@ -61,6 +92,7 @@ export function Tour({ onClose, subscribeVariants }: {
   const [switched, setSwitched] = useState(false);
   const [agent, setAgent] = useState<AgentState>('waiting');
   const note = useRef<string | null>(null);
+  const touch = useTouch();
 
   const close = useCallback(() => { rememberTour(); onClose(); }, [onClose]);
 
@@ -81,6 +113,15 @@ export function Tour({ onClose, subscribeVariants }: {
   }, [step, panel.open]);
 
   useEffect(() => subscribeVariants(() => setSwitched(true)), [subscribeVariants]);
+
+  // On a phone, keep the cards in view while trying variants and pinning one,
+  // once the panel and the tour card have settled.
+  const showCards = (step === 'variants' && panel.variants) || (step === 'pin' && panel.picking && !panel.pinned);
+  useEffect(() => {
+    if (!showCards || !narrow()) return;
+    const timer = setTimeout(revealCards, 460);
+    return () => clearTimeout(timer);
+  }, [showCards]);
 
   useEffect(() => {
     const sent = (event: Event) => {
@@ -109,7 +150,7 @@ export function Tour({ onClose, subscribeVariants }: {
     else close();
   };
 
-  const content = stepContent(step, panel, switched, agent);
+  const content = stepContent(step, panel, switched, agent, touch);
   return <TourCard
     step={step}
     layout={`${panel.variants}-${panel.notes}`}
@@ -122,7 +163,7 @@ export function Tour({ onClose, subscribeVariants }: {
         </>
       : step === 'finish'
         ? <>
-            <TourButton primary onClick={close}>Done</TourButton>
+            <TourButton onClick={close}>Done</TourButton>
             <a className="tour-button" href="https://github.com/aaroi/isotone" target="_blank" rel="noreferrer">GitHub</a>
           </>
         : <>
@@ -161,11 +202,13 @@ function Status({ done, children }: { done: boolean; children: ReactNode }) {
 const one = (selector: string): Highlight => ({ key: selector, find: () => [inPanel(selector)].filter(e => e !== null) });
 
 /** What each step says and highlights, given what the visitor has done so far. */
-function stepContent(step: Step, panel: PanelState, switched: boolean, agent: AgentState): {
+function stepContent(step: Step, panel: PanelState, switched: boolean, agent: AgentState, touch: boolean): {
   title: string; body: ReactNode; highlight: Highlight | null; ready?: boolean;
 } {
+  const press = touch ? 'Tap' : 'Click';
   // The pill behind the button: it stays visible when hovering swaps the button for the tools.
   const fab = one('.isotone-rail-track');
+  const sendHint = touch ? <>tap the arrow to send it</> : <>press <Keys keys={['↵']} /> to send it</>;
   switch (step) {
     case 'welcome': return {
       title: 'This is a pretend app',
@@ -197,7 +240,7 @@ function stepContent(step: Step, panel: PanelState, switched: boolean, agent: Ag
           : <p>Say you asked your agent for a few ways to lay out the cards. They show up here. {press} one of the highlighted layouts and watch the page.</p>,
         highlight: switched ? null : {
           key: 'layouts',
-          find: () => allInPanel('fieldset[aria-label="Card layout"] .isotone-thumb[aria-pressed="false"]'),
+          find: () => allInPanel('fieldset[aria-label="Cards › Layout"] .isotone-thumb[aria-pressed="false"]'),
         },
         ready: switched,
       };
@@ -214,12 +257,12 @@ function stepContent(step: Step, panel: PanelState, switched: boolean, agent: Ag
       };
       if (panel.picking) return {
         title: 'Leave a note',
-        body: <p>The card is selected, and a note field opened next to it. Write what you'd change, like "make this number bigger", and press <Keys keys={['↵']} /> to send it. You can click more cards first.</p>,
+        body: <p>The card is selected, and a note field opened next to it. Write what you'd change, like "make this number bigger", and {sendHint}. You can {press.toLowerCase()} more cards first.</p>,
         highlight: one('.isotone-float'),
       };
       if (panel.pinned) return {
         title: 'Leave a note',
-        body: <p>Write what you'd change, like "make this number bigger", and press <Keys keys={['↵']} /> to send it.</p>,
+        body: <p>Write what you'd change, like "make this number bigger", and {sendHint}.</p>,
         highlight: inPanel('.isotone-float') ? one('.isotone-float') : one('.isotone-compose'),
       };
       return {
@@ -241,25 +284,48 @@ function stepContent(step: Step, panel: PanelState, switched: boolean, agent: Ag
     case 'finish': return {
       title: 'Try it in your own app',
       body: <>
-        <p>Run these in your project. It works with Vite and other dev servers, and none of it ends up in your production build.</p>
-        <Install />
+        <p>{touch ? 'On your computer, paste' : 'Paste'} this into your coding agent (Claude Code, Cursor, Codex…) in your project:</p>
+        <Prompt />
+        <p className="tour-hint">It works with Vite and other dev servers, and none of it ends up in your production build.</p>
+        <details className="tour-manual">
+          <summary>Or set it up yourself</summary>
+          <Install />
+        </details>
       </>,
       highlight: null,
     };
   }
 }
 
-function Install() {
+/** Copies text, then reports it for a moment. */
+function useCopy(text: string): [boolean, () => void] {
   const [copied, setCopied] = useState(false);
-  const commands = 'npm i -D isotone\nnpx isotone init';
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1400);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  return [copied, () => { void navigator.clipboard?.writeText(text).then(() => setCopied(true)); }];
+}
+
+/** The README's agent prompt: the way most people start. It wraps; nothing is cut off. */
+function Prompt() {
+  const [copied, copy] = useCopy(AGENT_PROMPT);
+  return <div className="tour-prompt">
+    {/* Each `command` stays on one line: a phone would otherwise break `--yes` after its dashes. */}
+    <p>{AGENT_PROMPT.split(/(`[^`]+`)/).map(part =>
+      part.startsWith('`') ? <span key={part} className="tour-token">{part}</span> : part)}</p>
+    <button type="button" className="tour-button tour-primary" onMouseDown={keepFocus} onClick={copy}>
+      {copied ? <Check size={13} /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy prompt'}
+    </button>
+  </div>;
+}
+
+function Install() {
+  const [copied, copy] = useCopy(SETUP_COMMANDS.join('\n'));
   return <div className="tour-code">
-    <pre><span>$</span> npm i -D isotone{'\n'}<span>$</span> npx isotone init</pre>
-    <button type="button" aria-label="Copy commands" title="Copy" onClick={() => {
-      void navigator.clipboard?.writeText(commands).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1400);
-      });
-    }}>{copied ? <Check size={14} /> : <Copy size={14} />}</button>
+    <pre>{SETUP_COMMANDS.map((command, i) => <Fragment key={command}>{i > 0 && '\n'}<span>$</span> {command}</Fragment>)}</pre>
+    <button type="button" aria-label="Copy commands" title="Copy" onClick={copy}>{copied ? <Check size={14} /> : <Copy size={14} />}</button>
   </div>;
 }
 

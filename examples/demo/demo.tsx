@@ -29,36 +29,49 @@ function layoutThumb(cards: [number, number, number, number][]): string {
     `<rect x="${x + 4}" y="${y + 4}" width="${Math.min(14, w - 8)}" height="2.5" rx="1.25" fill="#8b8e99"/>`).join('');
   return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 72">${shapes}</svg>`)}`;
 }
+/** Selectors sit in sections named by a label prefix ("Cards > Layout"). The README
+ *  capture keeps its two plain selectors for a compact composition. */
+const named = (section: string, label: string, plain: string) => screenshot ? plain : `${section} > ${label}`;
 const axes: VariantAxis[] = [
-  { id: 'layout', label: 'Card layout', defaultOption: 'row', options: [
+  { id: 'layout', label: named('Cards', 'Layout', 'Card layout'), defaultOption: 'row', options: [
     { id: 'row', label: 'Row', image: layoutThumb([[33, 12, 26, 32], [62, 12, 26, 32], [91, 12, 26, 32]]) },
     { id: 'feature', label: 'Feature', image: layoutThumb([[33, 9, 84, 18], [33, 30, 41, 15], [76, 30, 41, 15]]) },
     { id: 'sidebar', label: 'Sidebar', image: layoutThumb([[33, 9, 41, 36], [76, 9, 41, 16.5], [76, 28.5, 41, 16.5]]) },
     { id: 'list', label: 'List', image: layoutThumb([[33, 9, 84, 10], [33, 22, 84, 10], [33, 35, 84, 10]]) },
   ] },
-  { id: 'spacing', label: 'Spacing', defaultOption: 'compact', options: [
+  { id: 'spacing', label: named('Cards', 'Spacing', 'Spacing'), defaultOption: 'compact', options: [
     { id: 'compact', label: 'Compact' }, { id: 'comfy', label: 'Comfy' }, { id: 'spacious', label: 'Spacious' },
   ] },
-  { id: 'accent', label: 'Accent colour', kind: 'color', defaultColor: '#6687ff', swatches: [
+  { id: 'accent', label: named('Theme', 'Accent colour', 'Accent colour'), kind: 'color', defaultColor: '#6687ff', swatches: [
     { id: 'blue', label: 'Blue', value: '#6687ff' }, { id: 'green', label: 'Green', value: '#63b990' },
     { id: 'amber', label: 'Amber', value: '#dfae5e' }, { id: 'rose', label: 'Rose', value: '#dd7f9a' },
     { id: 'violet', label: 'Violet', value: '#a18be0' },
   ] },
 ];
-axes.push({ id: 'card-radius', label: 'Card radius', kind: 'range', min: 0, max: 24, step: 1, defaultValue: 11, unit: 'px' });
+axes.push({ id: 'card-radius', label: named('Cards', 'Corner radius', 'Card radius'), kind: 'range', min: 0, max: 24, step: 1, defaultValue: 11, unit: 'px' });
 if (!screenshot) axes.push(
-  { id: 'card-padding', label: 'Card padding', kind: 'range', min: 8, max: 32, step: 2, defaultValue: 18, unit: 'px' },
+  { id: 'card-padding', label: 'Cards > Padding', kind: 'range', min: 8, max: 32, step: 2, defaultValue: 18, unit: 'px' },
 );
 if (stress) {
   const startingAxes = axes.length;
-  for (let index = startingAxes; index < 500; index++) axes.push({
-    id: `decision-${index}`, label: index === startingAxes ? `Long label ${'without any room to wrap '.repeat(40)}` : `Decision ${index + 1}`,
-    defaultOption: 'option-0',
-    options: Array.from({ length: index % 25 === 0 ? 50 : 4 }, (_, option) => ({
-      id: `option-${option}`,
-      label: option === 3 ? `Alternative ${'withaverylongunbrokenlabel'.repeat(8)}` : `Option ${option + 1}`,
-    })),
-  });
+  // Sections of a dozen, one written as an explicit `section` with a long name;
+  // the long label stays unsectioned, so it sits above every section.
+  for (let index = startingAxes; index < 500; index++) {
+    const area = Math.floor((index - startingAxes - 1) / 12);
+    axes.push({
+      id: `decision-${index}`,
+      ...(index === startingAxes
+        ? { label: `Long label ${'without any room to wrap '.repeat(40)}` }
+        : area === 1
+          ? { label: `Decision ${index + 1}`, section: `Section with a long name ${'that keeps on going '.repeat(12)}` }
+          : { label: `Area ${area + 1} > Decision ${index + 1}` }),
+      defaultOption: 'option-0',
+      options: Array.from({ length: index % 25 === 0 ? 50 : 4 }, (_, option) => ({
+        id: `option-${option}`,
+        label: option === 3 ? `Alternative ${'withaverylongunbrokenlabel'.repeat(8)}` : `Option ${option + 1}`,
+      })),
+    });
+  }
 }
 const source = createVariantsSource({
   axes, selections: { spacing: 'comfy' },
@@ -150,9 +163,43 @@ function serveNotesInPage(path: string) {
     return reply(201, { id });
   };
 }
+/** `?update-preview=1`: a fictional release. The demo never contacts npm. */
+const updatePreview = !screenshot && params.has('update-preview');
+const updateEndpoint = `/demo-update/${session}`;
+const DEMO_UPDATE = {
+  currentVersion: '1.1.3', latestVersion: '1.2.0', status: 'available',
+  upgrade: { manager: 'pnpm', command: 'pnpm add -D --exact isotone@1.2.0', cwd: '/workspace/example-app' },
+} as const;
+/**
+ * The update endpoint for the hosted build. Like the dev server, it builds the
+ * update note itself and keeps at most one open.
+ */
+function serveUpdateInPage(path: string) {
+  const network = window.fetch.bind(window);
+  window.fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+    if (url.pathname !== path) return network(input, init);
+    const reply = (status: number, body: unknown) =>
+      new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+    if ((init?.method ?? 'GET').toUpperCase() === 'GET') return reply(200, DEMO_UPDATE);
+    const notes = readHostedNotes();
+    const open = notes.find((n) => !n.done && n.update);
+    if (open) return reply(200, { id: open.id, created: false });
+    const { currentVersion: from, latestVersion: to, upgrade } = DEMO_UPDATE;
+    const route = String((JSON.parse(String(init?.body ?? '{}')) as { route?: unknown }).route ?? '/');
+    const id = crypto.randomUUID();
+    writeHostedNotes([...notes, {
+      id, route, feedback: `Update Isotone ${from} → ${to}`, element: null, done: false, doneAt: null,
+      createdAt: new Date().toISOString(),
+      update: { from, to, command: upgrade.command, cwd: upgrade.cwd, manager: upgrade.manager },
+    }]);
+    return reply(201, { id, created: true });
+  };
+}
 if (hosted && !screenshot) {
   try { if (localStorage.getItem(HOSTED_KEY) === null) seedHostedNotes(); } catch { /* No storage. */ }
   serveNotesInPage(endpoint);
+  if (updatePreview) serveUpdateInPage(updateEndpoint);
 }
 /**
  * A pretend coding agent. A moment after a note is sent it marks it as being
@@ -160,18 +207,33 @@ if (hosted && !screenshot) {
  * `--done`. The tour listens to the same events.
  */
 function runPretendAgent() {
+  void clearStaleWorking();
   const network = window.fetch.bind(window);
   window.fetch = async (input, init) => {
     const response = await network(input, init);
     const url = new URL(input instanceof Request ? input.url : String(input), location.href);
-    if (url.pathname !== endpoint || (init?.method ?? 'GET').toUpperCase() !== 'POST' || response.status !== 201) return response;
+    // An update request is a note too: the agent picks it up the same way.
+    if (![endpoint, updateEndpoint].includes(url.pathname) || (init?.method ?? 'GET').toUpperCase() !== 'POST' || response.status !== 201) return response;
     const { id } = await response.clone().json() as { id: string };
-    const feedback = String((JSON.parse(String(init?.body ?? '{}')) as { feedback?: string }).feedback ?? '');
+    const feedback = url.pathname === updateEndpoint ? '[update]'
+      : String((JSON.parse(String(init?.body ?? '{}')) as { feedback?: string }).feedback ?? '');
     window.dispatchEvent(new CustomEvent('demo:note', { detail: { id, action: feedback.startsWith('[') } }));
     setTimeout(() => void agentStep(id, 'working'), 1600);
     setTimeout(() => void agentStep(id, 'done'), 6400);
     return response;
   };
+}
+/**
+ * The pretend agent lives in this page, so a note it was working on when the
+ * page last closed will never be finished. On load, nothing is in progress.
+ */
+async function clearStaleWorking() {
+  if (hosted) {
+    const notes = readHostedNotes();
+    if (notes.some((note) => note.workingAt)) writeHostedNotes(notes.map(({ workingAt: _stale, ...note }) => note));
+    return;
+  }
+  await fetch(`/demo-agent?action=reset&session=${session}`, { method: 'POST' });
 }
 async function agentStep(id: string, state: 'working' | 'done') {
   if (hosted) {
@@ -217,7 +279,7 @@ function Panel({ theme }: { theme: IterationTheme }) {
     };
   }, []);
   useEffect(() => {
-    panel.current?.render(<IterationPanel route={page} theme={theme} updateEndpoint={screenshot || hosted ? undefined : params.has('update-preview') ? '/demo-update' : '/api/iteration/update'}
+    panel.current?.render(<IterationPanel route={page} theme={theme} updateEndpoint={updatePreview ? updateEndpoint : screenshot || hosted ? undefined : '/api/iteration/update'}
       store={{ endpoint, key: `isotone-public-demo-${session}` }}
       variants={source} defaultTab="variants" shortcut={screenshot ? false : undefined} />);
   }, [theme]);
@@ -350,7 +412,7 @@ function Demo() {
   return <>
     {!screenshot && <header className="demo-bar">
       <a href={hosted ? 'https://github.com/aaroi/isotone' : '/'} className="brand"><Gem size={15} strokeWidth={1.75} />Isotone</a>
-      <span className="demo-bar-note">{stress ? 'Stress test · 500 selectors and 500 notes' : 'Demo. The page below stands in for your app.'}</span>
+      <span className="demo-bar-note"><span>{stress ? 'Stress test · 500 selectors and 500 notes' : 'Demo. The page below stands in for your app.'}</span></span>
       <div className="demo-bar-actions">
         {!hosted && <>
           <label className="demo-select">Panel <select value={panelTheme} onChange={event => setPanelTheme(event.target.value as IterationTheme)}>

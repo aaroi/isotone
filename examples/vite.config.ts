@@ -6,6 +6,18 @@ import { defineConfig, type Plugin } from 'vite';
 import { notesResponse, updateNotes, writeNotes } from '../src/store';
 import { iteration } from '../src/vite/index';
 import { checkOrigin, readNodeJson, sendFailure } from '../src/server/http';
+import type { UpdateInfo } from '../src/core/update';
+import { updateResponse } from '../src/update-note';
+
+/**
+ * Not a real release: the demo never contacts npm or installs anything. The
+ * directory is the demo's own notes directory, since an update note may only
+ * name one inside its notes file's project.
+ */
+const demoUpdate = (cwd: string): UpdateInfo => ({
+  currentVersion: '1.1.3', latestVersion: '1.2.0', status: 'available',
+  upgrade: { manager: 'pnpm', command: 'pnpm add -D --exact isotone@1.2.0', cwd },
+});
 
 /** Real notes transport, isolated from every project's review data. */
 function demoNotes(): Plugin {
@@ -77,12 +89,17 @@ function demoNotes(): Plugin {
       }
       server.httpServer?.once('close', () => rmSync(directory, { recursive: true, force: true }));
       server.middlewares.use(async (req, res, next) => {
-        if (req.url === '/demo-update' && req.method === 'GET') {
-          res.writeHead(200, { 'content-type': 'application/json' });
-          res.end(JSON.stringify({
-            currentVersion: '0.3.4', latestVersion: '0.4.0', status: 'available',
-            upgrade: { manager: 'pnpm', command: 'pnpm add -D --exact isotone@0.4.0', cwd: '/workspace/example-app' },
-          }));
+        // `?update-preview=1`: a fictional update. Asking the agent files a real
+        // update note in the session's notes, built by the same server code.
+        const preview = /^\/demo-update\/([a-z]+)$/.exec((req.url ?? '').split('?')[0]);
+        if (preview) {
+          try {
+            checkOrigin(req.headers.origin, req.headers.host ?? '');
+            const body = req.method === 'POST' ? await readNodeJson(req) : undefined;
+            const result = updateResponse(files.get(`/demo-notes/${preview[1]}`) ?? null, demoUpdate(directory), { method: req.method, body });
+            res.writeHead(result.status, result.headers);
+            res.end(JSON.stringify(result.body));
+          } catch (error) { sendFailure(res, error); }
           return;
         }
         // The pretend agent: `start` is `isotone --working` on one note, `finish` is `--done`.
@@ -90,6 +107,15 @@ function demoNotes(): Plugin {
           try { checkOrigin(req.headers.origin, req.headers.host ?? ''); } catch (error) { sendFailure(res, error); return; }
           const query = new URL(req.url ?? '', 'http://x').searchParams;
           const action = query.get('action');
+          const sessionNotes = files.get(`/demo-notes/${query.get('session') ?? ''}`);
+          // A reload forgets what the pretend agent was doing, so nothing it
+          // marked as being worked on will ever finish: clear it.
+          if (sessionNotes && action === 'reset') {
+            updateNotes(sessionNotes, (notes) => notes.map(({ workingAt: _stale, ...note }) => note));
+            res.writeHead(200, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ ok: true }));
+            return;
+          }
           for (const file of files.values()) updateNotes(file, (notes) => {
             const target = notes.find((n) => n.id === query.get('id') && !n.done);
             if (!target) return notes;

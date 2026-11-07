@@ -52,7 +52,12 @@ export interface SelectVariantAxis {
   /** The primary option; what a host renders when nothing is selected. */
   defaultOption: string;
   showWhen?: VariantAxisCondition;
-  /** Panel grouping: a hairline separates consecutive different sections. */
+  /**
+   * The part of the page the selector belongs to, shown as a section header in
+   * the panel. Usually written as a label prefix instead (`"Header > Logo size"`);
+   * see {@link axisSection}. When set, it wins over the prefix, and `''` keeps the
+   * selector out of every section with its label shown as written.
+   */
   section?: string;
 }
 
@@ -99,6 +104,117 @@ export interface VariantAction {
   axisId: string;
   action: 'remove-option' | 'remove-axis' | 'keep-default';
   optionId?: string;
+}
+
+/* ── Sections ─────────────────────────────────────────────────────────── */
+
+/** How a section and its selector are joined for display: `Header › Logo size`. */
+export const SECTION_SEPARATOR = ' › ';
+
+export interface SectionedLabel {
+  /** The section's display name, or `null` for a selector without one. */
+  section: string | null;
+  /** What the panel prints under the section header. */
+  label: string;
+  /** Section and label together, for assistive technology, notes and the CLI. */
+  fullLabel: string;
+}
+
+const squash = (text: string) => text.replace(/\s+/g, ' ').trim();
+
+/**
+ * The first spaced `>` (or `›`) with text on both sides. A slash is deliberately
+ * not a separator: binary selectors are naturally named `Light / Dark` or
+ * `Grid / List`, and a slash would turn their first word into a section.
+ */
+function prefixSplit(label: string): [string, string] | null {
+  for (const match of label.matchAll(/\s+[>›]\s+/g)) {
+    const before = label.slice(0, match.index);
+    const after = label.slice(match.index + match[0].length);
+    if (!before.trim() || !after.trim()) continue;
+    return [squash(before), squash(after)];
+  }
+  return null;
+}
+
+/**
+ * Split a selector label into its section and its own name. `"Header > Logo size"`
+ * is the Logo size selector in the Header section. The first separator wins, so
+ * `"Header > Nav > Gap"` is `Nav > Gap` in Header. An explicit `section` overrides
+ * the prefix: the label then shows as written, less a prefix that repeats the
+ * section, and `''` means no section at all.
+ */
+export function splitSectionLabel(label: string, section?: string): SectionedLabel {
+  const whole = squash(label);
+  let name: string | null;
+  let own = whole;
+  if (section !== undefined) {
+    name = squash(section) || null;
+    const split = name ? prefixSplit(whole) : null;
+    if (name && split && split[0].toLowerCase() === name.toLowerCase()) own = split[1];
+  } else {
+    const split = prefixSplit(whole);
+    name = split?.[0] ?? null;
+    if (split) own = split[1];
+  }
+  return { section: name, label: own, fullLabel: name ? `${name}${SECTION_SEPARATOR}${own}` : own };
+}
+
+export function axisSection(axis: Pick<VariantAxis, 'label' | 'section'>): SectionedLabel {
+  return splitSectionLabel(axis.label, axis.section);
+}
+
+export interface VariantSection<T extends VariantAxis = VariantAxis> {
+  /** Display name, from the section's first selector; `null` for selectors without one. */
+  name: string | null;
+  /** Case-insensitive identity: `"Header"` and `"header"` are one section. */
+  key: string;
+  axes: (SectionedLabel & { axis: T })[];
+}
+
+/**
+ * Group axes for the panel. Selectors without a section come first, without a
+ * header; sections follow in the order their first selector appears, and every
+ * selector keeps its relative order. A dependent axis (`showWhen`) without its
+ * own section joins its parent's, so it never jumps away from the control that
+ * reveals it. Linear in the number of axes.
+ */
+export function sectionAxes<T extends VariantAxis>(axes: T[]): VariantSection<T>[] {
+  const byId = new Map(axes.map((axis) => [axis.id, axis]));
+  const labels = new Map(axes.map((axis) => [axis.id, axisSection(axis)]));
+  const resolved = new Map<string, string | null>();
+  const sectionOf = (axis: T): string | null => {
+    const trail = new Set<string>();
+    let current: T | undefined = axis;
+    let result: string | null = null;
+    while (current) {
+      const known = resolved.get(current.id);
+      if (known !== undefined) { result = known; break; }
+      const own = labels.get(current.id)?.section ?? null;
+      trail.add(current.id);
+      if (own !== null || current.section !== undefined || !current.showWhen) { result = own; break; }
+      const parent = byId.get(current.showWhen.axis);
+      if (!parent || trail.has(parent.id)) break;
+      current = parent;
+    }
+    for (const id of trail) resolved.set(id, result);
+    return result;
+  };
+  const loose: VariantSection<T> = { name: null, key: '', axes: [] };
+  const sections = new Map<string, VariantSection<T>>();
+  for (const axis of axes) {
+    const label = labels.get(axis.id) as SectionedLabel;
+    const name = sectionOf(axis);
+    const entry = { ...label, axis };
+    if (name === null) { loose.axes.push(entry); continue; }
+    // An inherited section still prints the child's own label in full.
+    if (label.section === null) entry.fullLabel = `${name}${SECTION_SEPARATOR}${label.label}`;
+    const key = name.toLowerCase();
+    const section = sections.get(key) ?? { name, key, axes: [] };
+    sections.set(key, section);
+    section.axes.push(entry);
+  }
+  return [...(loose.axes.length ? [loose] : []), ...sections.values()];
 }
 
 /* ── Pure helpers ─────────────────────────────────────────────────────── */
@@ -397,6 +513,9 @@ export interface OverlayVariant {
   group?: string;
   /** What the panel calls the group's selector. Any member may carry it. */
   groupLabel?: string;
+  /** The panel section the group's selector sits in, like an axis `section`.
+   *  Any member may carry it; a `groupLabel` prefix (`"Header > Logo"`) also works. */
+  section?: string;
   createdAt: string;
   /**
    * Repo-relative source path → what the override was derived from. `base`
@@ -641,9 +760,11 @@ export function overlayAxes(list: OverlayVariantsList, route: string): SelectVar
   for (const group of overlayGroups(list.variants)) {
     const mine = group.members.filter((v) => variantAppliesTo(v.route, route));
     if (mine.length === 0) continue;
+    const section = group.members.find((m) => m.section !== undefined)?.section;
     axes.push({
       id: group.id,
       label: group.label,
+      ...(section !== undefined ? { section } : {}),
       defaultOption: OVERLAY_DEFAULT_OPTION,
       options: [
         { id: OVERLAY_DEFAULT_OPTION, label: 'Default', hint: 'The committed source' },

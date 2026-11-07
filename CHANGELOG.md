@@ -3,6 +3,36 @@
 ## Unreleased
 
 - chore: the hosted demo deploys from `main` and gives each pull request a preview link, through Vercel's Git connection
+- feat: removing an option from a selector's action dialog keeps the dialog open, marks the row "Removal requested" and moves focus to the next option, so several can be removed in a row
+- feat: selector sections. A label prefix such as `Header > Logo size`, or a `section` field, puts the selector under a sticky, foldable Header heading with a count in the Variants panel, for host axes, knobs and file variants. `variant new --section` and `variant section` set it, and `variant list` has a SECTION column
+  - compatibility: an existing label containing a spaced ` > ` (or ` › `) now splits into a section and a shorter label, so `Before > After` shows as *After* under a Before heading
+  - compatibility: an existing `section` field, which used to draw only a hairline between neighbouring sections, now renders a heading and reorders the selectors: unsectioned ones first, then each section in the order its first selector appears
+  - `section: ''` opts a selector out of every section and keeps its label whole
+- feat: on touch, select mode says "Tap", shows no Shift, ⌘/Ctrl or ↵ hints, and explains that Done (or the crosshair) pauses selecting so the page can be used, with pins kept. Copy follows the last pointer used
+- feat: a tapped element gets the floating composer under or over it rather than on top of it, and a finger no longer leaves a stray selection preview
+- feat: on small screens the variants and feedback panels take turns, the variants panel stops at half the screen, and selecting hides the saved notes so the page can be reached
+- fix: the dock and the floating composer stay above an on-screen keyboard, and the dock's height allows for safe areas
+- feat: larger touch hit areas around the composer controls, reference removal, note delete and panel close
+- fix: select-mode hints are never cut off. They read "Hold ⇧ to use the page" (touch: "Tap Done to use the page") and, beside a pinned element, "Click to pin more · ⇧ uses the page" (touch: "Tap to pin more · crosshair pauses"), each on one line at phone and desktop widths
+- chore: the demo works on phones: touch copy in the tour, the cards scroll into view, larger touch targets, and a list layout and top bar that fit a phone
+- change: `serveNotesRequest` and `serveVariantsRequest` answer 404 when `NODE_ENV` is `production`. This breaks any production use of them: a deliberate, access-controlled review deployment must now pass `{ allowProduction: true }` as the third argument to keep its endpoints working. See [the migration guide](docs/migration.md#request-handlers-are-off-in-production)
+- fix: `init` and the serve setup page give static HTML a script loader that requests nothing outside localhost, and give Next a `next/script` tag behind `NODE_ENV === 'development'` in the root layout, instead of a plain tag that would make visitors' browsers request their own localhost if it shipped
+- fix: the generated AGENTS.md section states the development-only rule
+- feat: the README starts with a prompt for your coding agent, and says up front that Isotone is not an agent, an MCP server or an AI product
+- feat: `init` prints a first run for the agent: two real, opt-in variants on the user's page and a short message telling them what to open and try. It is skipped once the project has variants or knobs
+- feat: `isotone serve` serves `.isotone/knobs.json`, so range, colour and select knobs work on Next, static sites and any other dev server, not only Vite. Its panel has a Variants tool only while that file holds valid knobs, and an empty list there asks for knobs, not file variants
+- feat: `variant list` lists knobs and names every knobs.json entry the panel would skip, and says when one is skipped for repeating an earlier knob's id
+- fix: the generated AGENTS.md section names `variant use default` for going back
+- chore: the demo tour ends with the same agent prompt as the README, with a Copy button, and keeps the install commands under "Or set it up yourself"
+- feat: the update notice is one quiet line, "Isotone x.y.z is available". Its dialog shows the versions and **Ask agent to update**, with Copy prompt (a ready-to-paste agent request) and the raw command one click away
+- feat: **Ask agent to update** files an update note in Feedback that the agent reads with `npx isotone --json`. The dev server builds it from its own update check (versions, command, directory, changelog) under an `update` field; the browser cannot supply them. At most one is open, a newer release updates it, and deleting it cancels the request. The CLI prints it with an `updateHint`, and AGENTS.md tells agents how to carry it out
+- fix: an update note's request is checked wherever it is read: the command must be exactly the canonical `npm`, `pnpm` or `yarn` command for that version, and its directory inside the notes file's project, or the request is dropped. Its text is always rebuilt as "Update Isotone a → b", and the notes endpoint refuses edits to it
+- feat: `checkForUpdates: 'note'` and `isotone serve --update-note` file the update note by themselves, once per version. There is deliberately no silent auto-install; `docs/updates.md` explains why
+- feat: the demo's `?update-preview=1` works in the hosted demo too, and the pretend agent picks up the update note like any other
+- feat: Blast mode. `npx isotone blast --for 45m --new` lets your coding agent keep acting on notes for a set time: it waits for new notes (a directory watch plus a cheap poll), hands out each batch in the `--json` record shape after a 3-second quiet time, prints a check-in every `--every` (default 5m, at most 9m) and "Blast session over" at the deadline with exit status 3. Running bare `npx isotone blast` again continues the session, and after the end only ever answers "over"; `--for` or `--new` starts the next session however recently the last one ended, and `--new` refuses to take over a live one; a note is handed out once unless the reviewer edits it. `--status`, `--stop`, `--extend` and `--stream` (one JSON line per batch, for background tasks and Claude Code's Monitor). Isotone still never runs an agent
+  - Blast is an agent and CLI feature only: you start it by asking your agent (`docs/blast.md` has a ready-to-paste prompt), and the panel has no Blast controls. The session lives in a local state file beside the notes, read and written only by the CLI; no dev server endpoint serves it
+- feat: `npx isotone --reply <id> "<text>"` lets an agent ask about a note instead of guessing. The reply shows under the note in the panel, the note stays open, and editing it answers
+- docs: `docs/blast.md`, with a ready-to-paste prompt for starting a session, and Blast guardrails in AGENTS.md and the section `init` writes: act only on what notes ask, one small reversible change at a time, no installs, pushes, deploys or deletions, ask when unclear, leave risky requests open, summarize at the end
 
 ## 1.1.3
 
