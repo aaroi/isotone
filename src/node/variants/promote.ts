@@ -3,7 +3,7 @@
 import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { overlayGroups, type OverlayVariant } from '../../core/variants';
+import { overlayGroups, type OverlayVariant } from '../../core/variants/overlay';
 import { readActive, writeActive } from './active';
 import { blobOf, currentBlob } from './git';
 import { readVariant, writeVariant, readVariants, listVariants } from './manifest';

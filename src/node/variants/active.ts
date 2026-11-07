@@ -2,13 +2,13 @@
 
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { overlayGroups } from '../../core/variants';
+import { overlayGroups } from '../../core/variants/overlay';
 import { writeJson } from '../fs/atomic';
 import { ensureFileIgnored } from '../fs/git-exclude';
 import { isEscaping, toPosixPath } from '../fs/paths';
 import { readVariant, readVariants } from './manifest';
-import { ACTIVE_FILE, type VariantsStoreOptions, type ActiveFileShape } from './options';
-import { variantsDir, variantDir } from './paths';
+import { ACTIVE_FILE, type VariantsStoreOptions, type ActiveFileShape, variantsDir } from './options';
+import { variantDir } from './paths';
 
 /**
  * The override that answers for `absSourcePath` under the active set, or

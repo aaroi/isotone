@@ -3,17 +3,23 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { isEscaping, isWithin, toPosixPath } from '../fs/paths';
-import { isSafeManifestKey } from './manifest';
-import { DEFAULT_VARIANTS_DIR, type VariantsStoreOptions } from './options';
-
-export function variantsDir(opts: VariantsStoreOptions): string {
-  const dir = opts.dir ?? DEFAULT_VARIANTS_DIR;
-  return isAbsolute(dir) ? dir : resolve(opts.root, dir);
-}
+import { type VariantsStoreOptions, variantsDir } from './options';
 
 export function variantDir(opts: VariantsStoreOptions, id: string): string {
   if (!isValidVariantId(id)) throw new Error(`Invalid variant id "${id}"`);
   return join(variantsDir(opts), id);
+}
+
+/**
+ * A manifest key is joined onto the variant dir and onto the project root,
+ * so a key that climbs out of either (`../../x`, an absolute path, or a
+ * backslash that Windows would read as a separator) would let a hand-edited
+ * or checked-in variant.json reach files outside both trees. Such a manifest
+ * is not a variant at all.
+ */
+export function isSafeManifestKey(key: string): boolean {
+  if (!key || isAbsolute(key) || /[\\:\0]/.test(key) || key === 'variant.json') return false;
+  return !key.split('/').some((segment) => !segment || segment === '.' || segment === '..' || segment === '.git');
 }
 
 export function isValidVariantId(id: string): boolean {

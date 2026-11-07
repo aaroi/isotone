@@ -1,26 +1,14 @@
 /** Variant manifests: reading, listing, creating and editing variants. */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import type { IterationElement } from '../../core/types';
-import { OVERLAY_GROUP_ID, type OverlayVariant, type OverlayVariantStatus } from '../../core/variants';
+import { OVERLAY_GROUP_ID, type OverlayVariant, type OverlayVariantStatus } from '../../core/variants/overlay';
 import { writeJson } from '../fs/atomic';
 import { isWithin } from '../fs/paths';
 import { blobOf, hashFile } from './git';
-import { type VariantsStoreOptions, mutateVariants } from './options';
-import { variantsDir, variantDir, isValidVariantId, repoRelativeKey } from './paths';
-
-/**
- * A manifest key is joined onto the variant dir and onto the project root,
- * so a key that climbs out of either (`../../x`, an absolute path, or a
- * backslash that Windows would read as a separator) would let a hand-edited
- * or checked-in variant.json reach files outside both trees. Such a manifest
- * is not a variant at all.
- */
-export function isSafeManifestKey(key: string): boolean {
-  if (!key || isAbsolute(key) || /[\\:\0]/.test(key) || key === 'variant.json') return false;
-  return !key.split('/').some((segment) => !segment || segment === '.' || segment === '..' || segment === '.git');
-}
+import { type VariantsStoreOptions, mutateVariants, variantsDir } from './options';
+import { variantDir, isValidVariantId, isSafeManifestKey, repoRelativeKey } from './paths';
 
 /** Env files, private keys and registry credentials: a copy would sit in a
  *  directory that is committed by default. `.env.example` and the like are fine. */

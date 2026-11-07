@@ -10,9 +10,9 @@
  * synchronous and framework-free so the CLI and the Vite plugin (a
  * different owner) can both sit on top of it.
  */
-export { ACTIVE_FILE, DEFAULT_VARIANTS_DIR, KNOBS_FILE } from './options';
+export { ACTIVE_FILE, DEFAULT_VARIANTS_DIR, KNOBS_FILE, variantsDir } from './options';
 export type { VariantsStoreOptions } from './options';
-export { variantDir, variantsDir } from './paths';
+export { variantDir } from './paths';
 export {
   addVariantFile,
   createVariant,
