@@ -5,6 +5,9 @@
 - chore: the hosted demo deploys from `main` and gives each pull request a preview link (`demo.yml`)
 - feat: removing an option from a selector's action dialog keeps the dialog open, marks the row "Removal requested" and moves focus to the next option, so several can be removed in a row
 - feat: selector sections. A label prefix such as `Header > Logo size`, or a `section` field, puts the selector under a sticky, foldable Header heading with a count in the Variants panel, for host axes, knobs and file variants. `variant new --section` and `variant section` set it, and `variant list` has a SECTION column
+  - compatibility: an existing label containing a spaced ` > ` (or ` › `) now splits into a section and a shorter label, so `Before > After` shows as *After* under a Before heading
+  - compatibility: an existing `section` field, which used to draw only a hairline between neighbouring sections, now renders a heading and reorders the selectors: unsectioned ones first, then each section in the order its first selector appears
+  - `section: ''` opts a selector out of every section and keeps its label whole
 
 ## 1.1.3
 

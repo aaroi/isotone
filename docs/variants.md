@@ -49,7 +49,7 @@ Keep the default among the available options or swatches.
 ## Sections
 
 Once a page has more than a few selectors, put each one in a section named after
-the part of the page it changes. Write the section as a label prefix, a slash
+the part of the page it changes. Write the section as a label prefix, a `>`
 with a space on each side:
 
 ```ts
