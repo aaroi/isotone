@@ -26,5 +26,5 @@ export {
 export { dropVariant, promoteVariant } from './promote';
 export { syncVariant } from './sync';
 export { activeConflict, crossGroupOverlaps, overrideSourcePath, readActive, resolveOverride, writeActive } from './active';
-export { readKnobs } from './knobs';
+export { knobProblem, readKnobs } from './knobs';
 export { variantsResponse } from './handler';

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { runCli } from '../../src/cli/run';
+import { shellCommand } from '../../src/cli/text';
 import { captureIo } from '../helpers/cli';
 import { tempGitRepo } from '../helpers/fs';
 
@@ -729,19 +730,28 @@ describe('output an agent can trust', () => {
       JSON.stringify(notes.map((n) => ({ route: '/', feedback: 'fix', done: false, createdAt: new Date().toISOString(), ...n }))),
     );
 
-  it('quotes a hostile id in doneCommand so the shell sees one argument', async () => {
+  it('never prints a hostile stored id into doneCommand', async () => {
     const root = tempRepo();
-    const id = "a1b2 ; touch pwned #'";
-    write(root, [{ id }]);
+    write(root, [{ id: "a1b2 ; touch pwned #'" }]);
     const io = makeIo(root);
     expect(await runCli(['--json'], io)).toBe(0);
     const [record] = JSON.parse(io.text.out);
+    // The store reads an unsafe id under a safe one; the command closes that id.
+    expect(record.id).toMatch(/^[A-Za-z0-9_-]+$/);
     // Swap npx for printf: the shell must hand over exactly two arguments.
     const argv = execFileSync('sh', ['-c', record.doneCommand.replace(/^npx isotone /, 'printf "%s\\n" ')], {
       cwd: root,
       encoding: 'utf8',
     });
-    expect(argv).toBe(`--done\n${id}\n`);
+    expect(argv).toBe(`--done\n${record.id}\n`);
+    expect(existsSync(join(root, 'pwned'))).toBe(false);
+  });
+
+  it('quotes every printed argument so the shell sees it as one', () => {
+    const root = tempRepo();
+    const hostile = "a1b2 ; touch pwned #'$(id)";
+    const argv = execFileSync('sh', ['-c', `printf "%s\\n" ${shellCommand('--done', hostile)}`], { cwd: root, encoding: 'utf8' });
+    expect(argv).toBe(`--done\n${hostile}\n`);
     expect(existsSync(join(root, 'pwned'))).toBe(false);
   });
 

@@ -4,7 +4,7 @@
  * I/O beyond the filesystem and `git`, so there is nothing here to await.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { knobsFor, overlayGroups, splitSectionLabel, variantAppliesTo } from '../core/variants';
 import { isRouteModule, scanExports } from '../vite/exports';
@@ -19,6 +19,7 @@ import {
   listVariants,
   promoteVariant,
   readActive,
+  knobProblem,
   readKnobs,
   readVariant,
   removeVariantFile,
@@ -30,7 +31,7 @@ import {
   type VariantsStoreOptions,
 } from '../node/variants';
 import { mutateVariants } from '../node/variants/options';
-import { isValidVariantId } from '../node/variants/paths';
+import { repoRelativeKey } from '../node/variants/paths';
 import { type CliIO, errOut, extractFlag, findNoteByPrefix, has, out, parseArgs, printTable, valueFor } from './util';
 
 /** Each subcommand's value flags, boolean flags and most positionals; anything else is refused. */
@@ -205,24 +206,18 @@ function printKnobs(io: CliIO, opts: VariantsStoreOptions, route: string | undef
     return;
   }
   const valid = readKnobs(opts);
-  // readKnobs keeps the parsed entries it accepts, in order, so a walk that
-  // matches them back up names every entry it dropped.
   const skipped: string[] = [];
-  let next = 0;
+  const ids = new Set<string>();
   raw.forEach((entry, index) => {
-    if (next < valid.length && JSON.stringify(entry) === JSON.stringify(valid[next])) {
-      next++;
-      return;
-    }
     const id =
       entry && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string' ? (entry as { id: string }).id : null;
     const name = `knob ${index + 1}${id === null ? '' : ` "${id}"`}`;
+    const problem = knobProblem(entry);
+    if (problem !== null) skipped.push(`Skipped ${name}: ${problem} (see node_modules/isotone/docs/variants.md, "Knobs").`);
     // An earlier knob already took this id; the panel keeps that one.
-    if (id !== null && valid.slice(0, next).some((knob) => knob.id === id)) {
+    else if (ids.has(id as string))
       skipped.push(`Skipped ${name}: another knob earlier in the file already has this id. Give each knob its own id.`);
-    } else {
-      skipped.push(`Skipped ${name}: ${knobProblem(entry)} (see node_modules/isotone/docs/variants.md, "Knobs").`);
-    }
+    else ids.add(id as string);
   });
   const shown = route ? knobsFor(valid, route) : valid;
   out(io);
@@ -529,62 +524,6 @@ function cmdPath(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreO
     errOut(io, `No variant "${id}"`);
     return 1;
   }
-  out(io, join(variantDir(opts, id), repoRelative(io.cwd, file)));
+  out(io, join(variantDir(opts, id), repoRelativeKey(io.cwd, file).key));
   return 0;
-}
-
-/** Same escape guard as the store's own (private) `repoRelativeKey`, just
- *  for turning a CLI-supplied file argument into the manifest's POSIX key —
- *  `path` never touches the store's own state, so it does not warrant an
- *  export from there. */
-function repoRelative(root: string, file: string): string {
-  const abs = isAbsolute(file) ? resolve(file) : resolve(root, file);
-  const rel = relative(root, abs);
-  if (!rel || rel.startsWith('..') || isAbsolute(rel)) {
-    throw new Error(`"${file}" escapes the project root`);
-  }
-  return rel.split(sep).join('/');
-}
-
-/**
- * Why a `.isotone/knobs.json` entry is skipped, field by field. Only called for
- * entries `readKnobs` dropped, so it explains its rules rather than deciding.
- */
-function knobProblem(entry: unknown): string {
-  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return 'not a JSON object.';
-  const k = entry as Record<string, unknown>;
-  const num = (key: string) => typeof k[key] === 'number' && Number.isFinite(k[key]);
-  const hex = (v: unknown) => typeof v === 'string' && /^#(?:[a-f0-9]{3}|[a-f0-9]{6})$/i.test(v);
-  const named = (list: unknown, value?: (o: Record<string, unknown>) => boolean) =>
-    Array.isArray(list) && list.every((o) => o && typeof o.id === 'string' && typeof o.label === 'string' && (!value || value(o)));
-  if (typeof k.id !== 'string' || !isValidVariantId(k.id)) return 'id must be lowercase letters, digits and dashes.';
-  if (typeof k.label !== 'string') return 'label must be a string.';
-  if (k.route !== undefined && typeof k.route !== 'string' && !(Array.isArray(k.route) && k.route.every((r) => typeof r === 'string')))
-    return 'route must be a route pattern or a list of them.';
-  if (k.section !== undefined && typeof k.section !== 'string') return 'section must be a string.';
-  if (k.showWhen !== undefined) {
-    const w = k.showWhen as Record<string, unknown> | null;
-    if (
-      !w ||
-      typeof w.axis !== 'string' ||
-      (w.equals !== undefined && typeof w.equals !== 'string') ||
-      (w.not !== undefined && typeof w.not !== 'string')
-    )
-      return 'showWhen needs an axis id, and equals or not as strings.';
-  }
-  if (k.kind === 'range') {
-    if (!['min', 'max', 'step', 'defaultValue'].every(num)) return 'a range needs numeric min, max, step and defaultValue.';
-    const [min, max, step, value] = [k.min, k.max, k.step, k.defaultValue] as number[];
-    if (!(min < max)) return 'min must be below max.';
-    if (!(step > 0)) return 'step must be above 0.';
-    if (value < min || value > max) return 'defaultValue must be between min and max.';
-    if (k.unit !== undefined && typeof k.unit !== 'string') return 'unit must be a string.';
-  } else if (k.kind === 'color') {
-    if (!hex(k.defaultColor)) return 'defaultColor must be a hex colour such as #3366ff.';
-    if (!named(k.swatches, (o) => hex(o.value))) return 'swatches must be a list of { id, label, value } with hex values.';
-  } else if (k.kind === 'select') {
-    if (!named(k.options) || !(k.options as unknown[]).length) return 'a select needs options, each with an id and a label.';
-    if (!(k.options as { id: string }[]).some((o) => o.id === k.defaultOption)) return 'defaultOption must be one of the option ids.';
-  } else return 'kind must be "select", "range" or "color".';
-  return 'not a valid knob.';
 }
