@@ -223,6 +223,14 @@ export function IterationPanel({
     const active = (root?.getRootNode() as Document | ShadowRoot | undefined)?.activeElement;
     return Boolean(root && active && root.contains(active));
   }, []);
+  /** Remember the host control to return to on close. The dock itself (seen from outside as the shadow host) is
+   *  not one: focus would land on a div that cannot take it, then on the body. Closing falls back to the launcher. */
+  const rememberFocus = useCallback(() => {
+    const active = document.activeElement;
+    const root = rootRef.current;
+    const ours = !root || active === (root.getRootNode() as ShadowRoot).host || (active !== null && root.contains(active));
+    previousFocus.current = active instanceof HTMLElement && active !== document.body && !ours ? active : null;
+  }, []);
   const closeAll = useCallback(() => {
     const inDock = focusInDock();
     cancelAnimationFrame(focusFrame.current);
@@ -486,7 +494,7 @@ export function IterationPanel({
         update({ picking: false });
         focusComposer();
       } else {
-        if (!notesOpen && !variantsOpen) previousFocus.current = document.activeElement as HTMLElement;
+        if (!notesOpen && !variantsOpen) rememberFocus();
         update({ expanded: true });
         startFeedback(true);
       }
@@ -529,7 +537,7 @@ export function IterationPanel({
         for (const type of FENCED_EVENTS) shadow.removeEventListener(type, stop);
       }
     };
-  }, [visible, update, focusComposer, startFeedback, dockComposer, cancelEdit, closeAll]);
+  }, [visible, update, focusComposer, startFeedback, dockComposer, cancelEdit, closeAll, rememberFocus]);
 
   // Opening a surface or changing route loads at once; the poll in useNotes keeps it current.
   // biome-ignore lint/correctness/useExhaustiveDependencies: open-time refresh.
@@ -842,7 +850,7 @@ export function IterationPanel({
             if (open) closeAll();
             else if (expanded) update({ expanded: false });
             else {
-              previousFocus.current = document.activeElement as HTMLElement | null;
+              rememberFocus();
               update({ expanded: true });
               const { defaultTab, notesAvailable, variantsAvailable } = latest.current;
               if ((defaultTab === 'variants' || !notesAvailable) && variantsAvailable) update({ variantsOpen: true });

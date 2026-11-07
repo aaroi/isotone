@@ -156,12 +156,26 @@ it('swallows presses on the page while selecting, unless Shift is held', async (
 it('returns focus to the rail or launcher when a panel closes from inside', async () => {
   await render({ variants: source() });
   await openFeedback();
-  const close = $<HTMLButtonElement>('.isotone-notes-panel .isotone-panel-head button');
+  const close = $<HTMLButtonElement>('.isotone-notes-panel > .isotone-panel-close');
   close.focus();
   await act(async () => close.click());
   await frame();
   expect(shadow.activeElement).not.toBeNull();
   expect([$('.isotone-fab'), $('.isotone-rail-button[aria-label^="Feedback"]')]).toContain(shadow.activeElement);
+});
+
+it('never drops focus to the page body when Escape closes a panel opened from the launcher', async () => {
+  await render();
+  document.getElementById('host-button')?.focus();
+  await openFeedback();
+  await act(async () => {
+    $('textarea').focus();
+    $('textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
+  });
+  await frame();
+  expect($('.isotone-notes-panel').dataset.open).toBe('false');
+  expect(document.activeElement).toBe(host);
+  expect([$('.isotone-fab'), $('.isotone-rail-button')]).toContain(shadow.activeElement);
 });
 
 it('names the note count on the launcher and the Feedback button', async () => {
