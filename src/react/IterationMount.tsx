@@ -29,6 +29,9 @@ export interface MountIterationOptions {
    * endpoint. With neither this nor `endpoint`, nothing mounts.
    */
   variants?: VariantsSource | 'overlay';
+  /** Where `'overlay'` reads variants and knobs. Defaults to the Vite plugin's
+   *  same-origin endpoint; `isotone serve` passes its own absolute URL. */
+  variantsEndpoint?: string;
   /** Which tab a tabbed panel opens on until the reviewer picks one. */
   defaultTab?: 'variants' | 'notes';
   /** Optional localStorage namespace for multi-app origins. */
@@ -100,7 +103,7 @@ export function mountIteration(opts: MountIterationOptions): () => void {
   const getRoute = opts.getRoute ?? (() => window.location.pathname);
   const variants =
     opts.variants === 'overlay'
-      ? overlaySourceWithSave(getRoute, opts.endpoint, opts.key)
+      ? overlaySourceWithSave(getRoute, opts.endpoint, opts.key, opts.variantsEndpoint)
       : opts.variants;
   // Nothing to show: no notes to write and no variants to pick. A production
   // host that forgot its source gets no empty launcher in the corner.
@@ -231,8 +234,9 @@ function overlaySourceWithSave(
   getRoute: () => string,
   endpoint: string | undefined,
   key: string | undefined,
+  variantsEndpoint = VARIANTS_ENDPOINT,
 ): VariantsSource {
-  const source = createOverlayVariantsSource({ endpoint: VARIANTS_ENDPOINT, getRoute });
+  const source = createOverlayVariantsSource({ endpoint: variantsEndpoint, getRoute });
   if (!endpoint) return source;
   const notes = createIterationStore({ endpoint, key });
   source.saveDefaults = async (selections) => {

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- feat: the README starts with a prompt for your coding agent, and says up front that Isotone is not an agent, an MCP server or an AI product
+- feat: `init` prints a first run for the agent: two real, opt-in variants on the user's page and a short message telling them what to open and try. It is skipped once the project has variants or knobs
+- feat: `isotone serve` serves `.isotone/knobs.json`, so range, colour and select knobs work on Next, static sites and any other dev server, not only Vite
+- feat: `variant list` lists knobs and names every knobs.json entry the panel would skip
+- fix: `serveNotesRequest` and `serveVariantsRequest` answer 404 when `NODE_ENV` is `production`. A deliberate review deployment can pass `{ allowProduction: true }`
+- fix: `init` and the serve setup page give static HTML a script loader that requests nothing outside localhost, and give Next a `next/script` tag behind `NODE_ENV === 'development'` in the root layout, instead of a plain tag that would make visitors' browsers request their own localhost if it shipped
+- fix: the generated AGENTS.md section states the development-only rule, and names `variant use default` for going back
+
 ## 1.1.3
 
 - fix: a failed variant switch shows the server's reason, naming the variants, their groups and the shared file

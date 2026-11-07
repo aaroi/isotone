@@ -13,6 +13,9 @@ Run `pnpm check` for types, lint, build, and tests. For package or adapter
 changes, also run `pnpm check:package`. Inspect both themes, keyboard use,
 reduced motion, scrolling, and long content when changing UI.
 
+[Onboarding](onboarding.md) explains how the README prompt, `init` and its first
+run fit together, and the simulations behind them. Re-run one when changing them.
+
 Merging into `main` publishes automatically. Follow [the release guide](releasing.md)
 before merging; use a development branch until the change is ready for npm.
 

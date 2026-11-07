@@ -101,6 +101,28 @@ describe('--help', () => {
 });
 
 describe('variant', () => {
+  it('lists knobs for a route and names every entry the panel would skip', async () => {
+    const root = tempRepo();
+    mkdirSync(join(root, '.isotone'), { recursive: true });
+    writeFileSync(join(root, '.isotone', 'knobs.json'), JSON.stringify([
+      { kind: 'range', id: 'card-radius', label: 'Card radius', min: 0, max: 24, step: 1, defaultValue: 12, unit: 'px', route: '/' },
+      { kind: 'color', id: 'accent', label: 'Accent', defaultValue: '#2f6f4e', route: '/' },
+      { kind: 'select', id: 'menu-style', label: 'Menu style', defaultOption: 'list', options: [{ id: 'list', label: 'List' }], route: '/menu' },
+    ]));
+    const io = makeIo(root);
+    expect(await runCli(['variant', 'list', '/'], io)).toBe(0);
+    expect(io.text.out).toContain('No file variants for "/".');
+    expect(io.text.out).toContain('card-radius');
+    expect(io.text.out).not.toContain('menu-style');
+    // A colour knob written with a range's defaultValue silently vanishes from the panel.
+    expect(io.text.out).toContain('Skipped knob 2 "accent"');
+
+    writeFileSync(join(root, '.isotone', 'knobs.json'), '{ not json');
+    const broken = makeIo(root);
+    expect(await runCli(['variant', 'list'], broken)).toBe(0);
+    expect(broken.text.out).toContain('is not valid JSON');
+  });
+
   it('runs new -> add -> list -> use -> sync (noop) -> path -> promote', async () => {
     const root = tempRepo();
     commit(root, 'src/Hero.tsx', 'export const Hero = () => "hello";\n');
@@ -470,6 +492,57 @@ describe('init', () => {
     expect(io.text.out).toContain('Usage: isotone init');
     expect(existsSync(join(root, 'AGENTS.md'))).toBe(false);
     expect(existsSync(join(root, '.isotone'))).toBe(false);
+  });
+
+  it('keeps a Next setup dev-only and points it at the root layout', async () => {
+    const root = tempRepo();
+    writeFileSync(join(root, 'next.config.ts'), 'export default {};\n');
+    mkdirSync(join(root, 'src', 'app'), { recursive: true });
+    writeFileSync(join(root, 'src', 'app', 'layout.tsx'), 'export default function Layout() {}\n');
+    const io = makeIo(root);
+    expect(await runCli(['init'], io)).toBe(0);
+    expect(io.text.out).toContain('In src/app/layout.tsx');
+    expect(io.text.out).toContain("{process.env.NODE_ENV === 'development' && (");
+    expect(io.text.out).toContain('{ allowProduction: true }');
+    // No plain, unguarded tag for a Next app.
+    expect(io.text.out).not.toContain('<script src=');
+  });
+
+  it('gives a static site the localhost-only loader and no Next route handler', async () => {
+    const io = makeIo(tempRepo());
+    expect(await runCli(['init'], io)).toBe(0);
+    expect(io.text.out).toContain("if(/^(localhost|127\\.0\\.0\\.1|\\[::1\\])$/.test(location.hostname))");
+    expect(io.text.out).not.toContain('app/api/iteration/notes/route.ts');
+  });
+
+  it('prints a first run until the project has variants or knobs', async () => {
+    const root = tempRepo();
+    writeFileSync(join(root, 'vite.config.ts'), 'export default {};\n');
+    const first = makeIo(root);
+    expect(await runCli(['init'], first)).toBe(0);
+    expect(first.text.out).toContain('First run: do this now');
+    expect(first.text.out).toContain('npx isotone variant new');
+    expect(first.text.out).toContain('check my Isotone notes');
+
+    mkdirSync(join(root, '.isotone'), { recursive: true });
+    writeFileSync(join(root, '.isotone', 'knobs.json'), '[]');
+    const later = makeIo(root);
+    expect(await runCli(['init'], later)).toBe(0);
+    expect(later.text.out).not.toContain('First run: do this now');
+    expect(later.text.out).toContain('no first run to do');
+  });
+
+  it('says whether --yes wrote the AGENTS.md section, which states the dev-only rule', async () => {
+    const root = tempRepo();
+    const io = makeIo(root);
+    expect(await runCli(['init', '--yes'], io)).toBe(0);
+    expect(io.text.out).toContain('AGENTS.md: added the isotone section');
+    const guide = readFileSync(join(root, 'AGENTS.md'), 'utf8');
+    expect(guide).toContain('Never ship it\nto production unless the user explicitly asks');
+    expect(guide).toContain('.isotone/knobs.json');
+    const again = makeIo(root);
+    expect(await runCli(['init', '--yes'], again)).toBe(0);
+    expect(again.text.out).toContain('AGENTS.md already has an isotone section');
   });
 
   it('rejects an unknown --approach', async () => {

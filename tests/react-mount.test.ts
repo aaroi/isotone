@@ -95,3 +95,46 @@ describe('mountIteration next to a document-level host root', () => {
     dispose(off);
   });
 });
+
+describe('mountIteration with a cross-origin variants endpoint', () => {
+  it('reads overlay knobs from the endpoint it is given, as isotone serve passes it', async () => {
+    vi.useRealTimers();
+    const knobsEndpoint = 'http://127.0.0.1:4123/api/iteration/variants';
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).startsWith(knobsEndpoint)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            variants: [],
+            active: [],
+            knobs: [{ kind: 'range', id: 'card-radius', label: 'Card radius', min: 0, max: 24, step: 1, defaultValue: 12, unit: 'px' }],
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => [] };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const tick = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+    const off = mountIteration({
+      endpoint: 'http://127.0.0.1:4123/api/iteration/notes',
+      variants: 'overlay',
+      variantsEndpoint: knobsEndpoint,
+    });
+    await tick();
+    const shadow = document.querySelector('[data-isotone="root"]')?.shadowRoot;
+    if (!shadow) throw new Error('no shadow root');
+    await act(async () => {
+      shadow.querySelector('.isotone-fab')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await tick();
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(urls).toContain(knobsEndpoint);
+    expect(urls.some((url) => url.startsWith('/api/iteration/variants'))).toBe(false);
+
+    off();
+    await tick();
+    vi.unstubAllGlobals();
+  });
+});
