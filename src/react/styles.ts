@@ -129,7 +129,9 @@ ${APPEARANCE_CSS}
 .isotone-axis-label { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; min-height: 24px; padding: 2px 7px; margin-left: -7px; border-radius: 6px; text-align: left; }
 .isotone-axis-label, .isotone-menu-title > strong, .isotone-menu-heading > strong { font: inherit; font-weight: 550; }
 .isotone-axis-label > span, .isotone-menu-title > strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.isotone-axis-label svg { color: var(--iso-muted); }
+/* A touch quieter than the label's muted ink, between muted and faint; full muted when it is in use. */
+.isotone-axis-label svg { color: color-mix(in oklch, var(--iso-muted) 50%, var(--iso-faint)); transition: color var(--iso-fast) var(--iso-ease-out), transform var(--iso-fast) var(--iso-ease-out); }
+.isotone-axis-label[aria-expanded='true'] svg, .isotone-axis-label:focus-visible svg { color: var(--iso-muted); }
 .isotone-axis-value { min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--iso-muted); font: 10px var(--iso-sans); font-variant-numeric: tabular-nums; }
 .isotone-segs { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; border-radius: 7px; background: var(--iso-well); box-shadow: var(--iso-segment-track-shadow); }
 .isotone-seg { width: 100%; flex: 1 1 64px; min-width: 0; padding: 5px 8px; line-height: 16px; border-radius: 5px; color: var(--iso-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -337,6 +339,7 @@ ${FEEDBACK_LAYOUT_CSS}
   .isotone-x:hover::before { background: var(--iso-control-hover-face); }
   .isotone-note .isotone-x { opacity: 0; }
   .isotone-opt > .isotone-opt-more:hover { color: var(--iso-fg); }
+  .isotone-axis-label:hover svg { color: var(--iso-muted); }
   .isotone-opt > .isotone-opt-more { opacity: 0; pointer-events: none; }
   .isotone-opt:hover > .isotone-opt-more, .isotone-opt:has(:focus-visible) > .isotone-opt-more, .isotone-opt > .isotone-opt-more[aria-expanded='true'] { opacity: 1; pointer-events: auto; }
   /* The chevron takes the default dot's corner while it shows. Keyboard focus shows it;
