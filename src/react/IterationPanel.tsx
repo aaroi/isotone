@@ -25,6 +25,10 @@ import { useDockMotion } from './useDockMotion';
 import { UpdateNotice } from './UpdateNotice';
 import { MOTION } from './motion';
 import { isCompactViewport, prefersTouch, useKeyboardInset, visibleBand } from './viewport';
+import { summarizeStyleEdits, type StyleEdit } from '../core/style';
+import { StyleInspector, type StyleEntry } from './StyleInspector';
+import { buildStyleEdits, createStylePreview, type StylePreview } from './style-preview';
+import { elementsInArea } from './select-area';
 
 export interface Rect {
   top: number;
@@ -38,6 +42,14 @@ export interface IterationShortcut {
   mod?: boolean;
   shift?: boolean;
   alt?: boolean;
+}
+/** Opt-in features that may change or go away between minor versions. */
+export interface IterationExperiments {
+  /**
+   * Visual style editing in select mode: a docked inspector previews edits to
+   * the pinned elements and attaches a structured style diff to the note.
+   */
+  styleEditor?: boolean;
 }
 export interface IterationPanelProps {
   /** Auto follows the page at the dock. System follows the OS preference. */
@@ -53,6 +65,8 @@ export interface IterationPanelProps {
   defaultTab?: 'variants' | 'notes';
   /** Default: Cmd/Ctrl+Shift+Period. false disables the shortcut. */
   shortcut?: IterationShortcut | false;
+  /** Experimental features, all off by default. */
+  experimental?: IterationExperiments;
 }
 const PULSE_MS = 2000;
 
@@ -152,6 +166,7 @@ export function IterationPanel({
   variants,
   defaultTab = 'notes',
   shortcut = DEFAULT_SHORTCUT,
+  experimental,
 }: IterationPanelProps) {
   const [store] = useState(() => createIterationStore(storeCfg));
   const nsKey = storeCfg.key ?? FEEDBACK_STORAGE_KEY;
@@ -182,6 +197,8 @@ export function IterationPanel({
     null,
   );
   const [hoverRect, setHoverRect] = useState<Rect | null>(null);
+  // An area being dragged out in select mode, with the style editor on.
+  const [marquee, setMarquee] = useState<Rect | null>(null);
   const [rects, setRects] = useState<(Rect & { selector: string })[]>([]);
   // The elements clicked, by selector. A re-render can shift a path onto a
   // different element, and the highlight has to stay on the one that was picked.
@@ -192,6 +209,17 @@ export function IterationPanel({
     try { return document.querySelector(selector); } catch { return null; }
   }, []);
   const [text, setText] = useState('');
+  // The experimental style editor: open state, its live preview (created on
+  // first use, never during a server render) and the number of previewed changes.
+  const styleEditor = Boolean(experimental?.styleEditor);
+  const [styleOpen, setStyleOpen] = useState(false);
+  const [styleCount, setStyleCount] = useState(0);
+  const [styleScope, setStyleScope] = useState<string[] | null>(null);
+  const previewRef = useRef<StylePreview | null>(null);
+  const stylePreview = useCallback(() => {
+    previewRef.current ??= createStylePreview();
+    return previewRef.current;
+  }, []);
   const [notes, setNotes] = useState<IterationNote[]>([]);
   // Which pages' notes the list shows. Unset means this page only.
   const [scope, setScope] = useState<string[] | null>(null);
@@ -227,7 +255,12 @@ export function IterationPanel({
   const visible =
     isRouteVisible(route, rule) &&
     (notesAvailable || variantsAvailable || variantsOpen);
-  const hasContext = Boolean(editing || variantTarget || targets.length || notice);
+  const styleVisible = styleEditor && styleOpen && notesOpen && notesAvailable;
+  // With the inspector open, the composer stays docked under it rather than
+  // floating beside the element, where it would cover the inspector or the edit.
+  const styleVisibleRef = useRef(styleVisible);
+  styleVisibleRef.current = styleVisible;
+  const hasContext = Boolean(editing || variantTarget || targets.length || notice || (styleVisible && styleCount));
   // Context changes the scroll-through inset; measure again when that changes
   // or a route restores the composer after its DOM was removed.
   // biome-ignore lint/correctness/useExhaustiveDependencies: hasContext changes the CSS inset used by scrollHeight.
@@ -442,14 +475,28 @@ export function IterationPanel({
     setVariantTarget(null);
   }
 
+  /** The previewed style changes on pinned elements, as the note's diff. */
+  function collectStyleEdits(): StyleEdit[] {
+    if (!styleVisible || !previewRef.current?.count()) return [];
+    const entries = targets.flatMap((target) => {
+      const el = locate(target.selector);
+      return el ? [{ selector: target.selector, el }] : [];
+    });
+    return buildStyleEdits(entries, previewRef.current);
+  }
   async function send() {
-    const value = text.trim();
+    const styleEdits = collectStyleEdits();
+    // Style changes alone make a note; their summary stands in for the text.
+    const value = text.trim() || summarizeStyleEdits(styleEdits);
     if (!value) return;
     if (value.length > MAX_FEEDBACK_LENGTH) {
       setNotice(`Feedback must be at most ${MAX_FEEDBACK_LENGTH} characters.`);
       return;
     }
-    const context = { elements: targets, variant: variantTarget, ...(editing?.variantAction ? { variantAction: editing.variantAction } : {}) };
+    const context = { elements: targets, variant: variantTarget, ...(editing?.variantAction ? { variantAction: editing.variantAction } : {}), ...(styleEdits.length ? { styleEdits } : {}) };
+    // The preview ends with the note: the agent makes the change in source.
+    const styleSnapshot = styleEdits.length && previewRef.current ? previewRef.current.snapshot() : null;
+    if (styleSnapshot) previewRef.current?.revert();
     const noteRoute = editing?.route ?? route;
     const element = targets[0] ?? null;
     const tempId = editing?.id ?? `pending-${createNoteId()}`;
@@ -495,7 +542,8 @@ export function IterationPanel({
           ? prev.map((n) => (n.id === tempId ? previous : n))
           : prev.filter((n) => n.id !== tempId),
       );
-      setText(value);
+      if (styleSnapshot) previewRef.current?.restore(styleSnapshot);
+      setText(styleSnapshot && !text.trim() ? '' : value);
       setTargets(context.elements);
       setVariantTarget(context.variant);
       setEditing(previous);
@@ -710,13 +758,19 @@ export function IterationPanel({
         : document.elementFromPoint(e.clientX, e.clientY);
       return el && !el.closest('[data-isotone]') ? el : null;
     };
+    // With the style editor on, dragging across the page selects an area: the
+    // outermost elements that lie wholly inside it, such as a row of cards.
+    let drag: { x: number; y: number } | null = null;
+    let dragging = false;
+    let swallowClick = false;
+    let userSelect = '';
     // Only a hovering pointer previews; a finger has nothing to preview before it taps.
     const onMove = (e: PointerEvent) => {
       if (e.pointerType === 'touch') return;
       cancelAnimationFrame(frame);
       const deferred = e.shiftKey;
       frame = requestAnimationFrame(() => {
-        const el = deferred ? null : elementAt(e);
+        const el = deferred || dragging ? null : elementAt(e);
         setHoverRect(el ? el.getBoundingClientRect() : null);
       });
     };
@@ -733,7 +787,66 @@ export function IterationPanel({
       );
       return added ? target : null;
     };
+    const area = (e: PointerEvent): Rect => {
+      const left = Math.min(drag?.x ?? 0, e.clientX);
+      const top = Math.min(drag?.y ?? 0, e.clientY);
+      return { left, top, width: Math.abs(e.clientX - (drag?.x ?? 0)), height: Math.abs(e.clientY - (drag?.y ?? 0)) };
+    };
+    const onDown = (e: PointerEvent) => {
+      swallowClick = false;
+      if (!styleEditor || e.button !== 0 || e.shiftKey || e.pointerType === 'touch') return;
+      drag = elementAt(e) ? { x: e.clientX, y: e.clientY } : null;
+    };
+    // A drag that may become an area must not select the page's text on the way.
+    const noSelect = (e: Event) => { if (drag) e.preventDefault(); };
+    const onDragMove = (e: PointerEvent) => {
+      if (!drag) return;
+      // The press ended somewhere this page did not hear about.
+      if (!(e.buttons & 1)) { drag = null; return; }
+      if (!dragging) {
+        if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 6) return;
+        dragging = true;
+        userSelect = document.body.style.userSelect;
+        document.body.style.userSelect = 'none';
+        document.getSelection()?.removeAllRanges();
+      }
+      setMarquee(area(e));
+    };
+    const onUp = (e: PointerEvent) => {
+      if (dragging) {
+        const box = area(e);
+        document.body.style.userSelect = userSelect;
+        setMarquee(null);
+        // The click that ends the drag lands on a common ancestor; it is not a pin.
+        swallowClick = true;
+        const found = elementsInArea(box).slice(0, 50);
+        const added = found.map((el) => {
+          const target = describeIterationElement(elementAsNode(el));
+          pinnedElements.current.set(target.selector, el);
+          return target;
+        });
+        if (added.length) {
+          setTargets((prev) => [...prev, ...added.filter((t) => !prev.some((p) => p.selector === t.selector))].slice(0, 50));
+          setNotesOpen(true);
+          if (styleVisibleRef.current) return;
+          const r = found[0].getBoundingClientRect();
+          if (!anchorRef.current)
+            slotHeight.current = rootRef.current?.querySelector<HTMLElement>('.isotone-notes-panel .isotone-input')?.offsetHeight ?? 0;
+          setAnchor({ selector: added[0].selector, dx: e.clientX - r.left, dy: e.clientY - r.top, x: e.clientX, y: e.clientY });
+          setNotesOpen(true);
+          focusWhilePicking();
+        }
+      }
+      drag = null;
+      dragging = false;
+    };
     const onClick = (e: MouseEvent) => {
+      if (swallowClick) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        swallowClick = false;
+        return;
+      }
       // Shift passes the click through so the page can open menus and tabs first.
       if (e.shiftKey) return;
       const el = elementAt(e);
@@ -747,6 +860,10 @@ export function IterationPanel({
         const pointed = e.detail > 0 || e.clientX !== 0 || e.clientY !== 0;
         const x = pointed ? e.clientX : r.left;
         const y = pointed ? e.clientY : r.bottom;
+        if (styleVisibleRef.current) {
+          setNotesOpen(true);
+          return;
+        }
         if (!anchorRef.current)
           slotHeight.current = rootRef.current?.querySelector<HTMLElement>('.isotone-notes-panel .isotone-input')?.offsetHeight ?? 0;
         setAnchor({ selector: added.selector, dx: x - r.left, dy: y - r.top, x, y, beside: touchRef.current && pointed });
@@ -755,6 +872,8 @@ export function IterationPanel({
       }
     };
     const onKey = (e: KeyboardEvent) => {
+      // The style editor's fields take their own keys while selecting.
+      if (e.composedPath().some((node) => node instanceof Element && node.classList.contains('isotone-style-panel'))) return;
       if (e.key === ' ') {
         const el = e.composedPath().find((node): node is Element => node instanceof Element);
         if (!el || el === document.body || el.closest('[data-isotone], input, textarea, select, [contenteditable]')) return;
@@ -797,15 +916,25 @@ export function IterationPanel({
     window.addEventListener('pointermove', onMove, true);
     window.addEventListener('click', onClick, true);
     window.addEventListener('keydown', onKey, true);
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('pointermove', onDragMove, true);
+    window.addEventListener('pointerup', onUp, true);
+    document.addEventListener('selectstart', noSelect, true);
     return () => {
       document.body.style.cursor = cursor;
+      if (dragging) document.body.style.userSelect = userSelect;
       cancelAnimationFrame(frame);
       setHoverRect(null);
+      setMarquee(null);
       window.removeEventListener('pointermove', onMove, true);
       window.removeEventListener('click', onClick, true);
       window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('pointerdown', onDown, true);
+      window.removeEventListener('pointermove', onDragMove, true);
+      window.removeEventListener('pointerup', onUp, true);
+      document.removeEventListener('selectstart', noSelect, true);
     };
-  }, [picking, focusComposer, focusWhilePicking]);
+  }, [picking, focusComposer, focusWhilePicking, styleEditor]);
   // Pointer events inside the dock stay inside it, so a host dropdown that closes
   // on an outside press is not dismissed by using the dock. React listens on the
   // shadow root too, and it registered first, so its handlers still run.
@@ -944,10 +1073,71 @@ export function IterationPanel({
   useEffect(() => {
     const kept = new Set(targets.map((t) => t.selector));
     for (const selector of pinnedElements.current.keys()) if (!kept.has(selector)) pinnedElements.current.delete(selector);
-  }, [targets]);
+    // An unpinned element's previewed changes go with it.
+    previewRef.current?.retain(targets.flatMap((t) => {
+      const el = locate(t.selector);
+      return el ? [el] : [];
+    }));
+  }, [targets, locate]);
+  // The preview lives only while the style editor is on screen: closing it,
+  // the feedback panel or the whole dock reverts every previewed change.
+  useEffect(() => {
+    if (!styleEditor) return;
+    const preview = stylePreview();
+    const off = preview.subscribe(() => setStyleCount(preview.count()));
+    return () => { off(); preview.revert(); };
+  }, [styleEditor, stylePreview]);
+  useEffect(() => {
+    if (!styleVisible) {
+      previewRef.current?.revert();
+      setStyleScope(null);
+    } else setAnchor(null);
+  }, [styleVisible]);
+  /** Move pins to related elements from the style editor's breadcrumb. */
+  const navigateStyle = useCallback((from: Element[], to: Element[]): string[] => {
+    const preview = previewRef.current;
+    const described = to.map((el) => {
+      const target = describeIterationElement(elementAsNode(el));
+      pinnedElements.current.set(target.selector, el);
+      return target;
+    });
+    const current = targetsRef.current;
+    const leaving = new Set(from);
+    // An element with previewed changes stays pinned, so its changes still go with the note.
+    const next = current.filter((t) => {
+      const el = locate(t.selector);
+      return !el || !leaving.has(el) || Boolean(preview && Object.keys(preview.overrides(el)).length);
+    });
+    for (const target of described) if (next.length < 50 && !next.some((t) => t.selector === target.selector)) next.push(target);
+    setTargets(next);
+    // The floating composer stays where it is, now relative to the new element.
+    const first = described[0] ? to[0] : null;
+    setAnchor((a) => {
+      if (!a || !first || next.some((t) => t.selector === a.selector)) return a;
+      const r = first.getBoundingClientRect();
+      return { ...a, selector: described[0].selector, dx: a.x - r.left, dy: a.y - r.top };
+    });
+    return described.map((target) => target.selector);
+  }, [locate]);
+  const hoverStyleTarget = useCallback((el: Element | null) => {
+    setHoverRect(el ? el.getBoundingClientRect() : null);
+  }, []);
+  const styleEntries: StyleEntry[] = styleVisible ? targets.flatMap((target) => {
+    const el = locate(target.selector);
+    return el ? [{ selector: target.selector, label: target.text || target.tag, el }] : [];
+  }) : [];
+  function toggleStyle() {
+    const opening = !styleOpen;
+    setStyleOpen(opening);
+    if (opening && !targets.length && !picking) {
+      cancelAnimationFrame(focusFrame.current);
+      setPickingWithPanel(false);
+      setPicking(true);
+    }
+  }
   // Pinned elements stay outlined while their note is written next to them.
   useEffect(() => {
-    if (!picking && !floating) {
+    if (!picking && !floating && !styleVisible) {
       setRects([]);
       return;
     }
@@ -975,12 +1165,15 @@ export function IterationPanel({
     update();
     window.addEventListener('scroll', schedule, { capture: true, passive: true });
     window.addEventListener('resize', schedule);
+    // Previewed style changes move and resize the outlined elements.
+    const off = styleVisible ? previewRef.current?.subscribe(schedule) : undefined;
     return () => {
       if (frame !== undefined) cancelAnimationFrame(frame);
+      off?.();
       window.removeEventListener('scroll', schedule, true);
       window.removeEventListener('resize', schedule);
     };
-  }, [targets, picking, floating, locate]);
+  }, [targets, picking, floating, styleVisible, locate]);
 
   const variantsPanel = variants && (
         <section
@@ -1075,6 +1268,26 @@ export function IterationPanel({
           </button>
         </span>
       ))}
+      {styleVisible && styleCount > 0 && (
+        <span className="isotone-chip">
+          <Icon name="style" size={12} />
+          <span>{styleCount} style change{styleCount === 1 ? '' : 's'}</span>
+          <button
+            type="button"
+            aria-label="Discard style changes"
+            title="Discard style changes"
+            onClick={() => previewRef.current?.revert()}
+          >
+            <Icon name="close" size={12} />
+          </button>
+        </span>
+      )}
+      {!(styleVisible && styleCount > 0) && editing?.styleEdits?.length ? (
+        <span className="isotone-chip">
+          <Icon name="style" size={12} />
+          <span>{editing.styleEdits.reduce((sum, edit) => sum + edit.changes.length, 0)} saved style changes</span>
+        </span>
+      ) : null}
       {notice && (
         <p role="status" className="isotone-notice">
           {notice}
@@ -1103,9 +1316,11 @@ export function IterationPanel({
         }
       }}
       placeholder={
-        targets.length || variantTarget
-          ? 'Feedback on your selection…'
-          : 'What would you change?'
+        styleVisible && styleCount
+          ? 'Add a note to the style changes…'
+          : targets.length || variantTarget
+            ? 'Feedback on your selection…'
+            : 'What would you change?'
       }
       rows={1}
       className="isotone-textarea"
@@ -1127,6 +1342,20 @@ export function IterationPanel({
       >
         <Icon name="pin" size={14} />
       </button>
+      {styleEditor && (
+        <button
+          type="button"
+          title="Edit styles (experimental)"
+          aria-label="Edit styles"
+          aria-pressed={styleOpen}
+          aria-controls={`${id}-style`}
+          className="isotone-pick isotone-icon"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={toggleStyle}
+        >
+          <Icon name="style" size={14} />
+        </button>
+      )}
       {floating && picking && (
         <span ref={fadeIn} className="isotone-float-hint">
           {touch ? 'Tap to pin more · the crosshair pauses' : 'Click to pin more · hold ⇧ to use the page'}
@@ -1135,7 +1364,7 @@ export function IterationPanel({
       <button
         type="button"
         aria-label={editing ? 'Save edit' : 'Send note'}
-        disabled={!text.trim()}
+        disabled={!text.trim() && !(styleVisible && styleCount)}
         className="isotone-send"
         title={editing ? 'Save edit (Enter)' : 'Send note (Enter)'}
         onClick={() => void send()}
@@ -1147,10 +1376,25 @@ export function IterationPanel({
       <div ref={fadeIn} className="isotone-picking" data-still={pickingWithPanel}>
         <Icon name="pin" size={14} />
         <p>
-          <span>{targets.length ? `${targets.length} selected` : `${touch ? 'Tap' : 'Click'} elements on the page`}</span>
+          <span>{targets.length ? `${targets.length} selected` : touch ? 'Tap elements on the page' : styleEditor ? 'Click or drag across elements' : 'Click elements on the page'}</span>
           {/* Touch has no Shift: Done leaves select mode with the pins kept, and the crosshair resumes it. */}
           <small>{touch ? 'Tap Done to use the page; pins stay' : 'Hold ⇧ to use the page normally'}</small>
         </p>
+        {styleEditor && (
+          // The cover hides the toolbar while selecting, so it carries the style toggle too.
+          <button
+            type="button"
+            title="Edit styles (experimental)"
+            aria-label="Edit styles"
+            aria-pressed={styleOpen}
+            aria-controls={`${id}-style`}
+            className="isotone-pick isotone-icon"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={toggleStyle}
+          >
+            <Icon name="style" size={14} />
+          </button>
+        )}
         <button
           type="button"
           onMouseDown={(e) => e.preventDefault()}
@@ -1166,6 +1410,31 @@ export function IterationPanel({
     </div>
     </fieldset>
   );
+  const stylePanel = styleEditor && notesAvailable && (
+        <section
+          id={`${id}-style`}
+          role="dialog"
+          aria-label="Style editor"
+          className="isotone-panel isotone-style-panel"
+          data-open={styleVisible}
+          aria-hidden={!styleVisible}
+          ref={node => { node?.toggleAttribute('inert', !styleVisible); }}
+        >
+          <PanelClose label="Close style editor" onClose={() => setStyleOpen(false)} />
+          {styleVisible && (
+            <StyleInspector
+              entries={styleEntries}
+              preview={stylePreview()}
+              picking={picking}
+              onNavigate={navigateStyle}
+              onHover={hoverStyleTarget}
+              onScope={setStyleScope}
+              onPick={() => { setPickingWithPanel(false); setPicking(true); }}
+              onSend={() => void send()}
+            />
+          )}
+        </section>
+      );
   const notesPanel = notesAvailable && (
         <section
           id={`${id}-notes`}
@@ -1283,12 +1552,13 @@ export function IterationPanel({
       data-instant={instant}
       data-notes-open={notesOpen}
       data-selecting={picking || floating}
+      data-style-open={styleVisible}
       data-working={working.size > 0}
       data-open={open}
       className="isotone-root"
     >
       <div className="isotone-rail-track" aria-hidden="true" />
-      {(picking || floating) &&
+      {(picking || floating || styleVisible) &&
         [
           ...rects,
           ...(hoverRect
@@ -1307,6 +1577,7 @@ export function IterationPanel({
             key={rect.selector}
             data-isotone
             className={`isotone-hover${i < rects.length ? ' isotone-selected' : ''}`}
+            data-scoped={i < rects.length && styleScope ? String(styleScope.includes(rect.selector)) : undefined}
             style={{
               top: rect.top,
               left: rect.left,
@@ -1315,6 +1586,13 @@ export function IterationPanel({
             }}
           />
         ))}
+      {marquee && (
+        <div
+          data-isotone
+          className="isotone-marquee"
+          style={{ top: marquee.top, left: marquee.left, width: marquee.width, height: marquee.height }}
+        />
+      )}
       {floating && notesOpen && (
         <div
           ref={floatRef}
@@ -1367,6 +1645,7 @@ export function IterationPanel({
             </button>
           )}
           {variantsPanel}
+          {stylePanel}
           {notesPanel}
           {notesAvailable && (
             <button

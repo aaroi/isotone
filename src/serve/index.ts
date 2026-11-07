@@ -23,6 +23,7 @@ import { dirname, resolve } from 'node:path';
 
 import type { RouteGateOptions } from '../core/index';
 import type { IterationTheme } from '../react/theme';
+import type { IterationExperiments } from '../react/IterationPanel';
 import { checkOrigin, HttpError, isLoopback, readNodeJson, sendFailure } from '../server/http';
 import { ensureFileIgnored, notesResponse, NOTES_ENDPOINT } from '../store';
 
@@ -50,6 +51,8 @@ export interface ServeIterationOptions {
   rule?: RouteGateOptions;
   /** localStorage namespace for the panel. */
   key?: string;
+  /** Experimental panel features, all off by default, e.g. `{ styleEditor: true }`. */
+  experimental?: IterationExperiments;
 }
 
 export interface ServedIteration {
@@ -98,6 +101,7 @@ function bundleWithMount(origin: string, opts: ServeIterationOptions): string {
     key: opts.key ?? '',
     rule: opts.rule ?? {},
     theme: opts.theme,
+    ...(opts.experimental ? { experimental: opts.experimental } : {}),
   });
   return `${readBundle()}\n;window.__isotone&&window.__isotone.mount(${config});\n`;
 }
