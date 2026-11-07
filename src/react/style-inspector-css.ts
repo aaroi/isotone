@@ -114,4 +114,9 @@ export const STYLE_INSPECTOR_CSS = `
   .isotone-field-reset:hover, .isotone-mixed-value:hover { color: var(--iso-fg); }
   .isotone-mixed-value:hover { border-style: solid; }
 }
+/* Phones: like the variants panel, the editor stops short of the whole screen so
+   the element it changes can stay in view above it. */
+@media (max-width: 640px) {
+  .isotone-root .isotone-style-panel { min-height: 0; max-height: min(calc(var(--iso-view-height, 100dvh) - 76px), 42dvh); }
+}
 `;
