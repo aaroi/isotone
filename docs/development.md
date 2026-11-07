@@ -13,6 +13,9 @@ Run `pnpm check` for types, lint, build, and tests. For package or adapter
 changes, also run `pnpm check:package`. Inspect both themes, keyboard use,
 reduced motion, scrolling, and long content when changing UI.
 
+[Onboarding](onboarding.md) explains how the README prompt, `init` and its first
+run fit together, and the simulations behind them. Re-run one when changing them.
+
 Merging into `main` publishes automatically. Follow [the release guide](releasing.md)
 before merging; use a development branch until the change is ready for npm.
 
@@ -43,7 +46,10 @@ standalone consumers. The build bundles only the icons used by the panel.
 has a Panel theme select (automatic page detection, system preference, or an
 explicit theme), a light and dark toggle for the page, and a Tour button. The
 tour (`examples/demo/tour.tsx`) starts by itself on a browser's first visit and
-remembers when it was closed; `/?tour=1` starts it regardless. A pretend agent marks each new note as being worked on a moment after it
+remembers when it was closed; `/?tour=1` starts it regardless. Its last step
+hands visitors the README's "Start with your agent" prompt, kept in
+`examples/demo/agent-prompt.ts`; `tests/agent-prompt.test.ts` keeps the two the
+same, so change both together. A pretend agent marks each new note as being worked on a moment after it
 is sent and closes it a few seconds later, the way `--working` and `--done`
 would.
 

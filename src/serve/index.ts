@@ -25,6 +25,8 @@ import type { RouteGateOptions } from '../core/index';
 import type { IterationTheme } from '../react/theme';
 import { checkOrigin, HttpError, isLoopback, readNodeJson, sendFailure } from '../server/http';
 import { ensureFileIgnored, notesResponse, NOTES_ENDPOINT } from '../store';
+import { VARIANTS_ENDPOINT } from '../core/variants';
+import { readKnobs } from '../variants-store';
 
 import { readBundle } from '../standalone/bundle';
 import { guardedScriptTag } from './tag';
@@ -37,7 +39,8 @@ const BUNDLE_PATH = '/isotone.js';
 export interface ServeIterationOptions {
   /** Background npm notice, at most once a day. false disables the check. */
   checkForUpdates?: boolean;
-  /** Project directory for the suggested update command. Defaults to the notes directory. */
+  /** Project directory for the suggested update command and for
+   *  `.isotone/knobs.json`. Defaults to the notes directory. */
   projectRoot?: string;
   /** Defaults to auto (page background); system follows the OS preference. */
   theme?: IterationTheme;
@@ -95,6 +98,10 @@ function cors(req: IncomingMessage, res: ServerResponse): void {
 function bundleWithMount(origin: string, opts: ServeIterationOptions): string {
   const config = JSON.stringify({
     endpoint: `${origin}${NOTES_ENDPOINT}`,
+    // Knobs only: file variants need a bundler to swap modules, which a
+    // script tag on another dev server does not have.
+    variants: 'overlay',
+    variantsEndpoint: `${origin}${VARIANTS_ENDPOINT}`,
     updateEndpoint: `${origin}${UPDATE_ENDPOINT}`,
     key: opts.key ?? '',
     rule: opts.rule ?? {},
@@ -202,11 +209,12 @@ export function serveIteration(
   opts: ServeIterationOptions,
 ): Promise<ServedIteration> {
   const file = resolve(opts.file);
+  const projectRoot = resolve(opts.projectRoot ?? dirname(file));
   const port = opts.port ?? DEFAULT_PORT;
   const host = opts.host ?? '127.0.0.1';
   if (!isLoopback(host)) throw new Error('isotone serve binds only to localhost, 127.0.0.1 or ::1.');
   ensureFileIgnored(file);
-  const updates = startUpdateCheck(opts.projectRoot ?? dirname(file), opts.checkForUpdates !== false);
+  const updates = startUpdateCheck(projectRoot, opts.checkForUpdates !== false);
 
   // The port we were ASKED for is not necessarily the one we got: 0 means "any
   // free port". The panel's endpoint has to be the bound one or the bundle
@@ -251,6 +259,19 @@ export function serveIteration(
       res.setHeader('content-type', 'text/javascript; charset=utf-8');
       res.setHeader('cache-control', 'no-store');
       res.end(body);
+      return;
+    }
+
+    if (path === VARIANTS_ENDPOINT || path.startsWith(`${VARIANTS_ENDPOINT}/`)) {
+      res.setHeader('content-type', 'application/json; charset=utf-8');
+      res.setHeader('cache-control', 'no-store');
+      if (path === VARIANTS_ENDPOINT && method === 'GET') {
+        res.statusCode = 200;
+        res.end(JSON.stringify({ variants: [], active: [], knobs: readKnobs({ root: projectRoot }) }));
+      } else {
+        res.statusCode = 405;
+        res.end(JSON.stringify({ error: 'isotone serve has knobs only; file variants need the Vite plugin' }));
+      }
       return;
     }
 

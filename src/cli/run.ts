@@ -125,6 +125,7 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
   }
   out(io, `isotone serving on ${served.url}`);
   out(io, `  notes  ${file}`);
+  out(io, `  knobs  ${served.url}/api/iteration/variants  (from .isotone/knobs.json)`);
   out(io, `  panel  ${served.bundleUrl}  (load it on development pages only)`);
   out(io, `  setup  ${served.url}  (a localhost-only script tag + bookmarklet)`);
   return new Promise<number>((resolveExit) => {

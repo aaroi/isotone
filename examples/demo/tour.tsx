@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Copy, X } from 'lucide-react';
+import { AGENT_PROMPT, SETUP_COMMANDS } from './agent-prompt';
 
 /**
  * A short guided tour for first-time visitors. It never blocks the page: each
@@ -150,7 +151,7 @@ export function Tour({ onClose, subscribeVariants }: {
         </>
       : step === 'finish'
         ? <>
-            <TourButton primary onClick={close}>Done</TourButton>
+            <TourButton onClick={close}>Done</TourButton>
             <a className="tour-button" href="https://github.com/aaroi/isotone" target="_blank" rel="noreferrer">GitHub</a>
           </>
         : <>
@@ -270,25 +271,46 @@ function stepContent(step: Step, panel: PanelState, switched: boolean, agent: Ag
     case 'finish': return {
       title: 'Try it in your own app',
       body: <>
-        <p>{touch ? 'On your computer, run these in your project.' : 'Run these in your project.'} It works with Vite and other dev servers, and none of it ends up in your production build.</p>
-        <Install />
+        <p>{touch ? 'On your computer, paste' : 'Paste'} this into your coding agent (Claude Code, Cursor, Codex…) in your project:</p>
+        <Prompt />
+        <p className="tour-hint">It works with Vite and other dev servers, and none of it ends up in your production build.</p>
+        <details className="tour-manual">
+          <summary>Or set it up yourself</summary>
+          <Install />
+        </details>
       </>,
       highlight: null,
     };
   }
 }
 
-function Install() {
+/** Copies text, then reports it for a moment. */
+function useCopy(text: string): [boolean, () => void] {
   const [copied, setCopied] = useState(false);
-  const commands = 'npm i -D isotone\nnpx isotone init';
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1400);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  return [copied, () => { void navigator.clipboard?.writeText(text).then(() => setCopied(true)); }];
+}
+
+/** The README's agent prompt: the way most people start. It wraps; nothing is cut off. */
+function Prompt() {
+  const [copied, copy] = useCopy(AGENT_PROMPT);
+  return <div className="tour-prompt">
+    <p>{AGENT_PROMPT}</p>
+    <button type="button" className="tour-button tour-primary" onMouseDown={keepFocus} onClick={copy}>
+      {copied ? <Check size={13} /> : <Copy size={13} />}{copied ? 'Copied' : 'Copy prompt'}
+    </button>
+  </div>;
+}
+
+function Install() {
+  const [copied, copy] = useCopy(SETUP_COMMANDS.join('\n'));
   return <div className="tour-code">
-    <pre><span>$</span> npm i -D isotone{'\n'}<span>$</span> npx isotone init</pre>
-    <button type="button" aria-label="Copy commands" title="Copy" onClick={() => {
-      void navigator.clipboard?.writeText(commands).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1400);
-      });
-    }}>{copied ? <Check size={14} /> : <Copy size={14} />}</button>
+    <pre>{SETUP_COMMANDS.map((command, i) => <Fragment key={command}>{i > 0 && '\n'}<span>$</span> {command}</Fragment>)}</pre>
+    <button type="button" aria-label="Copy commands" title="Copy" onClick={copy}>{copied ? <Check size={14} /> : <Copy size={14} />}</button>
   </div>;
 }
 

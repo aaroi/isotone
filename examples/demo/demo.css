@@ -183,6 +183,14 @@ h1 { margin: 0; font-size: 26px; font-weight: 650; letter-spacing: -.025em; line
 .tour-primary:hover { background: var(--fg); opacity: .88; }
 .tour-link { margin-right: auto; padding: 0; border: 0; background: none; color: var(--muted); font-size: 12.5px; cursor: pointer; }
 .tour-link:hover { color: var(--fg); }
+/* The agent prompt wraps inside the card at any width, with its Copy button below it. */
+.tour-prompt { display: flex; flex-direction: column; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--code); }
+.tour-step .tour-prompt p { margin: 0 0 10px; color: var(--fg); font: 12px/1.6 ui-monospace, 'SF Mono', Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tour-prompt .tour-button { align-self: flex-end; }
+.tour-manual { margin-top: 10px; color: var(--muted); font-size: 12.5px; }
+.tour-manual summary { width: fit-content; cursor: pointer; }
+.tour-manual summary:hover { color: var(--fg); }
+.tour-manual .tour-code { margin-top: 8px; }
 @keyframes tour-fade { from { opacity: 0; } }
 @keyframes tour-step { from { opacity: 0; transform: translateY(3px); } }
 @keyframes tour-pulse { 50% { opacity: .35; transform: scale(.8); } }

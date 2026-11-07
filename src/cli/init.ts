@@ -1,15 +1,15 @@
 /**
  * isotone — `init`: tells a repo which of overlay, host or serve fits
- * it, prints the setup for the chosen one, and (opt-in) drops the paperwork.
- * Never touches vite.config or app code — at most AGENTS.md and a fresh
- * `.isotone/variants/README.md`.
+ * it, prints the development-only setup for the chosen one and a first run
+ * for the agent, and (opt-in) drops the paperwork. Never touches vite.config
+ * or app code — at most AGENTS.md and a fresh `.isotone/variants/README.md`.
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import type { Dirent } from 'node:fs';
 import { join } from 'node:path';
 
 import { guardedScriptTag } from '../serve/tag';
-import { DEFAULT_VARIANTS_DIR } from '../variants-store';
+import { DEFAULT_VARIANTS_DIR, KNOBS_FILE } from '../variants-store';
 import { type CliIO, errOut, extractBoolFlag, extractFlag, out, parseArgs } from './util';
 
 type Host = 'vite' | 'next' | 'other';
@@ -38,10 +38,9 @@ export function runInit(args: string[], io: CliIO): number {
   const json = args.includes('--json');
 
   if (help) {
-    out(io, 'Usage: isotone init                      look at this repo and recommend an approach');
+    out(io, 'Usage: isotone init                      look at this repo and print the setup to apply');
     out(io, '       isotone init --approach <name>    print the setup for overlay, host or serve');
-    out(io, '       isotone init --approach <name> --yes');
-    out(io, '                                             also write the AGENTS.md paragraph (and, for');
+    out(io, '       isotone init --yes                also write the AGENTS.md section (and, for');
     out(io, '                                             overlay, .isotone/variants/README.md)');
     out(io, 'Without --approach, uses the recommendation. --json prints a structured setup plan.');
     out(io, 'The setup is development-only. init never edits vite.config or app code.');
@@ -55,27 +54,54 @@ export function runInit(args: string[], io: CliIO): number {
     errOut(io, `Unknown approach "${approach}". Use host, overlay or serve.`);
     return 1;
   }
+  const setup: Setup = {
+    host,
+    approach,
+    nextEntry: host === 'next' ? detectNextEntry(io.cwd) : null,
+    firstRun: !hasReviewContent(io.cwd),
+  };
+  const instructions: string[] = [];
+  printSetup((line = '') => instructions.push(line), setup);
+
   if (json) {
-    const instructions: string[] = [];
-    printApproach({ ...io, stdout: { write: (line) => instructions.push(line) } }, approach, host);
     out(io, JSON.stringify({
       host, approach, recommended, reason,
       writes: yes ? ['AGENTS.md', ...(approach === 'overlay' ? ['.isotone/variants/README.md'] : [])] : [],
-      instructions: instructions.join(''),
+      instructions: instructions.map((line) => `${line}\n`).join(''),
     }, null, 2));
-  } else {
-    out(io, `isotone init — ${hostLabel(host)}`);
-    out(io, `Recommended: ${recommended} — ${reason}`);
-    out(io);
-    printApproach(io, approach, host);
-    if (!yes) out(io, 'Run `npx isotone init --yes` to add the agent guide, or choose --approach overlay|host|serve.');
+    if (yes) applyApproach(io.cwd, approach);
+    return 0;
   }
-  if (yes) applyApproach(io.cwd, approach);
+
+  out(io, `isotone init — ${hostLabel(host)}`);
+  out(io, `Recommended: ${recommended} — ${reason}`);
+  out(io);
+  for (const line of instructions) out(io, line);
+  out(io);
+  if (yes) {
+    const added = applyApproach(io.cwd, approach);
+    out(io, added
+      ? 'AGENTS.md: added the isotone section, so later sessions know the review loop.'
+      : 'AGENTS.md already has an isotone section; left it unchanged.');
+  } else {
+    out(io, 'Run `npx isotone init --yes` to add this section to AGENTS.md, or paste it there:');
+    out(io);
+    for (const line of agentsParagraph(approach).split('\n')) out(io, line);
+  }
   return 0;
 }
 
 function isApproach(v: string): v is Approach {
   return v === 'host' || v === 'overlay' || v === 'serve';
+}
+
+interface Setup {
+  host: Host;
+  approach: Approach;
+  /** Where a Next app renders every page, for the dev-only script tag. */
+  nextEntry: string | null;
+  /** Print the first run: the project has no variants or knobs yet. */
+  firstRun: boolean;
 }
 
 /* ── detection ────────────────────────────────────────────────────────── */
@@ -102,6 +128,12 @@ function detectNextEntry(cwd: string): string | null {
     }
   }
   return null;
+}
+
+/** Whether the reviewer already has something to switch: overlay variants or knobs. */
+function hasReviewContent(cwd: string): boolean {
+  if (existsSync(join(cwd, KNOBS_FILE))) return true;
+  return safeReaddirent(join(cwd, DEFAULT_VARIANTS_DIR)).some((entry) => entry.isDirectory());
 }
 
 function detectHostOwnedAxes(cwd: string): boolean {
@@ -151,6 +183,8 @@ function safeRead(file: string): string {
 
 /* ── printing ─────────────────────────────────────────────────────────── */
 
+type Print = (line?: string) => void;
+
 function hostLabel(host: Host): string {
   return host === 'vite' ? 'Vite' : host === 'next' ? 'Next' : 'other';
 }
@@ -167,97 +201,209 @@ function recommend(host: Host, hostOwnedAxes: boolean): [Approach, string] {
   }
   return [
     'serve',
-    'there is no bundler hook to swap files here, so notes work today and variants would need --approach host.',
+    'there is no bundler hook to swap files here, so notes and knobs work through a small local server.',
   ];
 }
 
-function printApproach(io: CliIO, approach: Approach, host: Host): void {
-  out(io, `isotone init — ${approach}`);
-  out(io, '');
-  if (approach === 'overlay') {
-    if (host !== 'vite') {
-      out(io, 'No vite.config or react-router.config found here. Overlay variants need the Vite');
-      out(io, 'plugin; for another dev server use --approach serve for notes, or host for variants.');
-      out(io, '');
-    }
-    out(io, 'Add the plugin in vite.config.ts (npm install -D isotone first):');
-    out(io, '');
-    out(io, "  import { defineConfig } from 'vite';");
-    out(io, "  import { iteration } from 'isotone/vite';");
-    out(io, '');
-    out(io, '  // Add iteration() to your existing plugins array; keep the other plugins.');
-    out(io, '  export default defineConfig({ plugins: [iteration()] });');
-    out(io, '');
-    out(io, 'That serves the variants and notes endpoints from the dev server and injects the');
-    out(io, 'panel. Alternative source files live under .isotone/variants/<id>/<repo-relative');
-    out(io, 'path>, one directory per variant, with a variant.json manifest next to them; the');
-    out(io, 'plugin swaps them in for the real files while that variant is active, one selector');
-    out(io, 'per decision (variants over one file, or made with --group) on its route. Keep');
-    out(io, '@vitejs/plugin-react (or your framework plugin) in the list so a switch swaps the');
-    out(io, 'component in place instead of reloading the page.');
-  } else if (approach === 'host') {
-    out(io, 'Your app owns the variant state; the panel is a view over it. Client-side setup:');
-    out(io, 'Run this only in development after the page mounts. Keep the returned disposer');
-    out(io, 'and call it on client unmount or HMR cleanup. Direct imports require react and react-dom.');
-    out(io, '');
-    for (const line of HOST_EXAMPLE) out(io, line ? `  ${line}` : '');
-    out(io, '');
-    out(io, 'onChange fires with the full selections after every change; the app renders from');
-    out(io, "them and keeps its own defaults and URL sync. Add endpoint: '/api/iteration/notes'");
-    out(io, 'for notes served by the Vite plugin. Use iteration({ panel: false }) there to');
-    out(io, 'avoid injecting a second panel. With `isotone serve`, use the absolute endpoint');
-    out(io, "'http://127.0.0.1:4123/api/iteration/notes'. Set");
-    out(io, "defaultTab: 'variants' when reviewers come for the controls first.");
-  } else {
-    out(io, 'npx isotone serve');
-    out(io, '');
-    if (host === 'next') {
-      const entry = detectNextEntry(io.cwd) ?? 'app/layout.tsx';
-      out(io, `Then load the panel in development only. In ${entry}, import Script at the top`);
-      out(io, 'and render the tag inside <body>:');
-      out(io, '');
-      out(io, "  import Script from 'next/script';");
-      out(io, '  ...');
-      out(io, "  {process.env.NODE_ENV === 'development' && (");
-      out(io, `    <Script src="${SERVE_BUNDLE}" strategy="afterInteractive" />`);
-      out(io, '  )}');
-      out(io, '');
-      out(io, 'Next inlines NODE_ENV when it builds, so production HTML has no tag.');
-    } else {
-      out(io, 'Then load the panel in development only. For plain HTML files, add this loader to');
-      out(io, 'the <head> of every page the user reviews. It requests nothing unless the page is');
-      out(io, 'on localhost, so it stays inert if the HTML ships:');
-      out(io, '');
-      out(io, `  ${GUARDED_SCRIPT_TAG}`);
-      out(io, '');
-      out(io, 'Where a template or build step has a development flag, a plain tag behind that');
-      out(io, `flag also works: <script src="${SERVE_BUNDLE}" defer></script>`);
-    }
-    out(io, '');
-    out(io, 'That is the endpoint and the panel from one process, with no app code. To serve the');
-    out(io, `endpoint from ${host === 'next' ? 'a Next route handler' : "the app's own dev server"} instead, isotone/server has the handler.`);
-    out(io, 'It answers 404 when NODE_ENV is production unless you pass { allowProduction: true }:');
-    out(io, '');
-    for (const line of ROUTE_HANDLER_EXAMPLE) out(io, line ? `  ${line}` : '');
-    out(io, 'Manual handlers do not change Git exclusions: add .iteration-feedback.json to .gitignore.');
-    out(io, '');
-    out(io, 'and the panel mounts from a dev-only client module:');
-    out(io, '');
-    out(io, "  import { mountIteration } from 'isotone/react';");
-    out(io, "  if (process.env.NODE_ENV === 'development') mountIteration({ endpoint: '/api/iteration/notes' });");
-    out(io, 'Run the mount after the page mounts, keep its returned disposer, and call it on');
-    out(io, 'client unmount or HMR cleanup. Direct imports require react and react-dom.');
+function printSetup(print: Print, setup: Setup): void {
+  print('Isotone is development-only: never ship the panel or its endpoints to production');
+  print('unless the user explicitly asks for that. The setup below says how each part stays out.');
+  print();
+  if (setup.approach === 'overlay') printOverlay(print, setup.host);
+  else if (setup.approach === 'host') printHost(print);
+  else printServe(print, setup);
+  print();
+  if (setup.firstRun) printFirstRun(print, setup.approach);
+  else {
+    print('This project already has variants or knobs, so there is no first run to do.');
+    print('Tell the user the URL to open and that the pill in the corner is Isotone.');
   }
-  out(io, '');
-  out(io, "Theme: auto follows the page (default); light/dark are fixed; system follows the OS.");
-  out(io, 'Pass theme to iteration(), mountIteration(), or serve --theme <value>.');
-  out(io, 'Vite and serve check for updates in the background; upgrades are always explicit.');
-  out(io, 'Use checkForUpdates: false, serve --no-update-check, or ISOTONE_UPDATE_CHECK=0');
-  out(io, 'to disable automatic checks. `npx isotone check-update --json` checks explicitly.');
-  out(io, '');
-  out(io, 'Paste this into AGENTS.md:');
-  out(io, '');
-  for (const line of agentsParagraph(approach).split('\n')) out(io, line);
+  print();
+  if (setup.approach === 'serve') {
+    if (setup.host === 'next') printRouteAlternative(print);
+    else print('A server that should own the endpoint itself can use isotone/server instead (docs/integrations.md).');
+    print();
+  }
+  print('Theme: auto (default) follows the page. Pass light, dark or system as `theme` to');
+  print('iteration() or mountIteration(), or as serve --theme <value>.');
+  print('Update checks run in the background and never install anything. Turn them off with');
+  print('checkForUpdates: false, serve --no-update-check or ISOTONE_UPDATE_CHECK=0.');
+}
+
+function printOverlay(print: Print, host: Host): void {
+  if (host !== 'vite') {
+    print('No vite.config or react-router.config found here. Overlay variants need the Vite');
+    print('plugin; for another dev server use --approach serve for notes, or host for variants.');
+    print();
+  }
+  print('Setup (overlay)');
+  print('1. Add the plugin to the existing plugins array in vite.config, keeping the others');
+  print('   (npm install -D isotone first):');
+  print();
+  print("     import { iteration } from 'isotone/vite';");
+  print('     plugins: [/* existing plugins */, iteration()]');
+  print();
+  print('   Vite applies it to the dev server only: `vite build` output has no panel and no');
+  print('   endpoints, so the plugin needs no guard of its own. Keep @vitejs/plugin-react (or');
+  print('   the framework plugin) in the list so a variant switch swaps in place.');
+  print('2. Start or restart the dev server and leave it running. It prints');
+  print('   `isotone  notes → .iteration-feedback.json`; the panel is the small pill in the');
+  print('   bottom-right corner of every page.');
+  print();
+  print('Variants are copies of source files under .isotone/variants/<id>/ that the dev');
+  print('server swaps in while one is active. Knobs are numbers, colours or named styles in');
+  print(`${KNOBS_FILE} that reach the page as CSS custom properties. .isotone/ is the work`);
+  print('under review and can be committed; when the dev server starts it excludes the notes');
+  print('file and .isotone/active.json from Git (in .git/info/exclude).');
+}
+
+function printHost(print: Print): void {
+  print('Setup (host)');
+  print('Your app owns the variant state; the panel is a view over it. Mount it on the client,');
+  print('in development only, after the page mounts. Keep the returned disposer and call it');
+  print('on unmount or HMR cleanup. Direct imports require react and react-dom.');
+  print();
+  for (const line of HOST_EXAMPLE) print(line ? `  ${line}` : '');
+  print();
+  print('onChange fires with the full selections after every change; the app renders from');
+  print("them and keeps its own defaults and URL sync. Add endpoint: '/api/iteration/notes'");
+  print('for notes served by the Vite plugin, with iteration({ panel: false }) there to avoid');
+  print('a second panel. With `isotone serve`, use the absolute endpoint');
+  print("'http://127.0.0.1:4123/api/iteration/notes'. Set defaultTab: 'variants' when");
+  print('reviewers come for the controls first.');
+}
+
+function printServe(print: Print, setup: Setup): void {
+  const next = setup.host === 'next';
+  print('Setup (serve)');
+  print('1. Run the panel’s local server in this directory and leave it running, next to');
+  print('   the app’s own dev server:');
+  print();
+  print('     npx isotone serve');
+  print();
+  print('   If port 4123 is taken, pass --port <n>, use that port in the URL below, and add');
+  print('   "isotone": "isotone serve --port <n>" to the package.json scripts so the two agree.');
+  if (next) {
+    const entry = setup.nextEntry ?? 'app/layout.tsx';
+    print(`2. Load the panel in development only. In ${entry}, import Script at the top`);
+    print('   and render the tag inside <body>:');
+    print();
+    print("     import Script from 'next/script';");
+    print('     ...');
+    print("     {process.env.NODE_ENV === 'development' && (");
+    print(`       <Script src="${SERVE_BUNDLE}" strategy="afterInteractive" />`);
+    print('     )}');
+    print();
+    print('   Next inlines NODE_ENV when it builds, so production HTML has no tag.');
+  } else {
+    print('2. Load the panel in development only. For plain HTML files, add this loader to');
+    print('   the <head> of every page the user reviews. It requests nothing unless the page is');
+    print('   on localhost, so it stays inert if the HTML ships:');
+    print();
+    print(`     ${GUARDED_SCRIPT_TAG}`);
+    print();
+    print('   Where a template or build step has a development flag, a plain tag behind that');
+    print(`   flag also works: <script src="${SERVE_BUNDLE}" defer></script>`);
+  }
+  print('3. Reload the page: the panel is the small pill in the bottom-right corner.');
+  print();
+  print(`Notes and knobs (${KNOBS_FILE}) work here; when \`isotone serve\` starts it excludes`);
+  print('the notes file from Git (in .git/info/exclude). Swapping whole source files needs');
+  print('the Vite plugin, or a host-owned VariantsSource (--approach host).');
+}
+
+function printRouteAlternative(print: Print): void {
+  print('Alternative, when the user does not want a second process: serve the endpoint from');
+  print('a Next route handler. isotone/server answers 404 when NODE_ENV is production unless');
+  print('you pass { allowProduction: true }:');
+  print();
+  for (const line of ROUTE_HANDLER_EXAMPLE) print(line ? `  ${line}` : '');
+  print();
+  print('Manual handlers do not change Git exclusions: add .iteration-feedback.json to');
+  print('.gitignore. Then mount the panel from a client module, in development only, and');
+  print('call the disposer it returns on unmount (direct imports need react and react-dom):');
+  print();
+  print("  if (process.env.NODE_ENV === 'development') {");
+  print("    import('isotone/react').then(({ mountIteration }) => mountIteration({ endpoint: '/api/iteration/notes' }));");
+  print('  }');
+}
+
+/**
+ * The agent's first loop: something real to switch on the user's own page
+ * within minutes, then a short message that teaches the panel by naming
+ * what was made. The real design stays as it is until the user picks.
+ */
+function printFirstRun(print: Print, approach: Approach): void {
+  print('First run: do this now, unless the user asked for something else');
+  print('Show the user what Isotone does on the page they care about (the main page if');
+  print('they named none). Leave the real design as it is; everything below is opt-in.');
+  if (approach === 'overlay') {
+    print('a. One selector: two alternatives of a prominent component on that page, as');
+    print('   file variants in one group. For each alternative:');
+    print();
+    print('     npx isotone variant new hero-split --route / --group hero --group-label "Hero" --label "Split"');
+    print('     npx isotone variant add hero-split src/components/Hero.tsx');
+    print('     npx isotone variant path hero-split src/components/Hero.tsx   # edit this copy');
+    print();
+    print('   Use the real route and file. Make the alternatives clearly different and');
+    print('   plausible (layout, emphasis or copy), and copy only files that export components.');
+    print('   Imports in a copy resolve as they would from the real file.');
+    print('b. One knob for a number or a colour. Write it in .isotone/knobs.json:');
+    printKnobExamples(print, false);
+  } else if (approach === 'serve') {
+    print('a. Two knobs in .isotone/knobs.json (one JSON array): a select for two or three');
+    print('   named styles of a prominent element, and a range or colour.');
+    printKnobExamples(print, true);
+  } else {
+    print('a. Add one select axis to the VariantsSource for a prominent element on that page.');
+    print('b. Add one range or colour axis, and apply both in onChange so each visibly');
+    print('   changes the page.');
+  }
+  print('c. Check: `npx isotone variant list <route>` lists what you made and names any');
+  print('   knob the panel would skip. Without a browser, confirm the panel is live:');
+  if (approach === 'serve') {
+    print('   the page HTML has the tag, and `curl http://127.0.0.1:4123/api/iteration/variants`');
+    print('   returns the knobs the panel will show.');
+  } else {
+    print("   `curl -H 'Accept: text/html' <page URL>` includes `data-isotone-inject`, and");
+    print('   <origin>/api/iteration/variants lists the variants and knobs the panel will show.');
+    print('   <origin>/<file>?isotone=<id> serves one variant’s copy, to check that it compiles.');
+  }
+  print('d. Leave the dev server running and tell the user, briefly, in this order:');
+  print('   - the one URL to open, and that the pill in the bottom-right corner is Isotone,');
+  print('     a development-only panel (nothing ships to production);');
+  print('   - what you made: open Variants and switch them on the live page;');
+  print('   - in one line: ⌘/Ctrl + Shift + . (or the pin button), click an element, type');
+  print('     the change and press Enter, then say “check my Isotone notes”;');
+  print('   - last, a short list of the files you changed. Save as defaults turns their');
+  print('     picks into a note for you.');
+}
+
+function printKnobExamples(print: Print, withSelect: boolean): void {
+  print();
+  print('     [');
+  if (withSelect) {
+    print('       { "kind": "select", "id": "hero-layout", "label": "Hero layout", "route": "/",');
+    print('         "defaultOption": "left", "options": [{ "id": "left", "label": "Left" },');
+    print('         { "id": "centered", "label": "Centered" }] },');
+  }
+  print('       { "kind": "range", "id": "card-radius", "label": "Card radius", "route": "/",');
+  print('         "min": 0, "max": 24, "step": 1, "defaultValue": 12, "unit": "px" }');
+  print('     ]');
+  print();
+  print(`${withSelect ? 'b.' : '  '} Read each value in CSS with today’s value as the default and the fallback (12px`);
+  print('   here is only an example), so the page is unchanged until the user moves it. Add a');
+  print('   class or data attribute to the element if it has none:');
+  print();
+  if (withSelect) {
+    print('     html[data-knob-hero-layout="centered"] .hero { text-align: center; margin-inline: auto; }');
+  }
+  print('     .card { border-radius: var(--knob-card-radius, 12px); }');
+  print();
+  print('   With Tailwind, use an arbitrary value (rounded-[var(--knob-card-radius,12px)]) or');
+  print('   put the rule outside @layer so it wins over utilities. A colour knob is');
+  print('   { "kind": "color", "id", "label", "defaultColor": "#2f6f4e", "swatches":');
+  print('   [{ "id", "label", "value": "#2f6f4e" }, ...] }, read as var(--knob-<id>, <today>).');
 }
 
 /** Typechecks against `isotone/react` as written; `kind` defaults to select. */
@@ -303,9 +449,11 @@ const ROUTE_HANDLER_EXAMPLE = [
   'export { handle as GET, handle as POST, handle as DELETE };',
 ];
 
-function applyApproach(cwd: string, approach: Approach): void {
-  appendAgentsParagraph(cwd, agentsParagraph(approach));
+/** Writes the AGENTS.md section; false when one was already there. */
+function applyApproach(cwd: string, approach: Approach): boolean {
+  const added = appendAgentsParagraph(cwd, agentsParagraph(approach));
   if (approach === 'overlay') createVariantsReadme(cwd);
+  return added;
 }
 
 function agentsParagraph(approach: Approach): string {
@@ -337,7 +485,8 @@ function agentsParagraph(approach: Approach): string {
     'A select becomes a thumbnail grid when every option has an image. Use a two-option',
     'select for binary choices. Give ranges useful min/max bounds, a meaningful positive',
     'step, an in-range default and a unit; connect every selector to a visible app change.',
-    'Overlay numeric/colour controls belong in .isotone/knobs.json, not duplicate files.',
+    'Numeric and colour controls belong in .isotone/knobs.json, not duplicate files;',
+    '`npx isotone variant list` names any knob the panel would skip.',
     'Once a page has more than a few selectors, put each in a section named after the',
     'part of the page it changes: prefix its label with the section and a spaced `>`',
     '(`Header > Logo size`), or pass `variant new <id> --section Header` for a variant.',
@@ -363,7 +512,7 @@ function approachParagraph(approach: Approach): string {
       'Give it the route from the note, and `--group <id>`',
       'when it is one of several alternatives of the same element that touch different',
       'files, so the panel shows one selector per decision on its page. `variant use',
-      '<id>` switches the dev server to it, `default` goes back. Once the reviewer picks',
+      '<id>` switches the dev server to it, `variant use default` goes back. Once the reviewer picks',
       'a winner, `variant promote <id>` lands it over the real files; it refuses a stale',
       'or conflicted override, `variant sync <id>` merges first. A `[set-defaults]` note',
       'carrying `variants=<id>, <id>` means promote each named id and leave the other',
@@ -380,19 +529,24 @@ function approachParagraph(approach: Approach): string {
     ].join('\n');
   }
   return [
-    'Notes from the panel land in .iteration-feedback.json. Read them with `npx',
-    'isotone` and mark one addressed with `npx isotone --done <id>`. Variants',
-    'need a bundler hook this app doesn’t have; re-run `isotone init` if it gets a',
-    'Vite config later, or ask for approach host if it already owns variant state.',
+    'The panel loads from `npx isotone serve`, which must be running in this directory;',
+    'if package.json has an `isotone` script, it pins the port the page’s tag uses, so run that.',
+    'For alternatives, use knobs in .isotone/knobs.json (committed with the work): a `select` knob lands on',
+    '<html> as `data-knob-<id>` for CSS to style each option, and range and colour',
+    'knobs land as `--knob-<id>` custom properties, read with the committed value as',
+    'the fallback. A `[set-defaults]` note names the knob values to write into the',
+    'source and the knob file. Swapping whole source files needs a bundler hook this',
+    'app doesn’t have; re-run `isotone init` if it gets a Vite config later.',
   ].join('\n');
 }
 
-function appendAgentsParagraph(cwd: string, paragraph: string): void {
+function appendAgentsParagraph(cwd: string, paragraph: string): boolean {
   const file = join(cwd, 'AGENTS.md');
   const existing = existsSync(file) ? readFileSync(file, 'utf8') : '';
-  if (existing.includes(AGENTS_MARKER)) return; // already there; do not duplicate
+  if (existing.includes(AGENTS_MARKER)) return false; // already there; do not duplicate
   const sep = existing ? (existing.endsWith('\n') ? '\n' : '\n\n') : '';
   writeFileSync(file, `${existing}${sep}${paragraph}\n`);
+  return true;
 }
 
 function createVariantsReadme(cwd: string): void {

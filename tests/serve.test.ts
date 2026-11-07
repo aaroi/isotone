@@ -5,13 +5,14 @@
  * actually carrying its mount call and the CORS rule that keeps a random
  * public page from writing into someone's repo.
  */
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { get } from 'node:http';
 import { join } from 'node:path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { VARIANTS_ENDPOINT } from '../src/core/variants';
 import { serveIteration, type ServedIteration } from '../src/serve/index';
 import { guardedScriptTag } from '../src/serve/tag';
 import { NOTES_ENDPOINT } from '../src/store';
@@ -53,6 +54,31 @@ describe('the browser bundle', () => {
     expect(js.includes('"hidden":["/login"]'), 'passes the route rule').toBe(true);
     expect(js.includes('"theme":"light"'), 'passes the theme').toBe(true);
     expect(js.includes(`${served.url}${UPDATE_ENDPOINT}`), 'passes the update endpoint').toBe(true);
+  });
+});
+
+describe('knobs', () => {
+  it('serves the project’s knobs and hands the panel their endpoint', async () => {
+    const js = await (await fetch(served.bundleUrl)).text();
+    expect(js.includes(`"variantsEndpoint":"${served.url}${VARIANTS_ENDPOINT}"`), 'passes the knobs endpoint').toBe(true);
+
+    const empty = await fetch(`${served.url}${VARIANTS_ENDPOINT}`, { headers: { origin: 'http://localhost:3000' } });
+    expect(empty.status).toBe(200);
+    expect(empty.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
+    expect(await empty.json()).toEqual({ variants: [], active: [], knobs: [] });
+
+    mkdirSync(join(dir, '.isotone'), { recursive: true });
+    const radius = { kind: 'range', id: 'card-radius', label: 'Card radius', min: 0, max: 24, step: 1, defaultValue: 12, unit: 'px' };
+    writeFileSync(join(dir, '.isotone', 'knobs.json'), JSON.stringify([radius, { id: 'broken' }]));
+    expect(await (await fetch(`${served.url}${VARIANTS_ENDPOINT}`)).json()).toEqual({ variants: [], active: [], knobs: [radius] });
+  });
+
+  it('refuses file-variant activation, which needs a bundler', async () => {
+    const res = await fetch(`${served.url}${VARIANTS_ENDPOINT}/active`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ active: ['a'] }),
+    });
+    expect(res.status).toBe(405);
+    expect((await fetch(`${served.url}${VARIANTS_ENDPOINT}`, { headers: { origin: 'https://outside.example' } })).status).toBe(403);
   });
 });
 
