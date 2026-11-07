@@ -1,4 +1,4 @@
-import { checkOrigin, type HandlerResponse, httpFailure, readWebJson } from '../node/http';
+import { checkRequest, type HandlerResponse, httpFailure, readWebJson } from '../node/http';
 /**
  * isotone — server.
  *
@@ -77,7 +77,7 @@ export async function serveNotesRequest(file: string, request: Request, options:
   if (refused) return refused;
   try {
     const url = new URL(request.url);
-    checkOrigin(request.headers.get('origin'), url.host, options.loopbackOrigins);
+    checkRequest({ origin: request.headers.get('origin'), host: url.host, loopbackOrigins: options.loopbackOrigins });
     const body = request.method === 'POST' ? await readWebJson(request) : undefined;
     return notesResponse(file, {
       method: request.method,
@@ -104,7 +104,7 @@ export async function serveVariantsRequest(
   if (refused) return refused;
   try {
     const url = new URL(request.url);
-    checkOrigin(request.headers.get('origin'), url.host, options.loopbackOrigins);
+    checkRequest({ origin: request.headers.get('origin'), host: url.host, loopbackOrigins: options.loopbackOrigins });
     const body = request.method === 'POST' ? await readWebJson(request) : undefined;
     const mounted = url.pathname.startsWith(VARIANTS_ENDPOINT) ? url.pathname.slice(VARIANTS_ENDPOINT.length) : url.pathname;
     return variantsResponse(opts, {

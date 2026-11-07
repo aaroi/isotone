@@ -6,17 +6,26 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { UpdateInfo } from '../core/update';
-import { checkOrigin, readNodeJson, sendFailure, writeResponse } from '../node/http';
+import { checkRequest, readNodeJson, sendFailure, writeResponse } from '../node/http';
 import { notesResponse } from '../node/notes/handler';
 import { updateResponse } from '../node/update/note';
 import { type VariantsStoreOptions, variantsResponse } from '../node/variants';
 
 type Middleware = (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
 
-/** Whether the request's origin may use the endpoints; answers 403 when not. */
-export function guardOrigin(req: IncomingMessage, res: ServerResponse): boolean {
+/** The names Vite was told to serve besides local ones (`server.allowedHosts`). */
+export type AllowedHosts = () => readonly string[];
+
+/** Whether the request may use the endpoints; answers 403 when not. Only this
+ *  machine may: `vite --host` exposes the app, not the notes file. */
+function guard(req: IncomingMessage, res: ServerResponse, allowedHosts: AllowedHosts): boolean {
   try {
-    checkOrigin(req.headers.origin, req.headers.host ?? '');
+    checkRequest({
+      origin: req.headers.origin,
+      host: req.headers.host,
+      remoteAddress: req.socket?.remoteAddress ?? null,
+      allowedHosts: allowedHosts(),
+    });
     return true;
   } catch (error) {
     sendFailure(res, error);
@@ -24,18 +33,11 @@ export function guardOrigin(req: IncomingMessage, res: ServerResponse): boolean 
   }
 }
 
-/** Whether the request declares a JSON body (`application/json`, with or
- *  without a charset parameter). */
-export function isJsonRequest(req: IncomingMessage): boolean {
-  const type = req.headers['content-type'];
-  return typeof type === 'string' && type.toLowerCase().includes('application/json');
-}
-
 /** GET reads the cached check; POST asks for the update note, which the
  *  server builds from that check rather than from the request. */
-export function updateEndpoint(file: () => string, updates: { getSnapshot(): UpdateInfo }): Middleware {
+export function updateEndpoint(file: () => string, updates: { getSnapshot(): UpdateInfo }, allowedHosts: AllowedHosts): Middleware {
   return (req, res) => {
-    if (!guardOrigin(req, res)) return;
+    if (!guard(req, res, allowedHosts)) return;
     const method = req.method ?? '';
     (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined))
       .then((body) => {
@@ -46,9 +48,9 @@ export function updateEndpoint(file: () => string, updates: { getSnapshot(): Upd
 }
 
 /** Notes endpoint → local file. Other methods fall through to the next handler. */
-export function notesEndpoint(file: () => string): Middleware {
+export function notesEndpoint(file: () => string, allowedHosts: AllowedHosts): Middleware {
   return (req, res, next) => {
-    if (!guardOrigin(req, res)) return;
+    if (!guard(req, res, allowedHosts)) return;
     const method = req.method ?? '';
     if (method !== 'GET' && method !== 'POST' && method !== 'DELETE') {
       next();
@@ -67,23 +69,13 @@ export function notesEndpoint(file: () => string): Middleware {
 export function variantsEndpoint(
   vopts: () => VariantsStoreOptions,
   activate: (active: string[], changedFiles?: string[]) => Promise<void>,
+  allowedHosts: AllowedHosts,
 ): Middleware {
   return (req, res, next) => {
-    if (!guardOrigin(req, res)) return;
+    if (!guard(req, res, allowedHosts)) return;
     const method = req.method ?? '';
     if (method !== 'GET' && method !== 'POST') {
       next();
-      return;
-    }
-    // A POST switches every open tab of this dev server to another set
-    // of files. A cross-site page can fire a `no-cors` form post at
-    // localhost, but only with a text/plain or form content type; a
-    // JSON content type needs a preflight, which vite's CORS does not
-    // grant to an unknown origin. So the header is the gate.
-    if (method === 'POST' && !isJsonRequest(req)) {
-      res.statusCode = 415;
-      res.setHeader('content-type', 'application/json; charset=utf-8');
-      res.end(JSON.stringify({ error: 'content-type must be application/json' }));
       return;
     }
     (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined))

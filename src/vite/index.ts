@@ -436,13 +436,17 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
       if (options.checkForUpdates === 'note') {
         void updates.ready.then(() => autoUpdateNote(file, updates.getSnapshot())).catch(() => {});
       }
+      const allowedHosts = () => {
+        const hosts = server.config.server?.allowedHosts;
+        return Array.isArray(hosts) ? hosts : [];
+      };
       server.middlewares.use(
         UPDATE_ENDPOINT,
-        updateEndpoint(() => file, updates),
+        updateEndpoint(() => file, updates, allowedHosts),
       );
       server.middlewares.use(
         NOTES_ENDPOINT,
-        notesEndpoint(() => file),
+        notesEndpoint(() => file, allowedHosts),
       );
 
       if (variantsOptions) {
@@ -576,7 +580,7 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
 
         server.middlewares.use(
           VARIANTS_ENDPOINT,
-          variantsEndpoint(() => vopts, activate),
+          variantsEndpoint(() => vopts, activate, allowedHosts),
         );
 
         // The CLI's `variant use` writes the active file with no request to

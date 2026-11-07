@@ -452,11 +452,17 @@ function request(
   url: string,
   body?: unknown,
   headers: Record<string, string> = { 'content-type': 'application/json' },
+  remoteAddress = '127.0.0.1',
 ): Promise<{ status: number; body: unknown }> {
   const call = server.middlewares.use.mock.calls.find((c) => c[0] === mount);
   if (!call) throw new Error(`nothing mounted at ${mount}`);
   const handler = call[1] as Middleware;
-  const req = Object.assign(new EventEmitter(), { method, url, headers });
+  const req = Object.assign(new EventEmitter(), {
+    method,
+    url,
+    headers: { host: 'localhost:5173', ...headers },
+    socket: { remoteAddress },
+  });
   return new Promise((done) => {
     const res = {
       statusCode: 200,
@@ -670,6 +676,25 @@ describe('overlay variants in the dev server', () => {
     expect(server.ws.send).not.toHaveBeenCalled();
     const other = await request(server, VARIANTS_ENDPOINT, 'POST', '/', {});
     expect(other.status).toBe(405);
+  });
+
+  it('answers only this machine, even when the dev server is exposed on the network', async () => {
+    const { root } = tempProject();
+    const hooks = plugin(root, 'serve');
+    const server = fakeServer(root);
+    (server.config as { server?: unknown }).server = { allowedHosts: ['.dev.example'] };
+    hooks.configureServer(server);
+    const json = { 'content-type': 'application/json' };
+    const note = { route: '/', feedback: 'From the network' };
+    // A phone or laptop on the same Wi-Fi, whatever Host it claims.
+    expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, json, '192.168.1.20')).status).toBe(403);
+    expect((await request(server, NOTES_ENDPOINT, 'GET', '/', undefined, { host: 'localhost:5173' }, '::ffff:192.168.1.20')).status).toBe(
+      403,
+    );
+    // A rebinding page's own name is refused; Vite's allowed hosts are not.
+    expect((await request(server, NOTES_ENDPOINT, 'GET', '/', undefined, { host: 'rebind.attacker.example' })).status).toBe(403);
+    expect((await request(server, NOTES_ENDPOINT, 'GET', '/', undefined, { host: 'app.dev.example' })).status).toBe(200);
+    expect((await request(server, NOTES_ENDPOINT, 'GET', '/', undefined, {}, '::1')).status).toBe(200);
   });
 
   it('answers 415 to a POST that does not declare a JSON body', async () => {
