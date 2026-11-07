@@ -22,12 +22,10 @@ export interface BlastSession {
   version: 1;
   startedAt: string;
   endsAt: string;
-  every: number;
   route: string | null;
   heartbeatAt: string | null;
   waiting: boolean;
   stoppedAt?: string;
-  stoppedBy?: 'cli';
   seen: Record<string, string>;
 }
 
@@ -43,18 +41,16 @@ export function readSession(file: string): BlastSession | null {
   if (!existsSync(file)) return null;
   try {
     const v = JSON.parse(readFileSync(file, 'utf8')) as Partial<BlastSession>;
-    if (!v || typeof v !== 'object' || !iso(v.startedAt) || !iso(v.endsAt) ||
-      typeof v.every !== 'number' || !(v.every > 0)) return null;
+    if (!v || typeof v !== 'object' || !iso(v.startedAt) || !iso(v.endsAt)) return null;
     const seen = v.seen && typeof v.seen === 'object' && !Array.isArray(v.seen)
       ? Object.fromEntries(Object.entries(v.seen).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
       : {};
     return {
-      version: 1, startedAt: v.startedAt, endsAt: v.endsAt, every: v.every,
+      version: 1, startedAt: v.startedAt, endsAt: v.endsAt,
       route: typeof v.route === 'string' && v.route ? v.route : null,
       heartbeatAt: iso(v.heartbeatAt) ? v.heartbeatAt : null,
       waiting: v.waiting === true,
       ...(iso(v.stoppedAt) ? { stoppedAt: v.stoppedAt } : {}),
-      ...(v.stoppedBy === 'cli' ? { stoppedBy: v.stoppedBy } : {}),
       seen,
     };
   } catch { return null; }
@@ -93,16 +89,14 @@ export function isLive(session: BlastSession, now = Date.now()): boolean {
 export function publicState(session: BlastSession, now = Date.now()): BlastState {
   const ended = isEnded(session, now);
   return {
-    startedAt: session.startedAt, endsAt: session.endsAt, every: session.every, route: session.route,
+    startedAt: session.startedAt, endsAt: session.endsAt, route: session.route,
     heartbeatAt: session.heartbeatAt,
     // A killed command never clears its flag; a missed heartbeat does.
     waiting: !ended && session.waiting && session.heartbeatAt !== null && now - Date.parse(session.heartbeatAt) < HEARTBEAT_MS * 2.5,
     ...(session.stoppedAt ? { stoppedAt: session.stoppedAt } : {}),
-    ...(session.stoppedBy ? { stoppedBy: session.stoppedBy } : {}),
     live: isLive(session, now), ended, now: new Date(now).toISOString(),
   };
 }
-
 
 /** Open notes in the session's scope that have not been handed out as they are now. */
 export function unseenNotes(notes: StoredNote[], session: BlastSession): StoredNote[] {
@@ -110,10 +104,8 @@ export function unseenNotes(notes: StoredNote[], session: BlastSession): StoredN
     .filter((note) => !note.done)
     // An update request concerns the whole project, as in `npx isotone <route>`.
     .filter((note) => !session.route || note.route === session.route || Boolean(updateRequestOf(note.update)))
-    .filter((note) => {
-      // A question the reviewer has not answered yet (by editing the note) waits for them.
-      return session.seen[note.id] !== noteFingerprint(note) && !isAwaitingAnswer(note);
-    })
+    // A question the reviewer has not answered yet (by editing the note) waits for them.
+    .filter((note) => session.seen[note.id] !== noteFingerprint(note) && !isAwaitingAnswer(note))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
