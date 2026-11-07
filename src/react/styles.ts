@@ -43,6 +43,9 @@ ${APPEARANCE_CSS}
   z-index: 2147483000; width: 44px; display: flex; flex-direction: column; isolation: isolate; max-height: calc(var(--iso-view-height) - 32px); color: var(--iso-fg);
   font: 12px/1.5 var(--iso-sans); -webkit-font-smoothing: antialiased;
   text-align: left; letter-spacing: normal; color-scheme: dark;
+  /* Inherited text properties cross the shadow boundary: an RTL or styled host must not mirror or restyle the panel. */
+  direction: ltr; writing-mode: horizontal-tb; word-spacing: normal; text-indent: 0; text-transform: none;
+  text-shadow: none; white-space: normal; font-feature-settings: normal; font-variation-settings: normal;
 }
 .isotone-root :where(button, input, textarea):focus-visible { outline: 2px solid var(--iso-focus); outline-offset: 3px; }
 .isotone-root button { transition: transform var(--iso-fast) var(--iso-ease-out), opacity var(--iso-fast) var(--iso-ease-out); }
