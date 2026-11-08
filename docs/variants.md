@@ -156,9 +156,8 @@ moved ones in its `[set-defaults]` note (`payload.knobs` as `fade-from:40`).
 
 ## Sections
 
-Once a page has more than a few selectors, put each one in a section named after
-the part of the page it changes. Write the section as a label prefix, a `>`
-with a space on each side:
+Once a page has more than a few selectors, put each in a section named after the
+part of the page it changes, as a label prefix with a spaced `>`:
 
 ```ts
 { id: 'logo-size', label: 'Header > Logo size', kind: 'range', min: 16, max: 48, step: 2, defaultValue: 24, unit: 'px' }
@@ -168,30 +167,30 @@ The panel shows *Logo size* under a sticky, foldable **Header** heading with a
 count. Screen readers, notes and saved defaults keep the full name,
 `Header › Logo size`.
 
-- Only the first ` > ` splits, so `Header > Nav > Gap` is *Nav > Gap* in Header.
-  ` › ` works the same way. The spaces matter: `a>b` stays one label.
-- A slash never makes a section, so binary selectors such as `Light / Dark` or
-  `Grid / List` keep their whole label.
-- Sections match without regard to case and keep the casing of their first selector.
-- Selectors without a section come first, without a heading. Sections follow in
-  the order their first selector appears, and selectors keep their order inside them.
-- A `showWhen` selector without its own section joins its parent's section.
-- Section names are display text only. IDs, `?v=` links and `selections` do not change.
+- Only the first ` > ` (or ` › `) splits: `Header > Nav > Gap` is *Nav > Gap*
+  in Header, and `a>b` stays one label. A slash never splits, so `Light / Dark`
+  keeps its whole label.
+- Sections match case-insensitively and keep their first selector's casing.
+  Unsectioned selectors come first; sections follow in order of their first
+  selector, and selectors keep their order inside them.
+- A `showWhen` selector without its own section joins its parent's.
+- Sections are display text only: IDs, `?v=` links and `selections` do not change.
 
-An explicit `section` field overrides the prefix. The label then shows as written,
-less a prefix that repeats the section. `section: ''` keeps a label that needs a
-spaced `>`, such as `Before > After`, out of every section:
+An explicit `section` field overrides the prefix, and the label shows as
+written, less a prefix repeating the section. `section: ''` keeps a label that
+needs a spaced `>`, such as `Before > After`, out of every section:
 
 ```ts
 { id: 'order', label: 'Before > After', section: '', options: [/* … */], defaultOption: 'before' }
 ```
 
-The same works everywhere a selector is defined. Host axes and `.isotone/knobs.json`
-entries take a prefixed `label` or a `section` field. File variants take it from the
-group label (`variant new <id> --group-label "Header > Logo"`), or from
-`variant new <id> --section Header`. `variant section <id> <text>` moves an existing
-selector, with every variant in its group; `variant section <id> --none` takes it out
-of every section. `variant list` shows a SECTION column.
+Host axes and `.isotone/knobs.json` entries take a prefixed `label` or a
+`section` field. File variants take it from the group label
+(`variant new <id> --group-label "Header > Logo"`) or
+`variant new <id> --section Header`.
+`variant section <id> <text>` moves an existing selector with its whole group,
+`variant section <id> --none` takes it out of every section, and `variant list`
+shows a SECTION column.
 
 ## The Variants panel
 

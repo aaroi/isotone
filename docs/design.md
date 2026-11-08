@@ -200,25 +200,21 @@ delete, panel close) with the same faces; the pill stays 76 × 44px.
 Keep native scrolling, wheel and trackpad input and focus reveal; hide scrollbar
 chrome without disabling overflow.
 
-Content passing under a fixed area fades into the actual surface, through the
-shared surface token or a mask so it works over dark gradients: the Save footer,
-the dialog header, sticky section headers, the error footer, both edges of the
-saved-note list and the top of scrolled composer text. Never put a hard clipping
-edge inside an empty inset. Lists reserve scroll padding so the first and last
-rows scroll fully clear of the fades and fixed controls, keyboard outlines
-included.
+Content passing under a fixed area (the Save footer, dialog header, sticky
+section headers, error footer, both edges of the saved-note list, the top of
+scrolled composer text) fades into the actual surface, via the surface token or
+a mask so it works over dark gradients; never a hard clipping edge inside an
+empty inset. Scroll padding lets the first and last rows, and keyboard outlines,
+clear the fades and fixed controls.
 
 A section header sticks to the top of the Variants scroll area while its
-selectors pass beneath, and the next header pushes it out. At rest its padding
-fills the gap above it, so sticking does not move its text, and its fade sits in
-the gap below, never covering a control at rest. Scroll padding keeps keyboard
-focus from landing beneath it.
+selectors pass, until the next pushes it out. At rest its padding fills the gap
+above (sticking does not move its text) and its fade sits in the gap below,
+covering no control; scroll padding keeps focus from landing beneath it.
 
-The textarea's top mask appears only after scrolling, so its first line is whole
-at rest. Without tags the textarea extends through the field's top inset, which
-scrolls away with the content, and the fade reaches the field edge. With tags,
-the gap below the strip belongs to the scrolling text, which fades directly
-beneath the strip.
+The textarea's top mask appears only after scrolling. Without tags the textarea
+extends through the field's top inset, which scrolls away with the text, and the
+fade reaches the field edge; with tags, text fades directly beneath the strip.
 
 ## Theme detection
 

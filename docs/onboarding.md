@@ -8,17 +8,15 @@ Re-run [the agent trial](#the-agent-trial) when changing it.
 
 1. The user pastes the README's **Start with your agent** prompt, naming a page.
 2. The agent installs `isotone` as a dev dependency and runs `npx isotone init --yes`.
-3. `init` detects the framework and prints the development-only setup, a **first
-   run** and the `AGENTS.md` status. The first run has the agent build two real,
-   opt-in variants on the user's page (Vite: one file-variant selector and one
-   knob; any other dev server: a select knob and a range or colour knob), check
-   them with `npx isotone variant list`, and send a short message in a fixed
-   order: the URL, what was made, how to pin a note, what changed.
+3. `init` prints the development-only setup, the `AGENTS.md` status and, until
+   the project has variants or knobs, a **first run**: build two real, opt-in
+   variants on the user's page (Vite: a file-variant selector and a knob;
+   otherwise a select knob and a range or colour knob), check them with
+   `npx isotone variant list`, and reply in a fixed order: the URL, what was
+   made, how to pin a note, what changed.
 4. The user switches the variants, pins a note and says "check my Isotone notes".
-   The short `AGENTS.md` section carries the loop into later sessions and points
-   to the shipped agent guide for the rest.
-
-`init` skips the first run once the project has variants or knobs.
+   The `AGENTS.md` section carries the loop into later sessions and points to the
+   shipped agent guide.
 
 ## Why the CLI leads
 
