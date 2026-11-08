@@ -18,10 +18,10 @@ framework's development check, and never ship them to production unless the
 user explicitly asks. The [integration guide](integrations.md) has every host
 and how each one stays out of production.
 
-`init --yes` also writes a short Isotone section into `AGENTS.md`. Running it
-again rewrites only that section, so it matches the installed version
-([what init writes](integrations.md)), and says when the integration is
-already in place instead of printing it again.
+`init --yes` also writes a short Isotone section into `AGENTS.md`
+([what init writes](integrations.md)). Run it again after an upgrade: it
+rewrites only that section and, when the integration is already in place, says
+so instead of printing it again.
 
 ## Act on notes
 
@@ -41,16 +41,15 @@ open in the reviewer's panel until you close it.
 - The viewport is a breakpoint hint: a layout note ("3 columns on desktop") is
   about that width. Make the change there and keep other widths as they are,
   unless the note says otherwise.
-- Run `--done` as its own command, once the edit has landed. It refuses, and
-  closes nothing, while no project file has changed since `--working` on the
-  note (or, without it, since the note was written): the usual cause is an edit
-  that failed earlier in a chained command. In Git, staged edits, reverts,
-  commits and deleted files all count. `--force` closes a note that needed no
-  change, such as a question you answered.
-- After closing, `--done` names the variants on the note's route that copy a
-  file changed since `--working` (so the copy may lack the fix), with the
-  `variant sync <id>` that merges it in, and any variant showing in place of the
-  real file. With `--json` that goes to stderr; stdout stays one array.
+- Run `--done` as its own command, once the edit has landed. It refuses while
+  no project file has changed since `--working` (or since the note was
+  written), usually because an earlier edit in a chained command failed; in Git,
+  staged edits, reverts, commits and deletions count. `--force` closes a note
+  that needed no change, such as a question you answered.
+- After closing, `--done` names variants on the note's route that copy a file
+  changed since `--working` (the copy may lack the fix) with the `variant sync
+  <id>` that merges it, and any variant showing in place of the real file. With
+  `--json` that goes to stderr; stdout stays one array.
 - An id prefix is enough when it is unique, and a full id always wins.
   `--working`, `--done` and `--undone` take several ids (`a1 b2` or `a1,b2`);
   either all change or none do.
@@ -148,9 +147,9 @@ npx isotone variant list [<route>] [--json]        # check what the panel will s
 - `variant promote <id>` lands a variant over the real files. Run it only when
   the reviewer picks it. It refuses a stale or conflicted copy; `variant sync
   <id>` merges the real file's changes first, and `--force` lands it anyway.
-- A copy is stale once its real file changes, as it does when you fix a note in
-  that file: `variant list` shows it in the STALE column, and `--done` names it.
-  Sync each copy the fix belongs in too.
+- A copy is stale once its real file changes, as when you fix a note there:
+  `variant list` shows it as STALE and `--done` names it. Sync each copy the fix
+  belongs in too.
 - `variant list --json` prints one object: `variants` (with `stale`, `missing`
   and `active`), `knobs`, and `skippedKnobs` with the reason for each.
   `--all-routes` lists every route's variants even with a route given.
