@@ -12,6 +12,7 @@
  * installed copy would resolve it.
  */
 import { execFileSync } from 'node:child_process';
+import { request as httpRequest } from 'node:http';
 import { EventEmitter } from 'node:events';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -162,6 +163,15 @@ describe('the Vite adapter, served', () => {
     expect(js.length).toBeGreaterThan(100_000);
     expect(/^\s*import\s/m.test(js)).toBe(false);
     expect(server.config.optimizeDeps.include).not.toContain('isotone/react');
+  });
+
+  it('refuses a page on another localhost port, and accepts the dev server’s own', async () => {
+    const port = new URL(origin).port;
+    const read = (from: string) => fetch(`${origin}${NOTES_ENDPOINT}`, { headers: { origin: from } });
+    for (const from of ['http://127.0.0.1:3000', `http://localhost:${port}`, 'http://127.0.0.1']) {
+      expect((await read(from)).status, from).toBe(403);
+    }
+    expect((await read(origin)).status).toBe(200);
   });
 
   it('rejects foreign-origin writes and oversized bodies before changing notes', async () => {
@@ -988,6 +998,21 @@ function livePlugin(root: string): { hooks: LiveHooks; server: FakeServer & { en
 }
 
 describe('live variants', () => {
+  it('answers ?isotone= only for files a variant tracks, leaving the rest to Vite', () => {
+    const { root, source } = tempProject();
+    writeFileSync(join(root, '.env'), 'SECRET_TOKEN=sk_live_FAKE\n');
+    const { hooks } = livePlugin(root);
+    for (const version of ['_base', 'b', 'zzz']) {
+      for (const file of ['.env', '.git/config', '.git/HEAD', 'src/Table.tsx.bak', 'package.json']) {
+        expect(hooks.load(`${join(root, file)}?isotone=${version}`), `${file}?isotone=${version}`).toBeNull();
+      }
+    }
+    // A tracked file keeps its versions; a variant without a copy has none.
+    expect(hooks.load(`${source}?isotone=_base`)?.code).toContain('"real"');
+    expect(hooks.load(`${source}?isotone=b`)?.code).toContain('variant b');
+    expect(hooks.load(`${source}?isotone=t`)?.code).toBe('export {};\n');
+  });
+
   it('serves a dispatcher in the browser and keeps the whole-file swap for SSR', () => {
     const { root, source } = tempProject();
     writeActive({ root }, ['b']);
@@ -1145,5 +1170,93 @@ describe('live variants', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('project files through the dev server', () => {
+  let live: ViteDevServer;
+  let base: string;
+  let project: string;
+
+  beforeAll(async () => {
+    project = tempProject().root;
+    // Kept for the whole describe: the file-level afterEach removes `repos`.
+    repos.splice(repos.indexOf(project), 1);
+    writeFileSync(join(project, '.env'), 'SECRET_TOKEN=sk_live_FAKE_ENV\n');
+    writeFileSync(join(project, '.git', 'config'), '[remote "origin"]\n\turl = https://FAKE_GIT_TOKEN@example.com/x.git\n', { flag: 'a' });
+    writeFileSync(
+      join(project, '.iteration-feedback.json'),
+      JSON.stringify([{ id: 'n1', route: '/', feedback: 'FAKE_NOTE_TEXT', createdAt: '2026-11-08T00:00:00Z' }]),
+    );
+    writeFileSync(join(project, '.iteration-feedback.blast.json'), '{"FAKE_BLAST_STATE":1}');
+    writeFileSync(join(project, '.isotone', 'knobs.json'), '[{"id":"FAKE_KNOB"}]');
+    live = await createServer({
+      root: project,
+      configFile: false,
+      logLevel: 'silent',
+      server: { port: 0, host: '127.0.0.1', watch: null },
+      optimizeDeps: { noDiscovery: true, include: [] },
+      // A React-named plugin turns live switching on, which answers `?isotone=`.
+      plugins: [{ name: 'fixture:react' }, isotone({ checkForUpdates: false })],
+    });
+    await live.listen();
+    const address = live.httpServer?.address();
+    base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
+  });
+
+  afterAll(async () => {
+    (live?.httpServer as import('node:http').Server | null)?.closeAllConnections?.();
+    await live?.close();
+    rmSync(project, { recursive: true, force: true });
+  });
+
+  /** GET `path` exactly as written: no client-side normalization of `..` or `%2e`. */
+  function raw(path: string): Promise<{ status: number; body: string }> {
+    return new Promise((done, fail) => {
+      const req = httpRequest(`${base}${path}`, { headers: { host: new URL(base).host } }, (res) => {
+        let body = '';
+        res.on('data', (chunk) => (body += chunk));
+        res.on('end', () => done({ status: res.statusCode ?? 0, body }));
+      });
+      req.on('error', fail);
+      req.path = path;
+      req.end();
+    });
+  }
+
+  it('never serves secrets or Isotone’s own files, however the path is written', async () => {
+    const secrets = /FAKE_(ENV|GIT_TOKEN|NOTE_TEXT|BLAST_STATE|KNOB)/;
+    const paths = [
+      '/.env?isotone=_base',
+      '/.env?isotone=b',
+      '/.env?import&isotone=_base',
+      '/.git/config?isotone=_base',
+      '/.isotone/../.env?isotone=_base',
+      '/src/../.env?isotone=_base',
+      '/%2eenv?isotone=_base',
+      '/.%65nv?isotone=_base',
+      `/@fs${project}/.env?isotone=_base`,
+      '/.iteration-feedback.json',
+      '/.iteration-feedback.json?import',
+      '/.iteration-feedback.json?raw',
+      '/.iteration-feedback.json?isotone=_base',
+      '/.iteration-feedback.blast.json',
+      '/.isotone/knobs.json',
+      '/.isotone/knobs.json?import',
+      '/.isotone/variants/b/src/Button.tsx',
+      `/@fs${project}/.isotone/knobs.json`,
+    ];
+    for (const path of paths) {
+      const { body } = await raw(path);
+      expect(body, path).not.toMatch(secrets);
+    }
+  });
+
+  it('still serves a tracked file’s versions and the notes endpoint', async () => {
+    expect((await raw('/src/Button.tsx?isotone=_base')).body).toContain('real');
+    expect((await raw('/src/Button.tsx?isotone=b')).body).toContain('variant b');
+    const notes = await raw(NOTES_ENDPOINT);
+    expect(notes.status).toBe(200);
+    expect(notes.body).toContain('FAKE_NOTE_TEXT');
   });
 });

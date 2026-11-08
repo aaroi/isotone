@@ -8,7 +8,7 @@
  * (the endpoints), and ./html-inject (the panel in each page).
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, relative, resolve } from 'node:path';
+import { basename, dirname, relative, resolve } from 'node:path';
 
 // `normalizePath` is a plain function, so importing it as a value does not
 // pull vite's nominal `Plugin` type into the structural return type below.
@@ -24,6 +24,7 @@ import {
 } from 'vite';
 
 import { VARIANTS_ENDPOINT } from '../core/variants';
+import { blastFile } from '../node/blast';
 import { ensureFileIgnored } from '../node/fs/git-exclude';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
@@ -48,6 +49,10 @@ import { createSwitching } from './switching';
 export type { IterationPlugin, IterationViteOptions } from './options';
 
 const DEFAULT_FILE = '.iteration-feedback.json';
+
+/** Vite's own `server.fs.deny`, which a plugin that sets the option replaces
+ *  unless it repeats it. */
+const VITE_DENY = ['.env', '.env.*', '*.{crt,pem}', '**/.git/**'];
 
 /**
  * Import queries that hand the file to one of vite's own loaders (assets,
@@ -91,6 +96,14 @@ export function isotone(options: IterationViteOptions = {}): IterationPlugin {
   const plugin = {
     name: 'iso:iteration',
     enforce: 'pre',
+    // Isotone's own files are read through its endpoints, never as static
+    // files: keep Vite's file server from handing them out.
+    config(config: { server?: { fs?: { deny?: string[] } } }) {
+      const notes = basename(options.file ?? DEFAULT_FILE);
+      const own = [`**/${notes}`, `**/${basename(blastFile(notes))}`, '**/.isotone/**'];
+      // Vite concatenates a plugin's array with the user's.
+      return { server: { fs: { deny: config.server?.fs?.deny ? own : [...VITE_DENY, ...own] } } };
+    },
     configResolved(config: ResolvedConfig) {
       isDev = config.command === 'serve';
       file = resolve(config.root, options.file ?? DEFAULT_FILE);
@@ -122,7 +135,10 @@ export function isotone(options: IterationViteOptions = {}): IterationPlugin {
       if (!overrides.overridable(path)) return null;
       const query = id.slice(path.length).replace(/^\?/, '').replace(/#.*$/, '');
       const version = switching.live ? new URLSearchParams(query).get(VERSION_QUERY) : null;
-      if (version !== null) {
+      // Only a file some variant tracks has versions. Any other path is left
+      // to Vite, whose `server.fs.deny` keeps `.env` and `.git/` out of reach;
+      // answering it here would read the file around that check.
+      if (version !== null && overrides.versionsByFile().has(path)) {
         const from = version === BASE_VERSION ? (existsSync(path) ? path : null) : overrides.copyOf(version, path);
         return { code: from ? readFileSync(from, 'utf8') : 'export {};\n', map: null };
       }
