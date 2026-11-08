@@ -46,9 +46,9 @@ open in the reviewer's panel until you close it.
   staged edits, reverts, commits and deletions count. `--force` closes a note
   that needed no change, such as a question you answered.
 - After closing, `--done` names variants on the note's route that copy a file
-  changed since `--working` (the copy may lack the fix) with the `variant sync
-  <id>` that merges it, and any variant showing in place of the real file. With
-  `--json` that goes to stderr; stdout stays one array.
+  changed since `--working` (the copy may lack the fix) with the
+  `variant sync <id>` that merges it, and any variant showing in place of the
+  real file. With `--json` that goes to stderr; stdout stays one array.
 - An id prefix is enough when it is unique, and a full id always wins.
   `--working`, `--done` and `--undone` take several ids (`a1 b2` or `a1,b2`);
   either all change or none do.
