@@ -40,7 +40,7 @@ already use, with any agent that can run a command.
 
 ## Get started
 
-Isotone needs Node.js 20 or later. Pick one of these ways to start.
+Isotone needs Node.js 22 or later. Pick one of these ways to start.
 
 ### Start with your agent
 

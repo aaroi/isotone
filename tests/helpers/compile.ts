@@ -13,8 +13,8 @@ function resolveSource(from: string, specifier: string): string {
 
 /**
  * Compile `src` modules, and every module they import, to plain `.mjs` under
- * `outDir`, so a child process runs the current sources on Node 20, which has
- * no built-in TypeScript loader. Entries are paths relative to `src`, without
+ * `outDir`, so a child process runs the current sources. Node's own type
+ * stripping cannot resolve their extensionless relative imports. Entries are paths relative to `src`, without
  * an extension. Returns each entry's file URL.
  */
 export function compileSources(entries: string[], outDir: string): Record<string, string> {

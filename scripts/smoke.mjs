@@ -28,8 +28,7 @@ const pairs = (process.argv.length > 2 ? process.argv.slice(2) : ['5:18', '8:19'
   if (!match) throw new Error(`Expected <vite major>:<react major>, received ${JSON.stringify(pair)}`);
   return { vite: match[1], react: match[2] };
 });
-// jsdom 26 is the newest release that still runs on Node 20.
-const JSDOM = 'jsdom@^26';
+const JSDOM = `jsdom@${JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).devDependencies.jsdom}`;
 
 const scratch = mkdtempSync(join(tmpdir(), 'iso-smoke-'));
 const run = (args, cwd) => npm(args, { cwd, stdio: ['ignore', 'pipe', 'inherit'] });

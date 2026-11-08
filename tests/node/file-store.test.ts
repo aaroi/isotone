@@ -12,8 +12,7 @@ it('serializes independent writers while readers only see complete JSON', async 
   const writesPerWriter = 20;
   const root = mkdtempSync(join(tmpdir(), 'iso-atomic-'));
   const file = join(root, 'counter.json');
-  // Compile the helpers so the child test also runs on Node 20, which has
-  // no built-in TypeScript loader.
+  // Compile the helpers so the child processes run the current sources.
   const runtime = mkdtempSync(join(tmpdir(), 'iso-atomic-runtime-'));
   const compiled = compileSources(['node/fs/lock', 'node/fs/atomic'], runtime);
   const helper = join(root, 'file-store.mjs');
@@ -92,8 +91,7 @@ it('preserves every file when separate agents add to the same variant', async ()
   try {
     execFileSync('git', ['init', '-q', root]);
     const runtime = join(root, 'runtime');
-    // Run the current sources in child processes without rebuilding the
-    // package or requiring a TypeScript loader in the supported Node versions.
+    // Run the current sources in child processes without rebuilding the package.
     const store = compileSources(['node/variants'], runtime)['node/variants'];
     createVariant({ root }, { id: 'shared' });
     const files = Array.from({ length: 20 }, (_, index) => `source-${index}.txt`);
