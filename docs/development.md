@@ -86,15 +86,14 @@ used by the panel.
 
 ## Local workflow
 
-`pnpm dev` starts the fictional demo at `http://127.0.0.1:4173`. Its top bar has
-a Panel theme select, a light and dark toggle for the page, and a Tour button. The
-tour (`examples/demo/tour.tsx`) starts by itself on a browser's first visit and
-remembers when it was closed; `/?tour=1` starts it regardless. Its last step
-hands visitors the README's "Start with your agent" prompt, kept in
-`examples/demo/agent-prompt.ts`; `tests/package/agent-prompt.test.ts` keeps the
-two the same. A pretend agent marks each new note as worked on a moment after it
-is sent and closes it a few seconds later, as `--working` and `--done` would;
-reloading clears a claim it never finished.
+`pnpm dev` starts the fictional demo at `http://127.0.0.1:4173`, with a panel
+theme select, a page light/dark toggle and a Tour button in its top bar. The tour
+(`examples/demo/tour.tsx`) starts on a browser's first visit until closed
+(`/?tour=1` forces it) and ends with the README's "Start with your agent"
+prompt, kept in `examples/demo/agent-prompt.ts` and checked against the README
+by `tests/package/agent-prompt.test.ts`. A pretend agent marks each new note as
+worked on and closes it seconds later, as `--working` and `--done` would; a
+reload clears a claim it never finished.
 
 The sample app's selectors sit in two sections, Cards and Theme. Other demo URLs:
 
@@ -111,16 +110,15 @@ corners have no frame, and a 15s virtual time budget so the opening motion has
 settled. `?scene=focus` shows the feedback panel alone, `?scene=pin` select mode
 with a pinned card, and `?theme=light` the light page.
 
-`docs/assets/loop.gif` is recorded by `scripts/capture/record-loop.mjs`, which
-drives the hosted demo build through the Chrome DevTools Protocol and encodes the
-frames with ffmpeg. The header comment has the commands.
+`scripts/capture/record-loop.mjs` records `docs/assets/loop.gif` from the hosted
+demo build over the Chrome DevTools Protocol and ffmpeg; its header has the
+commands.
 
 ## Hosted demo
 
-`pnpm build:demo` builds the demo as a static site in `demo-dist/`. Without a
-dev server, the page answers the notes endpoint itself from `localStorage`, and
-the pretend agent edits those notes there. `pnpm dev --mode hosted` serves the
-same hosted variant from the dev server. `vercel.json` holds the install and
+`pnpm build:demo` builds the demo as a static site in `demo-dist/` that answers
+the notes endpoint itself from `localStorage`; `pnpm dev --mode hosted` serves
+the same build mode from the dev server, and `vercel.json` holds the install and
 build commands.
 
 Every user-facing change updates the demo so it shows the change: new controls
@@ -146,7 +144,6 @@ status hashes blobs in process (Git-compatible) rather than spawning per file.
 Theme events and picker geometry are coalesced per frame; panel motion and
 render budgets are in [the design language](design.md#motion).
 
-Add virtualization or a new runtime only for a measured bottleneck with a clear
-benefit, keeping native scrolling and keyboard access. Validate
-performance-sensitive changes with large collections and failure and retry
-paths, not only a fast happy path.
+Add virtualization or a new runtime only for a measured bottleneck, keeping
+native scrolling and keyboard access, and validate performance changes with
+large collections and failure and retry paths, not just the happy path.

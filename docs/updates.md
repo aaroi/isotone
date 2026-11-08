@@ -1,9 +1,8 @@
 # Updates
 
 Your project controls its installed version. Isotone checks for a newer release
-in the background and lets you hand the upgrade to your coding agent, or copy the
-exact command; it never installs packages, runs that command, or changes a
-manifest or lockfile itself.
+in the background and lets you hand the upgrade to your agent or copy the exact
+command; it never installs, runs that command or changes a manifest or lockfile.
 
 The Vite plugin and `isotone serve` check the public npm `latest` tag at most
 once a day, cached per user in `~/.cache/isotone` (or `$XDG_CACHE_HOME/isotone`),

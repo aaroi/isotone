@@ -1,10 +1,9 @@
 # Instrument design
 
-Maintainer reference for Isotone's own panel. Instrument is its single design: a
+Maintainer reference for Isotone's panel. Instrument is its one design: a
 horizontal pill with the feedback and variants panels above it. Light and dark
-share components, geometry, typography, states and motion; only paint tokens
-differ. The panel is a small physical control on the host page: depth explains
-function, and nothing decorative competes with the app under review.
+share everything but paint tokens. The panel is a small physical control on the
+host page: depth explains function, and no decoration competes with the app.
 
 ## Materials and states
 
@@ -32,9 +31,9 @@ Focus uses the common visible outline, except the text field, which shows only
 the caret. A click on any noninteractive part of the composer focuses the
 textarea. Disabled controls keep shape and material, lower opacity, get no hover.
 
-In forced colors (Windows high contrast) segments get a `ButtonBorder` edge,
-every persistent selection becomes `Highlight` with `HighlightText`, and sliders
-use system colours. Swatches and the colour picker keep their own colours.
+In forced colors segments get a `ButtonBorder` edge, persistent selection
+becomes `Highlight` with `HighlightText`, and sliders use system colours;
+swatches and the colour picker keep theirs.
 
 ## Geometry and content
 
@@ -51,9 +50,9 @@ Layout constants live in `styles.ts`:
 | Tool faces | 28px, with 4px between faces and around them |
 | Saved note padding | 6px vertically, 11px horizontally; background extends 1px past the composer on each side |
 
-The expanded pill is the same material stretched: keep its lower rim, inset and
-proportions. Panels stay anchored above it; opening one never moves the pill or
-rescales text in another.
+The expanded pill is the same material stretched, keeping its lower rim, inset
+and proportions. Panels stay anchored above it; opening one never moves the pill
+or rescales another's text.
 
 The defaults bar sits at the bottom of the variants panel while a pick differs
 from its default: a count and Make default, which files a request and keeps
@@ -131,19 +130,18 @@ changing the preview, and cannot undo a source change already made.
 
 ### Update notice
 
-One quiet line beside the pill (“Isotone 1.2.0 is available”). Its dialog has
-one line of versions, one raised action, **Ask agent to update**, and two quiet
-text buttons, Copy prompt and Command (which reveals the raw command in a well);
-no paragraphs of instructions. Once asked, the action gives way to “Update
-requested · in Feedback” and the line reads “Update requested”. The update note
-is an ordinary note with an “Update” tag in place of references, on every page.
+One quiet line beside the pill ([what it offers](updates.md#in-the-panel)). Its
+dialog is one line of versions, one raised action and two quiet text buttons,
+Command revealing the raw command in a well; no paragraphs of instructions. Once
+asked, the action reads “Update requested · in Feedback” and the line “Update
+requested”. The update note is an ordinary note tagged “Update” in place of
+references.
 
 ### Tooltips
 
-Native tooltips are only for brief icon hints and labels that really overflow:
-never full notes, readable labels or internal selectors in `title`. Check
-overflow on pointer entry, not by measuring every row during render. Accessible
-labels keep the full text.
+Native tooltips are only for brief icon hints and labels that really overflow,
+never full notes, readable labels or internal selectors. Check overflow on
+pointer entry, not by measuring rows during render.
 
 ## Resizing the dock
 
@@ -166,13 +164,12 @@ ignored.
 
 ## Hints and instructions
 
-Hint and instruction text is never truncated. Every hint, such as the
-select-mode cover and the floating composer's line, fits on one line in pointer
-and touch copy, at 375px and desktop widths, in both themes: through size,
-shorter copy or reserved space, never an ellipsis or clip. `src/react/hints.ts`
-holds them, and `tests/react/hints.test.ts` keeps them within a 375px viewport.
-The demo tour's copy wraps. User content such as note text and element names may
-truncate, keeping its full text in the accessible name.
+Hints and instructions (the select-mode cover, the floating composer's line) are
+never truncated: each fits on one line in pointer and touch copy, at 375px and
+desktop, in both themes, by size, shorter copy or reserved space, never an
+ellipsis or clip. `tests/react/hints.test.ts` holds `src/react/hints.ts` to a
+375px viewport; the demo tour's copy wraps. User content (note text, element
+names) may truncate, keeping its full text in the accessible name.
 
 ## Phones and touch
 
@@ -218,9 +215,9 @@ fade reaches the field edge; with tags, text fades directly beneath the strip.
 
 ## Theme detection
 
-The `theme` values are listed in [integrations](integrations.md#themes). `auto`
-samples rendered background colours near the dock, not image pixels. It ignores
-the overlay, composites transparent backgrounds and follows page changes without
+The `theme` values are in [integrations](integrations.md#themes). `auto` samples
+rendered background colours near the dock (not image pixels), ignoring the
+overlay, compositing transparent backgrounds and following page changes without
 polling. An unpainted canvas uses CSS `color-scheme`, or white when no dark
 canvas is declared; open shadow roots at the sample point count where the
 browser exposes them. Images, gradients, closed shadow roots and CSSOM-only
@@ -265,12 +262,11 @@ nowhere; an Escape in a host field or dialog is the host's.
 
 Two limits are accepted rather than worked around:
 
-- Host listeners in the capture phase on `window` or `document` run first. A
-  focus trap built that way (as focus-trap libraries do) can pull focus out of
-  the composer while it is active.
-- A host modal opened with `showModal()` or the popover API sits in the top
-  layer, above any z-index, and makes the rest of the page inert; the dock is
-  unreachable until the host closes it.
+- Host capture-phase listeners on `window` or `document` run first, so a focus
+  trap built that way (as focus-trap libraries do) can pull focus out of the
+  composer while active.
+- A host modal from `showModal()` or the popover API sits in the top layer and
+  makes the page inert; the dock is unreachable until it closes.
 
 ## Where changes belong
 

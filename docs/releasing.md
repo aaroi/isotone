@@ -56,18 +56,16 @@ guard, actionlint and zizmor on the workflows, and `pnpm smoke`.
 These are account-side settings no commit can make. Do them once.
 
 1. **Ruleset on `main`** (Settings → Rules → Rulesets → New branch ruleset):
-   name `main`, Enforcement Active, target the default branch. Turn on Restrict
-   deletions, Block force pushes, Require a pull request before merging (0
-   approvals is fine for a solo maintainer), and Require status checks to pass
-   with `check (ubuntu-latest, Node 22)`, `check (ubuntu-latest, Node 24)`,
+   name `main`, Active, targeting the default branch, with Restrict deletions,
+   Block force pushes, Require a pull request (0 approvals is fine solo), and
+   Require status checks: `check (ubuntu-latest, Node 22)`, `check (ubuntu-latest, Node 24)`,
    `check (ubuntu-latest, Node 26)`, `release guard`, `workflow lint` and
-   `packed smoke (oldest and newest Vite and React)`; they appear in the picker
-   after one run on a pull request. Add `check (windows-latest, Node 24)` once it
-   is green and its `continue-on-error` line is removed from `ci.yml`. Tick
-   Require branches to be up to date. Add Repository admin to the bypass list,
-   and the github-actions app only if `Publish main` then fails at
-   `git push origin HEAD:main` with a rule violation (the `prepare` job pushes
-   the version commit directly).
+   `packed smoke (oldest and newest Vite and React)` (they appear in the picker
+   after one pull-request run; add `check (windows-latest, Node 24)` once it is
+   green and its `continue-on-error` is gone from `ci.yml`). Require branches to
+   be up to date. Bypass: Repository admin, plus the github-actions app only if
+   `Publish main` fails at `git push origin HEAD:main` with a rule violation
+   (the `prepare` job pushes the version commit directly).
 2. **Release tags**: a tag ruleset named `release tags`, targeting `v*`, with
    Restrict deletions, Restrict updates and Block force pushes. Bypass:
    github-actions (the `release` job creates the tag) and Repository admin.
@@ -100,5 +98,5 @@ Provenance needs a public repository and package, and `package.json`'s
 repository URL must match the publishing repository; local checks cannot verify
 any of this.
 
-After publishing, verify the new version, README image, exports and provenance
-on npm, then try the documented quick start in a clean project.
+After publishing, check the version, README image, exports and provenance on
+npm, and try the quick start in a clean project.

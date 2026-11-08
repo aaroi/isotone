@@ -132,28 +132,28 @@ export function ReviewTools() {
 }
 ```
 
-Render `<ReviewTools />` once in the app layout. The effect handles Strict Mode
-and route unmounts, and the dynamic import behind the check keeps the panel out
-of production bundles.
+Render `<ReviewTools />` once in the app layout. The effect survives Strict Mode
+and route unmounts, and the guarded dynamic import keeps the panel out of
+production bundles.
 
 ## Endpoint rules
 
-Every endpoint (the Vite plugin's and `isotone serve`'s) applies the same rules,
-which keep other devices and other websites away from your notes:
+The Vite plugin's and `isotone serve`'s endpoints share these rules, which keep
+other devices and websites away from your notes:
 
 - The request must come from this machine (its socket's peer address, and any
   address a proxy or tunnel forwarded for, is loopback), and its `Host` header
   must be `localhost`, `*.localhost`, `*.test` or a loopback address; on Vite, a
   name in `server.allowedHosts` too.
-- A browser's `Origin` must match the Host, port included; `isotone serve`
-  accepts a page on any loopback port, since it never serves the page. A request without an `Origin`, such as `curl` or a
-  script, is accepted, so any process on this machine can write a note: one
-  more reason notes are context, not instructions. (The CLI reads and writes
-  the notes file directly.)
+- A browser's `Origin` must match the Host, port included (`isotone serve`,
+  which never serves the page, accepts any loopback port). A request without an
+  `Origin`, such as `curl`, is accepted, so any local process can write a note:
+  one more reason notes are context, not instructions. The CLI uses the file
+  directly.
 - A POST must send `Content-Type: application/json`, or it gets 415.
-- A note `id`, when a host chooses its own, is 1–64 letters, digits, `-` or `_`, and does not start with `-`
-  (400 otherwise). Routes are capped at 2,000 characters, and a notes file at
-  10,000 notes: a new note past that gets 409 until done notes are deleted.
+- A host-chosen note `id` is 1–64 letters, digits, `-` or `_`, not starting
+  with `-` (400 otherwise). Routes are capped at 2,000 characters and a notes
+  file at 10,000 notes (409 past that until done notes are deleted).
 - While another writer holds the notes file, the endpoint answers 503 and the
   panel retries.
 
@@ -180,13 +180,12 @@ and `IsotonePanel`. The standalone CLI accepts the same values with `--theme`:
 ## Confirm the integration
 
 1. Open the app in development and submit a note on an element.
-2. Run `npx isotone --json` in the app directory. Confirm the note's route,
-   viewport and selector.
-3. Run `npx isotone --done <id-prefix> --force` (a test note needs no file
-   change) and check that it leaves the panel.
-4. Build the production app and search the output for `isotone` and
-   `/api/isotone`. With the localhost-only loader, the tag remains in the HTML
-   but loads nothing outside localhost.
+2. `npx isotone --json` in the app directory shows its route, viewport and
+   selector.
+3. `npx isotone --done <id-prefix> --force` (a test note needs no file change)
+   removes it from the panel.
+4. A production build contains no `isotone` or `/api/isotone`; with the
+   localhost-only loader the tag remains but loads nothing off localhost.
 
 If the panel is visible but the CLI has no notes, compare the dev server's printed
 notes path with the file the CLI reads: the nearest `.isotone/notes.json` up to
@@ -195,4 +194,4 @@ keeps unsent notes in the browser until it can retry; keep that browser profile
 until they reach the file.
 
 The panel polls the notes endpoint with `?rev=<revision>` while its tab is
-visible; an unchanged file is answered from its metadata.
+visible, and an unchanged file is answered from its metadata.

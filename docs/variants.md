@@ -27,14 +27,11 @@ independent axes for independent decisions; `showWhen` hides a dependent axis
 until its parent has the relevant selection. Keep the default among the options
 or swatches.
 
-For a range, choose bounds that give a valid design at both extremes (padding
-8–32px in 2px steps, not 0–1000px), a positive `step` matching the decision's
-precision, and a default on a step within `min` and `max`. Use a unit such as
-`px`, `%` or `ms`; a bare 0–1 range displays as a percentage, and `unit: ''`
-keeps the raw number.
-
-Check that every control changes the intended property at its minimum, maximum
-and reset, and keep the source fallback and the default in sync.
+A range needs bounds that are valid designs at both ends (padding 8–32px in 2px
+steps, not 0–1000px), a positive `step` at the decision's precision, a default
+on a step between them, and a unit such as `px`, `%` or `ms` (a bare 0–1 range shows as a
+percentage; `unit: ''` keeps the raw number). Check every control at its
+minimum, maximum and reset, and keep the source fallback and default in sync.
 
 ## File variants
 
@@ -70,16 +67,16 @@ stop reading as stale: they are alternatives to what was promoted.
 
 ### What the host needs
 
-- **Framework HMR support.** Keep the host's Vite framework plugin (React Fast
-  Refresh through `@vitejs/plugin-react` or its framework wrapper; Vue and
-  Svelte use their own). Without an HMR accept boundary, a switch reloads.
+- **Framework HMR.** Keep the host's Vite framework plugin (`@vitejs/plugin-react`
+  or its wrapper; Vue and Svelte their own): without an accept boundary, a
+  switch reloads.
 - **Tailwind v4** scans only the sources it is pointed at. Add
   `@source "../.isotone/variants/**/*.{ts,tsx}";` (relative to the CSS
   file) or classes new to a variant render unstyled.
 - **A sibling dev server** that aliases into another package sets
   `variants: { root: '../that-package' }` so both serve the same variants.
-- **Routes** come from `window.location.pathname`. An app on a memory
-  router sees `/` everywhere; leave `--route` off there.
+- **Routes** come from `window.location.pathname`; on a memory router (`/`
+  everywhere) leave `--route` off.
 - **Linters** should ignore `.isotone` (Biome: `"!.isotone"` in
   `files.includes`; ESLint: `{ ignores: ['.isotone/**'] }`).
 
