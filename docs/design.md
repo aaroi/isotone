@@ -1,31 +1,35 @@
 # Instrument design
 
 Maintainer reference for Isotone's panel. Instrument is its one design: a
-horizontal pill with the feedback and variants panels above it. Light and dark
-share everything but paint tokens. The panel is a small physical control on the
-host page: depth explains function, and no decoration competes with the app.
+horizontal pill with the feedback and variants panels above it, drawn as rounded
+cards with capsule controls. Light and dark share everything but paint tokens.
+The panel is a small physical control on the host page: depth explains function,
+and no decoration competes with the app.
 
 ## Materials and states
 
 | Role | Light | Dark |
 | --- | --- | --- |
-| Panel surface | White with a light edge and crisp contact shadow | Dark neutral surface with a quiet edge and shadow |
-| Recessed field or selector slot | Gray fill and one crisp inset border | Deeper background with a restrained inset shadow |
-| Raised action or persistent selection | White face, gray border and unblurred gray bottom shadow | Lighter face, edge highlight and contact shadow |
-| Hover | Stronger text or edge within the existing material | Stronger text or a subtle lighter face |
+| Panel surface | Flat white, a fine edge and a short soft shadow | Flat dark neutral, an inner top highlight, a crisp outline against the page and a long soft shadow |
+| Recessed field or selector slot | Light gray fill and one crisp hairline, never a blurred inner shadow | Deeper fill shaded from above, with a faint lit lower lip |
+| Raised action or persistent selection | White face, fine edge and a small shadow | Lighter gradient face, lit top edge, quiet outline and small contact shadow |
+| Popup (action dialog, colour picker, update dialog) | The panel's surface with a stronger shadow | A step lighter than the panel, with a stronger shadow |
+| Hover | Stronger text or a faint fill within the existing material | Stronger text or a faint lighter fill |
+
+Every surface a sticky header or fade has to match is flat, so a header never
+shows as a band over a gradient. Depth comes from edges, highlights and shadows.
 
 Gray means recessed in light mode; selection means raised. A note being
-edited, selected segments and thumbnails and the picker toggle use the shared
-selection recipe. Open pill buttons use Clean Highlight, the accepted
-active-pill material (lighter solid face, fine border, crisp 1px contact shadow;
-one recipe for both themes in `styles/panel.ts`). A selected swatch keeps its
-colour inside the raised frame.
+edited, selected segments, thumbnails and page chips, the picker toggle and the
+open pill button use the shared raised key. A selected swatch keeps its colour
+inside the raised frame.
 
-Raised actions (Make default, Send) share one normal and one hover recipe: no
+Send is the one coloured control: an accent capsule that sinks to a quiet,
+flat face while there is nothing to send. The count badge on the pill shares the
+accent. Every other raised action (Make default, Ask agent to update, Done)
+is a neutral key in regular weight, sharing one normal and one hover recipe: no
 special Save material, stacked inset borders or brightness filter. Hover stays
-below persistent selection. Idle pill icons and the count badge share one muted
-hierarchy; the badge is part of the control, not a notification bubble. Icons
-come through the shared `Icon` component.
+below persistent selection. Icons come through the shared `Icon` component.
 
 Focus uses the common visible outline, except the text field, which shows only
 the caret. A click on any noninteractive part of the composer focuses the
@@ -41,10 +45,11 @@ Layout constants live in `styles/panel.ts`:
 
 | Measure | Value |
 | --- | --- |
-| Panel inset and regular section spacing | 12px |
+| Panel inset | 14px; selectors are 14px apart, the feedback panel's parts 12px |
+| Corners | Panels 18px, wells and the composer 12px, dialogs 14px, thumbnails and note rows 10px; controls, chips and segments are capsules |
 | Space between panels and between panel and pill | 8px |
-| Composer inset | 10px, derived from the panel inset |
-| Composer controls | 24px faces, 14px icons, 28px hit areas |
+| Composer inset | 12px |
+| Composer controls | 30px round select toggle; 44 × 30px send capsule with a 16px icon |
 | Collapsed pill | 44 × 44px |
 | Expanded pill with two tools | 76 × 44px |
 | Tool faces | 28px, with 4px between faces and around them |
@@ -61,19 +66,20 @@ marks each source default; a range draws a tick there while the thumb is
 elsewhere. A slider's visible thumb edge sits 6px below its header like other
 controls, and range inputs use block layout.
 
-Labels, dialog titles, and selected and unselected options share one font
-weight; material and text colour show selection. The host's `--font-sans` may
+Selector labels, dialog titles, and selected and unselected options share one
+light font weight (450); material and text colour show selection. Dialog titles
+are a step larger than the label that opened them. The host's `--font-sans` may
 supply the typeface; weights and sizes stay in the shared stylesheet.
 
 A section header ([naming](variants.md#sections)) is a quiet disclosure, never
-raised: chevron, name in 11px muted text, count in faint tabular figures, the
-axis label's hover face. Unsectioned selectors come first. A sectioned selector
+raised: chevron, name in 11px text between the foreground and muted, count in
+faint tabular figures, the axis label's hover face. Unsectioned selectors come first. A sectioned selector
 and its dialog title show the short name; controls, accessible names and notes
 keep the full one. Folding is immediate and keeps selections.
 
 Saved feedback is one row per note, inline references, no gap between rows.
 Note text sits 3px outside the composer's text inset; references take at most
-42% of the row and name the pinned element or selector, not a route and pin
+a third of the row and name the pinned element or selector, not a route and pin
 count. Delete floats over the top-right corner (24px hit target, no column),
 shown on hover, focus or selection and always on touch. The list is one Tab
 stop: Up, Down, Home and End move between notes, Left and Right between a note
@@ -109,7 +115,8 @@ heading.
 
 Each option and thumbnail has a small chevron (the heading's glyph) in its
 top-right corner, beside its button, taking no label width and replacing the
-default dot while shown. With a pointer it shows on hover, focus or while its
+default dot while shown. In a capsule segment the chevron sits centred on the
+right and the default dot leads the label, so both stay. With a pointer it shows on hover, focus or while its
 dialog is open, and takes no clicks while hidden; touch always shows it. On a
 swatch it is a 16px badge just off the corner, outside the paint, so a press
 anywhere on the colour picks it. A right click, Shift+F10 or the context-menu
@@ -119,6 +126,11 @@ option-scoped dialog, titled with the option over the selector, holds Feedback
 on this option, Keep only this, then Remove this option (disabled for the
 default). It never changes the selection, and opens below the option when it
 cannot fit above, never covering what opened it.
+
+Every action dialog follows the same placement: above what opened it, else below.
+When it fits on neither side it takes the roomier side and scrolls there, with a
+longer fade at its foot; it covers its heading only when neither side has 160px.
+It stays 12px clear of the panel's foot.
 
 The custom swatch opens Isotone's own colour picker, never the browser's, in the
 popup material below the swatch (above when it does not fit), growing the panel
@@ -276,7 +288,7 @@ Two limits are accepted rather than worked around:
 | File | Responsibility |
 | --- | --- |
 | `src/react/styles/appearance.ts` | Complete light/dark palettes and the shared material recipe |
-| `src/react/styles/panel.ts` | Geometry, typography, shared control classes, state selectors and the accepted recipes (inline references, Clean Highlight) |
+| `src/react/styles/panel.ts` | Geometry, typography, shared control classes, state selectors and the accepted recipes (inline references, the open pill's raised key) |
 | `src/react/dock/UpdateNotice.tsx` | Update line and dialog |
 | `src/react/icons.tsx` | Icon choices, optical size and stroke |
 | `src/react/notes/NoteSummary.tsx` | Saved note summaries and their tags |
