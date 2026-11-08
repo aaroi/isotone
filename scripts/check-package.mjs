@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -104,6 +104,47 @@ console.log('Packed package: isolated install, public imports, CLI, bundle and n
 `,
   );
   execFileSync(process.execPath, ['check.mjs'], { cwd: consumer, stdio: 'inherit' });
+  typecheckAsConsumer(consumer);
 } finally {
   rmSync(scratch, { recursive: true, force: true });
+}
+
+/**
+ * Compile a strict TypeScript file that uses every public subpath against the
+ * packed declarations, as an app would, under both module resolutions an app
+ * is likely to use. The peers' types (React, Vite, Node) are linked in from
+ * this repository after the runtime checks, which require their absence.
+ * @param {string} consumer
+ */
+function typecheckAsConsumer(consumer) {
+  for (const name of ['@types', 'vite']) symlinkSync(join(root, 'node_modules', name), join(consumer, 'node_modules', name), 'junction');
+  writeFileSync(
+    join(consumer, 'consumer.ts'),
+    `import { type IsotonePanelProps, IsotonePanel, mountIsotone } from 'isotone/react';
+import { createVariantsSource, type IsotoneNote, type VariantAxis } from 'isotone/core';
+import { type ServedIsotone, serveIsotone } from 'isotone/serve';
+import { isotone } from 'isotone/vite';
+import { runCli } from 'isotone/cli';
+import type { PluginOption } from 'vite';
+
+const plugins: PluginOption[] = [isotone()];
+const panel: typeof IsotonePanel = (props: IsotonePanelProps) => IsotonePanel(props);
+const unmount: () => void = mountIsotone({ theme: 'system' });
+const axes: VariantAxis[] = [];
+const source = createVariantsSource({ axes });
+const notes: IsotoneNote[] = [];
+const served: Promise<ServedIsotone> = serveIsotone({ file: 'notes.json', port: 0 });
+const exit: Promise<number> = runCli(['--json']);
+export { axes, exit, notes, panel, plugins, served, source, unmount };
+`,
+  );
+  const tsc = join(root, 'node_modules', 'typescript', 'bin', 'tsc');
+  const strict = ['--noEmit', '--strict', '--skipLibCheck', 'false', '--target', 'es2022', '--lib', 'es2022,dom', 'consumer.ts'];
+  for (const resolution of [
+    ['--module', 'preserve', '--moduleResolution', 'bundler'],
+    ['--module', 'node16', '--moduleResolution', 'node16'],
+  ]) {
+    execFileSync(process.execPath, [tsc, ...resolution, ...strict], { cwd: consumer, stdio: 'inherit' });
+  }
+  console.log('Packed declarations: a strict consumer compiles under bundler and node16 resolution.');
 }
