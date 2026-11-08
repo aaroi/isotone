@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -39,8 +39,11 @@ function stored(root: string): { id: string; done: boolean }[] {
   return JSON.parse(readFileSync(join(root, NOTES), 'utf8'));
 }
 
+/** Named as the OS names the temp dir, not as git does (macOS's /var is
+ *  /private/var; Windows's is the short `RUNNER~1`), the way an agent's shell
+ *  often holds it: Isotone's own files must still be recognized as its own. */
 function repo(): string {
-  const root = tempGitRepo('isotone-loop-', dirs);
+  const root = tempGitRepo('isotone-loop-', dirs, { canonical: false });
   write(root, 'src/App.jsx', 'export default function App() { return <button>Sign up</button>; }\n');
   execFileSync('git', ['add', '.'], { cwd: root });
   execFileSync('git', ['commit', '-q', '-m', 'app'], { cwd: root });
@@ -278,7 +281,8 @@ describe('--done and variants', () => {
     const io = captureIo(root);
     expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
     expect(io.text.out).toContain('These copies still hold conflict markers');
-    expect(io.text.out).toContain('  hero: .isotone/variants/hero/src/App.jsx');
+    // A path to open, in the platform's own separators.
+    expect(io.text.out).toContain(`  hero: ${join('.isotone', 'variants', 'hero', 'src', 'App.jsx')}`);
   });
 
   it('names only copies of files changed since --working on the note', async () => {
@@ -374,10 +378,9 @@ describe('what an agent reads', () => {
     // Hoisted to the workspace root: a relative path up to it.
     const hoisted = join(project, 'node_modules/isotone');
     expect(docPath(app, 'docs/agent-guide.md', hoisted)).toBe('../../node_modules/isotone/docs/agent-guide.md');
-    // An npx cache outside the project: absolute.
-    expect(docPath(app, 'docs/agent-guide.md', '/cache/_npx/1/node_modules/isotone')).toBe(
-      '/cache/_npx/1/node_modules/isotone/docs/agent-guide.md',
-    );
+    // An npx cache outside the project: absolute, in the platform's separators.
+    const npx = resolve('/cache/_npx/1/node_modules/isotone');
+    expect(docPath(app, 'docs/agent-guide.md', npx)).toBe(join(npx, 'docs', 'agent-guide.md'));
     // In the project's own node_modules (a pnpm symlink, say): the short path.
     write(app, 'node_modules/isotone/docs/agent-guide.md', '# Agent guide');
     expect(docPath(app, 'docs/agent-guide.md', '/elsewhere')).toBe('node_modules/isotone/docs/agent-guide.md');

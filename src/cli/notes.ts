@@ -4,7 +4,7 @@
  * in a browser, so text output goes through `./text` and every command printed
  * for an agent to run is shell-quoted.
  */
-import { existsSync, realpathSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 
 import { MAX_REPLY_LENGTH } from '../core/limits';
@@ -12,6 +12,7 @@ import { matchRoute } from '../core/routes';
 import { updateNoteText } from '../core/update';
 import { variantAppliesTo } from '../core/variants';
 import { blastFile, touchSession } from '../node/blast';
+import { realPath } from '../node/fs/paths';
 import { noteFingerprint, readNotes, replyView, type StoredNote, updateNotes } from '../node/notes/store';
 import { defaultNotesFile, NOTES_FILE } from '../node/notes/location';
 import { notesProjectRoot, updateRequestOf } from '../node/update/request';
@@ -250,8 +251,9 @@ const ISOTONE_SIDE_FILE = /\/\.isotone\/(?:active\.json(?:\..*)?|.*\.(?:lock|ste
 function isBookkeeping(file: string): (path: string) => boolean {
   let notes = resolve(file);
   try {
-    // Git reports canonical paths (macOS's /var is /private/var).
-    notes = join(realpathSync(dirname(notes)), basename(notes));
+    // Git reports canonical paths (macOS's /var is /private/var; Windows's
+    // long names where the temp dir is `RUNNER~1`).
+    notes = join(realPath(dirname(notes)), basename(notes));
   } catch {
     /* No directory yet: nothing of ours to ignore. */
   }
@@ -268,7 +270,7 @@ function managedFiles(file: string, root: string): string[] {
   // Canonical, so two runs through different symlinks fingerprint the same paths.
   const real = (path: string) => {
     try {
-      return realpathSync(path);
+      return realPath(path);
     } catch {
       return path;
     }

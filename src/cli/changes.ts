@@ -16,6 +16,8 @@ import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { realPath } from '../node/fs/paths';
+
 /** Past this many candidate files the answer is "changed": a guard must never block on a guess. */
 const MAX_FILES = 20_000;
 /** A file larger than this is fingerprinted by size and time instead of its contents. */
@@ -155,8 +157,17 @@ export function mtime(file: string): number | null {
   }
 }
 
+/** The work tree's root, named the way the `ignore` callers name their own
+ *  files: on Windows git prints `C:/Users/runneradmin/…` where node may hold
+ *  `C:\\Users\\RUNNER~1\\…`, and only the native realpath agrees with both. */
 function gitTop(root: string): string | null {
-  return git(root, ['rev-parse', '--show-toplevel'])?.trim() || null;
+  const top = git(root, ['rev-parse', '--show-toplevel'])?.trim();
+  if (!top) return null;
+  try {
+    return realPath(top);
+  } catch {
+    return top;
+  }
 }
 
 function git(cwd: string, args: string[]): string | null {
