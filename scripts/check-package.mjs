@@ -7,16 +7,23 @@ import { fileURLToPath } from 'node:url';
 
 import { npm } from './npm.mjs';
 
+// Size budgets, about 5% over the 1.3.0 build (panel bundle 349 kB, tarball
+// 366 kB). Every host page loads the bundle, so growth should be a decision:
+// raise a budget in the same change that needs it, and say why.
+const BUDGET = { bundle: 367_000, tarball: 384_000 };
+
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));
+/** @param {string[]} args @param {string} cwd */
 const run = (args, cwd) => npm(args, { cwd, env: { ...process.env, npm_config_cache: join(scratch, 'cache') } });
 
 try {
+  /** @type {[{ filename: string, size: number, files: { path: string, size: number }[] }]} */
   const [packed] = JSON.parse(run(['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], root));
-  assert.ok(
-    packed.files.some(({ path }) => path === 'dist/isotone.global.js'),
-    'build before checking the package',
-  );
+  const bundle = packed.files.find(({ path }) => path === 'dist/isotone.global.js');
+  assert.ok(bundle, 'build before checking the package');
+  assert.ok(bundle.size <= BUDGET.bundle, `dist/isotone.global.js is ${bundle.size} bytes, over its ${BUDGET.bundle}-byte budget`);
+  assert.ok(packed.size <= BUDGET.tarball, `the packed tarball is ${packed.size} bytes, over its ${BUDGET.tarball}-byte budget`);
   assert.ok(
     packed.files.some(({ path }) => path === 'docs/blast.md'),
     'the Blast guide ships with the package',
