@@ -162,6 +162,34 @@ describe('--done waits for the fix to land', () => {
     expect(await runCli(['--done', 'cccc'], captureIo(root))).toBe(0);
   });
 
+  it('counts a commit, and a further edit to a file already modified, after --working', async () => {
+    const root = repo();
+    notes(root, [
+      { id: 'aaaa1111', createdAt: ago(60_000) },
+      { id: 'bbbb2222', createdAt: ago(60_000) },
+    ]);
+    // Edit on a clean tree and commit it: the tree is clean again, but HEAD moved.
+    expect(await runCli(['--working', 'aaaa'], captureIo(root))).toBe(0);
+    write(root, 'src/App.jsx', 'export default () => 1;\n');
+    execFileSync('git', ['commit', '-q', '-am', 'fix'], { cwd: root });
+    expect(await runCli(['--done', 'aaaa'], captureIo(root))).toBe(0);
+
+    // Git's status line for a file modified before --working does not change on a second edit.
+    write(root, 'src/App.jsx', 'export default () => 2;\n');
+    expect(await runCli(['--working', 'bbbb'], captureIo(root))).toBe(0);
+    expect(await runCli(['--done', 'bbbb'], captureIo(root))).toBe(1);
+    write(root, 'src/App.jsx', 'export default () => 3;\n');
+    expect(await runCli(['--done', 'bbbb'], captureIo(root))).toBe(0);
+  });
+
+  it('counts a deleted tracked file without --working', async () => {
+    const root = repo();
+    notes(root, [{ id: 'aaaa1111', createdAt: new Date(Date.now() + 1000).toISOString() }]);
+    expect(await runCli(['--done', 'aaaa'], captureIo(root))).toBe(1);
+    rmSync(join(root, 'src/App.jsx'));
+    expect(await runCli(['--done', 'aaaa'], captureIo(root))).toBe(0);
+  });
+
   it('counts a staged or restored file without --working too', async () => {
     const root = repo();
     notes(root, [
