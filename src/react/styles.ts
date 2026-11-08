@@ -114,7 +114,7 @@ ${APPEARANCE_CSS}
 .isotone-vars { min-height: min(var(--iso-menu-need, 0px), calc(var(--iso-view-height) - 76px)); }
 /* The panel no longer clips, so its corner close can overhang; the variants body clips itself. */
 .isotone-root .isotone-panel > .isotone-vars { overflow: hidden; border-radius: 11px; }
-.isotone-vars-body { flex: 1; overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: var(--iso-space); display: flex; flex-direction: column; gap: var(--iso-space); }
+.isotone-vars-body { flex: 1; overflow-x: hidden; overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: var(--iso-space); display: flex; flex-direction: column; gap: var(--iso-space); }
 /* The footer overlaps only the scroller's bottom padding: content fades beneath
    it while scrolling, but the last control remains fully visible at the end. */
 .isotone-axis { flex: none; }
@@ -154,7 +154,8 @@ ${APPEARANCE_CSS}
 .isotone-seg[aria-checked='true'] { color: var(--iso-fg); }
 .isotone-opt { position: relative; display: flex; min-width: 0; }
 /* Never narrower than its label plus the chevron's corner on both sides, so a long label widens its own segment instead of running under the chevron. */
-.isotone-opt-seg { flex: 1 1 64px; min-width: fit-content; }
+/* A segment is at least its label wide, so labels wrap to a new row before they truncate, but never wider than the row. */
+.isotone-opt-seg { flex: 1 1 64px; min-width: auto; max-width: 100%; }
 .isotone-opt-seg > .isotone-seg { padding-inline: 18px; }
 .isotone-opt-swatch { flex: none; }
 .isotone-opt > .isotone-seg, .isotone-opt > .isotone-thumb { flex: 1 1 auto; }
