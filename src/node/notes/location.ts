@@ -17,6 +17,7 @@ export const LEGACY_NOTES_FILE = '.iteration-feedback.json';
  * to `.isotone/notes.json` with one rename (its Blast session file with it),
  * under the old file's lock so no older Isotone writes it mid-move. When both
  * exist the new file is used and the old one is named, never merged.
+ * The move will be removed in 1.5.0; after that the old file is ignored.
  */
 export function defaultNotesFile(dir: string, log: (line: string) => void): string {
   const file = join(dir, NOTES_FILE);
