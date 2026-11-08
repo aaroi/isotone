@@ -108,7 +108,8 @@ export async function runBlast(argv: string[], io: CliIO, timingOverrides: Parti
     return 0;
   }
   const { args, thenWait } = modernize(argv);
-  const command: Command = (COMMANDS as readonly string[]).includes(args[0]) ? (args[0] as Command) : 'wait';
+  const first = args[0] ?? '';
+  const command: Command = (COMMANDS as readonly string[]).includes(first) ? (first as Command) : 'wait';
   const rest = command === 'wait' ? args : args.slice(1);
   let durationMs: number | undefined;
   let route: string | null = null;

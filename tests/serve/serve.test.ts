@@ -142,7 +142,7 @@ describe('the notes endpoint', () => {
       element: { selector: string } | null;
     }>;
     expect(rows).toHaveLength(1);
-    expect(rows[0].element?.selector).toBe('#price-figure');
+    expect(rows[0]?.element?.selector).toBe('#price-figure');
 
     const gone = await fetch(`${served.url}${NOTES_ENDPOINT}?id=${id}`, {
       method: 'DELETE',

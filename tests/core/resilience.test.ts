@@ -65,7 +65,7 @@ describe('offline recovery', () => {
     expect(store.lastSave).toBe('local');
     const notes = await store.listNotes();
     expect(notes).toHaveLength(1);
-    expect(notes[0].id).toBe(id);
+    expect(notes[0]?.id).toBe(id);
     expect(saved.size).toBe(1);
   });
 
@@ -216,7 +216,7 @@ describe('bounded local transport', () => {
     const rejected = expect(reading).rejects.toThrow('did not respond in time');
     await vi.advanceTimersByTimeAsync(5000);
     await rejected;
-    expect(vi.mocked(fetch).mock.calls[0][1]?.signal?.aborted).toBe(true);
+    expect(vi.mocked(fetch).mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
   });
 

@@ -26,8 +26,9 @@ export function parseVersion(value: string): Version {
 export function compareVersions(a: string, b: string): number {
   const left = parseVersion(a),
     right = parseVersion(b);
-  for (let i = 0; i < 3; i++) {
-    if (left.parts[i] !== right.parts[i]) return left.parts[i] > right.parts[i] ? 1 : -1;
+  for (const [i, part] of left.parts.entries()) {
+    const other = right.parts[i] ?? 0n;
+    if (part !== other) return part > other ? 1 : -1;
   }
   if (!left.prerelease.length || !right.prerelease.length) {
     return left.prerelease.length === right.prerelease.length ? 0 : left.prerelease.length ? -1 : 1;

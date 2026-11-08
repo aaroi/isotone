@@ -235,7 +235,7 @@ describe('variant', () => {
     const sections = async () => {
       const list = makeIo(root);
       expect(await runCli(['variant', 'list'], list)).toBe(0);
-      const [head, ...rows] = list.text.out.trim().split('\n');
+      const [head = '', ...rows] = list.text.out.trim().split('\n');
       const at = head.indexOf('SECTION');
       return Object.fromEntries(rows.map((row) => [row.split(/\s+/)[0], row.slice(at).split(/\s{2,}/)[0]]));
     };
@@ -642,7 +642,7 @@ describe('init', () => {
       'yarn add [-D] [-W] --exact isotone@<to>',
     ];
     const guide = readFileSync(new URL('../../docs/agent-guide.md', import.meta.url), 'utf8');
-    const block = /## Update notes[\s\S]*?```sh\n([\s\S]*?)```/.exec(guide)?.[1].trim().split('\n');
+    const block = /## Update notes[\s\S]*?```sh\n([\s\S]*?)```/.exec(guide)?.[1]?.trim().split('\n');
     expect(block).toEqual(forms);
     for (const form of forms) expect(UPDATE_HINT).toContain(`\`${form}\``);
     expect(UPDATE_HINT).toContain('npx isotone init --yes');
@@ -1023,7 +1023,7 @@ describe('variant flags', () => {
     for (const [id, group] of [
       ['a', 'g1'],
       ['b', 'g2'],
-    ]) {
+    ] as const) {
       await runCli(['variant', 'new', id, '--group', group], makeIo(root));
       await runCli(['variant', 'add', id, 'src/App.tsx'], makeIo(root));
     }

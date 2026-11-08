@@ -7,9 +7,10 @@ type Color = { r: number; g: number; b: number; a: number };
 function parseColor(value: string): Color | null {
   const rgb = value.match(/^rgba?\(([^)]+)\)$/);
   if (rgb) {
-    const parts = rgb[1].split(/[,\s/]+/).filter(Boolean);
+    const parts = (rgb[1] ?? '').split(/[,\s/]+/).filter(Boolean);
     const values = parts.map((part, i) => Number.parseFloat(part) * (part.endsWith('%') ? (i === 3 ? 0.01 : 2.55) : 1));
-    if (values.length >= 3 && values.every(Number.isFinite)) return { r: values[0], g: values[1], b: values[2], a: values[3] ?? 1 };
+    const [r, g, b, a = 1] = values;
+    if (r !== undefined && g !== undefined && b !== undefined && values.every(Number.isFinite)) return { r, g, b, a };
   }
   if (value === 'transparent') return { r: 0, g: 0, b: 0, a: 0 };
   if (!value || !globalThis.CSS?.supports('color', value)) return null;
@@ -20,7 +21,7 @@ function parseColor(value: string): Color | null {
     if (!ctx) return null;
     ctx.fillStyle = value;
     ctx.fillRect(0, 0, 1, 1);
-    const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+    const [r = 0, g = 0, b = 0, a = 0] = ctx.getImageData(0, 0, 1, 1).data;
     return { r, g, b, a: a / 255 };
   } catch {
     return null;

@@ -251,15 +251,16 @@ it('makes single choices a radio group with one tab stop and keyboard actions', 
   ]);
   // Hidden chevrons take no tab stops.
   expect(Array.from(group.querySelectorAll<HTMLButtonElement>('.isotone-opt-more'), (b) => b.tabIndex)).toEqual([-1, -1, -1]);
-  const key = (target: HTMLElement, init: KeyboardEventInit) =>
+  const key = (target: HTMLElement | undefined, init: KeyboardEventInit) =>
     act(async () => {
+      if (!target) throw new Error('No such option');
       target.focus();
       target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }));
     });
   await key(radios()[0], { key: 'ArrowRight' });
   expect(variants.getSelections().spacing).toBe('comfy');
   expect(shadow.activeElement).toBe(radios()[1]);
-  expect(radios()[1].tabIndex).toBe(0);
+  expect(radios()[1]?.tabIndex).toBe(0);
   await key(radios()[1], { key: 'End' });
   expect(variants.getSelections().spacing).toBe('roomy');
   await key(radios()[2], { key: 'ArrowRight' });

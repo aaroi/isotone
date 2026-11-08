@@ -110,7 +110,7 @@ export function checkOrigin(origin: string | null | undefined, host: string, loo
  *  type counts (`application/json` or `application/*+json`), not a parameter:
  *  `text/plain; x=application/json` is still a form's type. */
 function requireJson(type: string | null | undefined): void {
-  const media = (type ?? '').split(';')[0].trim().toLowerCase();
+  const media = (type ?? '').replace(/;.*$/s, '').trim().toLowerCase();
   if (media !== 'application/json' && !/^application\/[^/]+\+json$/.test(media)) {
     throw new HttpError(415, 'content-type must be application/json');
   }

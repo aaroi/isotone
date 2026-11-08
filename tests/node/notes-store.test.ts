@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, assert, describe, expect, it } from 'vitest';
 
 import { ensureDirIgnored, ensureFileIgnored, excludePattern, hasExcludePattern } from '../../src/node/fs/git-exclude';
 import { notesResponse } from '../../src/node/notes/handler';
@@ -56,7 +56,7 @@ describe('notesResponse', () => {
     expect(post(file, body).status).toBe(200);
     expect(readNotes(file)).toHaveLength(1);
     expect(post(file, { ...body, route: '/another' }).status).toBe(409);
-    expect(readNotes(file)[0].route).toBe('/');
+    expect(readNotes(file)[0]?.route).toBe('/');
   });
 
   it('reconciles a queued defaults snapshot with the pending server snapshot', () => {
@@ -86,7 +86,7 @@ describe('notesResponse', () => {
     const listed = get(file, '/api/iteration/notes?route=/projects');
     const rows = listed.body as Array<{ id: string; feedback: string }>;
     expect(rows).toHaveLength(1);
-    expect(rows[0].feedback).toBe('hello');
+    expect(rows[0]?.feedback).toBe('hello');
     expect(readNotes(file)).toHaveLength(1);
 
     expect(del(file, id).status).toBe(200);
@@ -100,14 +100,15 @@ describe('notesResponse', () => {
     const second = post(file, { id, route: '/x', feedback: 'v2', element: null });
     expect(second.status).toBe(200);
     expect(readNotes(file)).toHaveLength(1);
-    expect(readNotes(file)[0].feedback).toBe('v2');
+    expect(readNotes(file)[0]?.feedback).toBe('v2');
   });
 
   it('keeps only the latest pending defaults per route, preserving history and ordinary notes', () => {
     const file = tempFile();
     const first = post(file, { route: '/a', feedback: '[set-defaults] old', payload: { variants: 'old' } });
     const id = (first.body as { id: string }).id;
-    const initial = readNotes(file)[0];
+    const [initial] = readNotes(file);
+    assert(initial);
     writeNotes(file, [initial, { ...initial, id: 'legacy-duplicate' }, { ...initial, id: 'history', done: true }]);
     post(file, { route: '/b', feedback: '[set-defaults] another route' });
     post(file, { route: '/a', feedback: 'Ordinary feedback' });
@@ -118,7 +119,7 @@ describe('notesResponse', () => {
     expect(pending[0]).toMatchObject({ feedback: '[set-defaults] new', payload: { variants: 'new' }, viewport: { w: 800, h: 600 } });
     expect(readNotes(file)).toHaveLength(4);
     expect(readNotes(file).find((n) => n.id === 'history')?.feedback).toBe('[set-defaults] old');
-    expect(pending[0].id).toBe(id);
+    expect(pending[0]?.id).toBe(id);
   });
 
   it('only lists open notes when no route is given', () => {

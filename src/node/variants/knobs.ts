@@ -56,7 +56,7 @@ export function knobProblem(entry: unknown): string | null {
   if (k.kind === 'range') {
     const nums = [k.min, k.max, k.step, k.defaultValue];
     if (!nums.every((n) => typeof n === 'number' && Number.isFinite(n))) return 'a range needs numeric min, max, step and defaultValue.';
-    const [min, max, step, value] = nums as number[];
+    const [min, max, step, value] = nums as [number, number, number, number];
     if (!(min < max) || !Number.isFinite(max - min)) return 'min must be below max.';
     if (!(step > 0)) return 'step must be above 0.';
     if (value < min || value > max) return 'defaultValue must be between min and max.';

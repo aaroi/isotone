@@ -33,9 +33,10 @@ describe('version precedence', () => {
       '1.0.0-rc.1',
       '1.0.0',
     ];
-    for (let i = 1; i < ordered.length; i++) {
-      expect(compareVersions(ordered[i], ordered[i - 1])).toBe(1);
-      expect(compareVersions(ordered[i - 1], ordered[i])).toBe(-1);
+    for (const [i, newer] of ordered.slice(1).entries()) {
+      const older = ordered[i] ?? '';
+      expect(compareVersions(newer, older)).toBe(1);
+      expect(compareVersions(older, newer)).toBe(-1);
     }
   });
   it('compares numbers rather than strings and ignores build metadata', () => {

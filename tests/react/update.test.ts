@@ -82,7 +82,7 @@ describe('quiet update checks', () => {
     expect(fetch).toHaveBeenCalledTimes(2);
     await act(async () => vi.advanceTimersByTimeAsync(60_000));
     expect(fetch).toHaveBeenCalledTimes(2);
-    const signal = vi.mocked(fetch).mock.calls[0][1]?.signal;
+    const signal = vi.mocked(fetch).mock.calls[0]?.[1]?.signal;
     expect(signal?.aborted).toBe(true);
     expect(host.textContent).toBe('');
   });
@@ -90,7 +90,7 @@ describe('quiet update checks', () => {
   it('aborts in-flight work and cancels a scheduled retry on unmount', async () => {
     vi.mocked(fetch).mockResolvedValue(Response.json({ ...available, status: 'checking' }));
     await render();
-    const signal = vi.mocked(fetch).mock.calls[0][1]?.signal;
+    const signal = vi.mocked(fetch).mock.calls[0]?.[1]?.signal;
     await act(async () => root.unmount());
     mounted = false;
     expect(signal?.aborted).toBe(true);

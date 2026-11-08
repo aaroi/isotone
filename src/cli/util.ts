@@ -57,10 +57,10 @@ function options(args: string[]): string[] {
 export function parseArgs(args: string[], values: readonly string[], booleans: readonly string[] = []): string[] {
   const positionals: string[] = [];
   const seen = new Set<string>();
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
+  const queue = [...args];
+  for (let arg = queue.shift(); arg !== undefined; arg = queue.shift()) {
     if (arg === '--') {
-      positionals.push(...args.slice(i + 1));
+      positionals.push(...queue);
       break;
     }
     if (!arg.startsWith('-') || arg === '-') {
@@ -70,9 +70,9 @@ export function parseArgs(args: string[], values: readonly string[], booleans: r
     if (!values.includes(arg) && !booleans.includes(arg)) throw new Error(`Unknown option "${arg}".`);
     if (seen.has(arg)) throw new Error(`Option "${arg}" was given more than once.`);
     seen.add(arg);
-    if (values.includes(arg) && (!args[++i] || args[i].startsWith('--'))) {
-      throw new Error(`Option "${arg}" requires a value.`);
-    }
+    if (!values.includes(arg)) continue;
+    const value = queue.shift();
+    if (!value || value.startsWith('--')) throw new Error(`Option "${arg}" requires a value.`);
   }
   return positionals;
 }
@@ -96,15 +96,17 @@ export function extractBoolFlag(args: string[], flag: string): { present: boolea
 /** `--done`/`--undone` and `variant new --note` all resolve an id the same
  *  way: an exact id wins, then a unique prefix; an empty or ambiguous one is a
  *  user error. */
-export function findNoteByPrefix<T extends { id: string }>(notes: T[], prefix: string): T {
+export function findNoteByPrefix<T extends { id: string }>(notes: T[], prefix: string | undefined): T {
+  if (!prefix) throw new Error('Give the note id (a prefix is enough).');
   const exact = notes.find((n) => n.id === prefix);
   if (exact) return exact;
   const matches = notes.filter((n) => n.id.startsWith(prefix));
-  if (matches.length === 0) throw new Error(`No feedback id starting with "${prefix}".`);
-  if (matches.length > 1) {
+  const [match, ...others] = matches;
+  if (!match) throw new Error(`No feedback id starting with "${prefix}".`);
+  if (others.length) {
     throw new Error(`Ambiguous prefix "${prefix}" (${matches.length} matches) — use more characters.`);
   }
-  return matches[0];
+  return match;
 }
 
 /** A plain, fixed-width table: two spaces between columns, no colour, no
@@ -113,7 +115,7 @@ export function printTable(io: CliIO, header: string[], rows: string[][]): void 
   const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => (r[i] ?? '').length)));
   const line = (cells: string[]) =>
     cells
-      .map((c, i) => (c ?? '').padEnd(widths[i]))
+      .map((c, i) => (c ?? '').padEnd(widths[i] ?? 0))
       .join('  ')
       .trimEnd();
   out(io, line(header));

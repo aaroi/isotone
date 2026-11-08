@@ -105,7 +105,7 @@ it.each(['mouse', 'pen'])('expands on native %s entry from another React tree ac
     pointer(launcher, 'pointerover', hostContent, pointerType);
     pointer(root, 'pointerenter', hostContent, pointerType);
   });
-  expect(outerLeave.mock.calls[0][0].relatedTarget).toBe(shadow.host);
+  expect(outerLeave.mock.calls[0]?.[0]?.relatedTarget).toBe(shadow.host);
   expect(root.dataset.expanded).toBe('true');
   expect(root.dataset.open).toBe('false');
   expect(launcher.getAttribute('aria-hidden')).toBe('true');

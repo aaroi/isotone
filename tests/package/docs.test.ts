@@ -45,7 +45,7 @@ describe('shipped docs', () => {
 
   it.each(docs)('%s links only to shipped files and existing headings', (file) => {
     const text = readFileSync(join(root, file), 'utf8').replace(/```[\s\S]*?```/g, '');
-    for (const [, target] of text.matchAll(/(?<!!)\[[^\]]*\]\(([^)\s]+)\)/g)) {
+    for (const [, target = ''] of text.matchAll(/(?<!!)\[[^\]]*\]\(([^)\s]+)\)/g)) {
       if (/^[a-z]+:/i.test(target)) continue; // absolute URLs
       const [path, hash] = target.split('#');
       const linked = path ? normalize(join(dirname(file), path)) : file;

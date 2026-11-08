@@ -202,9 +202,10 @@ export function overlayGroups<T extends OverlayVariant>(variants: T[]): OverlayG
   // Union-find over the loose variants, keyed by index into `loose`.
   const parent = loose.map((_, i) => i);
   const find = (i: number): number => {
-    while (parent[i] !== i) {
-      parent[i] = parent[parent[i]];
-      i = parent[i];
+    for (let up = parent[i] ?? i; up !== i; up = parent[i] ?? i) {
+      // Path halving: point at the grandparent and continue from there.
+      parent[i] = parent[up] ?? up;
+      i = parent[i] ?? up;
     }
     return i;
   };

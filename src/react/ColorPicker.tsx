@@ -23,7 +23,7 @@ export function normalizeHex(input: string): string | null {
 
 export function hexToHsv(hex: string): Hsv {
   const full = normalizeHex(hex) ?? '#000000';
-  const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(full.slice(i, i + 2), 16) / 255);
+  const [r = 0, g = 0, b = 0] = [1, 3, 5].map((i) => Number.parseInt(full.slice(i, i + 2), 16) / 255);
   const max = Math.max(r, g, b);
   const d = max - Math.min(r, g, b);
   let h = 0;
