@@ -21,11 +21,11 @@ Choose the control for the decision being reviewed, not for variety in the panel
 | One numeric property across a useful interval | `kind: 'range'` | Card radius, padding, opacity or animation duration |
 | A colour | `kind: 'color'` with named `swatches` | Accent or surface colour, with the built-in custom picker |
 
-Thumbnail grids are a presentation of select axes, not another `kind`. There are
-no separate checkbox, toggle, dropdown or free-text axis kinds. Use stable IDs,
-short descriptive labels, and independent axes for independent decisions.
-`showWhen` hides a dependent axis until its parent has the relevant selection.
-Keep the default among the available options or swatches.
+Thumbnails are a presentation of select axes, not a `kind`, and there are no
+checkbox, toggle, dropdown or free-text kinds. Use stable IDs, short labels, and
+independent axes for independent decisions; `showWhen` hides a dependent axis
+until its parent has the relevant selection. Keep the default among the options
+or swatches.
 
 For a range, choose bounds that give a valid design at both extremes (padding
 8–32px in 2px steps, not 0–1000px), a positive `step` matching the decision's
@@ -239,36 +239,33 @@ load or update failures in the panel.
 
 ### Live switching
 
-In a React project on Vite 6 or later, the plugin serves each overridden
-script as a small dispatcher module that imports every version of the file:
-the real one as `<file>?isotone=_base` and each variant's copy as
-`<file>?isotone=<id>`. Each export becomes one binding, decided in the
-browser:
+In a React project on Vite 6 or later, the plugin serves each overridden script
+as a dispatcher module importing every version: the real file as
+`<file>?isotone=_base` and each copy as `<file>?isotone=<id>`. Each export
+becomes one binding, decided in the browser:
 
-- A component becomes a wrapper that renders the active version. A switch
+- A component becomes a wrapper rendering the active version; a switch
   re-renders it, and state outside it survives.
-- A value that is identical in every version passes through.
-- Anything else (a hook, a helper function, a constant object, a context) is
-  fixed when the page loads, because React cannot swap a hook under a mounted
-  component. A switch that changes one reloads the page. Every copy defines its
-  functions and objects afresh, so a copied file that exports a hook or helper
-  reloads on every switch: move shared helpers into files the variant leaves alone.
+- A value identical in every version passes through.
+- Anything else (a hook, helper, constant object, context) is fixed at page
+  load, since React cannot swap a hook under a mounted component, and a switch
+  that changes one reloads. Every copy defines these afresh, so a copied file
+  exporting one reloads on every switch: move shared helpers into files the
+  variant leaves alone.
 
-The selection belongs to the tab: a pick is written to the URL as
-`?v=<group>:<variant>` (the grammar host variants use), kept through client-side
-navigation, so a copied link opens the same variant and two tabs can compare
-side by side. The pick also goes to `.isotone/active.json`, which tabs without
-`?v=` and the agent follow.
-
-The browser loads every version of a dispatched file, so a copy runs even while
-its variant is off: a global stylesheet it imports applies everywhere, and a
-syntax error in it breaks pages that import the real file.
+The selection belongs to the tab: a pick goes into the URL as
+`?v=<group>:<variant>` (the host-variant grammar), kept through client-side
+navigation, so a copied link opens the same variant and two tabs can compare. It
+also goes to `.isotone/active.json`, which tabs without `?v=` and the agent
+follow. Every version of a dispatched file loads, so a copy runs even while off:
+a global stylesheet it imports applies everywhere, and a syntax error in it
+breaks pages importing the real file.
 
 ### Whole-file switching
 
-`variants: { live: false }` turns live switching off and switches by swapping
-whole files over HMR, which is also what non-React hosts, CSS files, Vite 5 and
-`vite build` use. In live mode the plugin still serves these files whole:
+`variants: { live: false }` swaps whole files over HMR instead, as non-React
+hosts, CSS files, Vite 5 and `vite build` always do. Live mode still serves these
+whole:
 
 - route modules (a default export beside `loader`, `action`, `meta` and
   similar, which the router's plugin reads one by one);
@@ -278,18 +275,16 @@ whole files over HMR, which is also what non-React hosts, CSS files, Vite 5 and
 - files whose exports it cannot list (`export *`, destructuring, several
   declarators in one `export const`).
 
-A file served whole, and every CSS file, follows `.isotone/active.json` in every
-tab. Its switch is a Vite hot update, so it swaps in place exactly where an edit
-to that file would. A React file that also exports data or a hook cannot be
-swapped alone: the update climbs to its importer, and an entry with no accept
-handler reloads. Accept the import in the entry and re-render from the new
-module, or move the extra exports out.
+Such a file, and every CSS file, follows `.isotone/active.json` in every tab, and
+switches as a Vite hot update, exactly as an edit to it would. A React file that
+also exports data or a hook cannot be swapped alone: the update climbs to its
+importer, and an entry with no accept handler reloads. Accept the import in the
+entry and re-render from the new module, or move the extra exports out.
 
 ### Server rendering
 
 Server rendering follows `.isotone/active.json`, since the server cannot tell
-tabs apart. A tab whose components differ hydrates from the server's version and
-switches right after. When a link opens a tab whose `?v=` differs in a fixed
-export, the tab saves its set as the default and reloads once; a later reload
-hydrates with a recoverable mismatch instead, so two tabs never fight over the
-default.
+tabs apart; a tab whose components differ hydrates from it and switches right
+after. A link whose `?v=` differs in a fixed export saves its set as the default
+and reloads once; later reloads hydrate with a recoverable mismatch, so two tabs
+never fight over the default.

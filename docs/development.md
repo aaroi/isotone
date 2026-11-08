@@ -42,22 +42,19 @@ guide and the CLI's `updateHint` list the same update commands.
 
 ## Pull requests
 
-Write the description for a person who hasn't followed the work and doesn't
-know the codebase well, however technical the change is. When the review depends
-on a part of Isotone (the dock, knobs, overlay variants, the notes file), say in a
-sentence what it is. `.github/pull_request_template.md` has the outline:
+Write the description for someone who hasn't followed the work or the
+codebase, however technical the change. When the review depends on a part of
+Isotone (the dock, knobs, overlay variants, the notes file), say in a sentence
+what it is. The outline, in `.github/pull_request_template.md` and for
+`gh pr create --body` alike:
 
-- **Before:** what someone using Isotone experiences today, in plain words. Name
-  who that is: the person reviewing their app, their coding agent, or a maintainer.
+- **Before:** what someone using Isotone experiences today, in plain words, and
+  who: the person reviewing their app, their coding agent, or a maintainer.
 - **After:** what changes for them.
-- **Review notes:** only the technical detail a reviewer needs, such as risks,
-  trade-offs, effects on existing users, and what to try in the demo. Leave out
-  file-by-file lists, internal names and implementation narration unless they
-  matter for the review.
+- **Review notes:** only what a reviewer needs (risks, trade-offs, effects on
+  existing users, what to try in the demo); no file lists, internal names or
+  implementation narration unless they matter.
 - **Tested:** what was checked, and what wasn't.
-
-Agents that write the description themselves (`gh pr create --body`) follow the
-same outline.
 
 ## Boundaries
 
@@ -75,9 +72,9 @@ same outline.
 | `src/vite`, `src/serve` | Development-server integration and self-contained panel delivery. | core, node |
 | `src/cli` | Setup, feedback and variant commands over the same stores. | core, node, serve |
 
-`tests/package/boundaries.test.ts` enforces the last column, dynamic `import()`
-included, keeps `node:*` out of core, react and standalone, and keeps React
-packages out of everything but react and standalone. Biome refuses import cycles.
+`tests/package/boundaries.test.ts` enforces the last column (dynamic `import()`
+included) and keeps `node:*` out of core, react and standalone and React out of
+everything but react and standalone. Biome refuses import cycles.
 
 Public entry points are `react`, `core`, `serve`, `vite` and `cli`,
 built to `dist/<name>.js`; the `isotone` binary is `dist/bin.js`. Each barrel
@@ -89,9 +86,8 @@ used by the panel.
 
 ## Local workflow
 
-`pnpm dev` starts the fictional demo at `http://127.0.0.1:4173`. Its top bar
-has a Panel theme select (automatic page detection, system preference, or an
-explicit theme), a light and dark toggle for the page, and a Tour button. The
+`pnpm dev` starts the fictional demo at `http://127.0.0.1:4173`. Its top bar has
+a Panel theme select, a light and dark toggle for the page, and a Tour button. The
 tour (`examples/demo/tour.tsx`) starts by itself on a browser's first visit and
 remembers when it was closed; `/?tour=1` starts it regardless. Its last step
 hands visitors the README's "Start with your agent" prompt, kept in
@@ -108,14 +104,12 @@ The sample app's selectors sit in two sections, Cards and Theme. Other demo URLs
 | `/?review=1` | Feedback stays open across variant reloads |
 | `/?review=1&update-preview=1` | A fictional update result; **Ask agent to update** files a demo update note (built by the same server code in the dev demo) that the pretend agent closes. Nothing contacts npm. |
 
-`/preview.html` frames the live demo for the README image. The README image is
-`?scene=both` (variants and feedback panels) captured at an 816 × 856 window
-with a device scale of 2 and a transparent background
-(`--default-background-color=00000000` in headless Chrome), saved as PNG so the
-window's rounded corners have no frame. `?scene=focus` shows the feedback panel alone,
-`?scene=pin` shows select mode with a pinned card, and `?theme=light` switches
-the page. Give headless captures a long virtual time budget (15s) so the panel's
-opening motion has settled.
+`/preview.html` frames the live demo for the README image: `?scene=both`
+(variants and feedback) captured in headless Chrome at 816 × 856, device scale
+2, with `--default-background-color=00000000` and saved as PNG so the rounded
+corners have no frame, and a 15s virtual time budget so the opening motion has
+settled. `?scene=focus` shows the feedback panel alone, `?scene=pin` select mode
+with a pinned card, and `?theme=light` the light page.
 
 `docs/assets/loop.gif` is recorded by `scripts/capture/record-loop.mjs`, which
 drives the hosted demo build through the Chrome DevTools Protocol and encodes the

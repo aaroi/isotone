@@ -38,13 +38,11 @@ and Fast Refresh graph. The plugin acts only on the dev server: `vite build`
 injects nothing and serves no endpoints, so it needs no guard of its own.
 
 **This machine only.** The panel and its endpoints answer only the machine the
-dev server runs on. Started with `--host` (or `server.host`), Vite still serves
-the app to other devices, but without the panel, and Isotone's endpoints answer
-them 403. Pages served under a name other than `localhost`, `*.localhost`,
-`*.test`, a loopback address or one in Vite's `server.allowedHosts` are refused,
-and so is a request a local tunnel forwards for another machine. The plugin also
-adds the notes file, the Blast session and `.isotone/` to Vite's
-`server.fs.deny`, so Vite's static server never hands them out.
+dev server runs on. With `--host` (or `server.host`), other devices get the app
+without the panel, and the endpoints answer them 403 (see [Endpoint
+rules](#endpoint-rules)). The plugin also adds the notes file, the Blast
+session and `.isotone/` to Vite's `server.fs.deny`, so Vite's static server
+never hands them out.
 
 If the app mounts `IsotonePanel` or `mountIsotone` itself, use
 `isotone({ panel: false })` to keep the endpoints and source variants without
@@ -84,11 +82,10 @@ each page; it requests nothing off localhost, so it stays inert if deployed:
 </script>
 ```
 
-A plain `<script src="http://127.0.0.1:4123/isotone.js" defer></script>` works
-only behind the template's development flag: shipped, it would make every
-visitor's browser request its own localhost. In a Next app, render it from the
-root layout (`app/layout.tsx`, or `pages/_app.tsx`) behind the development check,
-which Next inlines at build time:
+A plain `<script src="http://127.0.0.1:4123/isotone.js" defer></script>` belongs
+behind the template's development flag, or every visitor's browser would request
+its own localhost. In Next, render it from the root layout (`app/layout.tsx` or
+`pages/_app.tsx`) behind the development check, which Next inlines at build time:
 
 ```tsx
 import Script from 'next/script';
@@ -99,26 +96,23 @@ import Script from 'next/script';
 )}
 ```
 
-Open the printed setup URL for a copyable tag or a bookmarklet. This path supports
-notes and [knobs](variants.md#knobs) from `.isotone/knobs.json` in the directory
-where `serve` runs; the panel shows a Variants tool once that file holds a valid
-knob (reload after adding the first). Swapping whole source files needs the Vite
-plugin, or a host-owned `VariantsSource`.
+The printed setup URL offers a copyable tag and a bookmarklet. This path has
+notes and [knobs](variants.md#knobs) from `.isotone/knobs.json` where `serve`
+runs (the Variants tool appears once it holds a valid knob; reload after the
+first). Swapping source files needs the Vite plugin or a host `VariantsSource`.
 
-`--port 4124` selects another port. `serve` prints the `panel` URL and the
-loader `tag` for the port it listens on, so paste those as printed, and keep the
-port in one place with a script such as `"isotone": "isotone serve --port 4124"`.
-`--file` selects a notes file and `--theme` the panel theme. The server binds to
-`127.0.0.1` and answers only this machine; another device on the network gets
-403 even if your app's dev server listens on every interface (`next dev` does).
-An HTTPS page may block the HTTP script.
+`serve` prints the `panel` URL and loader `tag` for the port it listens on:
+paste them as printed, and keep a non-default port in one script such as
+`"isotone": "isotone serve --port 4124"`. `--file` picks the notes file and
+`--theme` the panel theme. It binds to `127.0.0.1` and answers only this
+machine, so another device gets 403 even when the app's dev server listens on
+every interface (`next dev` does). An HTTPS page may block the HTTP script.
 
 ## Client mount
 
-Use this when the app should mount the panel from its own code, with the
-host's React. Install `react` and `react-dom` if the app does not already have
-them. Run `npx isotone serve` as above, then mount from a client component once,
-and clean up on unmount:
+To mount the panel from the app's own code with its own React (install `react`
+and `react-dom` if needed), run `npx isotone serve` as above and mount once from
+a client component, cleaning up on unmount:
 
 ```tsx
 'use client';
