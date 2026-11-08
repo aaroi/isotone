@@ -7,7 +7,9 @@
  * staged, unstaged, untracked and deleted path with a hash of its contents.
  * `--done` compares it with a fresh one, so a staged edit, a revert and a
  * deleted untracked file all count. Without a snapshot (no `--working`, or no
- * Git) {@link latestChange} falls back to modification times.
+ * Git) {@link latestChange} falls back to modification times. Both also read
+ * the `own` paths Isotone manages (variant copies, knobs) whether or not Git
+ * ignores them, so a fix made only there counts.
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -21,10 +23,11 @@ const MAX_HASHED_BYTES = 4 * 1024 * 1024;
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'out', 'coverage']);
 
 /**
- * A short fingerprint of the Git work tree that contains `root`, leaving out
- * the paths `ignore` excludes; null outside Git or past {@link MAX_FILES}.
+ * A short fingerprint of the Git work tree that contains `root`, and of the
+ * files under `own`, leaving out the paths `ignore` excludes; null outside Git
+ * or past {@link MAX_FILES}.
  */
-export function snapshot(root: string, ignore: (file: string) => boolean): string | null {
+export function snapshot(root: string, ignore: (file: string) => boolean, own: string[] = []): string | null {
   const top = gitTop(root);
   if (!top) return null;
   const status = git(top, ['status', '--porcelain=v2', '-z', '--branch', '--no-renames', '--untracked-files=all']);
@@ -43,6 +46,9 @@ export function snapshot(root: string, ignore: (file: string) => boolean): strin
     // The entry carries the index's hash, so staging an edit changes it too.
     hash.update(`${entry}\0${contents(abs)}\n`);
   }
+  const managed = filesUnder(own);
+  if (managed === null) return null;
+  for (const abs of managed) if (!ignore(abs)) hash.update(`own ${abs}\0${contents(abs)}\n`);
   return hash.digest('hex').slice(0, 32);
 }
 
@@ -66,13 +72,21 @@ function contents(file: string): string {
 }
 
 /**
- * The latest modification time, in ms, of a file under `root` that `ignore`
- * does not exclude; 0 when there is none, Infinity when it cannot tell. In
- * Git every tracked and untracked file counts (a restored file is new too),
- * plus the HEAD commit time; Git-ignored files never do. Elsewhere a bounded
- * walk skips dependencies, build output and dot-directories.
+ * The latest modification time, in ms, of a file under `root` or `own` that
+ * `ignore` does not exclude; 0 when there is none, Infinity when it cannot
+ * tell. In Git every tracked and untracked file counts (a restored file is
+ * new too), plus the HEAD commit time; other Git-ignored files never do.
+ * Elsewhere a bounded walk skips dependencies, build output and dot-directories.
  */
-export function latestChange(root: string, ignore: (file: string) => boolean): number {
+export function latestChange(root: string, ignore: (file: string) => boolean, own: string[] = []): number {
+  const managed = filesUnder(own);
+  if (managed === null) return Number.POSITIVE_INFINITY;
+  let latest = 0;
+  for (const abs of managed) if (!ignore(abs)) latest = Math.max(latest, mtime(abs) ?? 0);
+  return Math.max(latest, projectChange(root, ignore));
+}
+
+function projectChange(root: string, ignore: (file: string) => boolean): number {
   const top = gitTop(root);
   const listed = top ? git(top, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']) : null;
   if (!top || listed === null) return walk(root, ignore);
@@ -109,6 +123,28 @@ function walk(root: string, ignore: (file: string) => boolean): number {
     }
   }
   return latest;
+}
+
+/** Every file at or under `paths`, sorted; null past {@link MAX_FILES}. */
+function filesUnder(paths: string[]): string[] | null {
+  const files: string[] = [];
+  const queue = [...paths];
+  for (let path = queue.pop(); path !== undefined; path = queue.pop()) {
+    let entries: import('node:fs').Dirent[];
+    try {
+      entries = readdirSync(path, { withFileTypes: true });
+    } catch {
+      if (mtime(path) !== null) files.push(path);
+      continue;
+    }
+    for (const entry of entries) {
+      const abs = join(path, entry.name);
+      if (entry.isDirectory()) queue.push(abs);
+      else if (entry.isFile()) files.push(abs);
+    }
+    if (files.length > MAX_FILES) return null;
+  }
+  return files.sort();
 }
 
 export function mtime(file: string): number | null {

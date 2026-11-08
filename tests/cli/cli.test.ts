@@ -81,16 +81,38 @@ describe('the notes file from before 1.3', () => {
     expect(second.text.out).toContain('old note');
   });
 
-  it('uses .isotone/notes.json when both exist and names the old file, without merging', async () => {
+  it('merges an old file that reappears beside .isotone/notes.json, as a 1.2 dev server still running would write', async () => {
     const root = tempRepo();
-    writeFileSync(join(root, OLD), JSON.stringify([note]));
-    writeFileSync(notesAt(root), JSON.stringify([{ ...note, id: 'bbbb2222', feedback: 'new note' }]));
+    const kept = { ...note, feedback: 'new copy of the same note' };
+    const fresh = { ...note, id: 'cccc3333', feedback: 'filed on the old server', answer: 'kept field' };
+    writeFileSync(join(root, OLD), JSON.stringify([note, fresh]));
+    writeFileSync(notesAt(root), JSON.stringify([kept, { ...note, id: 'bbbb2222', feedback: 'new note' }]));
+    const io = makeIo(root);
+    expect(await runCli(['--json'], io)).toBe(0);
+    expect(io.text.err).toContain('Merged 1 note from .iteration-feedback.json.');
+    expect(existsSync(join(root, OLD))).toBe(false);
+    expect(JSON.parse(readFileSync(notesAt(root), 'utf8'))).toEqual([kept, { ...note, id: 'bbbb2222', feedback: 'new note' }, fresh]);
+    const again = makeIo(root);
+    expect(await runCli([], again)).toBe(0);
+    expect(again.text.err).toBe('');
+  });
+
+  it('leaves an unreadable old file beside .isotone/notes.json untouched', async () => {
+    const root = tempRepo();
+    writeFileSync(join(root, OLD), '{not json');
+    writeFileSync(notesAt(root), JSON.stringify([note]));
     const io = makeIo(root);
     expect(await runCli([], io)).toBe(0);
-    expect(io.text.err).toContain('.iteration-feedback.json beside it is an older notes file and is not read');
-    expect(io.text.out).toContain('new note');
-    expect(io.text.out).not.toContain('old note');
-    expect(JSON.parse(readFileSync(join(root, OLD), 'utf8'))).toEqual([note]);
+    expect(io.text.err).toContain('could not be merged and is left untouched');
+    expect(readFileSync(join(root, OLD), 'utf8')).toBe('{not json');
+  });
+
+  it('keeps the moved notes file out of Git right away, before any server restarts', async () => {
+    const root = tempRepo();
+    writeFileSync(join(root, OLD), JSON.stringify([note]));
+    expect(await runCli([], makeIo(root))).toBe(0);
+    const status = execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: root, encoding: 'utf8' });
+    expect(status).not.toContain('.isotone/notes.json');
   });
 
   it('never moves a file named with --file', async () => {

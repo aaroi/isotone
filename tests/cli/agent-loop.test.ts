@@ -133,6 +133,35 @@ describe('--done waits for the fix to land', () => {
     expect(await runCli(['--done', 'cccc'], captureIo(root))).toBe(0);
   });
 
+  it('counts a fix made only in Git-ignored variant copies or knobs, with or without --working', async () => {
+    const root = repo();
+    write(root, '.gitignore', '.isotone/variants/\n.isotone/knobs.json\n');
+    execFileSync('git', ['add', '.gitignore'], { cwd: root });
+    execFileSync('git', ['commit', '-q', '-m', 'ignore'], { cwd: root });
+    write(root, '.isotone/variants/b/src/App.jsx', 'export default () => 1;\n', Date.now() - 60_000);
+    write(root, '.isotone/knobs.json', '[]', Date.now() - 60_000);
+    notes(root, [
+      { id: 'aaaa1111', createdAt: ago(1000) },
+      { id: 'bbbb2222', createdAt: ago(1000) },
+      { id: 'cccc3333', createdAt: ago(1000) },
+    ]);
+
+    expect(await runCli(['--working', 'aaaa'], captureIo(root))).toBe(0);
+    // Isotone's own lock beside the copies is not a fix.
+    write(root, '.isotone/variants/b/variant.json.lock', '{}');
+    expect(await runCli(['--done', 'aaaa'], captureIo(root))).toBe(1);
+    write(root, '.isotone/variants/b/src/App.jsx', 'export default () => 2;\n');
+    expect(await runCli(['--done', 'aaaa'], captureIo(root))).toBe(0);
+
+    expect(await runCli(['--working', 'bbbb'], captureIo(root))).toBe(0);
+    write(root, '.isotone/knobs.json', '[{"id":"size"}]');
+    expect(await runCli(['--done', 'bbbb'], captureIo(root))).toBe(0);
+
+    // No --working: the copy's modification time counts.
+    write(root, '.isotone/variants/b/src/App.jsx', 'export default () => 3;\n', Date.now() + 2000);
+    expect(await runCli(['--done', 'cccc'], captureIo(root))).toBe(0);
+  });
+
   it('counts a staged or restored file without --working too', async () => {
     const root = repo();
     notes(root, [

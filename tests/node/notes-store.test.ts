@@ -71,7 +71,11 @@ describe('notesResponse', () => {
   it('reconciles a queued defaults snapshot with the pending server snapshot', () => {
     const file = tempFile();
     post(file, { id: 'server-defaults', route: '/', feedback: '[set-defaults] Old' });
-    post(file, { id: 'offline-defaults', route: '/', feedback: '[set-defaults] New' });
+    // The answer names the open note, as docs/integrations.md says, so the panel tracks that one.
+    expect(post(file, { id: 'offline-defaults', route: '/', feedback: '[set-defaults] New' })).toMatchObject({
+      status: 200,
+      body: { id: 'server-defaults' },
+    });
     expect(readNotes(file)).toMatchObject([{ id: 'server-defaults', feedback: '[set-defaults] New' }]);
     expect(readNotes(file)).toHaveLength(1);
   });
