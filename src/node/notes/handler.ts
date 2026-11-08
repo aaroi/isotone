@@ -6,13 +6,13 @@ import { randomUUID } from 'node:crypto';
 
 import type { IsotoneElement } from '../../core/types';
 import { NOTE_ID } from '../../core/id';
-import { MAX_FEEDBACK_LENGTH, MAX_NOTES, MAX_ROUTE, MAX_SELECTOR, PAYLOAD_MAX } from '../../core/limits';
+import { MAX_FEEDBACK_LENGTH, MAX_NOTES, MAX_ROUTE, PAYLOAD_MAX } from '../../core/limits';
 import { updateNoteText } from '../../core/update';
 import { LockBusyError, SERVER_LOCK_WAIT_MS, withFileLock } from '../fs/lock';
 import { type HandlerRequest, type HandlerResponse, jsonResponse } from '../http';
 import { notesProjectRoot, updateRequestOf } from '../update/request';
 import { noteFingerprint, notesRevision, readNotes, replyView, type StoredNote, writeNotes } from './store';
-import { cap, elementContext, elementOf, removalOf, variantOf, viewportOf, withinPayloadCap } from './validate';
+import { elementFields, elementOf, removalOf, variantOf, viewportOf, withinPayloadCap } from './validate';
 
 /** The endpoint path the client calls. */
 export const NOTES_ENDPOINT = '/api/isotone/notes';
@@ -126,15 +126,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     const variant = body.variant === undefined ? undefined : variantOf(body.variant);
     const variantAction = removalOf(body.variantAction);
     if (body.variantAction !== undefined && !variantAction) return json(400, { error: 'Invalid variant action' });
-    let cleanElement: IsotoneElement | null = null;
-    if (element && typeof element === 'object' && !Array.isArray(element)) {
-      cleanElement = {
-        tag: cap(String((element as { tag?: unknown }).tag ?? ''), 30),
-        text: cap(String((element as { text?: unknown }).text ?? ''), 120),
-        selector: cap(String((element as { selector?: unknown }).selector ?? ''), MAX_SELECTOR),
-        ...elementContext(element),
-      };
-    }
+    const cleanElement = element && typeof element === 'object' && !Array.isArray(element) ? elementFields(element) : null;
     const notes = readNotes(file);
     const defaultsRequest = cleanFeedback.startsWith('[set-defaults]');
     const previousDefaults =
