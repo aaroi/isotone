@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.3.0
+
 ### What you need to know
 
 - **Node.js 22 or later** is required (`engines.node` is `>=22`; Node 20 reached end of life in April 2026).
