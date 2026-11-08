@@ -116,7 +116,8 @@ it('does not restore a deleted note when an older refresh finishes', async () =>
   await render();
   await click('.isotone-fab');
   expect(container.querySelector('.isotone-note-hit')?.textContent).toContain('Original note');
-  await click('[aria-label="Delete note"]');
+  // The delete button names the note it deletes.
+  await click('[aria-label="Delete note: Original note"]');
   expect(container.querySelectorAll('.isotone-note')).toHaveLength(0);
   await act(async () => refresh.resolve(response([note])));
   expect(container.querySelectorAll('.isotone-note')).toHaveLength(0);

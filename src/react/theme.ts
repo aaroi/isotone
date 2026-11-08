@@ -1,4 +1,6 @@
+import { type RefObject, useLayoutEffect, useState } from 'react';
 import type { IterationTheme } from '../core/types';
+import { ensurePanelStyles } from './styles';
 
 type ResolvedTheme = 'light' | 'dark';
 type Color = { r: number; g: number; b: number; a: number };
@@ -194,4 +196,20 @@ export function observeTheme(onTheme: (theme: ResolvedTheme) => void, preference
     document.removeEventListener('transitionend', pageEvent, true);
     document.removeEventListener('animationend', pageEvent, true);
   };
+}
+
+/**
+ * The dock's theme, and its styles in whichever document or shadow root holds
+ * it. The observer follows the page from mount; opening a panel or changing
+ * route does not rebuild it.
+ */
+export function useDockTheme(rootRef: RefObject<HTMLElement | null>, visible: boolean, preference: IterationTheme): ResolvedTheme {
+  const [theme, setTheme] = useState(() => detectTheme(preference));
+  useLayoutEffect(() => {
+    if (!visible) return;
+    const root = rootRef.current?.getRootNode();
+    if (root instanceof ShadowRoot || root instanceof Document) ensurePanelStyles(root);
+    return observeTheme(setTheme, preference);
+  }, [rootRef, visible, preference]);
+  return theme;
 }

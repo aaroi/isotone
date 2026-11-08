@@ -1,46 +1,16 @@
 import { memo, type RefObject, useLayoutEffect, useSyncExternalStore } from 'react';
-import type { IterationElement, IterationNote, VariantReference } from '../core/types';
 import { HINTS } from './hints';
 import { Icon } from './icons';
 import { fadeIn } from './motion';
 import { showOverflowTitle } from './tooltips';
-
-/**
- * The composer's text, outside React state: typing re-renders the composer
- * alone, and the panel reads the text only when it sends, edits or saves a draft.
- */
-export interface DraftText {
-  get(): string;
-  set(value: string): void;
-  subscribe(listener: () => void): () => void;
-}
-
-export function createDraftText(): DraftText {
-  let value = '';
-  const listeners = new Set<() => void>();
-  return {
-    get: () => value,
-    set(next) {
-      if (next === value) return;
-      value = next;
-      for (const listener of listeners) listener();
-    },
-    subscribe(listener) {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  };
-}
+import type { ComposerDraft } from './useNoteActions';
 
 interface ComposerProps {
-  text: DraftText;
+  /** The text, what it refers to, and the note being edited. */
+  draft: ComposerDraft;
   fieldRef: RefObject<HTMLTextAreaElement | null>;
   /** Whether the feedback panel is open; a closed one does not measure its field. */
   active: boolean;
-  editing: IterationNote | null;
-  variantTarget: VariantReference | null;
-  targets: IterationElement[];
-  notice: string;
   picking: boolean;
   /** Selecting started together with the panel: the cover shows at once. */
   pickingWithPanel: boolean;
@@ -59,13 +29,9 @@ interface ComposerProps {
 
 /** One composer, in the dock or floating beside the element being written about. */
 export const Composer = memo(function Composer({
-  text: draft,
+  draft: { text: draft, editing, variantTarget, targets, notice },
   fieldRef,
   active,
-  editing,
-  variantTarget,
-  targets,
-  notice,
   picking,
   pickingWithPanel,
   floating,

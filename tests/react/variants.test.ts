@@ -989,7 +989,7 @@ describe('review dock interactions', () => {
     expect(saved[0]?.variantAction).toEqual({ axisId: 'headline', action: 'remove-option', optionId: 'b' });
     expect(manage).not.toHaveBeenCalled();
     expect(labels()).toEqual(['Headline', 'Tagline', 'Haze']);
-    expect(byText('Cancel removal')).toBeDefined();
+    expect(byText('Cancel removal: Remove “Bold” from Headline.')).toBeDefined();
     await click(container.querySelector('.isotone-note-hit'));
     expect(container.querySelector('textarea')?.value).toContain('Remove “Bold”');
     await typeFeedback('Remove this option after checking the alternative layout.');
@@ -1008,7 +1008,7 @@ describe('review dock interactions', () => {
     expect(labels()).toEqual(['Headline', 'Tagline', 'Haze']);
     // The rail button's name carries the count the badge shows.
     await click(byText('Feedback, 1 note'));
-    await click(byText('Cancel removal'));
+    await click(container.querySelector('[title="Cancel removal"]'));
     expect(labels()).toEqual(['Headline', 'Tagline', 'Haze']);
     expect(source.getSelections().headline).toBe('b');
     expect(source.getAxes()).toHaveLength(3);

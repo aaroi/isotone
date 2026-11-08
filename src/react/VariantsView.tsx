@@ -1,4 +1,5 @@
 import {
+  type HTMLAttributes,
   memo,
   type ReactNode,
   startTransition,
@@ -29,6 +30,7 @@ import { AxisControl, type OpenMenu } from './AxisControl';
 import { ColorPicker } from './ColorPicker';
 import { Icon } from './icons';
 import { MAX_ANIMATED_ITEMS } from './motion';
+import { PanelClose } from './NotesPanel';
 import { useLayoutMotion } from './useLayoutMotion';
 import { showOverflowTitle } from './tooltips';
 
@@ -351,6 +353,32 @@ export const VariantsView = memo(function VariantsView({
     </div>
   );
 });
+
+/** The variants panel in the dock: its close control, resize handle and selectors. */
+export function VariantsPanel({
+  id,
+  resizeHandle,
+  onClose,
+  ...view
+}: VariantsViewProps & { id: string; active: boolean; resizeHandle: HTMLAttributes<HTMLDivElement>; onClose: () => void }) {
+  return (
+    <section
+      id={id}
+      role="dialog"
+      aria-label="Iteration variants"
+      className="isotone-panel isotone-variants-panel"
+      data-open={view.active}
+      aria-hidden={!view.active}
+      ref={(node) => {
+        node?.toggleAttribute('inert', !view.active);
+      }}
+    >
+      <PanelClose label="Close variants" onClose={onClose} />
+      {view.active && <div {...resizeHandle} />}
+      <VariantsView {...view} />
+    </section>
+  );
+}
 
 /**
  * A section of selectors: a sticky header that names the part of the page and

@@ -1,50 +1,31 @@
-import { type HTMLAttributes, memo, type ReactNode, type RefObject } from 'react';
+import { type HTMLAttributes, memo, type ReactNode, type RefObject, useEffect, useRef } from 'react';
 import { normalizeRoute } from '../core/routes';
-import type { IterationNote } from '../core/types';
+import type { IterationElement, IterationNote } from '../core/types';
 import { Icon } from './icons';
-import { dotPulse } from './motion';
+import { dotPulse, fadeInContent } from './motion';
 import { NoteSummary } from './NoteSummary';
+import type { Anchor } from './picking';
 import { showOverflowTitle } from './tooltips';
+import { useLayoutMotion } from './useLayoutMotion';
+import type { NoteView } from './useNoteView';
 
 interface NotesPanelProps {
   id: string;
   open: boolean;
   route: string;
-  notes: IterationNote[];
-  listRef: RefObject<HTMLUListElement | null>;
-  /** Pages with open notes and how many, this page first. */
-  pages: { counts: Map<string, number>; others: string[] };
-  selectedPages: ReadonlySet<string>;
-  /** Notes an agent is working on now. */
-  working: ReadonlySet<string>;
+  view: NoteView;
   editingId: string | undefined;
   resizeHandle: HTMLAttributes<HTMLDivElement>;
   /** The composer, or the button that brings it back from the page. */
   compose: ReactNode;
   onClose: () => void;
-  onTogglePage: (page: string) => void;
   onEdit: (note: IterationNote) => void;
   onRemove: (note: IterationNote) => void;
 }
 
-/** The feedback panel: its header, the page filter, saved notes and the compose slot. */
-export function NotesPanel({
-  id,
-  open,
-  route,
-  notes,
-  listRef,
-  pages,
-  selectedPages,
-  working,
-  editingId,
-  resizeHandle,
-  compose,
-  onClose,
-  onTogglePage,
-  onEdit,
-  onRemove,
-}: NotesPanelProps) {
+/** The feedback panel: its close control, the page filter, saved notes and the compose slot. */
+export function NotesPanel({ id, open, route, view, editingId, resizeHandle, compose, onClose, onEdit, onRemove }: NotesPanelProps) {
+  const { pages, selectedPages, notes, working, togglePage } = view;
   return (
     <section
       id={id}
@@ -68,7 +49,7 @@ export function NotesPanel({
               className="isotone-page"
               aria-pressed={selectedPages.has(page)}
               title={page === route ? `This page · ${page}` : page}
-              onClick={() => onTogglePage(page)}
+              onClick={() => togglePage(page)}
             >
               <span onPointerOver={showOverflowTitle}>{page === route ? 'This page' : page}</span>
               <small>{pages.counts.get(page) ?? 0}</small>
@@ -76,22 +57,32 @@ export function NotesPanel({
           ))}
         </fieldset>
       )}
-      <NoteList listRef={listRef} notes={notes} route={route} editingId={editingId} working={working} onEdit={onEdit} onRemove={onRemove} />
+      <NoteList open={open} notes={notes} route={route} editingId={editingId} working={working} onEdit={onEdit} onRemove={onRemove} />
       <div className="isotone-compose">{compose}</div>
     </section>
   );
 }
 
-/** The saved notes. Memoized apart from the panel: the composer and the dock re-render it with props that change on every render. */
+/**
+ * The saved notes, scrolled to the newest. Memoized apart from the panel,
+ * which the composer and the dock re-render with props that change every time.
+ */
 const NoteList = memo(function NoteList({
-  listRef,
+  open,
   notes,
   route,
   editingId,
   working,
   onEdit,
   onRemove,
-}: Pick<NotesPanelProps, 'listRef' | 'notes' | 'route' | 'editingId' | 'working' | 'onEdit' | 'onRemove'>) {
+}: Pick<NotesPanelProps, 'open' | 'route' | 'editingId' | 'onEdit' | 'onRemove'> & Pick<NoteView, 'notes' | 'working'>) {
+  const listRef = useRef<HTMLUListElement>(null);
+  useLayoutMotion(listRef, notes, open);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new note or opening the panel scrolls to the end.
+  useEffect(() => {
+    const list = listRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
+  }, [notes, open]);
   return (
     <ul ref={listRef} className="isotone-list">
       {notes.map((note) => (
@@ -135,7 +126,7 @@ const NoteRow = memo(function NoteRow({
   onEdit: (note: IterationNote) => void;
   onRemove: (note: IterationNote) => void;
 }) {
-  const remove = note.variantAction ? 'Cancel removal' : note.update ? 'Cancel update request' : 'Delete note';
+  const remove = removeAction(note);
   return (
     <li data-motion-key={note.id} className={`isotone-note${editing ? ' isotone-note-editing' : ''}`}>
       {note.update ? (
@@ -151,12 +142,62 @@ const NoteRow = memo(function NoteRow({
           <NoteSummary note={note} page={page} />
         </button>
       )}
-      <button type="button" className="isotone-x isotone-icon" aria-label={remove} title={remove} onClick={() => onRemove(note)}>
+      <button
+        type="button"
+        className="isotone-x isotone-icon"
+        aria-label={remove.name}
+        title={remove.action}
+        onClick={() => onRemove(note)}
+      >
         <Icon name="close" size={12} />
       </button>
     </li>
   );
 });
+
+/** The corner action, and an accessible name with enough of the note to tell rows apart. */
+function removeAction(note: IterationNote): { action: string; name: string } {
+  if (note.update) return { action: 'Cancel update request', name: 'Cancel update request' };
+  const action = note.variantAction ? 'Cancel removal' : 'Delete note';
+  const text = note.variantAction ? note.feedback.replace(/^\[[\w-]+\]\s*/, '') : note.feedback;
+  return { action, name: `${action}: ${text.length > 48 ? `${text.slice(0, 47).trimEnd()}…` : text}` };
+}
+
+/** Stands in for the composer while it floats on the page, naming where; a click brings it back. */
+export function AwayButton({
+  targets,
+  anchor,
+  slot,
+  onReturn,
+}: {
+  targets: IterationElement[];
+  /** Where the composer floats: beside the pinned element it names. */
+  anchor: Anchor | null;
+  /** The docked composer's height, kept so the panel does not jump. */
+  slot: RefObject<number>;
+  onReturn: () => void;
+}) {
+  const anchored = targets.find((t) => t.selector === anchor?.selector) ?? targets[0];
+  const more = targets.length > 1 ? ` and ${targets.length - 1} more` : '';
+  return (
+    <button
+      type="button"
+      ref={fadeInContent}
+      className="isotone-away"
+      title="Write here instead"
+      style={{ minHeight: slot.current || undefined }}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onReturn}
+    >
+      <Icon name="pin" size={14} />
+      <span className="isotone-away-text">
+        <span>Writing on the page</span>
+        <small>{anchored ? `Next to ${anchored.text || anchored.tag}${more}` : 'Next to where you clicked'}</small>
+      </span>
+      <span className="isotone-away-action">Move here</span>
+    </button>
+  );
+}
 
 /** A quiet close control in the panel's top-left corner. */
 export function PanelClose({ label, onClose }: { label: string; onClose: () => void }) {
