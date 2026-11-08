@@ -1,4 +1,4 @@
-import { FEEDBACK_STORAGE_KEY, readBrowserStorage, writeBrowserStorage } from './browser-storage';
+import { FEEDBACK_STORAGE_KEY, readBrowserStorage } from './browser-storage';
 import { createNoteId } from './id';
 import { MAX_FEEDBACK_LENGTH } from './limits';
 import { request } from './request';
@@ -63,16 +63,11 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     } catch {
       return [];
     }
-    return parseLocal(
-      readBrowserStorage(storage, key, (current, previous) => {
-        const merged = new Map([...parseLocal(previous), ...parseLocal(current)].map((note) => [note.id, note]));
-        return JSON.stringify([...merged.values()]);
-      }),
-    );
+    return parseLocal(readBrowserStorage(storage, key));
   }
 
   function localWrite(items: IterationNote[]) {
-    writeBrowserStorage(window.localStorage, key, JSON.stringify(items));
+    window.localStorage.setItem(key, JSON.stringify(items));
   }
 
   function acknowledge(item: IterationNote): void {

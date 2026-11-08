@@ -9,7 +9,7 @@ import {
   type PointerEvent,
   type RefObject,
 } from 'react';
-import { readBrowserStorage, writeBrowserStorage } from '../core/browser-storage';
+import { readBrowserStorage } from '../core/browser-storage';
 
 type Panel = 'variants' | 'notes';
 type Handle = 'width' | Panel;
@@ -63,7 +63,7 @@ function load(key: string): DockSize {
 
 function save(key: string, size: DockSize) {
   try {
-    writeBrowserStorage(localStorage, key, JSON.stringify(size));
+    localStorage.setItem(key, JSON.stringify(size));
   } catch {
     /* Quota or access restrictions only cost persistence. */
   }

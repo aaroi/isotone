@@ -1,6 +1,6 @@
 /** The overlay adapter: file variants and knobs served by the Vite plugin or `isotone serve`. */
 
-import { readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '../browser-storage';
+import { readBrowserStorage } from '../browser-storage';
 import { request } from '../request';
 import { matchRoute } from '../routes';
 import type { IterationElement } from '../types';
@@ -392,13 +392,7 @@ export function createOverlayVariantsSource(cfg: {
       }
     };
     try {
-      return storage
-        ? parse(
-            readBrowserStorage(storage, KNOBS_STORAGE_KEY, (current, previous) =>
-              JSON.stringify({ ...parse(previous), ...parse(current) }),
-            ),
-          )
-        : {};
+      return storage ? parse(readBrowserStorage(storage, KNOBS_STORAGE_KEY)) : {};
     } catch {
       return {};
     }
@@ -406,8 +400,8 @@ export function createOverlayVariantsSource(cfg: {
   const persistKnobs = () => {
     try {
       if (!storage) return;
-      if (Object.keys(knobValues).length === 0) removeBrowserStorage(storage, KNOBS_STORAGE_KEY);
-      else writeBrowserStorage(storage, KNOBS_STORAGE_KEY, JSON.stringify(knobValues));
+      if (Object.keys(knobValues).length === 0) storage.removeItem(KNOBS_STORAGE_KEY);
+      else storage.setItem(KNOBS_STORAGE_KEY, JSON.stringify(knobValues));
     } catch {
       // Storage full or blocked: the values still apply for this page view.
     }

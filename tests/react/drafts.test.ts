@@ -55,52 +55,24 @@ async function open() {
   return field;
 }
 
-const oldKey = 'iso-iterate-feedback::draft::/project';
 const newKey = 'isotone-feedback::draft::/project';
 
-it('restores a legacy draft and its references without first clearing the migrated value', async () => {
+it('restores a saved draft and its references', async () => {
   const draft = {
     text: 'Keep this offline draft',
     elements: [{ tag: 'button', text: 'Save', selector: '#save' }],
     variant: { axisId: 'layout', label: 'Layout', optionLabel: 'Grid' },
   };
-  values.set(oldKey, JSON.stringify(draft));
+  values.set(newKey, JSON.stringify(draft));
   await render();
-  const field = await open();
-  expect(field.value).toBe(draft.text);
-  expect(container.querySelector('.isotone-context')?.textContent).toContain('Layout / Grid');
-  expect(container.querySelector('.isotone-context')?.textContent).toContain('Save');
-  expect(JSON.parse(values.get(newKey) ?? '{}')).toEqual(draft);
-  expect(values.has(oldKey)).toBe(false);
-  expect(storage.removeItem).not.toHaveBeenCalledWith(newKey);
+  expect((await open()).value).toBe(draft.text);
 });
 
-it('keeps the current draft when both namespaces have a draft for the route', async () => {
-  values.set(oldKey, JSON.stringify({ text: 'Previous draft', elements: [] }));
-  values.set(newKey, JSON.stringify({ text: 'Current draft', elements: [] }));
-  await render();
-  expect((await open()).value).toBe('Current draft');
-  expect(values.has(oldKey)).toBe(false);
-});
-
-it('retains and restores the legacy draft when the new namespace cannot be written', async () => {
-  values.set(oldKey, 'Legacy plain text draft');
-  storage.setItem = vi.fn(() => {
-    throw new Error('Storage full');
-  });
-  await render();
-  expect((await open()).value).toBe('Legacy plain text draft');
-  expect(values.get(oldKey)).toBe('Legacy plain text draft');
-  expect(values.has(newKey)).toBe(false);
-});
-
-it('leaves custom draft namespaces unchanged', async () => {
-  values.set(oldKey, 'Unrelated draft');
-  values.set('project-review::draft::/project', 'Custom namespace draft');
+it('reads drafts from a custom namespace', async () => {
+  values.set(newKey, JSON.stringify({ text: 'Default namespace draft', elements: [] }));
+  values.set('project-review::draft::/project', JSON.stringify({ text: 'Custom namespace draft', elements: [] }));
   await render('/project', 'project-review');
   expect((await open()).value).toBe('Custom namespace draft');
-  expect(values.get(oldKey)).toBe('Unrelated draft');
-  expect(values.has(newKey)).toBe(false);
 });
 
 it('does not briefly overwrite the destination draft while changing routes', async () => {

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '../core/browser-storage';
+import { readBrowserStorage } from '../core/browser-storage';
 import type { IterationElement, IterationNote, VariantReference } from '../core/types';
 
 /**
@@ -42,8 +42,8 @@ interface Draft {
 function writeDraft(key: string, value: string, { editing, targets, variantTarget }: Draft): void {
   if (editing) return;
   try {
-    if (!value && targets.length === 0 && !variantTarget) removeBrowserStorage(localStorage, key);
-    else writeBrowserStorage(localStorage, key, JSON.stringify({ text: value, elements: targets, variant: variantTarget }));
+    if (!value && targets.length === 0 && !variantTarget) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify({ text: value, elements: targets, variant: variantTarget }));
   } catch {}
 }
 
