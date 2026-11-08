@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { VARIANTS_ENDPOINT } from '../../src/core/variants';
 import { serveIsotone, type ServedIsotone } from '../../src/serve/index';
-import { guardedScriptTag } from '../../src/serve/tag';
+import { guardedScriptTag } from '../../src/core/tag';
 import { NOTES_ENDPOINT } from '../../src/node/notes/handler';
 import { UPDATE_ENDPOINT } from '../../src/node/update/check';
 

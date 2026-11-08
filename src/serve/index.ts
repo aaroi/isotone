@@ -31,7 +31,7 @@ import { readKnobs } from '../node/variants';
 
 import { readBundle } from '../node/bundle';
 import { serveMountOptions } from './mount-config';
-import { DEFAULT_PORT, guardedScriptTag } from './tag';
+import { DEFAULT_PORT, guardedScriptTag } from '../core/tag';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
 import { autoUpdateNote, updateResponse } from '../node/update/note';
 

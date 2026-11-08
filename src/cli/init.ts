@@ -12,7 +12,7 @@ import { dirname, isAbsolute, join } from 'node:path';
 
 import { version } from '../../package.json';
 
-import { guardedScriptTag } from '../serve/tag';
+import { guardedScriptTag } from '../core/tag';
 import { DEFAULT_VARIANTS_DIR, KNOBS_FILE } from '../node/variants';
 import { docPath } from './docs';
 import { toJson } from './text';

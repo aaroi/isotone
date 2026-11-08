@@ -9,7 +9,7 @@ import { resolve } from 'node:path';
 import { version } from '../../package.json';
 import { BLAST } from '../core/blast';
 import { defaultNotesFile, NOTES_FILE } from '../node/notes/location';
-import { DEFAULT_PORT, guardedScriptTag } from '../serve/tag';
+import { DEFAULT_PORT, guardedScriptTag } from '../core/tag';
 import { runBlast } from './blast';
 import { docPath } from './docs';
 import { runInit } from './init';

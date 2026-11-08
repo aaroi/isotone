@@ -16,6 +16,7 @@ const ALLOWED: Record<string, readonly string[]> = {
   node: ['core', 'node'],
   serve: ['core', 'node', 'serve'],
   vite: ['core', 'node', 'vite'],
+  // Only to start `isotone serve`, loaded on demand.
   cli: ['core', 'node', 'serve', 'cli'],
 };
 /** Layers that run in a browser: no `node:*`. */
