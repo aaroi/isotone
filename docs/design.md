@@ -193,9 +193,7 @@ counterpart of holding Shift; pins stay. A tapped element gets the floating
 composer under or over the whole element, centred on the tap, since a finger
 hides the point. Selection previews follow hovering pointers only. Coarse
 pointers get larger hit areas (composer controls, reference removal, note
-delete, panel close) with the same faces; the pill stays 76 × 44px. Fields a finger
-types in (the composer, the hex colour) use 16px text, so iOS does not zoom the
-page on focus and turn off the keyboard lift; pointers keep the smaller sizes.
+delete, panel close) with the same faces; the pill stays 76 × 44px.
 
 ## Scrolling
 
