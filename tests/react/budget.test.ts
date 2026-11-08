@@ -109,7 +109,7 @@ async function commitsDuring(run: () => Promise<void>): Promise<number> {
 /** Let the Variants list finish rendering its chunks. */
 async function settle() {
   for (let i = 0; i < 30 && shadow.querySelectorAll('.isotone-axis').length < 500; i++)
-    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    await act(async () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0))));
 }
 
 it('opens 500 selectors with a first screenful, then the rest in a few chunks, rendering each once', async () => {

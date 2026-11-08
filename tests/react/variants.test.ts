@@ -98,11 +98,11 @@ async function render(element: React.ReactElement) {
   await act(async () => r.render(element));
 }
 
-/** A long list renders a first screenful, then the rest a chunk per task: wait for every chunk. */
+/** A long list renders a first screenful, then the rest a chunk per frame: wait for every chunk. */
 async function renderRemaining() {
   for (let count = -1; count !== container.querySelectorAll('.isotone-axis').length; ) {
     count = container.querySelectorAll('.isotone-axis').length;
-    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    await act(async () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0))));
   }
 }
 

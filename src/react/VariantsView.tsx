@@ -123,9 +123,16 @@ function useRenderLimit(open: boolean, total: number): number {
       return;
     }
     if (rendered >= total) return;
-    // A transition renders in slices that yield to input, and a click or keystroke meanwhile goes first.
-    const timer = setTimeout(() => startTransition(() => setLimit(rendered + AXES_PER_CHUNK)));
-    return () => clearTimeout(timer);
+    // Each chunk waits for the frame that shows the last one to be painted. A transition renders in slices
+    // that yield to input, so a click or keystroke meanwhile goes first.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      timer = setTimeout(() => startTransition(() => setLimit(rendered + AXES_PER_CHUNK)));
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
   }, [open, rendered, total]);
   return rendered;
 }
