@@ -38,7 +38,7 @@ function sources(dir: string): string[] {
 function importsOf(file: string, text = readFileSync(file, 'utf8')): string[] {
   const statics = /^\s*(?:import|export)\b[^'"`;]*?\bfrom\s*['"]([^'"]+)['"]|^\s*import\s*['"]([^'"]+)['"]/gm;
   const dynamics = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
-  const specifiers = [...text.matchAll(statics), ...text.matchAll(dynamics)].map((match) => match[1] ?? match[2]);
+  const specifiers = [...text.matchAll(statics), ...text.matchAll(dynamics)].map((match) => match[1] ?? match[2] ?? '');
   return specifiers.map((specifier) =>
     specifier.startsWith('.')
       ? relative(SRC, resolve(dirname(file), specifier))
@@ -49,7 +49,7 @@ function importsOf(file: string, text = readFileSync(file, 'utf8')): string[] {
 }
 
 const files = sources(SRC).map((file) => ({ path: relative(SRC, file).split('\\').join('/'), imports: importsOf(file) }));
-const layerOf = (path: string) => path.split('/')[0];
+const layerOf = (path: string) => path.split('/')[0] ?? '';
 
 /** What a file may not import, as `file → specifier`. */
 function violations(file: { path: string; imports: string[] }): string[] {

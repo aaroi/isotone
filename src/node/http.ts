@@ -30,7 +30,7 @@ export function jsonResponse(status: number, body: unknown): HandlerResponse {
   };
 }
 
-export class HttpError extends Error {
+class HttpError extends Error {
   constructor(
     public readonly status: number,
     message: string,
@@ -50,7 +50,7 @@ export function isLoopback(host: string): boolean {
  * `server.allowedHosts`; a leading dot allows subdomains). A DNS-rebinding
  * page sends its own public domain, which fails.
  */
-export function isLocalHostHeader(host: string | null | undefined, allowed: readonly string[] = []): boolean {
+function isLocalHostHeader(host: string | null | undefined, allowed: readonly string[] = []): boolean {
   if (!host) return false;
   let name: string;
   try {
@@ -66,7 +66,7 @@ export function isLocalHostHeader(host: string | null | undefined, allowed: read
 }
 
 /** A socket address on this machine (IPv4, IPv6, or IPv4-mapped IPv6). */
-export function isLoopbackAddress(address: string | undefined): boolean {
+function isLoopbackAddress(address: string | undefined): boolean {
   return !!address && (address === '::1' || /^(::ffff:)?127\./.test(address));
 }
 
@@ -110,7 +110,7 @@ export function checkOrigin(origin: string | null | undefined, host: string, loo
  *  type counts (`application/json` or `application/*+json`), not a parameter:
  *  `text/plain; x=application/json` is still a form's type. */
 function requireJson(type: string | null | undefined): void {
-  const media = (type ?? '').split(';')[0].trim().toLowerCase();
+  const media = (type ?? '').replace(/;.*$/s, '').trim().toLowerCase();
   if (media !== 'application/json' && !/^application\/[^/]+\+json$/.test(media)) {
     throw new HttpError(415, 'content-type must be application/json');
   }

@@ -23,8 +23,7 @@ function themeViolations(css: string): string[] {
           violations.push('separate component or state rule');
         }
         const declaration = (rule as CSSStyleRule).style;
-        for (let i = 0; i < declaration.length; i++) {
-          const property = declaration[i];
+        for (const property of Array.from(declaration)) {
           if (!PALETTE_TOKEN_NAMES.has(property) && property !== 'color-scheme') violations.push(property);
         }
       }
@@ -72,7 +71,7 @@ describe('theme boundary', () => {
         if (/^zinc-(50|100|200|300|400|500|600|700|800|900|950)$/.test(key)) return;
         expect(chain, `circular token: ${key}`).not.toContain(key);
         expect(values[key], `missing token: ${key}`).toBeDefined();
-        for (const [, ref] of values[key].matchAll(/var\(--iso-([\w-]+)\)/g)) resolve(ref, [...chain, key]);
+        for (const [, ref = ''] of (values[key] ?? '').matchAll(/var\(--iso-([\w-]+)\)/g)) resolve(ref, [...chain, key]);
       }
       for (const key of Object.keys(values)) resolve(key);
     }

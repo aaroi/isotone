@@ -323,15 +323,15 @@ describe('the Vite adapter, served', () => {
       payload?: unknown;
     }>;
     expect(onDisk).toHaveLength(1);
-    expect(onDisk[0].route).toBe('/projects');
-    expect(onDisk[0].payload).toEqual({ fixture: 'console' });
+    expect(onDisk[0]?.route).toBe('/projects');
+    expect(onDisk[0]?.payload).toEqual({ fixture: 'console' });
 
     const listed = (await (await fetch(`${origin}${NOTES_ENDPOINT}?route=/projects`)).json()) as Array<{
       id: string;
       element: { text: string } | null;
     }>;
-    expect(listed[0].id).toBe(id);
-    expect(listed[0].element?.text).toBe('platform-api');
+    expect(listed[0]?.id).toBe(id);
+    expect(listed[0]?.element?.text).toBe('platform-api');
 
     const deleted = await fetch(`${origin}${NOTES_ENDPOINT}?id=${id}`, {
       method: 'DELETE',

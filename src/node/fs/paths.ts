@@ -20,7 +20,7 @@ export function toPosixPath(p: string): string {
 
 /** The path with every existing ancestor's symlinks resolved, including for
  *  a not-yet-created file beneath a symlinked directory. */
-export function canonicalPath(path: string): string {
+function canonicalPath(path: string): string {
   let existing = resolve(path);
   while (dirname(existing) !== existing) {
     try {

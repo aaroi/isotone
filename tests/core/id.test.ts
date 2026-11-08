@@ -28,7 +28,7 @@ describe('note IDs on HTTP development hosts', () => {
     const store = createIterationStore({ endpoint: '/notes' });
     const id = await store.saveNote('/', 'Review this layout', null, null);
     expect(id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body)).id).toBe(id);
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body)).id).toBe(id);
   });
 
   it('still creates distinct IDs if Web Crypto is entirely unavailable', () => {

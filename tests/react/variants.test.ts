@@ -227,7 +227,7 @@ describe('VariantsView', () => {
     const last = container.querySelectorAll<HTMLButtonElement>('.isotone-seg')[999];
     await click(last);
     expect(source.getSelections()['axis-499']).toBe('b');
-    expect(last.getAttribute('aria-checked')).toBe('true');
+    expect(last?.getAttribute('aria-checked')).toBe('true');
   }, 30_000);
 
   it('renders the visible axes and hides the conditional one at default', async () => {
@@ -977,7 +977,7 @@ describe('review dock interactions', () => {
     await click(container.querySelector('.isotone-fab'));
     await click(byText('Headline actions'));
     await click(byText('Remove Bold'));
-    expect(saved[0].variantAction).toEqual({ axisId: 'headline', action: 'remove-option', optionId: 'b' });
+    expect(saved[0]?.variantAction).toEqual({ axisId: 'headline', action: 'remove-option', optionId: 'b' });
     expect(manage).not.toHaveBeenCalled();
     expect(labels()).toEqual(['Headline', 'Tagline', 'Haze']);
     expect(byText('Cancel removal')).toBeDefined();
@@ -985,9 +985,9 @@ describe('review dock interactions', () => {
     expect(container.querySelector('textarea')?.value).toContain('Remove “Bold”');
     await typeFeedback('Remove this option after checking the alternative layout.');
     await click(byText('Save edit'));
-    expect(saved[0].variantAction).toEqual({ axisId: 'headline', action: 'remove-option', optionId: 'b' });
-    expect(saved[0].variant).toMatchObject({ axisId: 'headline', optionId: 'b' });
-    expect(saved[0].feedback).toBe('Remove this option after checking the alternative layout.');
+    expect(saved[0]?.variantAction).toEqual({ axisId: 'headline', action: 'remove-option', optionId: 'b' });
+    expect(saved[0]?.variant).toMatchObject({ axisId: 'headline', optionId: 'b' });
+    expect(saved[0]?.feedback).toBe('Remove this option after checking the alternative layout.');
     await click(byText('Headline actions'));
     expect(byText('Remove Bold')?.hasAttribute('disabled')).toBe(true);
     await click(byText('Close selector actions'));
@@ -1025,13 +1025,13 @@ describe('review dock interactions', () => {
     await click(byText('Headline actions'));
     expect(byText('Keep default only')).toBeDefined();
     await click(byText('Keep only Bold'));
-    expect(saved[0].variantAction).toEqual({ axisId: 'headline', action: 'keep-option', optionId: 'b' });
-    expect(saved[0].feedback).toContain('Keep only “Bold” for Headline; make it the default');
+    expect(saved[0]?.variantAction).toEqual({ axisId: 'headline', action: 'keep-option', optionId: 'b' });
+    expect(saved[0]?.feedback).toContain('Keep only “Bold” for Headline; make it the default');
     await click(byText('Headline actions'));
     expect(byText('Keep only Bold')?.hasAttribute('disabled')).toBe(true);
     const defaultRow = [...container.querySelectorAll('.isotone-option-row')].find((row) => row.querySelector('small'));
     await click(defaultRow?.querySelector('[aria-label^="Keep only"]') ?? null);
-    expect(saved[1].variantAction).toEqual({ axisId: 'headline', action: 'keep-default' });
+    expect(saved[1]?.variantAction).toEqual({ axisId: 'headline', action: 'keep-default' });
     expect(source.getAxes()).toHaveLength(3);
   });
 
@@ -1609,7 +1609,7 @@ describe('review dock interactions', () => {
         for (const [id, tag] of [
           ['s', 'Default'],
           ['m', 'Removal requested'],
-        ]) {
+        ] as const) {
           const label = row(id)?.querySelector<HTMLElement>('.isotone-option-label');
           const tags = row(id)?.querySelector<HTMLElement>('.isotone-option-tags');
           // The ellipsized element holds the label alone; the tag is its sibling.

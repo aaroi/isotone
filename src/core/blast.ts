@@ -72,7 +72,7 @@ export function parseDuration(text: string): number {
     throw new Error(`"${text}" is not a duration. Use a number and a unit, such as 30s, 5m or 1h.`);
   }
   let total = 0;
-  for (const [, amount, unit] of value.matchAll(/(\d+(?:\.\d+)?)(ms|s|m|h)/g)) total += Number(amount) * UNITS[unit];
+  for (const [, amount, unit = ''] of value.matchAll(/(\d+(?:\.\d+)?)(ms|s|m|h)/g)) total += Number(amount) * (UNITS[unit] ?? Number.NaN);
   if (!Number.isFinite(total) || total <= 0) throw new Error(`"${text}" must be longer than zero.`);
   return Math.round(total);
 }

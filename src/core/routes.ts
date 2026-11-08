@@ -17,7 +17,7 @@
 
 /** `about` → `/about`, `/about/` → `/about`; drops a query or hash. `/` stays `/`. */
 export function normalizeRoute(route: string): string {
-  let path = route.trim().split(/[?#]/, 1)[0];
+  let path = route.trim().replace(/[?#].*$/s, '');
   if (!path.startsWith('/')) path = `/${path}`;
   while (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1);
   return path;

@@ -41,11 +41,11 @@ function demoNotes(): Plugin {
             done: false,
             doneAt: null,
             createdAt: new Date().toISOString(),
+            // The README image: one note the agent is working on, one waiting.
+            ...(session === 'light' || session === 'dark' ? { workingAt: new Date().toISOString() } : {}),
           },
         ];
         if (session === 'light' || session === 'dark') {
-          // The README image: one note the agent is working on, one waiting.
-          notes[0].workingAt = new Date().toISOString();
           notes.push({
             id: 'demo-capture-label',
             route: '/',
@@ -57,7 +57,7 @@ function demoNotes(): Plugin {
           });
         }
         if (session === 'interactive') {
-          const examples = [
+          const examples: [feedback: string, text: string][] = [
             ['Make the empty state more useful.', 'Projects'],
             ['Keep the filters visible when scrolling.', 'Project filters'],
             ['The status label needs more contrast.', 'Project status'],
@@ -116,7 +116,7 @@ function demoNotes(): Plugin {
       server.middlewares.use(async (req, res, next) => {
         // `?update-preview=1`: a fictional update. Asking the agent files a real
         // update note in the session's notes, built by the same server code.
-        const preview = /^\/demo-update\/([a-z]+)$/.exec((req.url ?? '').split('?')[0]);
+        const preview = /^\/demo-update\/([a-z]+)$/.exec((req.url ?? '').replace(/\?.*$/s, ''));
         if (preview) {
           try {
             checkRequest({ origin: req.headers.origin, host: req.headers.host });
@@ -167,7 +167,7 @@ function demoNotes(): Plugin {
           res.end(JSON.stringify({ ok: true }));
           return;
         }
-        const file = files.get((req.url ?? '').split('?')[0]);
+        const file = files.get((req.url ?? '').replace(/\?.*$/s, ''));
         if (!file) {
           next();
           return;

@@ -5,7 +5,7 @@
   "license": "MIT",
   "description": "Design variants and feedback for your running web app. Switch between variants your coding agent builds, pin elements, and give the agent the context to make the change.",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "packageManager": "pnpm@10.33.0",
   "exports": {
@@ -37,7 +37,6 @@
   },
   "files": [
     "dist",
-    "docs/assets/preview.png",
     "docs/agent-guide.md",
     "docs/integrations.md",
     "docs/migration.md",
@@ -54,10 +53,11 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome ci .",
     "lint:fix": "biome check --write .",
+    "knip": "knip",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "tsup",
-    "check": "pnpm typecheck && pnpm lint && pnpm build && pnpm test",
+    "build": "tsdown",
+    "check": "pnpm typecheck && pnpm lint && pnpm knip && pnpm build && pnpm test",
     "prepublishOnly": "pnpm check",
     "dev": "vite --config examples/vite.config.ts",
     "build:demo": "vite build --config examples/vite.config.ts --mode hosted",
@@ -77,11 +77,12 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "jsdom": "^30.0.1",
+    "knip": "^6.44.2",
     "lucide-react": "^1.55.0",
     "publint": "^0.3.25",
     "react": "^19",
     "react-dom": "^19",
-    "tsup": "^8",
+    "tsdown": "^0.23.7",
     "typescript": "^5",
     "vite": "^7",
     "vitest": "^4.1.10"

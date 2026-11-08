@@ -121,10 +121,10 @@ interface StackFrame {
  */
 function stackFrame(stack: { stack?: string } | string | null | undefined): StackFrame | undefined {
   const text = typeof stack === 'string' ? stack : stack?.stack;
-  for (const line of text?.split('\n').slice(1) ?? []) {
-    const match = line.match(/(?:\(|@|\bat )((?:[a-z-]+:\/\/\/?|\/)\S+?):(\d+):(\d+)\)?\s*$/i);
-    if (!match || /react[-_]jsx|react-dom|react\.development|\/react\/|jsx-dev-runtime|jsx-runtime/i.test(match[1])) continue;
-    return { url: match[1], line: Number(match[2]), column: Number(match[3]) };
+  for (const frame of text?.split('\n').slice(1) ?? []) {
+    const [, url, line, column] = frame.match(/(?:\(|@|\bat )((?:[a-z-]+:\/\/\/?|\/)\S+?):(\d+):(\d+)\)?\s*$/i) ?? [];
+    if (!url || /react[-_]jsx|react-dom|react\.development|\/react\/|jsx-dev-runtime|jsx-runtime/i.test(url)) continue;
+    return { url, line: Number(line), column: Number(column) };
   }
   return undefined;
 }
@@ -151,12 +151,15 @@ const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/
 
 /** The original source and line of a generated position, from a source map's VLQ mappings. */
 function mapPosition(mappings: string, line: number, column: number): { source: number; line: number } | undefined {
-  const lines = mappings.split(';');
-  const state = [0, 0, 0, 0];
+  // Running totals: generated column (reset per line), source index, source line.
+  let generated = 0;
+  let source = 0;
+  let sourceLine = 0;
   let found: { source: number; line: number } | undefined;
-  for (let at = 0; at <= line && at < lines.length; at++) {
-    state[0] = 0;
-    for (const segment of lines[at].split(',')) {
+  for (const [at, text] of mappings.split(';').entries()) {
+    if (at > line) break;
+    generated = 0;
+    for (const segment of text.split(',')) {
       const values: number[] = [];
       let value = 0;
       let shift = 0;
@@ -170,8 +173,11 @@ function mapPosition(mappings: string, line: number, column: number): { source: 
         }
       }
       if (values.length < 4) continue;
-      for (let i = 0; i < 4; i++) state[i] += values[i];
-      if (at === line && state[0] <= column) found = { source: state[1], line: state[2] };
+      const [columnDelta, sourceDelta, lineDelta] = values as [number, number, number];
+      generated += columnDelta;
+      source += sourceDelta;
+      sourceLine += lineDelta;
+      if (at === line && generated <= column) found = { source, line: sourceLine };
     }
   }
   return found;

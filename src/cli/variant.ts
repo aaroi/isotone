@@ -80,7 +80,8 @@ export function runVariant(args: string[], io: CliIO): number {
     path: cmdPath,
   };
   const spec = Object.hasOwn(SPEC, sub) ? SPEC[sub] : undefined;
-  if (!spec) {
+  const command = Object.hasOwn(commands, sub) ? commands[sub] : undefined;
+  if (!spec || !command) {
     errOut(io, `Unknown "variant" subcommand "${sub}". Run \`isotone variant --help\` for the list.`);
     return 1;
   }
@@ -89,7 +90,7 @@ export function runVariant(args: string[], io: CliIO): number {
     // `drop x --dry-run` must fail, not delete.
     const positionals = parseArgs(rest, spec[0], spec[1]);
     if (positionals.length > spec[2]) throw new Error(`Unexpected "${positionals[spec[2]]}". Run \`isotone variant --help\`.`);
-    return commands[sub](positionals, rest, io, opts);
+    return command(positionals, rest, io, opts);
   } catch (err) {
     // Every store function throws a plain Error with a one-line, already
     // user-facing message (invalid id, unknown variant, escaping path); this

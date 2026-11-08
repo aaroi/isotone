@@ -42,7 +42,7 @@ function project() {
     ['src/A.tsx', 'variant a\n'],
     ['src/B.tsx', 'variant b\n'],
     ['src/New.tsx', 'variant new\n'],
-  ])
+  ] as const)
     writeFileSync(join(variantDir(opts, 'v1'), file), text);
   return { root, opts };
 }

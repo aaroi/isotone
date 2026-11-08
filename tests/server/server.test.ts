@@ -1,7 +1,7 @@
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
 import { notesResponse } from '../../src/node/notes/handler';
 import { readNotes, updateNotes } from '../../src/node/notes/store';
@@ -36,7 +36,7 @@ describe('notesResponse (transport-agnostic)', () => {
     });
     const rows = listed.body as Array<{ id: string; feedback: string }>;
     expect(rows).toHaveLength(1);
-    expect(rows[0].feedback).toBe('hi');
+    expect(rows[0]?.feedback).toBe('hi');
 
     expect(
       notesResponse(file, {
@@ -81,7 +81,7 @@ describe('serveNotesRequest (fetch/gitworker adapter)', () => {
 
     const listed = await serveNotesRequest(file, new Request('http://localhost:3000/api/notes?route=/'));
     const rows = listed.body as Array<{ element: { selector: string } | null }>;
-    expect(rows[0].element?.selector).toBe('button:first-child');
+    expect(rows[0]?.element?.selector).toBe('button:first-child');
   });
 });
 
@@ -213,11 +213,11 @@ describe('the opaque payload', () => {
     });
     expect(created.status).toBe(201);
 
-    expect(readNotes(file)[0].payload).toEqual({ variants });
+    expect(readNotes(file)[0]?.payload).toEqual({ variants });
     const rows = notesResponse(file, { method: 'GET', url: '/api/notes?route=buttons' }).body as Array<{
       payload?: { variants: Record<string, string> };
     }>;
-    expect(rows[0].payload).toEqual({ variants });
+    expect(rows[0]?.payload).toEqual({ variants });
   });
 
   it('keeps a stored payload when a later autosave omits it', () => {
@@ -234,16 +234,19 @@ describe('the opaque payload', () => {
     create(file, { id, route: '/x', feedback: 'v2', element: null });
 
     const [note] = readNotes(file);
-    expect(note.feedback).toBe('v2');
-    expect(note.payload).toEqual({ variants });
+    expect(note?.feedback).toBe('v2');
+    expect(note?.payload).toEqual({ variants });
   });
 
   it('leaves the field absent, not null, for a host that never sends one', () => {
     const file = tempFile();
     create(file, { route: '/x', feedback: 'plain', element: null });
-    expect('payload' in readNotes(file)[0]).toBe(false);
-    const rows = notesResponse(file, { method: 'GET', url: '/api/notes?route=/x' }).body as Array<Record<string, unknown>>;
-    expect('payload' in rows[0]).toBe(false);
+    const [stored] = readNotes(file);
+    assert(stored);
+    expect('payload' in stored).toBe(false);
+    const [row] = notesResponse(file, { method: 'GET', url: '/api/notes?route=/x' }).body as Array<Record<string, unknown>>;
+    assert(row);
+    expect('payload' in row).toBe(false);
   });
 
   it('rejects an oversized or circular payload instead of storing it', () => {
@@ -277,9 +280,9 @@ describe('the viewport', () => {
       element: null,
       viewport: { w: 900, h: 620 },
     });
-    expect(readNotes(file)[0].viewport).toEqual({ w: 900, h: 620 });
+    expect(readNotes(file)[0]?.viewport).toEqual({ w: 900, h: 620 });
     const rows = notesResponse(file, { method: 'GET', url: '/api/notes?route=/x' }).body as Array<{ viewport?: { w: number; h: number } }>;
-    expect(rows[0].viewport).toEqual({ w: 900, h: 620 });
+    expect(rows[0]?.viewport).toEqual({ w: 900, h: 620 });
   });
 
   it('survives an edit and stays absent when never sent', () => {
@@ -293,7 +296,7 @@ describe('the viewport', () => {
       }).body as { id: string }
     ).id;
     create(file, { id, route: '/x', feedback: 'v2', element: null });
-    expect(readNotes(file)[0].viewport).toEqual({ w: 375, h: 812 });
+    expect(readNotes(file)[0]?.viewport).toEqual({ w: 375, h: 812 });
 
     create(file, { route: '/y', feedback: 'plain', element: null });
     const plain = readNotes(file).find((n) => n.route === '/y');

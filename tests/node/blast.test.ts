@@ -259,12 +259,11 @@ describe(`isotone ${BLAST.command}`, () => {
     p.take();
     expect(await runCli(['--reply', 'ask', 'Which of the two buttons?'], p.io)).toBe(0);
     expect(p.take()).toContain('The note stays open');
-    expect(readNotes(p.notes)[0].reply?.text).toBe('Which of the two buttons?');
+    expect(readNotes(p.notes)[0]?.reply?.text).toBe('Which of the two buttons?');
     const waiting = runBlast(['--json'], p.io, FAST);
     await later(100, () =>
       updateNotes(p.notes, (notes) => {
-        notes[0].feedback = 'Note ask. The primary one.';
-        return notes;
+        return notes.map((n) => ({ ...n, feedback: 'Note ask. The primary one.' }));
       }),
     );
     expect(await waiting).toBe(0);
@@ -279,7 +278,7 @@ describe(`isotone ${BLAST.command}`, () => {
     await runCli([], p.io);
     expect(p.take()).toContain('↩ you asked, and the reviewer has since edited the note: Which of the two buttons?');
     const [row] = notesResponse(p.notes, { method: 'GET', url: '/' }).body as StoredNote[];
-    expect(row.reply?.answered).toBe(true);
+    expect(row?.reply?.answered).toBe(true);
   });
 
   it('keeps a question pending until the note changes', async () => {
@@ -288,8 +287,8 @@ describe(`isotone ${BLAST.command}`, () => {
     await runCli(['--reply', 'wait', 'Which page?'], p.io);
     p.take();
     const [row] = notesResponse(p.notes, { method: 'GET', url: '/' }).body as StoredNote[];
-    expect(row.reply).toMatchObject({ text: 'Which page?' });
-    expect(row.reply?.answered).toBeUndefined();
+    expect(row?.reply).toMatchObject({ text: 'Which page?' });
+    expect(row?.reply?.answered).toBeUndefined();
     await runCli([], p.io);
     expect(p.take()).toContain('↩ you asked: Which page?');
   });

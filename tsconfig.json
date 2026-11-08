@@ -17,7 +17,8 @@
     "verbatimModuleSyntax": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noImplicitOverride": true
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true
   },
-  "include": ["src", "tests", "examples", "tsup.config.ts", "vitest.config.ts"]
+  "include": ["src", "tests", "examples", "tsdown.config.ts", "vitest.config.ts"]
 }

@@ -9,9 +9,9 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { build, type Options } from 'tsup';
+import { build, type UserConfig } from 'tsdown';
 
-import config from '../../tsup.config';
+import config from '../../tsdown.config';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const bundle = join(root, 'dist/isotone.global.js');
@@ -32,7 +32,7 @@ export default async function setup() {
     built = statSync(bundle).mtimeMs;
   } catch {}
   if (built > newest(join(root, 'src'))) return;
-  const standalone = (config as Options[]).find((options) => options.format?.includes('iife'));
-  if (!standalone) throw new Error('tsup.config.ts has no standalone (iife) build');
-  await build({ ...standalone, config: false, silent: true, outDir: join(root, 'dist') });
+  const standalone = (config as UserConfig[]).find((options) => options.format === 'iife');
+  if (!standalone) throw new Error('tsdown.config.ts has no standalone (iife) build');
+  await build({ ...standalone, config: false, logLevel: 'silent', outDir: join(root, 'dist') });
 }

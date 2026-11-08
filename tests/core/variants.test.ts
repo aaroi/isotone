@@ -44,8 +44,8 @@ describe('overlayGroups', () => {
       }),
     ]);
     expect(groups.map((g) => g.id)).toEqual(['settings', 'table-dense']);
-    expect(groups[0].label).toBe('Settings layout');
-    expect(groups[0].members.map((m) => m.id)).toEqual(['settings-tabs', 'settings-accordion']);
+    expect(groups[0]?.label).toBe('Settings layout');
+    expect(groups[0]?.members.map((m) => m.id)).toEqual(['settings-tabs', 'settings-accordion']);
   });
 
   it('joins ungrouped variants that override the same file, transitively', () => {
@@ -58,7 +58,7 @@ describe('overlayGroups', () => {
       variant('d', { files: ['src/z.tsx'] }),
     ]);
     expect(groups.map((g) => g.id)).toEqual(['a+b+c', 'd']);
-    expect(groups[0].members.map((m) => m.id)).toEqual(['a', 'b', 'c']);
+    expect(groups[0]?.members.map((m) => m.id)).toEqual(['a', 'b', 'c']);
   });
 
   it('labels an inferred group by the file every member shares, else the lone label', () => {
@@ -68,11 +68,11 @@ describe('overlayGroups', () => {
       variant('hero-b', { label: 'Bold hero', files: ['src/Hero.tsx'] }),
       variant('empty', { label: 'Nothing yet' }),
     ]);
-    expect(table.id).toBe('table-dense+table-striped');
-    expect(table.label).toBe('table.tsx');
+    expect(table?.id).toBe('table-dense+table-striped');
+    expect(table?.label).toBe('table.tsx');
     // A lone variant still names its selector after its file.
-    expect(hero.label).toBe('Hero.tsx');
-    expect(bare.label).toBe('Nothing yet');
+    expect(hero?.label).toBe('Hero.tsx');
+    expect(bare?.label).toBe('Nothing yet');
   });
 
   it('lets an explicit group override file overlap, and falls back to the group id', () => {
@@ -88,14 +88,14 @@ describe('overlayGroups', () => {
       variant('p', { group: 'layout', files: ['src/p.tsx'] }),
       variant('q', { group: 'layout', files: ['src/q.tsx'] }),
     ]);
-    expect(mixed.label).toBe('layout');
+    expect(mixed?.label).toBe('layout');
   });
 
   it('keeps the id stable whatever order the members arrive in', () => {
     const forward = overlayGroups([variant('b', { files: ['src/x.tsx'] }), variant('a', { files: ['src/x.tsx'] })]);
     const reverse = overlayGroups([variant('a', { files: ['src/x.tsx'] }), variant('b', { files: ['src/x.tsx'] })]);
-    expect(forward[0].id).toBe('a+b');
-    expect(reverse[0].id).toBe('a+b');
+    expect(forward[0]?.id).toBe('a+b');
+    expect(reverse[0]?.id).toBe('a+b');
   });
 
   it('returns nothing for no variants', () => {
@@ -118,9 +118,9 @@ describe('overlayAxes', () => {
       '/projects',
     );
     expect(axes.map((a) => a.id)).toEqual(['table-dense+table-striped', 'any']);
-    expect(axes[0].label).toBe('table.tsx');
-    expect(axes[0].options.map((o) => o.id)).toEqual([OVERLAY_DEFAULT_OPTION, 'table-dense', 'table-striped']);
-    expect(axes[0].defaultOption).toBe(OVERLAY_DEFAULT_OPTION);
+    expect(axes[0]?.label).toBe('table.tsx');
+    expect(axes[0]?.options.map((o) => o.id)).toEqual([OVERLAY_DEFAULT_OPTION, 'table-dense', 'table-striped']);
+    expect(axes[0]?.defaultOption).toBe(OVERLAY_DEFAULT_OPTION);
   });
 
   it('keeps a selector on its own route even while its variant is active elsewhere', () => {
@@ -131,7 +131,7 @@ describe('overlayAxes', () => {
       active: ['pricing-b'],
     };
     expect(overlayAxes(list, '/about')).toEqual([]);
-    expect(overlayAxes(list, '/pricing')[0].options.map((o) => o.id)).toEqual([OVERLAY_DEFAULT_OPTION, 'pricing-b']);
+    expect(overlayAxes(list, '/pricing')[0]?.options.map((o) => o.id)).toEqual([OVERLAY_DEFAULT_OPTION, 'pricing-b']);
   });
 
   it('shows only the members that belong to the route', () => {
@@ -142,7 +142,7 @@ describe('overlayAxes', () => {
       },
       '/here',
     );
-    expect(axis.options.map((o) => o.id)).toEqual([OVERLAY_DEFAULT_OPTION, 'a']);
+    expect(axis?.options.map((o) => o.id)).toEqual([OVERLAY_DEFAULT_OPTION, 'a']);
   });
 });
 
@@ -309,8 +309,8 @@ describe('sections', () => {
       ['Header', ['logo', 'ink']],
       ['Footer', ['gap', 'links']],
     ]);
-    expect(sections[1].axes.map((entry) => entry.label)).toEqual(['Logo', 'Ink']);
-    expect(sections[2].axes[0].fullLabel).toBe('Footer › Gap');
+    expect(sections[1]?.axes.map((entry) => entry.label)).toEqual(['Logo', 'Ink']);
+    expect(sections[2]?.axes[0]?.fullLabel).toBe('Footer › Gap');
   });
 
   it('keeps a dependent selector with the control that reveals it', () => {
@@ -328,7 +328,7 @@ describe('sections', () => {
       ['Header', ['nav', 'sticky', 'shadow']],
       ['Body', ['own']],
     ]);
-    expect(sections[1].axes[2]).toMatchObject({ label: 'Shadow', fullLabel: 'Header › Shadow' });
+    expect(sections[1]?.axes[2]).toMatchObject({ label: 'Shadow', fullLabel: 'Header › Shadow' });
   });
 
   it('groups a large selector set in linear passes without reordering it', () => {
@@ -336,7 +336,7 @@ describe('sections', () => {
     const sections = sectionAxes(axes);
     expect(sections).toHaveLength(7);
     expect(sections.flatMap((s) => s.axes).length).toBe(5000);
-    expect(sections[0].axes.slice(0, 2).map((entry) => entry.axis.id)).toEqual(['axis-0', 'axis-7']);
+    expect(sections[0]?.axes.slice(0, 2).map((entry) => entry.axis.id)).toEqual(['axis-0', 'axis-7']);
   });
 
   it('leaves ids, and so ?v= links, untouched', () => {

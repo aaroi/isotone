@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, assert, describe, expect, it } from 'vitest';
 
 import {
   activeConflict,
@@ -57,16 +57,16 @@ describe('create / add / list', () => {
 
     const updated = addVariantFile(opts, 'headline-b', 'src/Button.tsx');
     expect(updated.files['src/Button.tsx']).toBeDefined();
-    expect(updated.files['src/Button.tsx'].base).toMatch(/^[0-9a-f]{40}$/);
+    expect(updated.files['src/Button.tsx']?.base).toMatch(/^[0-9a-f]{40}$/);
     expect(readFileSync(join(variantDir(opts, 'headline-b'), 'src/Button.tsx'), 'utf8')).toBe(
       readFileSync(join(root, 'src', 'Button.tsx'), 'utf8'),
     );
 
     const listed = listVariants(opts);
     expect(listed).toHaveLength(1);
-    expect(listed[0].id).toBe('headline-b');
-    expect(listed[0].stale).toEqual([]);
-    expect(listed[0].missing).toEqual([]);
+    expect(listed[0]?.id).toBe('headline-b');
+    expect(listed[0]?.stale).toEqual([]);
+    expect(listed[0]?.missing).toEqual([]);
   });
 
   it('records a file under its on-disk spelling when the filesystem ignores case', () => {
@@ -105,11 +105,11 @@ describe('create / add / list', () => {
     const { root, opts } = tempRepo();
     createVariant(opts, { id: 'v1' });
     const first = addVariantFile(opts, 'v1', 'src/Button.tsx');
-    const baseFirst = first.files['src/Button.tsx'].base;
+    const baseFirst = first.files['src/Button.tsx']?.base;
     // Edit the override directly, the way a person would in their editor.
     writeFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'hand-edited override\n');
     const second = addVariantFile(opts, 'v1', 'src/Button.tsx');
-    expect(second.files['src/Button.tsx'].base).toBe(baseFirst);
+    expect(second.files['src/Button.tsx']?.base).toBe(baseFirst);
     expect(readFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'utf8')).toBe('hand-edited override\n');
     expect(readFileSync(join(root, 'src', 'Button.tsx'), 'utf8')).not.toBe('hand-edited override\n');
   });
@@ -176,10 +176,10 @@ describe('stale detection', () => {
     const { root, opts } = tempRepo();
     createVariant(opts, { id: 'v1' });
     addVariantFile(opts, 'v1', 'src/Button.tsx');
-    expect(listVariants(opts)[0].stale).toEqual([]);
+    expect(listVariants(opts)[0]?.stale).toEqual([]);
 
     writeFileSync(join(root, 'src', 'Button.tsx'), 'line one\nEDITED\nline three\n');
-    expect(listVariants(opts)[0].stale).toEqual(['src/Button.tsx']);
+    expect(listVariants(opts)[0]?.stale).toEqual(['src/Button.tsx']);
   });
 
   it('flags a file missing when the override was deleted off disk', () => {
@@ -187,7 +187,7 @@ describe('stale detection', () => {
     createVariant(opts, { id: 'v1' });
     addVariantFile(opts, 'v1', 'src/Button.tsx');
     rmSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'));
-    expect(listVariants(opts)[0].missing).toEqual(['src/Button.tsx']);
+    expect(listVariants(opts)[0]?.missing).toEqual(['src/Button.tsx']);
   });
 });
 
@@ -209,7 +209,7 @@ describe('sync', () => {
     expect(mergedText).toBe('REAL ONE\nline two\nOVERRIDE THREE\n');
 
     // The base advances, so the merged file reads as unchanged next time.
-    expect(listVariants(opts)[0].stale).toEqual([]);
+    expect(listVariants(opts)[0]?.stale).toEqual([]);
     expect(syncVariant(opts, 'v1').unchanged).toEqual(['src/Button.tsx']);
   });
 
@@ -233,7 +233,7 @@ describe('sync', () => {
     // The base advances, as after a conflicted git merge: the override is
     // now reconciled against the current file, so a second sync has nothing
     // to redo and resolving the markers is all that stands before promote.
-    expect(listVariants(opts)[0].stale).toEqual([]);
+    expect(listVariants(opts)[0]?.stale).toEqual([]);
     expect(syncVariant(opts, 'v1')).toEqual({
       merged: [],
       conflicts: [],
@@ -267,7 +267,7 @@ describe('sync', () => {
     expect(withMarkers).toContain('REAL ONE');
     expect(withMarkers).toContain('VARIANT LAST');
     expect(withMarkers).toContain('REAL LAST');
-    expect(listVariants(opts)[0].stale).toEqual([]);
+    expect(listVariants(opts)[0]?.stale).toEqual([]);
   });
 
   it('reports a conflict without touching the override when the base is unreachable', () => {
@@ -280,7 +280,9 @@ describe('sync', () => {
     // store (which git makes deliberately hard to do to a single blob).
     const manifest = readVariant(opts, 'v1');
     if (!manifest) throw new Error('expected manifest');
-    manifest.files['src/Button.tsx'].base = null;
+    const entry = manifest.files['src/Button.tsx'];
+    assert(entry);
+    entry.base = null;
     writeFileSync(join(variantDir(opts, 'v1'), 'variant.json'), `${JSON.stringify(manifest, null, 2)}\n`);
     const before = readFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'utf8');
     writeFileSync(join(root, 'src', 'Button.tsx'), 'line one\nline two\nline three CHANGED\n');
@@ -621,7 +623,9 @@ describe('promoteVariant guards', () => {
     // What an override made outside a git repo looks like in the manifest.
     const manifest = readVariant(opts, 'nb');
     if (!manifest) throw new Error('expected manifest');
-    manifest.files['src/Button.tsx'].base = null;
+    const entry = manifest.files['src/Button.tsx'];
+    assert(entry);
+    entry.base = null;
     writeFileSync(join(variantDir(opts, 'nb'), 'variant.json'), `${JSON.stringify(manifest, null, 2)}\n`);
     expect(() => promoteVariant(opts, 'nb')).toThrow(/no base recorded for src\/Button\.tsx \(not a git repo when the override was made\)/);
     expect(() => promoteVariant(opts, 'nb')).not.toThrow(/changed since/);

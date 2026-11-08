@@ -141,7 +141,7 @@ const source = createVariantsSource({
   onChange(selections) {
     document.documentElement.dataset.spacing = selections.spacing;
     document.documentElement.dataset.layout = selections.layout;
-    document.documentElement.style.setProperty('--accent', selections.accent);
+    document.documentElement.style.setProperty('--accent', selections.accent ?? null);
     for (const id of ['card-radius', 'card-padding']) {
       if (selections[id] !== undefined) document.documentElement.style.setProperty(`--${id}`, `${selections[id]}px`);
       else document.documentElement.style.removeProperty(`--${id}`);

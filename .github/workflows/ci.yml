@@ -43,14 +43,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      # On Node 22 this is also the packed runtime check at the supported floor.
       - run: pnpm check:package
-      # The development tools need Node 22; the published package supports 20.
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: matrix.os == 'ubuntu-latest' && matrix.node == 24
-        with:
-          node-version: 20
-      - run: node scripts/check-package.mjs
-        if: matrix.os == 'ubuntu-latest' && matrix.node == 24
 
   smoke:
     name: packed smoke (oldest and newest Vite and React)

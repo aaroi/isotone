@@ -42,10 +42,9 @@ npm; the archive's source maps contain source text. Keep the MIT notice and the
 The release check job builds and tests the prepared main commit, runs
 `pnpm smoke`, then creates an archive. A separate job downloads that archive and publishes it with provenance.
 Only that job has OIDC permission; it does not install dependencies or run project
-scripts. CI also checks the packed runtime on Node 20, runs the full
-development checks on Node 22 and 24 (and on Windows, not yet required, where
-POSIX-only tests skip), and installs the packed
-package into fresh Vite 5 and Vite 8 apps (React 18 and 19) with `pnpm smoke`.
+scripts. CI runs the full development checks and the packed-package check on
+Node 22 and 24 (and on Windows, not yet required, where POSIX-only tests skip),
+and installs the packed package into fresh Vite 5 and Vite 8 apps (React 18 and 19) with `pnpm smoke`.
 
 ## GitHub settings outside the repository
 
