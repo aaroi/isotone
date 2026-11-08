@@ -9,6 +9,6 @@
 export { IsotonePanel, type IsotonePanelProps } from './IsotonePanel';
 export { mountIsotone } from './IsotoneMount';
 export type { IsotoneShortcut, IsotoneTheme, MountIsotoneOptions } from '../core/types';
-export type { IsotoneStoreConfig } from '../core/notes-client';
+export type { IsotoneStoreConfig } from '../core/types';
 export { createVariantsSource } from '../core/variants';
 export type { VariantAxis, VariantSelections, VariantsSource } from '../core/variants';

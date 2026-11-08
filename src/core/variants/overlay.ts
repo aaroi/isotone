@@ -162,7 +162,7 @@ export const KNOBS_STORAGE_KEY = 'isotone:knobs';
 export const OVERLAY_DEFAULT_OPTION = 'default';
 
 /** The shape an explicit `group` has to take: an id, like a variant's. */
-export const OVERLAY_GROUP_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+export const OVERLAY_GROUP_ID: RegExp = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 /** A set of alternatives to one decision, as the panel renders it. */
 export interface OverlayGroup<T extends OverlayVariant = OverlayVariant> {

@@ -1,9 +1,9 @@
 import { FEEDBACK_STORAGE_KEY } from '../core/browser-storage';
-import type { IsotoneStoreConfig } from '../core/notes-client';
+import type { IsotoneStoreConfig } from '../core/types';
 import { isRouteVisible, normalizeRoute, type RouteGateOptions } from '../core/routes';
 import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
 import type { VariantsSource } from '../core/variants';
-import { useEffect, useId, useRef } from 'react';
+import { type ReactElement, useEffect, useId, useRef } from 'react';
 import { Composer } from './notes/Composer';
 import { AwayButton, NotesPanel } from './notes/NotesPanel';
 import { PickOverlay, useSelectMode } from './dock/picking';
@@ -55,7 +55,7 @@ export function IsotonePanel({
   variantsEmptyText,
   defaultTab = 'notes',
   shortcut = DEFAULT_SHORTCUT,
-}: IsotonePanelProps) {
+}: IsotonePanelProps): ReactElement | null {
   // One page, however the URL spells it: `/about/` and `/about?tab=2` are `/about`, as for the CLI.
   const route = normalizeRoute(pageRoute);
   const nsKey = storeCfg.key ?? FEEDBACK_STORAGE_KEY;

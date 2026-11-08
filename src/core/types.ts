@@ -95,6 +95,16 @@ export interface IsotoneNote extends NoteContext {
   payload?: unknown;
 }
 
+export interface IsotoneStoreConfig {
+  /** Absolute or same-origin URL of the notes endpoint. Must be set (by the
+   *  Vite plugin's `isotone()` options or a framework preset) for a shared
+   *  file-backed store; when omitted, only localStorage persists. */
+  endpoint?: string | null;
+  /** localStorage namespace. Default-scoped to the package; set it per hosted
+   *  app when two apps share an origin. */
+  key?: string;
+}
+
 /** Auto follows the page at the dock; system follows the OS preference. */
 export type IsotoneTheme = 'auto' | 'light' | 'dark' | 'system';
 

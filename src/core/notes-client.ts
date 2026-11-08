@@ -2,7 +2,7 @@ import { FEEDBACK_STORAGE_KEY, readBrowserStorage } from './browser-storage';
 import { createNoteId } from './id';
 import { MAX_FEEDBACK_LENGTH } from './limits';
 import { request } from './request';
-import type { IsotoneElement, IsotoneNote, NoteContext } from './types';
+import type { IsotoneElement, IsotoneNote, IsotoneStoreConfig, NoteContext } from './types';
 
 /* ---------------------------------------------------------------------------
  * Store: client transport for the notes. The Vite plugin serves the endpoint
@@ -10,16 +10,6 @@ import type { IsotoneElement, IsotoneNote, NoteContext } from './types';
  * dev server is unreachable. The endpoint and storage namespace are
  * configurable so multi-app origins don't collide.
  * ------------------------------------------------------------------------- */
-
-export interface IsotoneStoreConfig {
-  /** Absolute or same-origin URL of the notes endpoint. Must be set (by the
-   *  Vite plugin's `isotone()` options or a framework preset) for a shared
-   *  file-backed store; when omitted, only localStorage persists. */
-  endpoint?: string | null;
-  /** localStorage namespace. Default-scoped to the package; set it per hosted
-   *  app when two apps share an origin. */
-  key?: string;
-}
 
 /** Where the last `saveNote` landed; `null` before the first one. */
 export type SaveLocation = 'server' | 'local';
