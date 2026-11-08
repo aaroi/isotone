@@ -82,16 +82,30 @@ describe('create / add / list', () => {
   it('refuses to copy a file that looks like a secret into a variant', () => {
     const { root, opts } = tempRepo();
     createVariant(opts, { id: 'v1' });
-    for (const name of ['.env', '.env.local', 'server.pem', 'id_rsa', '.npmrc', '.envrc', '.dev.vars', 'credentials.json']) {
+    mkdirSync(join(root, '.aws'));
+    const names = ['.env', '.env.local', 'server.pem', 'id_rsa', '.npmrc', '.envrc', '.dev.vars', 'credentials.json'];
+    names.push('gcp-credentials-prod.json', 'release.keystore', '.aws/config');
+    for (const name of names) {
       writeFileSync(join(root, name), 'SECRET=1\n');
       expect(() => addVariantFile(opts, 'v1', name)).toThrow(/looks like a secret/);
+      expect(existsSync(join(variantDir(opts, 'v1'), name))).toBe(false);
     }
     writeFileSync(join(root, '.env.example'), 'SECRET=\n');
     expect(Object.keys(addVariantFile(opts, 'v1', '.env.example').files)).toEqual(['.env.example']);
     // Whatever the project keeps out of git stays out of variants too.
     writeFileSync(join(root, '.gitignore'), 'private.txt\n');
     writeFileSync(join(root, 'private.txt'), 'token\n');
-    expect(() => addVariantFile(opts, 'v1', 'private.txt')).toThrow(/Git ignores/);
+    expect(() => addVariantFile(opts, 'v1', 'private.txt')).toThrow(/Git ignores.*--force/);
+    // A deliberate copy goes through.
+    expect(Object.keys(addVariantFile(opts, 'v1', 'private.txt', { force: true }).files)).toContain('private.txt');
+    expect(Object.keys(addVariantFile(opts, 'v1', '.envrc', { force: true }).files)).toContain('.envrc');
+  });
+
+  it('keeps the variants lock out of git, since the variants dir is committed', () => {
+    const { root, opts } = tempRepo();
+    createVariant(opts, { id: 'v1' });
+    const exclude = readFileSync(join(root, '.git', 'info', 'exclude'), 'utf8');
+    expect(exclude).toContain('/.isotone/variants/.mutation.*');
   });
 
   it('rejects an invalid or duplicate id', () => {

@@ -1,6 +1,7 @@
 /** Where the variants tree and its state files live, and the lock every change takes. */
 
 import { isAbsolute, join, resolve } from 'node:path';
+import { ensureFileIgnored } from '../fs/git-exclude';
 import { type FileLockOptions, withFileLock } from '../fs/lock';
 
 /** Default location of the variants tree, relative to the project root. */
@@ -30,8 +31,23 @@ export interface ActiveFileShape {
   active: string[];
 }
 
+/** Lock files already kept out of git by this process. */
+const excluded = new Set<string>();
+
 /** Agents in separate processes may edit the same manifest. Keep their
- * read-modify-write operations together, including promotion and removal. */
+ * read-modify-write operations together, including promotion and removal.
+ * The lock lives in the committed variants dir, so its files are excluded. */
 export function mutateVariants<T>(opts: VariantsStoreOptions, change: () => T, lock?: FileLockOptions): T {
-  return withFileLock(join(variantsDir(opts), '.mutation'), change, lock);
+  const file = join(variantsDir(opts), '.mutation');
+  return withFileLock(
+    file,
+    () => {
+      if (!excluded.has(file)) {
+        excluded.add(file);
+        ensureFileIgnored(file);
+      }
+      return change();
+    },
+    lock,
+  );
 }

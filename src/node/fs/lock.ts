@@ -14,13 +14,19 @@
  * {@link SETTLE_MS} and its owner is gone (or it is older than
  * {@link ABANDONED_MS} whatever it holds, which covers PID reuse, another
  * user's process and another machine or container). The takeover itself
- * runs under a second lock, renames the old lock aside, and checks that it
- * renamed the very file it judged; anything else is put back.
+ * runs under a second lock, `<lock>.steal`, and renames the old lock aside.
+ * A writer that created its lock while a takeover was running does not use
+ * it, and every writer checks that the lock still holds its token before it
+ * starts: so the lock the takeover renamed, even one that appeared after it
+ * was judged, is never in use, and at most one writer ever proceeds.
+ *
+ * Temporary and stale files a killed writer left beside the file are swept
+ * by the next writer once they are a minute old.
  */
 import { randomUUID } from 'node:crypto';
-import { closeSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { dirname } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 /** How long a lock is never taken over, whatever it holds. Every critical
  *  section is a small synchronous read and write, far shorter than this. */
@@ -29,6 +35,8 @@ const SETTLE_MS = 1_000;
 const ABANDONED_MS = 30_000;
 /** A takeover in progress is this short; one older than this was interrupted. */
 const STEAL_ABANDONED_MS = 5_000;
+/** A temporary file this old beside the store belongs to a writer that died. */
+const LEFTOVER_MS = 60_000;
 
 /** How long the CLI waits for another writer by default. */
 const CLI_LOCK_WAIT_MS = 2_000;
@@ -62,6 +70,7 @@ export function withFileLock<T>(file: string, work: () => T, options: FileLockOp
   const lock = `${file}.lock`;
   const token = acquire(lock, file, options.waitMs ?? CLI_LOCK_WAIT_MS);
   try {
+    sweepLeftovers(file);
     return work();
   } finally {
     release(lock, token);
@@ -73,13 +82,35 @@ function acquire(lock: string, file: string, waitMs: number): string {
   const owner: LockOwner = { pid: process.pid, host: hostname(), token: randomUUID() };
   let pause = 2;
   while (true) {
-    if (create(lock, JSON.stringify(owner))) return owner.token;
+    if (claim(lock, owner)) return owner.token;
     takeOverIfAbandoned(lock);
-    if (create(lock, JSON.stringify(owner))) return owner.token;
+    if (claim(lock, owner)) return owner.token;
     if (Date.now() >= deadline) throw new LockBusyError(file);
     sleep(Math.min(pause, Math.max(1, deadline - Date.now())));
     pause = Math.min(pause * 2, 25);
   }
+}
+
+/**
+ * Create the lock and keep it only when it is safe to use: no takeover is
+ * running (one could rename this new lock aside, judging it the old one),
+ * and the lock still holds this owner's token.
+ */
+function claim(lock: string, owner: LockOwner): boolean {
+  if (!create(lock, JSON.stringify(owner))) return false;
+  if (!takeoverRunning(lock) && readOwner(lock)?.token === owner.token) return true;
+  release(lock, owner.token);
+  return false;
+}
+
+/** Whether `<lock>.steal` is held; one left by a takeover that died is removed. */
+function takeoverRunning(lock: string): boolean {
+  const steal = `${lock}.steal`;
+  const age = ageOf(steal);
+  if (age === null) return false;
+  if (age < STEAL_ABANDONED_MS) return true;
+  rmSync(steal, { force: true });
+  return false;
 }
 
 /** Create `path` holding `contents` in one step, or false when it exists. */
@@ -169,16 +200,16 @@ function isAbandoned(path: string): boolean {
 
 /**
  * Remove an abandoned lock. Takeovers are serialized by `<lock>.steal`, and
- * the lock is renamed aside before it is judged final: if what moved is not
- * the file that was judged, it is a live owner's new lock, and goes back.
+ * the lock is renamed aside before it is removed. Whatever was renamed is
+ * dropped, even a lock created after it was judged: its writer saw the
+ * takeover running, or will find its token gone, and does not use it.
  */
 function takeOverIfAbandoned(lock: string): void {
   const before = identity(lock);
   if (before === null || !isAbandoned(lock)) return;
   const steal = `${lock}.steal`;
   if (!create(steal, String(process.pid))) {
-    const age = ageOf(steal);
-    if (age !== null && age >= STEAL_ABANDONED_MS) rmSync(steal, { force: true });
+    takeoverRunning(lock);
     return;
   }
   try {
@@ -189,16 +220,24 @@ function takeOverIfAbandoned(lock: string): void {
     } catch {
       return; // Released meanwhile.
     }
-    if (identity(aside) !== before) {
-      try {
-        linkSync(aside, lock);
-      } catch {
-        /* Someone took the free name: they own the lock now. */
-      }
-    }
     rmSync(aside, { force: true });
   } finally {
     rmSync(steal, { force: true });
+  }
+}
+
+/** Remove `<file>.<uuid>.tmp` and `.stale` files a killed writer left. */
+function sweepLeftovers(file: string): void {
+  const dir = dirname(file);
+  const prefix = `${basename(file)}.`;
+  try {
+    for (const name of readdirSync(dir)) {
+      if (!name.startsWith(prefix) || !/\.(tmp|stale)$/.test(name)) continue;
+      const age = ageOf(join(dir, name));
+      if (age !== null && age >= LEFTOVER_MS) rmSync(join(dir, name), { force: true });
+    }
+  } catch {
+    /* Housekeeping only. */
   }
 }
 
