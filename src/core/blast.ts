@@ -103,9 +103,10 @@ export function timeLeft(ms: number): string {
 export function blastLoop(next: string): string[] {
   return [
     `Now run \`${next}\` and keep running it until it says the session is over:`,
-    '- New notes: it prints them as one batch and exits 0. Act on each one: `npx isotone --working <id>`, fix, verify, `npx isotone --done <id>`. Then run it again.',
+    '- New notes: it prints them as one batch and exits 0. For each one: `npx isotone --working <id>`, reproduce it at its route and viewport (a layout note is about that width: keep other breakpoints as they are), fix it, verify it, then run `npx isotone --done <id>` as its own command. Then run it again.',
     '- No notes: it checks in every 5 minutes and exits 0. Run it again. Keep the wait under your command timeout with `--every 90s`. If you can run it as a background task that wakes you when it exits, add `--every off` instead: it then exits only for a batch or the end.',
     `- "${BLAST.name} session over" (exit 3): stop running it, and give the user a short summary of what changed and what is still open.`,
+    '- Exit 1: an error, printed on stderr. Fix what it names, or run it again when the notes file was busy.',
   ];
 }
 

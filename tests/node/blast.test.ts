@@ -1,5 +1,6 @@
+import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -240,6 +241,20 @@ describe(`isotone ${BLAST.command}`, () => {
     expect(await waiting).toBe(0);
     expect(Date.now() - started).toBeGreaterThanOrEqual(700);
     expect(JSON.parse(p.take())).toMatchObject({ type: 'batch', notes: [{ id: 'late' }], next: `${BLAST_CLI} --every off --json` });
+  });
+
+  it('keeps waiting through a busy lock instead of exiting 1', { timeout: 20_000 }, async () => {
+    const p = project();
+    await start(p, '30s');
+    const waiting = runBlast(['--every', 'off', '--json'], p.io, FAST);
+    // Another writer holds the session's lock past the CLI's two-second wait,
+    // and lets go from its own process.
+    const lock = `${blastFile(p.notes)}.lock`;
+    writeFileSync(lock, JSON.stringify({ pid: process.pid, host: hostname(), token: 'other-writer' }));
+    spawn(process.execPath, ['-e', `setTimeout(() => require('node:fs').rmSync(${JSON.stringify(lock)}, { force: true }), 2500)`]);
+    add(p.notes, note('busy'));
+    expect(await waiting).toBe(0);
+    expect(JSON.parse(p.take())).toMatchObject({ type: 'batch', notes: [{ id: 'busy' }] });
   });
 
   it('never starts a session: with none it says so and exits as over', async () => {
