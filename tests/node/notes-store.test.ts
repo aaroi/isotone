@@ -41,7 +41,16 @@ function del(file: string, id: string | null) {
 describe('notesResponse', () => {
   it('preserves corrupt files instead of treating them as an empty store', () => {
     const file = tempFile();
-    for (const contents of ['[{"id":"unfinished"', '{"wrong":"shape"}', '[null]']) {
+    const note = { id: 'n1', route: '/', feedback: 'Fine', done: false, createdAt: '2026-01-01T00:00:00.000Z' };
+    const without = (key: string) => JSON.stringify([Object.fromEntries(Object.entries(note).filter(([k]) => k !== key))]);
+    for (const contents of [
+      '[{"id":"unfinished"',
+      '{"wrong":"shape"}',
+      '[null]',
+      without('feedback'),
+      without('route'),
+      JSON.stringify([{ ...note, feedback: 42 }]),
+    ]) {
       writeFileSync(file, contents);
       expect(() => post(file, { route: '/', feedback: 'New note' })).toThrow(/left untouched/);
       expect(() => del(file, 'some-id')).toThrow(/left untouched/);

@@ -27,8 +27,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Node 22 is the supported floor; the Node 24 leg also lints and
+          # enforces the coverage floors in vitest.config.ts.
           - { os: ubuntu-latest, node: 22 }
-          - { os: ubuntu-latest, node: 24 }
+          - { os: ubuntu-latest, node: 24, full: true }
+          - { os: ubuntu-latest, node: 26 }
           - { os: windows-latest, node: 24 }
     steps:
       # Keep LF line endings on Windows so formatting and fixtures match.
@@ -42,9 +45,42 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm check
+      # Types, lint and unused code do not depend on the runtime: once is enough.
+      - if: matrix.full
+        run: pnpm typecheck && pnpm lint && pnpm knip
+      - run: pnpm build
+      - run: pnpm ${{ matrix.full && 'test:coverage' || 'test' }}
       # On Node 22 this is also the packed runtime check at the supported floor.
       - run: pnpm check:package
+
+  release:
+    name: release guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      # Unreleased notes beyond fixes need package.json above the published minor.
+      - run: node scripts/check-release.mjs
+
+  workflows:
+    name: workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: pipx run actionlint-py==1.7.12.25
+      # The token lets zizmor check that each pinned SHA belongs to its tag.
+      - run: pipx run zizmor==1.32.0 --format=github .github
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   smoke:
     name: packed smoke (oldest and newest Vite and React)

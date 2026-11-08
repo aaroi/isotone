@@ -2,27 +2,24 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const published = process.argv[2];
-const parseVersion = (value) => {
-  if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value ?? '')) {
+/** @param {string | undefined} value @returns {[number, number, number]} */
+const parseVersion = (value = '') => {
+  if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value)) {
     throw new Error(`Expected a stable version, received ${JSON.stringify(value)}`);
   }
-  const parts = value.split('.').map(Number);
-  if (parts.some((part) => !Number.isSafeInteger(part))) {
+  const [major = 0, minor = 0, patch = 0] = value.split('.').map(Number);
+  if (![major, minor, patch].every(Number.isSafeInteger)) {
     throw new Error(`Version has an unsafe numeric part: ${value}`);
   }
-  return parts;
+  return [major, minor, patch];
 };
 
 const packageFile = 'package.json';
 const packageJson = JSON.parse(readFileSync(packageFile, 'utf8'));
 const current = parseVersion(packageJson.version);
 const latest = parseVersion(published);
-const compare = (left, right) => {
-  for (let index = 0; index < 3; index += 1) {
-    if (left[index] !== right[index]) return left[index] - right[index];
-  }
-  return 0;
-};
+/** @param {[number, number, number]} left @param {[number, number, number]} right */
+const compare = (left, right) => left[0] - right[0] || left[1] - right[1] || left[2] - right[2];
 
 const matchingTag = execFileSync('git', ['tag', '--list', `v${packageJson.version}`], {
   encoding: 'utf8',

@@ -59,6 +59,12 @@ describe('isRouteVisible', () => {
     const rule = { visible: ['/api', '/auth'] };
     expect(isRouteVisible('/api/foo', rule)).toBe(false);
     expect(isRouteVisible('/auth/session', rule)).toBe(false);
+    // An allow-list that covers the subtree still cannot reach under it.
+    expect(isRouteVisible('/api/foo', { visible: ['/api/*'] })).toBe(false);
+    expect(isRouteVisible('/login/reset', { visible: ['/login/*'] })).toBe(false);
+    expect(isRouteVisible('/admin/users', { visible: ['/admin/*'], alwaysHidden: ['/admin/'] })).toBe(false);
+    expect(isRouteVisible('/admin', { visible: ['/admin*'], alwaysHidden: ['/admin*'] })).toBe(false);
+    expect(isRouteVisible('/admin/users', { visible: ['/admin/*'], alwaysHidden: [] })).toBe(true);
   });
 
   it('hides a page and everything under it with /*', () => {

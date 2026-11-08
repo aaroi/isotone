@@ -18,7 +18,9 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitOverride": true,
-    "noUncheckedIndexedAccess": true
+    "noUncheckedIndexedAccess": true,
+    "allowJs": true,
+    "checkJs": true
   },
-  "include": ["src", "tests", "examples", "tsdown.config.ts", "vitest.config.ts"]
+  "include": ["src", "scripts/*.mjs", "tests", "examples", "tsdown.config.ts", "vitest.config.ts"]
 }
