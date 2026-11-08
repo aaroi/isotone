@@ -20,18 +20,16 @@ npm; the archive's source maps contain source text. Keep the MIT notice and the
 
 ## Before merging
 
-1. Record notable changes under `Unreleased` in the changelog. If Unreleased
-   adds a feature or changes what users or agents type, read or import, raise
-   the minor version in `package.json` in that PR (the major for a break that
-   needs user action). Routine fixes get the automatic patch. Preserve the
-   lockfile's resolved versions unless the release intentionally changes
-   dependencies.
-   `pnpm check:release` (the `release guard` check, and the first step of
-   `Publish main`) enforces the minor: only `### Fixed` and `### Security`
-   headings (or `- fix:` notes) under Unreleased may ship as a patch. Any other
-   heading, such as `### What you need to know`, `### Changed` or `### Removed`,
-   or a `- feat:` or `- change:` note, fails it until `package.json` is above
-   the published minor. Whether a break deserves the major stays your call.
+1. Record notable changes under `Unreleased` in the changelog. If they add a
+   feature or change what users or agents type, read or import, raise the minor
+   in `package.json` in that PR (the major for a break that needs user action);
+   routine fixes get the automatic patch. Keep the lockfile's resolved versions
+   unless the release means to change dependencies. `pnpm check:release` (the
+   `release guard` check, and the first step of `Publish main`) enforces the
+   minor: only `### Fixed` and `### Security` headings (or `- fix:` notes) may
+   ship as a patch, and any other heading or a `- feat:` or `- change:` note
+   fails until `package.json` is above the published minor. The major stays
+   your call.
 2. Run `pnpm install --frozen-lockfile`, `pnpm check`, `pnpm check:package` and
    `pnpm smoke` (which confirms a production Vite build contains no panel).
    Inspect both themes in the demo.
@@ -42,17 +40,16 @@ npm; the archive's source maps contain source text. Keep the MIT notice and the
    including on a phone, and confirm the demo shows any user-facing change.
 5. Merge the reviewed PR. Monitor `Publish main` until the npm version and
    GitHub Release appear. A green PR check alone does not prove publication.
-   Vercel then deploys [isotone.vercel.app](https://isotone.vercel.app) from
-   `main`.
+   Vercel then deploys the demo from `main` through its own Git connection,
+   independent of npm ([previews](development.md#hosted-demo)).
 
 The release check job builds and tests the prepared main commit, runs
-`pnpm smoke`, then creates an archive. A separate job downloads that archive and publishes it with provenance.
-Only that job has OIDC permission; it does not install dependencies or run project
-scripts. CI builds and tests on Node 22, 24 and 26 (and on Windows, not yet
-required, where POSIX-only tests skip), runs types, lint, knip and the coverage
-floors once, runs the packed-package check (with its size budgets) on every leg,
-the release guard, actionlint and zizmor on the workflows, and installs the packed
-package into fresh Vite 5 and Vite 8 apps (React 18 and 19) with `pnpm smoke`.
+`pnpm smoke` and creates an archive; a separate job, the only one with OIDC
+permission, downloads and publishes it with provenance without installing
+dependencies or running project scripts. CI tests on Node 22, 24 and 26 (and on
+Windows, not yet required, where POSIX-only tests skip), runs types, lint, knip
+and the coverage floors once, `pnpm check:package` on every leg, the release
+guard, actionlint and zizmor on the workflows, and `pnpm smoke`.
 
 ## GitHub settings outside the repository
 
@@ -87,28 +84,21 @@ These are account-side settings no commit can make. Do them once.
 5. In Settings → Code security, enable Dependabot alerts and security updates;
    `.github/dependabot.yml` only covers version updates.
 
-## Demo deployment outside the repository
-
-The hosted demo deploys through the Vercel project's Git connection to this
-repository; npm publication does not depend on it.
-[The development guide](development.md#hosted-demo) covers previews and
-preview protection.
-
 ## npm setup outside the repository
 
 In the package's npm settings, verify the trusted publisher names the intended
 GitHub owner, repository and **`publish.yml`**. Allow direct `npm publish`; new
 configurations can default to staged publishing only. The trusted publisher's
 environment must match the `publish` job's `environment:` (none until the `npm`
-environment below is set up). An existing working publisher does not need
+environment above is set up). An existing working publisher does not need
 replacing. A new configuration must complete its
 first publish within two days. The workflow uses GitHub-hosted runners, Node 24,
 and checks for npm 11.5.1 or newer. No long-lived publish token is needed.
 See [npm's trusted publishing guide](https://docs.npmjs.com/trusted-publishers/).
 
-Provenance needs the repository and package to be public, and `package.json`'s
-repository URL to match the publishing repository. Local checks cannot verify
-account-side configuration.
+Provenance needs a public repository and package, and `package.json`'s
+repository URL must match the publishing repository; local checks cannot verify
+any of this.
 
 After publishing, verify the new version, README image, exports and provenance
 on npm, then try the documented quick start in a clean project.
