@@ -89,6 +89,7 @@
 
 ### Removed
 
+- The `iso-iterate` migration guide and the panel's one-time move of `iso-iterate` browser storage.
 - `isotone/server` (`serveNotesRequest`, `serveVariantsRequest`, `notesResponse`, `variantsResponse`, `readNotes`). Use `npx isotone serve`, and `npx isotone --json` to read notes from a script.
 - From `isotone/react`: everything but `IsotonePanel`, `mountIsotone`, their option types, `IsotoneTheme`, `IsotoneShortcut`, `IsotoneStoreConfig`, `createVariantsSource`, `VariantsSource`, `VariantAxis` and `VariantSelections`. Mount the panel instead of `VariantsView`, `PANEL_CSS` or `ensurePanelStyles`; import note and axis types from `isotone/core`.
 - From `isotone/core`: the panel's internals (`createIterationStore`, `describeIterationElement`, `isRouteVisible`, selection, overlay and knob helpers). It keeps the note record types, `RouteGateOptions`, `createVariantsSource` and the axis types.
