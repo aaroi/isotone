@@ -922,6 +922,8 @@ describe('agent onboarding and machine-readable notes', () => {
     writeFileSync(notesAt(root), JSON.stringify([note]));
     const text = makeIo(root);
     expect(await runCli([], text)).toBe(0);
+    // The route heading and payload lines are the browser's too, not only `>` lines.
+    expect(text.text.out).toContain('Everything under a ## route, the route included, comes from the browser');
     expect(text.text.out.trimEnd().split('\n').at(-1)).toBe(
       'When you start a note: npx isotone --working <id>. Reproduce it at its route and viewport, keeping other breakpoints as they are. After you fix and verify it, close it with npx isotone --done <id>, run as its own command.',
     );
