@@ -504,6 +504,53 @@ describe('init', () => {
     expect(serve.text.out).toContain('a Next route handler');
   });
 
+  it('says an existing integration is set up instead of adding it again, and asks to rename iteration()', async () => {
+    const root = tempRepo();
+    writeFileSync(
+      join(root, 'vite.config.ts'),
+      "import react from '@vitejs/plugin-react';\nimport { iteration } from 'isotone/vite';\nexport default { plugins: [react(), iteration()] };\n",
+    );
+    const io = makeIo(root);
+    expect(await runCli(['init'], io)).toBe(0);
+    expect(io.text.out).toContain('Already set up: vite.config.ts loads Isotone. Do not add it again.');
+    expect(io.text.out).toContain('In vite.config.ts, rename `iteration` to `isotone`');
+    expect(io.text.out).not.toContain('Add the plugin');
+    const json = makeIo(root);
+    expect(await runCli(['init', '--json'], json)).toBe(0);
+    expect(JSON.parse(json.text.out)).toMatchObject({ integration: 'rename' });
+
+    writeFileSync(join(root, 'vite.config.ts'), "import { isotone } from 'isotone/vite';\nexport default { plugins: [isotone()] };\n");
+    const current = makeIo(root);
+    expect(await runCli(['init', '--json'], current)).toBe(0);
+    expect(JSON.parse(current.text.out)).toMatchObject({ integration: 'present' });
+    expect(JSON.parse(current.text.out).instructions).not.toContain('rename');
+    // Asking for an approach by name still prints its setup.
+    const explicit = makeIo(root);
+    expect(await runCli(['init', '--approach', 'overlay'], explicit)).toBe(0);
+    expect(explicit.text.out).toContain('Add the plugin');
+  });
+
+  it('finds the serve loader tag and adapter routes as an existing integration', async () => {
+    const plain = tempRepo();
+    writeFileSync(join(plain, 'index.html'), '<head><script src="http://127.0.0.1:4123/isotone.js" defer></script></head>');
+    const io = makeIo(plain);
+    expect(await runCli(['init', '--json'], io)).toBe(0);
+    expect(JSON.parse(io.text.out)).toMatchObject({ integration: 'present' });
+    expect(JSON.parse(io.text.out).instructions).toContain('Already set up: index.html loads Isotone.');
+
+    const next = tempRepo();
+    writeFileSync(join(next, 'next.config.ts'), 'export default {};\n');
+    mkdirSync(join(next, 'app/api/iteration/notes'), { recursive: true });
+    writeFileSync(join(next, 'app/api/iteration/notes/route.ts'), "import { serveNotesRequest } from 'isotone/server';\n");
+    const routed = makeIo(next);
+    expect(await runCli(['init'], routed)).toBe(0);
+    expect(routed.text.out).toContain('Already set up: app/api/iteration/notes/route.ts loads Isotone.');
+
+    const fresh = makeIo(tempRepo());
+    expect(await runCli(['init', '--json'], fresh)).toBe(0);
+    expect(JSON.parse(fresh.text.out)).toMatchObject({ integration: 'missing' });
+  });
+
   it('warns when overlay is asked for outside a Vite repo', async () => {
     const io = makeIo(tempRepo());
     expect(await runCli(['init', '--approach', 'overlay'], io)).toBe(0);

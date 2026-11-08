@@ -20,7 +20,8 @@ and how each one stays out of production.
 
 `init --yes` also writes a short Isotone section into `AGENTS.md`. Running it
 again rewrites only that section, so it matches the installed version
-([what init writes](integrations.md)).
+([what init writes](integrations.md)), and says when the integration is
+already in place instead of printing it again.
 
 ## Act on notes
 
