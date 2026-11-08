@@ -153,6 +153,8 @@ describe('bounded read-only registry request', () => {
     });
     expect(exit).toBe(0);
     expect(JSON.parse(text)).toMatchObject({ status: 'available', upgrade: { manager: 'pnpm' } });
+    // One compact line, like every other --json output.
+    expect(text.trimEnd().split('\n')).toHaveLength(1);
   });
 });
 

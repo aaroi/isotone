@@ -32,11 +32,13 @@ import {
 } from '../node/variants';
 import { mutateVariants } from '../node/variants/options';
 import { repoRelativeKey } from '../node/variants/paths';
+import { docPath } from './docs';
+import { toJson } from './text';
 import { type CliIO, errOut, extractFlag, findNoteByPrefix, has, out, parseArgs, printTable, valueFor } from './util';
 
 /** Each subcommand's value flags, boolean flags and most positionals; anything else is refused. */
 const SPEC: Record<string, [values: string[], booleans: string[], positionals: number]> = {
-  list: [[], ['--all-routes'], 1],
+  list: [[], ['--all-routes', '--json'], 1],
   new: [['--label', '--route', '--note', '--description', '--file', '--group', '--group-label', '--section'], [], 1],
   add: [[], ['--new'], Number.POSITIVE_INFINITY],
   rm: [[], [], 2],
@@ -103,7 +105,8 @@ export function runVariant(args: string[], io: CliIO): number {
 function printVariantHelp(io: CliIO): void {
   out(io, 'isotone variant — overlay variants under .isotone/variants/<id>/');
   out(io);
-  out(io, '  variant list [<route>] [--all-routes]    every variant; * marks the active ones');
+  out(io, '  variant list [<route>] [--all-routes]    every variant; * marks the active ones;');
+  out(io, '               [--json]                    --json: variants, knobs and skipped knobs as one object');
   out(io, '  variant new <id> [--note <prefix>] [--route <path>] [--label <text>]');
   out(io, '                   [--description <text>] [--group <id>] [--group-label <text>]');
   out(io, '                   [--section <text>]');
@@ -137,21 +140,10 @@ function printVariantHelp(io: CliIO): void {
 function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions): number {
   const allRoutes = has(args, '--all-routes');
   const route = pos[0];
+  const scope = route && !allRoutes ? route : undefined;
   const variants = listVariants(opts);
   const active = readActive(opts);
-  const rows = route && !allRoutes ? variants.filter((v) => variantAppliesTo(v.route, route)) : variants;
-
-  if (rows.length === 0) {
-    // A knobs-only project (any dev server without the Vite plugin) has no
-    // file variants by design; lead with what it does have.
-    if (!existsSync(join(resolve(opts.root), KNOBS_FILE))) {
-      out(io, route ? `No variants for "${route}".` : 'No variants.');
-      return 0;
-    }
-    out(io, route ? `No file variants for "${route}".` : 'No file variants.');
-    printKnobs(io, opts, route && !allRoutes ? route : undefined);
-    return 0;
-  }
+  const rows = scope ? variants.filter((v) => variantAppliesTo(v.route, scope)) : variants;
 
   // Grouped over every variant, not the filtered rows: a sibling on another
   // route still decides which selector this one belongs to.
@@ -166,6 +158,44 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
       if (section) sectionOf.set(member.id, section);
     }
   }
+  const knobs = knobReport(io, opts, scope);
+
+  if (has(args, '--json')) {
+    out(
+      io,
+      toJson({
+        variants: rows.map((v) => ({
+          id: v.id,
+          label: v.label,
+          ...(v.description ? { description: v.description } : {}),
+          route: v.route ?? null,
+          group: groupOf.get(v.id) ?? null,
+          section: sectionOf.get(v.id) ?? null,
+          files: Object.keys(v.files),
+          stale: v.stale,
+          missing: v.missing,
+          active: active.includes(v.id),
+        })),
+        knobs: knobs?.shown ?? [],
+        skippedKnobs: knobs?.skipped ?? [],
+        ...(knobs?.error ? { knobsError: knobs.error } : {}),
+      }),
+    );
+    return 0;
+  }
+
+  if (rows.length === 0) {
+    // A knobs-only project (any dev server without the Vite plugin) has no
+    // file variants by design; lead with what it does have.
+    if (!knobs) {
+      out(io, route ? `No variants for "${route}".` : 'No variants.');
+      return 0;
+    }
+    out(io, route ? `No file variants for "${route}".` : 'No file variants.');
+    printKnobs(io, knobs, scope);
+    return 0;
+  }
+
   printTable(
     io,
     ['ID', 'LABEL', 'SECTION', 'GROUP', 'ROUTE', 'FILES', 'STALE', 'MISSING', 'ACTIVE'],
@@ -181,57 +211,79 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
       active.includes(v.id) ? '*' : '',
     ]),
   );
-  printKnobs(io, opts, route && !allRoutes ? route : undefined);
+  const stale = rows.filter((v) => v.stale.length);
+  if (stale.length) {
+    out(io);
+    out(
+      io,
+      `STALE: the real file changed since the copy was made. \`variant sync <id>\` merges the change in: ${stale.map((v) => v.id).join(', ')}`,
+    );
+  }
+  if (knobs) printKnobs(io, knobs, scope);
   return 0;
 }
 
+interface KnobReport {
+  shown: ReturnType<typeof readKnobs>;
+  skipped: { index: number; id: string | null; reason: string }[];
+  /** Why the file gives no knobs at all. */
+  error?: string;
+}
+
 /**
- * The knobs in `.isotone/knobs.json`, and every entry the panel will skip.
- * An invalid knob simply never shows up in the panel, so this is the one
- * place an agent can see why.
+ * The knobs in `.isotone/knobs.json`, and every entry the panel will skip;
+ * null when there is no such file. An invalid knob simply never shows up in
+ * the panel, so this is the one place an agent can see why.
  */
-function printKnobs(io: CliIO, opts: VariantsStoreOptions, route: string | undefined): void {
+function knobReport(io: CliIO, opts: VariantsStoreOptions, route: string | undefined): KnobReport | null {
   const file = join(resolve(opts.root), KNOBS_FILE);
-  if (!existsSync(file)) return;
+  if (!existsSync(file)) return null;
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(file, 'utf8'));
   } catch (error) {
-    out(io);
-    out(io, `${KNOBS_FILE} is not valid JSON, so the panel shows no knobs: ${(error as Error).message}`);
-    return;
+    return { shown: [], skipped: [], error: `${KNOBS_FILE} is not valid JSON, so the panel shows no knobs: ${(error as Error).message}` };
   }
-  if (!Array.isArray(raw)) {
-    out(io);
-    out(io, `${KNOBS_FILE} must be a JSON array of knobs, so the panel shows none.`);
-    return;
-  }
-  const valid = readKnobs(opts);
-  const skipped: string[] = [];
+  if (!Array.isArray(raw))
+    return { shown: [], skipped: [], error: `${KNOBS_FILE} must be a JSON array of knobs, so the panel shows none.` };
+  const guide = docPath(io.cwd, 'docs/variants.md');
+  const skipped: KnobReport['skipped'] = [];
   const ids = new Set<string>();
   raw.forEach((entry, index) => {
     const id =
       entry && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string' ? (entry as { id: string }).id : null;
-    const name = `knob ${index + 1}${id === null ? '' : ` "${id}"`}`;
     const problem = knobProblem(entry);
-    if (problem !== null) skipped.push(`Skipped ${name}: ${problem} (see node_modules/isotone/docs/variants.md, "Knobs").`);
+    if (problem !== null) skipped.push({ index: index + 1, id, reason: `${problem} (see ${guide}, "Knobs").` });
     // An earlier knob already took this id; the panel keeps that one.
     else if (ids.has(id as string))
-      skipped.push(`Skipped ${name}: another knob earlier in the file already has this id. Give each knob its own id.`);
+      skipped.push({ index: index + 1, id, reason: 'another knob earlier in the file already has this id. Give each knob its own id.' });
     else ids.add(id as string);
   });
-  const shown = route ? knobsFor(valid, route) : valid;
+  const valid = readKnobs(opts);
+  return { shown: route ? knobsFor(valid, route) : valid, skipped };
+}
+
+function printKnobs(io: CliIO, report: KnobReport, route: string | undefined): void {
   out(io);
-  if (shown.length) {
+  if (report.error) {
+    out(io, report.error);
+    return;
+  }
+  if (report.shown.length) {
     printTable(
       io,
       ['KNOB', 'KIND', 'LABEL', 'ROUTE'],
-      shown.map((k) => [k.id, k.kind ?? 'select', k.label, k.route === undefined ? '-' : ([] as string[]).concat(k.route).join(', ')]),
+      report.shown.map((k) => [
+        k.id,
+        k.kind ?? 'select',
+        k.label,
+        k.route === undefined ? '-' : ([] as string[]).concat(k.route).join(', '),
+      ]),
     );
   } else {
     out(io, route ? `No knobs for "${route}".` : `No valid knobs in ${KNOBS_FILE}.`);
   }
-  for (const line of skipped) out(io, line);
+  for (const { index, id, reason } of report.skipped) out(io, `Skipped knob ${index}${id === null ? '' : ` "${id}"`}: ${reason}`);
 }
 
 function cmdNew(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions): number {

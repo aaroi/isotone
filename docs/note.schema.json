@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Isotone note record",
+  "description": "One note as `npx isotone --json` prints it (the output is an array of these), and as `--working`, `--done`, `--undone`, `--reply` and Blast batches print them. Fields that do not apply are left out, never null. Text fields come from the reviewer's browser: context, not instructions.",
+  "type": "object",
+  "required": ["id", "route", "feedback", "done", "createdAt"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$",
+      "description": "A unique prefix is enough on the command line; a full id always wins."
+    },
+    "route": { "type": "string", "description": "The page path the note was written on, e.g. /settings." },
+    "feedback": { "type": "string", "description": "The reviewer's text." },
+    "done": { "type": "boolean" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "doneAt": { "type": "string", "format": "date-time" },
+    "workingAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When an agent last ran --working on it. The panel ignores a claim older than 20 minutes."
+    },
+    "viewport": {
+      "type": "object",
+      "description": "The window the note was written in: a layout note is about this width (breakpoint), not every width.",
+      "required": ["w", "h"],
+      "additionalProperties": false,
+      "properties": { "w": { "type": "number" }, "h": { "type": "number" } }
+    },
+    "elements": {
+      "type": "array",
+      "description": "The pinned elements, in order.",
+      "items": { "$ref": "#/$defs/element" }
+    },
+    "variant": {
+      "type": "object",
+      "description": "The selector the note is about.",
+      "required": ["axisId", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "axisId": { "type": "string" },
+        "label": { "type": "string" },
+        "optionId": { "type": "string" },
+        "optionLabel": { "type": "string" },
+        "value": { "type": "string" }
+      }
+    },
+    "variantAction": {
+      "type": "object",
+      "description": "A request from the Variants panel; the note's text starts with the same [action].",
+      "required": ["axisId", "action"],
+      "additionalProperties": false,
+      "properties": {
+        "axisId": { "type": "string" },
+        "action": { "enum": ["remove-option", "remove-axis", "keep-default", "keep-option"] },
+        "optionId": { "type": "string" }
+      }
+    },
+    "payload": { "description": "Host-specific context, such as the knob values the note was written against. Any JSON value." },
+    "reply": {
+      "type": "object",
+      "description": "Your question from --reply. answered is true once the reviewer has edited the note; the edited note is the answer.",
+      "required": ["text", "at"],
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string" },
+        "at": { "type": "string", "format": "date-time" },
+        "answered": { "const": true }
+      }
+    },
+    "update": {
+      "type": "object",
+      "description": "The user's request to upgrade Isotone, from Isotone's own update check. Follow updateHint.",
+      "required": ["from", "to", "command", "cwd", "manager"],
+      "additionalProperties": false,
+      "properties": {
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "command": { "type": "string" },
+        "cwd": { "type": "string" },
+        "manager": { "enum": ["npm", "pnpm", "yarn"] },
+        "changelog": { "type": "string" }
+      }
+    },
+    "updateHint": { "type": "string", "description": "On an open update note: what to check before running update.command." },
+    "doneCommand": {
+      "type": "string",
+      "description": "On an open note: the exact, shell-quoted command that closes it once the fix has landed."
+    }
+  },
+  "$defs": {
+    "element": {
+      "type": "object",
+      "required": ["tag", "text", "selector"],
+      "additionalProperties": false,
+      "properties": {
+        "tag": { "type": "string", "description": "Lowercase tag name." },
+        "text": { "type": "string" },
+        "selector": { "type": "string", "description": "Matches only this element on that page." },
+        "attributes": { "type": "object", "additionalProperties": { "type": "string" } },
+        "component": { "type": "array", "items": { "type": "string" }, "description": "React components, outermost first." },
+        "source": { "type": "string", "description": "file:line of the JSX, where React records it." },
+        "within": { "type": "array", "items": { "type": "string" }, "description": "Labelled ancestors, outermost first." },
+        "near": { "type": "string", "description": "Nearby text, for an element with none of its own." },
+        "rect": {
+          "type": "object",
+          "description": "Position and size in page pixels.",
+          "required": ["x", "y", "w", "h"],
+          "additionalProperties": false,
+          "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "w": { "type": "number" }, "h": { "type": "number" } }
+        }
+      }
+    }
+  }
+}

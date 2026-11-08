@@ -4,27 +4,32 @@
  * in a browser, so text output goes through `./text` and every command printed
  * for an agent to run is shell-quoted.
  */
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 
 import { MAX_REPLY_LENGTH } from '../core/limits';
 import { matchRoute } from '../core/routes';
 import { updateNoteText } from '../core/update';
+import { variantAppliesTo } from '../core/variants';
 import { touchSession } from '../node/blast';
 import { noteFingerprint, readNotes, replyView, type StoredNote, updateNotes } from '../node/notes/store';
 import { notesProjectRoot, updateRequestOf } from '../node/update/request';
+import { ACTIVE_FILE, listVariants, readActive } from '../node/variants';
+import { latestChange } from './changes';
 import { oneLine, quoted, shellCommand, toJson, utcStamp } from './text';
 import { type CliIO, errOut, findNoteByPrefix, has, out, parseArgs, valueFor } from './util';
 
 export const NOTES_FILE = '.iteration-feedback.json';
 
 const VALUE_FLAGS = ['--days', '--file', '--done', '--undone', '--working', '--reply'] as const;
-const BOOLEAN_FLAGS = ['--all', '--json'] as const;
+const BOOLEAN_FLAGS = ['--all', '--json', '--force'] as const;
 const ACTIONS = ['--done', '--undone', '--working', '--reply'] as const;
 type Action = (typeof ACTIONS)[number];
 
 interface NotesArgs {
   file: string;
   json: boolean;
+  /** `--done --force`: close even though no file changed. */
+  force: boolean;
   action: Action | null;
   /** The ids of an action; one for `--reply`. */
   ids: string[];
@@ -60,6 +65,7 @@ function parseNotesArgs(input: string[], cwd: string): NotesArgs {
   const actions = ACTIONS.filter((flag) => has(argv, flag));
   if (actions.length > 1) throw new Error('Use only one of --done, --undone, --working and --reply.');
   const action = actions[0] ?? null;
+  if (has(argv, '--force') && action !== '--done') throw new Error('--force only goes with --done.');
   let ids: string[] = [];
   let replyText = '';
   let route: string | null = null;
@@ -84,6 +90,7 @@ function parseNotesArgs(input: string[], cwd: string): NotesArgs {
   return {
     file: resolve(cwd, valueFor(argv, '--file') ?? NOTES_FILE),
     json: has(argv, '--json'),
+    force: has(argv, '--force'),
     action,
     ids,
     replyText,
@@ -139,6 +146,7 @@ function reply(io: CliIO, args: NotesArgs, root: string): number {
 function flip(io: CliIO, args: NotesArgs, action: Exclude<Action, '--reply'>, root: string): number {
   const changed: { note: StoredNote; already: boolean }[] = [];
   try {
+    if (action === '--done' && !args.force) refuseUnfixed(args, root);
     updateNotes(args.file, (current) => {
       changed.length = 0;
       const now = new Date().toISOString();
@@ -167,8 +175,17 @@ function flip(io: CliIO, args: NotesArgs, action: Exclude<Action, '--reply'>, ro
   }
   // A closed or reopened note is handed out again by Blast once it is open.
   touchSession(args.file, Date.now(), action === '--working' ? [] : changed.map((c) => c.note.id));
+  const advice =
+    action === '--done'
+      ? variantAdvice(
+          io.cwd,
+          changed.filter((c) => !c.already).map((c) => c.note),
+        )
+      : [];
   if (args.json) {
     out(io, toJson(changed.map((c) => noteRecord(c.note, root))));
+    // stdout stays one JSON array; the advice is for whoever reads the run.
+    for (const line of advice) errOut(io, line);
     return 0;
   }
   const verb = action === '--working' ? 'working' : action === '--done' ? 'done' : 'reopened';
@@ -177,7 +194,76 @@ function flip(io: CliIO, args: NotesArgs, action: Exclude<Action, '--reply'>, ro
     const shown = agentNote(note, root);
     out(io, `${was ? already : verb}: [${shortId(note)}] ${oneLine(note.route)} — ${oneLine(shown.feedback, 60)}`);
   }
+  for (const line of advice) out(io, line);
   return 0;
+}
+
+const BOOKKEEPING = new RegExp(`/${ACTIVE_FILE.replace(/\./g, '\\.')}$|/\\.isotone/.*\\.lock$`);
+
+/**
+ * Refuses `--done` on a note when no project file changed since it was
+ * written, or since `--working` on it: the fix has not landed. That is what a
+ * chained `edit && … ; npx isotone --done <id>` does when the edit fails.
+ */
+function refuseUnfixed(args: NotesArgs, root: string): void {
+  const notes = readNotes(args.file);
+  const targets = [...new Set(args.ids.map((id) => findNoteByPrefix(notes, id)))].filter((n) => !n.done);
+  if (!targets.length) return;
+  const base = args.file.replace(/\.json$/i, '');
+  // The notes file, its Blast session and locks, and which variant is showing
+  // are Isotone's own bookkeeping, never a fix.
+  const ignore = (file: string) => file.startsWith(base) || BOOKKEEPING.test(file.split(sep).join('/'));
+  const latest = latestChange(root, ignore);
+  const since = (n: StoredNote) => Math.max(Date.parse(n.createdAt) || 0, Date.parse(n.workingAt ?? '') || 0);
+  const unfixed = targets.filter((n) => latest <= since(n));
+  if (!unfixed.length) return;
+  const lines = unfixed.map((n) => {
+    const at =
+      n.workingAt && Date.parse(n.workingAt) >= Date.parse(n.createdAt)
+        ? `you ran --working on it (${utcStamp(n.workingAt)})`
+        : `it was written (${utcStamp(n.createdAt)})`;
+    return `  [${shortId(n)}] ${oneLine(n.route)}: no file changed since ${at}`;
+  });
+  throw new Error(
+    [
+      `Not closed: ${unfixed.length === 1 ? 'its fix has' : 'their fixes have'} not landed.`,
+      ...lines,
+      'Check that your edit applied, then run --done again. A note that needed no file change (a question',
+      `you answered, or already fixed) closes with: ${shellCommand('npx', 'isotone', '--done', ...unfixed.map((n) => n.id), '--force')}`,
+    ].join('\n'),
+  );
+}
+
+/**
+ * After a fix: the variants on the fixed notes' routes that no longer match
+ * the real files they copy, or that are showing instead of them. Either way
+ * the reviewer will not see the fix on the page.
+ */
+function variantAdvice(cwd: string, notes: StoredNote[]): string[] {
+  if (!notes.length) return [];
+  let variants: ReturnType<typeof listVariants>;
+  let active: string[];
+  try {
+    variants = listVariants({ root: cwd });
+    active = readActive({ root: cwd });
+  } catch {
+    return [];
+  }
+  const relevant = variants.filter((v) => notes.some((n) => variantAppliesTo(v.route, n.route)));
+  const lines: string[] = [];
+  const stale = relevant.filter((v) => v.stale.length);
+  if (stale.length) {
+    lines.push('These variants copy files that changed after they were made, so they do not have this fix:');
+    for (const v of stale) lines.push(`  ${v.id} (${v.stale.join(', ')}): ${shellCommand('npx', 'isotone', 'variant', 'sync', v.id)}`);
+    lines.push('Sync each one the fix belongs in too; leave a copy alone when it is the alternative itself.');
+  }
+  const showing = relevant.filter((v) => active.includes(v.id));
+  if (showing.length) {
+    lines.push(
+      `Active now, so the page shows ${showing.length === 1 ? 'its copy' : 'their copies'} instead of the real file: ${showing.map((v) => v.id).join(', ')}. \`npx isotone variant use default\` shows the real files.`,
+    );
+  }
+  return lines;
 }
 
 function list(io: CliIO, args: NotesArgs, root: string): number {
@@ -231,7 +317,8 @@ function agentNote<T extends StoredNote>(note: T, root: string): T {
 export function noteRecord(record: StoredNote, root: string) {
   // A hand-edited, malformed update request or reply is dropped, not passed on.
   const n = agentNote(record, root);
-  const reply = replyView(record);
+  // `about` is the store's own fingerprint for Blast, not something to act on.
+  const { about: _about, ...reply } = replyView(record) ?? {};
   const pinned = n.elements?.length ? n.elements : n.element ? [n.element] : undefined;
   const fields = {
     id: n.id,
@@ -247,7 +334,7 @@ export function noteRecord(record: StoredNote, root: string) {
     elements: pinned,
     doneAt: n.doneAt,
     workingAt: n.workingAt,
-    reply,
+    reply: 'text' in reply ? reply : undefined,
     ...(n.done ? {} : { updateHint: n.update ? UPDATE_HINT : undefined, doneCommand: doneCommand(n.id) }),
   };
   return Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined && value !== null));
@@ -266,7 +353,7 @@ export function printNotes(io: CliIO, rows: StoredNote[], root: string): void {
       cur = n.route;
       out(io, `\n## ${oneLine(n.route)}`);
     }
-    const at = n.viewport ? ` · ${oneLine(n.viewport.w)}×${oneLine(n.viewport.h)}` : '';
+    const at = n.viewport ? ` · viewport ${oneLine(n.viewport.w)}×${oneLine(n.viewport.h)}` : '';
     const done = n.done ? ' ✓done' : n.workingAt ? ' …working' : '';
     out(io, `- [${shortId(n)}] (${utcStamp(n.createdAt)}${at})${done}`);
     for (const element of n.elements?.length ? n.elements : n.element ? [n.element] : []) {
