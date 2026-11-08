@@ -123,7 +123,7 @@ jobs:
     timeout-minutes: 15
     steps:
       # Nothing publishes without the packed archive installing into fresh
-      # apps on the oldest and newest Vite and React. Only the smoke script
+      # apps on Vite 5 to 8 with React 18 and 19. Only the smoke script
       # comes from the checkout; nothing is installed into it.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
