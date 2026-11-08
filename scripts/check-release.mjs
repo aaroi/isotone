@@ -1,4 +1,3 @@
-// @ts-check
 // Fails when CHANGELOG.md's Unreleased section holds more than fixes while
 // package.json's version is not above the published minor. Without it the
 // release workflow would publish features or breaking changes as a patch.

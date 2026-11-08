@@ -26,14 +26,15 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const pairs = (process.argv.length > 2 ? process.argv.slice(2) : ['5:18', '8:19']).map((pair) => {
   const match = /^(\d+):(\d+)$/.exec(pair);
   if (!match) throw new Error(`Expected <vite major>:<react major>, received ${JSON.stringify(pair)}`);
-  return { vite: match[1], react: match[2] };
+  return { vite: match[1] ?? '', react: match[2] ?? '' };
 });
 const JSDOM = `jsdom@${JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).devDependencies.jsdom}`;
 
 const scratch = mkdtempSync(join(tmpdir(), 'iso-smoke-'));
+/** @param {string[]} args @param {string} cwd */
 const run = (args, cwd) => npm(args, { cwd, stdio: ['ignore', 'pipe', 'inherit'] });
 
-/** Every file under `dir`, recursively. */
+/** Every file under `dir`, recursively. @param {string} dir @returns {string[]} */
 function files(dir) {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
@@ -116,6 +117,7 @@ try {
 `;
 
 try {
+  /** @type {[{ filename: string, files: { path: string }[] }]} */
   const [packed] = JSON.parse(run(['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], root));
   assert.ok(
     packed.files.some(({ path }) => path === 'dist/isotone.global.js'),

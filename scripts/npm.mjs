@@ -10,7 +10,13 @@ import { dirname, join } from 'node:path';
  * argument, so run npm's own entry script with this Node instead; Windows
  * installs ship it next to `node.exe`.
  */
+/**
+ * @param {string[]} args
+ * @param {Omit<import('node:child_process').ExecFileSyncOptions, 'encoding'>} [options]
+ * @returns {string}
+ */
 export function npm(args, options = {}) {
+  /** @type {import('node:child_process').ExecFileSyncOptionsWithStringEncoding} */
   const settings = { encoding: 'utf8', ...options };
   if (process.platform !== 'win32') return execFileSync('npm', args, settings);
   const cli = join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
