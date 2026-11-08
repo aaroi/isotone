@@ -12,6 +12,21 @@ export function isEscaping(rel: string): boolean {
   return rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
 }
 
+/**
+ * `path` as Git and Vite name it: symlinks resolved (macOS's /var is
+ * /private/var) and, on Windows, 8.3 short names expanded (`RUNNER~1` is
+ * `runneradmin`), which only the native call does. Falls back to the
+ * JavaScript one where the native call fails (some Windows RAM and network
+ * drives answer EISDIR). Throws when `path` does not exist.
+ */
+export function realPath(path: string): string {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return realpathSync(path);
+  }
+}
+
 /** POSIX-ify a path node gave us as platform-native (a no-op on POSIX,
  *  where `sep` already is `/`; keeps manifest keys portable regardless). */
 export function toPosixPath(p: string): string {

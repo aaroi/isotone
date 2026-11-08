@@ -3,10 +3,11 @@
  * `.git/info/exclude`, so a project needs no `.gitignore` edit.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join, relative, resolve, sep } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import * as path from 'node:path';
+import { basename, dirname, join, type PlatformPath, resolve } from 'node:path';
 
-import { isEscaping } from './paths';
+import { realPath } from './paths';
 
 /**
  * Ensure the feedback file path, and the lock and temporary files written
@@ -17,7 +18,8 @@ import { isEscaping } from './paths';
 export function ensureFileIgnored(file: string): void {
   try {
     // Resolve through symlinks so the path is comparable with git's answer,
-    // which is already canonical (macOS's /var → /private/var, for one).
+    // which is already canonical (macOS's /var → /private/var, for one; on
+    // Windows a long name where the temp dir is `RUNNER~1`).
     // The file, and `.isotone/` before the first note, may not exist yet.
     const absolute = canonical(resolve(file));
     let dir = dirname(absolute);
@@ -30,7 +32,7 @@ export function ensureFileIgnored(file: string): void {
       // throw is the signal we act on; the message is noise.
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
-    const pattern = excludePattern(gitRoot, absolute);
+    const pattern = excludePattern(canonical(gitRoot), absolute);
     if (!pattern) return;
     const infoExclude = excludeFile(dir);
     const existing = existsSync(infoExclude) ? readFileSync(infoExclude, 'utf8') : '';
@@ -51,7 +53,7 @@ export function ensureFileIgnored(file: string): void {
 /** `path` through symlinks, for as much of it as exists. */
 function canonical(path: string): string {
   try {
-    return realpathSync(path);
+    return realPath(path);
   } catch {
     const parent = dirname(path);
     return parent === path ? path : join(canonical(parent), basename(path));
@@ -65,13 +67,13 @@ function canonical(path: string): string {
  */
 export function ensureDirIgnored(dir: string): void {
   try {
-    const absolute = realpathSync(resolve(dir));
+    const absolute = realPath(resolve(dir));
     const gitRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
       cwd: absolute,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
-    const base = excludePattern(gitRoot, absolute);
+    const base = excludePattern(canonical(gitRoot), absolute);
     if (!base) return;
     const pattern = `${base}/`;
     const infoExclude = excludeFile(absolute);
@@ -106,14 +108,16 @@ function excludeFile(cwd: string): string {
  * anchors a pattern to the root of the repository. An absolute filesystem
  * path is read the same way and so matches nothing when the dev server runs
  * in a subdirectory of the checkout. Null when the file is outside the repo,
- * where no exclude entry could cover it.
+ * where no exclude entry could cover it. On Windows git names the root with
+ * forward slashes (`C:/repo`) and node the file with backslashes; `paths`
+ * is the platform's path module, swappable so a test can check that on any OS.
  */
-export function excludePattern(gitRoot: string, absolute: string): string | null {
-  const rel = relative(gitRoot, absolute);
-  if (!rel || isEscaping(rel)) {
+export function excludePattern(gitRoot: string, absolute: string, paths: PlatformPath = path): string | null {
+  const rel = paths.relative(gitRoot, absolute);
+  if (!rel || rel === '..' || rel.startsWith(`..${paths.sep}`) || paths.isAbsolute(rel)) {
     return null;
   }
-  return `/${rel.split(sep).join('/')}`;
+  return `/${rel.split(paths.sep).join('/')}`;
 }
 
 /** Whether `exclude` already carries `pattern`, with or without the anchor.
