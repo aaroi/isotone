@@ -154,6 +154,9 @@ other devices and websites away from your notes:
 - A host-chosen note `id` is 1–64 letters, digits, `-` or `_`, not starting
   with `-` (400 otherwise). Routes are capped at 2,000 characters and a notes
   file at 10,000 notes (409 past that until done notes are deleted).
+- A route has at most one open `[set-defaults]` note: a new one POSTed while
+  one is open replaces its content and answers 200 with the open note's `id`,
+  not the `id` sent.
 - While another writer holds the notes file, the endpoint answers 503 and the
   panel retries.
 
