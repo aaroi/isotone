@@ -18,7 +18,7 @@
 
 - Live variant switching served `?isotone=` for any project file around Vite's `server.fs.deny`, so `/.env?isotone=_base` returned the file to other localhost pages. It now answers only for files a variant tracks. Isotone 1.2.x has the same hole; upgrade.
 - The notes file, the Blast session file and `.isotone/` are added to Vite's `server.fs.deny`.
-- Endpoints refuse a `Host` other than `localhost`, `*.localhost`, `*.test` or a loopback address, which stops DNS rebinding; on Vite, add other names to `server.allowedHosts`. A request a tunnel or proxy forwards for another machine counts as that machine.
+- Endpoints refuse a `Host` other than `localhost`, `*.localhost` or a loopback address, which stops DNS rebinding; on Vite, add other names to `server.allowedHosts`. A request a tunnel or proxy forwards for another machine counts as that machine.
 - `isotone serve` binds to `127.0.0.1`, and neither panel bundle loads into other websites' `<script>` tags.
 - Every POST needs a JSON content type (415 otherwise), which a cross-site form cannot send. Note IDs a host chooses must be 1–64 letters, digits, `-` or `_`, not starting with `-`.
 - `doneCommand` is shell-quoted, and `--json` passes on only the note fields Isotone knows, so a page or a hand edit cannot plant a command for the agent.

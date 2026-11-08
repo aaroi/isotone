@@ -143,7 +143,7 @@ other devices and websites away from your notes:
 
 - The request must come from this machine (its socket's peer address, and any
   address a proxy or tunnel forwarded for, is loopback), and its `Host` header
-  must be `localhost`, `*.localhost`, `*.test` or a loopback address; on Vite, a
+  must be `localhost`, `*.localhost` or a loopback address; on Vite, a
   name in `server.allowedHosts` too.
 - A browser's `Origin` must match the Host, port included (`isotone serve`,
   which never serves the page, accepts any loopback port). A request without an

@@ -43,10 +43,11 @@ export function isLoopback(host: string): boolean {
   return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
 }
 
-/** A name or address only this machine answers: localhost, `*.localhost`,
- *  `*.test`, 127.0.0.0/8 or ::1 (brackets and a port allowed). */
+/** A name or address only this machine answers, the same list as Vite's:
+ *  localhost, `*.localhost`, 127.0.0.0/8 or ::1 (brackets and a port allowed).
+ *  Not `*.test`, which a hostile resolver can point anywhere. */
 function isLoopbackName(name: string): boolean {
-  return name === 'localhost' || name.endsWith('.localhost') || name.endsWith('.test') || isLoopbackAddress(name);
+  return name === 'localhost' || name.endsWith('.localhost') || isLoopbackAddress(name);
 }
 
 /**
