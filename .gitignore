@@ -7,3 +7,6 @@ dist
 demo-dist
 .vercel
 .env*
+coverage
+reports/mutation
+.stryker-tmp
