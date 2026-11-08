@@ -117,7 +117,9 @@ ${APPEARANCE_CSS}
 .isotone-vars-body { flex: 1; overflow-x: hidden; overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: var(--iso-space); display: flex; flex-direction: column; gap: var(--iso-space); }
 /* The footer overlaps only the scroller's bottom padding: content fades beneath
    it while scrolling, but the last control remains fully visible at the end. */
-.isotone-axis { flex: none; }
+/* A selector out of view skips layout, so opening Feedback beside hundreds of them does not lay out every one.
+   The clip margin keeps focus rings and corner badges, which reach past the selector, unclipped. */
+.isotone-axis { flex: none; content-visibility: auto; contain-intrinsic-size: auto 72px; overflow-clip-margin: 12px; }
 /* Sections name the part of the page their selectors change. The header sticks to
    the top of the scroll area while its own selectors pass beneath and fade into the
    surface; the next section's header pushes it out. At rest its padding occupies

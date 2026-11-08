@@ -2,7 +2,6 @@ import {
   type HTMLAttributes,
   memo,
   type ReactNode,
-  startTransition,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -32,6 +31,7 @@ import { Icon } from './icons';
 import { MAX_ANIMATED_ITEMS } from './motion';
 import { PanelClose } from './NotesPanel';
 import { useLayoutMotion } from './useLayoutMotion';
+import { useRenderLimit } from './useRenderLimit';
 import { showOverflowTitle } from './tooltips';
 
 export function refreshSource(source: VariantsSource): void {
@@ -106,36 +106,6 @@ export function useVariantsSnapshot(source: VariantsSource | undefined): Variant
 
 /** Selectors in the commit that opens the panel: more than a tall panel shows at once. */
 const FIRST_AXES = 16;
-/** Selectors added per task after that; each chunk stays well inside a frame on a slow machine. */
-const AXES_PER_CHUNK = 48;
-
-/**
- * How many selectors to render. None while closed. Opening renders a first
- * screenful and paints; the rest follow a chunk per task, so a page with
- * hundreds of selectors opens at once and no single task holds up input.
- */
-function useRenderLimit(open: boolean, total: number): number {
-  const [limit, setLimit] = useState(0);
-  const rendered = open ? Math.min(Math.max(limit, FIRST_AXES), total) : 0;
-  useEffect(() => {
-    if (!open) {
-      setLimit(0);
-      return;
-    }
-    if (rendered >= total) return;
-    // Each chunk waits for the frame that shows the last one to be painted. A transition renders in slices
-    // that yield to input, so a click or keystroke meanwhile goes first.
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const frame = requestAnimationFrame(() => {
-      timer = setTimeout(() => startTransition(() => setLimit(rendered + AXES_PER_CHUNK)));
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      clearTimeout(timer);
-    };
-  }, [open, rendered, total]);
-  return rendered;
-}
 
 const NO_PENDING_ACTIONS: VariantAction[] = [];
 
@@ -175,7 +145,7 @@ export const VariantsView = memo(function VariantsView({
     (n, section) => n + (section.name !== null && collapsed.has(section.key) ? 0 : section.axes.length),
     0,
   );
-  let left = useRenderLimit(active || lingering, expandedCount);
+  let left = useRenderLimit(active || lingering, expandedCount, FIRST_AXES);
   let stopped = false;
   const bodyRef = useRef<HTMLDivElement | null>(null);
   // A long list arrives in chunks and is past the size that animates anyway.

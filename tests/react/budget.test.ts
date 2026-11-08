@@ -216,3 +216,18 @@ it('leaves 500 notes alone when a load returns them unchanged', async () => {
   // Only the changed note is a new object, so every other row skips its render.
   expect(shown.filter((note, i) => note !== before[i]).map((note) => note.id)).toEqual(['note-0']);
 });
+
+it('renders no notes while Feedback is closed, then the newest first in chunks', HEAVY, async () => {
+  notes = manyNotes();
+  await render();
+  await frame(1000);
+  expect(noteNodes).toHaveLength(0);
+  await click('.isotone-fab', 0);
+  // The opening commit renders a screenful of the newest notes; older ones follow above them.
+  expect(noteNodes.length).toBeGreaterThan(0);
+  expect(noteNodes.length).toBeLessThanOrEqual(40);
+  expect(noteNodes[noteNodes.length - 1]?.textContent).toContain('Note 499');
+  await settle();
+  expect(noteNodes).toHaveLength(500);
+  expect(noteNodes[0]?.textContent).toContain('Note 0');
+});

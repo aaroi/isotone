@@ -54,19 +54,24 @@ export const Composer = memo(function Composer({
   useLayoutEffect(() => {
     const field = fieldRef.current;
     if (!field || !active) return;
+    // An empty field needs no layout read, so opening the panel does not force one.
     const resize = () => {
+      if (!field.value) {
+        field.style.height = '22px';
+        field.dataset.scrolled = 'false';
+        return;
+      }
       field.style.height = '0px';
-      field.style.height = `${field.value ? Math.max(22, field.scrollHeight) : 22}px`;
+      field.style.height = `${Math.max(22, field.scrollHeight)}px`;
       field.dataset.scrolled = String(field.scrollTop > 0);
     };
     resize();
     if (typeof ResizeObserver === 'undefined') return;
-    let width = field.clientWidth;
-    const observer = new ResizeObserver(() => {
-      if (field.clientWidth !== width) {
-        width = field.clientWidth;
-        resize();
-      }
+    let width: number | undefined;
+    const observer = new ResizeObserver(([entry]) => {
+      const next = entry?.contentRect.width;
+      if (width !== undefined && next !== width) resize();
+      width = next;
     });
     observer.observe(field);
     return () => observer.disconnect();

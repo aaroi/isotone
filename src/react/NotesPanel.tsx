@@ -1,12 +1,13 @@
-import { type HTMLAttributes, memo, type ReactNode, type RefObject, useEffect, useRef } from 'react';
+import { type HTMLAttributes, memo, type ReactNode, type RefObject, useDeferredValue, useEffect, useLayoutEffect, useRef } from 'react';
 import { normalizeRoute } from '../core/routes';
 import type { IterationElement, IterationNote } from '../core/types';
 import { Icon } from './icons';
-import { dotPulse, fadeInContent } from './motion';
+import { dotPulse, fadeInContent, MAX_ANIMATED_ITEMS } from './motion';
 import { NoteSummary } from './NoteSummary';
 import type { Anchor } from './picking';
 import { showOverflowTitle } from './tooltips';
 import { useLayoutMotion } from './useLayoutMotion';
+import { useRenderLimit } from './useRenderLimit';
 import type { NoteView } from './useNoteView';
 
 interface NotesPanelProps {
@@ -77,15 +78,33 @@ const NoteList = memo(function NoteList({
   onRemove,
 }: Pick<NotesPanelProps, 'open' | 'route' | 'editingId' | 'onEdit' | 'onRemove'> & Pick<NoteView, 'notes' | 'working'>) {
   const listRef = useRef<HTMLUListElement>(null);
+  // A closed panel renders no notes; the rows stay one more render after closing, for the dock's exit snapshot.
+  // Opening renders the newest notes first and older ones above them in chunks, as the Variants list does.
+  const lingering = useDeferredValue(open);
+  const count = useRenderLimit(open || lingering, notes.length, MAX_ANIMATED_ITEMS);
+  const shown = count < notes.length ? notes.slice(notes.length - count) : notes;
+  const fromEnd = useRef(0);
   useLayoutMotion(listRef, notes, open);
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new note or opening the panel scrolls to the end.
   useEffect(() => {
     const list = listRef.current;
     if (list) list.scrollTop = list.scrollHeight;
   }, [notes, open]);
+  // Older notes arriving above keep the reader where they were.
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (list && count) list.scrollTop = list.scrollHeight - fromEnd.current;
+  }, [count]);
   return (
-    <ul ref={listRef} className="isotone-list">
-      {notes.map((note) => (
+    <ul
+      ref={listRef}
+      className="isotone-list"
+      aria-label="Notes"
+      onScroll={(e) => {
+        fromEnd.current = e.currentTarget.scrollHeight - e.currentTarget.scrollTop;
+      }}
+    >
+      {shown.map((note) => (
         <NoteRow
           key={note.id}
           note={note}
