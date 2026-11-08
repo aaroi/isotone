@@ -106,7 +106,7 @@ function scoreSetup() {
   // 2. Wiring present, and every place that loads it behind a dev-only check.
   const files = walk(app, NOT_SOURCE).filter((file) => SOURCE_FILE.test(file));
   const viteConfigs = files.filter((file) => /(^|\/)vite\.config\.[cm]?[jt]s$/.test(file) && /['"]isotone\/vite['"]/.test(read(file)));
-  const pluginWired = viteConfigs.some((file) => /\biteration\s*\(/.test(read(file)));
+  const pluginWired = viteConfigs.some((file) => /\b(?:isotone|iteration)\s*\(/.test(read(file)));
   const loaders = files.filter((file) => !viteConfigs.includes(file) && /isotone/.test(read(file)));
   const unguarded = loaders.filter((file) => !guarded(file));
   const wired = kind === 'vite' ? pluginWired || loaders.length > 0 : loaders.length > 0;
