@@ -7,7 +7,6 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -19,6 +18,7 @@ import {
   isDirty,
   type VariantAction,
   type VariantAxis,
+  type VariantSection,
   type VariantSelections,
   type VariantsSource,
   sectionAxes,
@@ -37,24 +37,69 @@ export function refreshSource(source: VariantsSource): void {
   if (typeof candidate === 'function') void Promise.resolve(candidate.call(source)).catch(() => {});
 }
 
-/** How many times each source has notified; the snapshot that selectors are derived from. */
-const versions = new WeakMap<VariantsSource, number>();
-const noSource = () => () => {};
+/** What the panel draws from a source: read once per change and shared by every view of it. */
+export interface VariantsSnapshot {
+  selections: Readonly<VariantSelections>;
+  /** The axes on show: conditional ones only while their condition holds. */
+  shown: VariantAxis[];
+  sections: VariantSection[];
+  /** Each shown axis's name, without and with its section. */
+  names: Map<string, VariantSection['axes'][number]>;
+  error: string | null;
+}
 
-/** Re-render when the source changes. Returns its change count, to key derived values on. */
-export function useVariantsVersion(source: VariantsSource | undefined): number {
-  const subscribe = useCallback(
-    (notify: () => void) =>
-      source
-        ? source.subscribe(() => {
-            versions.set(source, (versions.get(source) ?? 0) + 1);
-            notify();
-          })
-        : noSource(),
-    [source],
-  );
-  const read = () => (source ? (versions.get(source) ?? 0) : 0);
-  return useSyncExternalStore(subscribe, read, read);
+interface SnapshotStore {
+  subscribe(listener: () => void): () => void;
+  read(): VariantsSnapshot;
+}
+
+function takeSnapshot(source: VariantsSource): VariantsSnapshot {
+  const selections = { ...source.getSelections() };
+  const shown = visibleAxes(source.getAxes(), selections);
+  const sections = sectionAxes(shown);
+  return {
+    selections,
+    shown,
+    sections,
+    names: new Map(sections.flatMap((section) => section.axes).map((entry) => [entry.axis.id, entry])),
+    error: source.getError?.() ?? null,
+  };
+}
+
+const stores = new WeakMap<VariantsSource, SnapshotStore>();
+const EMPTY: VariantsSnapshot = { selections: {}, shown: [], sections: [], names: new Map(), error: null };
+const NO_SOURCE: SnapshotStore = { subscribe: () => () => {}, read: () => EMPTY };
+
+/**
+ * One subscription per source, however many views read it, made the first
+ * time the source is read and kept as long as the source lives, so a snapshot
+ * is never stale between a render and its subscription.
+ */
+function storeFor(source: VariantsSource | undefined): SnapshotStore {
+  if (!source) return NO_SOURCE;
+  let store = stores.get(source);
+  if (store) return store;
+  const listeners = new Set<() => void>();
+  let snapshot: VariantsSnapshot | null = null;
+  source.subscribe(() => {
+    snapshot = null;
+    for (const listener of listeners) listener();
+  });
+  store = {
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    read: () => (snapshot ??= takeSnapshot(source)),
+  };
+  stores.set(source, store);
+  return store;
+}
+
+/** The source's current snapshot; a new one after each change. */
+export function useVariantsSnapshot(source: VariantsSource | undefined): VariantsSnapshot {
+  const store = storeFor(source);
+  return useSyncExternalStore(store.subscribe, store.read, store.read);
 }
 
 /** Selectors in the commit that opens the panel: more than a tall panel shows at once. */
@@ -107,26 +152,13 @@ export const VariantsView = memo(function VariantsView({
   pendingActions = NO_PENDING_ACTIONS,
   emptyText = DEFAULT_EMPTY_TEXT,
 }: VariantsViewProps) {
-  const version = useVariantsVersion(source);
+  const { selections, shown, sections, names, error: sourceError } = useVariantsSnapshot(source);
   useEffect(() => {
     if (active) refreshSource(source);
   }, [active, source]);
   // A closed panel renders no selectors. The body stays one more render after
   // closing, so the dock's exit snapshot still shows them.
   const lingering = useDeferredValue(active);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: version represents external source updates.
-  const { selections, shown, sections, names, sourceError } = useMemo(() => {
-    const selections = source.getSelections();
-    const shown = visibleAxes(source.getAxes(), selections);
-    const sections = sectionAxes(shown);
-    return {
-      selections,
-      shown,
-      sections,
-      names: new Map(sections.flatMap((section) => section.axes).map((entry) => [entry.axis.id, entry])),
-      sourceError: source.getError?.(),
-    };
-  }, [source, version]);
   const value = (axis: VariantAxis) => selections[axis.id] ?? axisDefault(axis);
   // Collapsed sections, by case-insensitive name; kept while the panel closes.
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());

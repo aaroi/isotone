@@ -4,7 +4,7 @@ import { MAX_FEEDBACK_LENGTH } from '../core/limits';
 import type { IterationStoreConfig } from '../core/notes-client';
 import { isRouteVisible, normalizeRoute, type RouteGateOptions } from '../core/routes';
 import type { IterationElement, IterationNote, IterationShortcut, IterationTheme, VariantReference } from '../core/types';
-import { type VariantAction, type VariantsSource, visibleAxes } from '../core/variants';
+import type { VariantAction, VariantsSource } from '../core/variants';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Composer, createDraftText } from './Composer';
 import { Icon } from './icons';
@@ -20,7 +20,7 @@ import { useDraft } from './useDraft';
 import { useFloatingComposer } from './useFloatingComposer';
 import { useLayoutMotion } from './useLayoutMotion';
 import { useNotes } from './useNotes';
-import { refreshSource, useVariantsVersion, VariantsView } from './VariantsView';
+import { refreshSource, useVariantsSnapshot, VariantsView } from './VariantsView';
 import { isCompactViewport, prefersTouch, useKeyboardInset } from './viewport';
 
 export interface IterationPanelProps {
@@ -142,12 +142,7 @@ export function IterationPanel({
   const id = useId();
 
   const notesAvailable = Boolean(storeCfg.endpoint);
-  const variantsVersion = useVariantsVersion(variants);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the version stands for the source's changes.
-  const variantsAvailable = useMemo(
-    () => Boolean(variants && visibleAxes(variants.getAxes(), variants.getSelections()).length),
-    [variants, variantsVersion],
-  );
+  const variantsAvailable = useVariantsSnapshot(variants).shown.length > 0;
   const visible = isRouteVisible(route, rule) && (notesAvailable || variantsAvailable || variantsOpen);
   const { store, notes, setNotes, clock, load: loadNotes, write } = useNotes(storeCfg, visible);
   useLayoutMotion(listRef, notes, notesOpen);
