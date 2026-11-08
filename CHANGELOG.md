@@ -18,6 +18,9 @@
 
 - Live variant switching served `?isotone=` for any project file around Vite's `server.fs.deny`, so `/.env?isotone=_base` returned the file to other localhost pages. It now answers only for files a variant tracks. Isotone 1.2.x has the same hole; upgrade.
 - The notes file, the Blast session file and `.isotone/` are added to Vite's `server.fs.deny`.
+- A file tracked with `variant add --force`, such as `.env`, still obeys `server.fs.deny` when live switching asks for one of its versions.
+- `*.test` no longer counts as a local `Host`, as in Vite, because a hostile resolver can point it at `127.0.0.1` to read notes from `isotone serve`.
+- The notes endpoint refuses a route that does not start with `/`, and `npx isotone` labels the route heading and payload lines as browser input too.
 - Endpoints refuse a `Host` other than `localhost`, `*.localhost` or a loopback address, which stops DNS rebinding; on Vite, add other names to `server.allowedHosts`. A request a tunnel or proxy forwards for another machine counts as that machine.
 - `isotone serve` binds to `127.0.0.1`, and neither panel bundle loads into other websites' `<script>` tags.
 - Every POST needs a JSON content type (415 otherwise), which a cross-site form cannot send. Note IDs a host chooses must be 1–64 letters, digits, `-` or `_`, not starting with `-`.
@@ -42,6 +45,7 @@
 
 - A busy notes file or a wall-clock change no longer makes a waiting run exit 1 or overrun `--every`.
 - `blast start 2024-recap` scopes to that route, and a closed then reopened note is handed out again.
+- Each batch now ends with the viewport rule and "run `--done` as its own command", like the loop `blast start` prints.
 
 **Variants**
 
@@ -49,6 +53,7 @@
 - `variant use` refuses a file another group's active variant overrides, and `promote` replaces all of a variant's files or none.
 - `variant add` records a file under its real spelling, so a case mismatch on macOS or Windows still overrides it.
 - On Windows, switching variants updates the page without a manual reload.
+- `variant sync` exits 1 on a conflict, `variant list` (`conflicts` in `--json`) and `--done` name copies with conflict markers, and in live mode such a copy no longer breaks the real page.
 
 **The panel**
 
