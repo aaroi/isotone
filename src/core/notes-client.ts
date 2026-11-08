@@ -136,6 +136,13 @@ function createLocalNotes(key: string) {
 
 type LocalNotes = ReturnType<typeof createLocalNotes>;
 
+/**
+ * Answers to a backlog POST that will never change: the note itself is
+ * invalid. Others (403 host, 404, 409 full file, 429) can pass once the
+ * server or its notes file changes, so those notes stay queued.
+ */
+const NEVER_ACCEPTED = new Set([400, 413, 415]);
+
 /** Pushes the local backlog to the server, one run at a time: a second call joins the run in flight. */
 function createBacklogSync(endpoint: string | null, local: LocalNotes): () => Promise<void> {
   let migration: Promise<void> | null = null;
@@ -148,7 +155,7 @@ function createBacklogSync(endpoint: string | null, local: LocalNotes): () => Pr
       // Notes saved by an older client may exceed today's server limit.
       // Keep them in the browser, but let valid notes behind them sync.
       if (item.feedback.trim().length > MAX_FEEDBACK_LENGTH) continue;
-      let rejected = false;
+      let rejected = null as { status: number; error: unknown } | null;
       const saved = await request(
         endpoint,
         {
@@ -169,14 +176,27 @@ function createBacklogSync(endpoint: string | null, local: LocalNotes): () => Pr
         },
         async (res) => {
           if (!res.ok) {
-            rejected = res.status >= 400 && res.status < 500;
+            if (res.status >= 400 && res.status < 500) {
+              rejected = { status: res.status, error: ((await res.json().catch(() => null)) as { error?: unknown } | null)?.error };
+            }
             return null;
           }
           return (await res.json()) as { id?: unknown };
         },
       );
       if (!saved || typeof saved.id !== 'string' || !saved.id) {
-        if (rejected) continue;
+        if (rejected) {
+          // A note the server can never accept is dropped, once and loudly,
+          // instead of being posted again on every poll.
+          if (NEVER_ACCEPTED.has(rejected.status)) {
+            local.acknowledge(item);
+            console.warn(
+              `Isotone dropped a saved note the server rejects (${rejected.status}${typeof rejected.error === 'string' ? `: ${rejected.error}` : ''}).`,
+              item,
+            );
+          }
+          continue;
+        }
         return; // A transient failure or missing acknowledgement stops the retry.
       }
       // A save may have happened while the request was in flight. Remove
