@@ -394,9 +394,9 @@ ${FEEDBACK_LAYOUT_CSS}
   .isotone-root button { transition: opacity 125ms ease; }
   .isotone-root button:not(:disabled):active > svg { transform: none; }
 }
-.isotone-root[data-instant='true'] *, .isotone-root[data-instant='true'] *::before, .isotone-root[data-instant='true'] *::after { transition-duration: 0s !important; transition-delay: 0s !important; animation: none !important; }
-/* Instant mode follows any key press, but the corner close only ever appears under the pointer, so it keeps its fade. */
-.isotone-root[data-instant='true'] .isotone-panel > .isotone-panel-close { transition-duration: 220ms, 120ms !important; }
+/* Keyboard actions are immediate. The rule names only the surfaces a key opens: one over every descendant
+   would restyle the whole dock each time the reviewer moves between mouse and keyboard. */
+.isotone-root[data-instant='true'] .isotone-rail-track, .isotone-root[data-instant='true'] .isotone-axis-menu, .isotone-root[data-instant='true'] .isotone-colour { transition-duration: 0s !important; transition-delay: 0s !important; }
 ${UPDATE_NOTICE_CSS}
 `;
 /**

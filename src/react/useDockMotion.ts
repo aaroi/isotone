@@ -115,7 +115,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       subtree: true,
       childList: true,
       attributes: true,
-      attributeFilter: ['data-open', 'data-instant', 'data-resizing'],
+      attributeFilter: ['data-open', 'data-resizing'],
     });
     // An on-screen keyboard lifts the dock through the root's own style (viewport.ts).
     const lifted = new MutationObserver(measure);

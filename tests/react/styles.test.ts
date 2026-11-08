@@ -98,3 +98,32 @@ describe('host isolation', () => {
     }
   });
 });
+
+function selectors(css: string): string[] {
+  const style = document.createElement('style');
+  style.textContent = css;
+  document.head.append(style);
+  try {
+    const found: string[] = [];
+    const visit = (rules: CSSRuleList) => {
+      for (const rule of Array.from(rules)) {
+        if ('cssRules' in rule) visit(rule.cssRules as CSSRuleList);
+        if ('selectorText' in rule) found.push(...String(rule.selectorText).split(','));
+      }
+    };
+    if (style.sheet) visit(style.sheet.cssRules);
+    return found.map((selector) => selector.trim());
+  } finally {
+    style.remove();
+  }
+}
+
+describe('input modality', () => {
+  // The root flips data-instant on the first key after a click and back on the next press. A rule that reaches
+  // every descendant or tag restyles thousands of elements on the stress page and stalls the host's own inputs.
+  it('makes only named surfaces instant, never every descendant', () => {
+    const instant = selectors(PANEL_CSS).filter((selector) => selector.includes('data-instant'));
+    expect(instant.length).toBeGreaterThan(0);
+    for (const selector of instant) expect(selector).toMatch(/\[data-instant='true'\] \.isotone-[\w-]+$/);
+  });
+});
