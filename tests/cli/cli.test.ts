@@ -842,6 +842,7 @@ describe('init', () => {
     const io = makeIo(tempRepo());
     expect(await runCli(['init', '--approach', 'serve'], io)).toBe(0);
     expect(io.text.out).toContain('a file:// page never loads the panel');
+    expect(io.text.out).toContain('python3 -m http.server 8000');
   });
 
   it('rejects an unknown --approach', async () => {
@@ -914,6 +915,17 @@ describe('agent onboarding and machine-readable notes', () => {
     const changed = makeIo(root);
     expect(await runCli(['--undone', 'note-1', '--json'], changed)).toBe(0);
     expect(JSON.parse(changed.text.out)).toMatchObject([{ id: 'note-1', done: false }]);
+  });
+
+  it('says "note id" when no note matches', async () => {
+    const root = tempRepo();
+    writeFileSync(
+      notesAt(root),
+      JSON.stringify([{ id: 'abc', route: '/', feedback: 'x', createdAt: new Date().toISOString(), done: false }]),
+    );
+    const io = makeIo(root);
+    expect(await runCli(['--done', 'zzz'], io)).toBe(1);
+    expect(io.text.err).toContain('No note id starting with "zzz".');
   });
 
   it('tells the agent how to close an open note in text and JSON', async () => {
