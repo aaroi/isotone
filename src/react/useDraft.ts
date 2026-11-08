@@ -1,7 +1,33 @@
 import { useEffect, useRef } from 'react';
 import { readBrowserStorage, removeBrowserStorage, writeBrowserStorage } from '../core/browser-storage';
 import type { IterationElement, IterationNote, VariantReference } from '../core/types';
-import type { DraftText } from './Composer';
+
+/**
+ * The composer's text, outside React state: typing re-renders the composer
+ * alone, and the panel reads the text only when it sends, edits or saves a draft.
+ */
+export interface DraftText {
+  get(): string;
+  set(value: string): void;
+  subscribe(listener: () => void): () => void;
+}
+
+export function createDraftText(): DraftText {
+  let value = '';
+  const listeners = new Set<() => void>();
+  return {
+    get: () => value,
+    set(next) {
+      if (next === value) return;
+      value = next;
+      for (const listener of listeners) listener();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
 
 /** How long typing settles before the draft is written to storage. */
 const DRAFT_SAVE_MS = 300;

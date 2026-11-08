@@ -1,6 +1,7 @@
 import { type CSSProperties, type KeyboardEvent, memo, type ReactNode } from 'react';
 import { formatRangeValue, type VariantAxis, type VariantsSource } from '../core/variants';
 import { Icon } from './icons';
+import { GRID_COLUMNS } from './styles';
 import { showOverflowTitle } from './tooltips';
 
 export type OpenMenu = (axis: VariantAxis, opener: HTMLButtonElement | null, optionId?: string | null) => void;
@@ -147,19 +148,31 @@ export const AxisControl = memo(function AxisControl({
   );
 });
 
-/** Arrow keys, Home and End move between a group's radios and select the one reached. */
+/**
+ * Arrow keys, Home and End move between a group's radios and select the one
+ * reached. Left and Right go along the group and wrap; in a thumbnail grid Up
+ * and Down go a row, and stop at the first and last.
+ */
 function moveChoice(event: KeyboardEvent<HTMLElement>) {
   const target = event.target as HTMLElement;
   if (target.getAttribute('role') !== 'radio') return;
-  const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
-  if (step === undefined && event.key !== 'Home' && event.key !== 'End') return;
-  event.preventDefault();
   const radios = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
   const at = radios.indexOf(target as HTMLButtonElement);
-  const next =
-    event.key === 'Home' ? radios[0] : event.key === 'End' ? radios.at(-1) : radios[(at + (step ?? 0) + radios.length) % radios.length];
-  next?.focus();
-  next?.click();
+  const row = event.currentTarget.classList.contains('isotone-grid') ? GRID_COLUMNS : 1;
+  const wrap = (index: number) => (index + radios.length) % radios.length;
+  const next = {
+    ArrowRight: wrap(at + 1),
+    ArrowLeft: wrap(at - 1),
+    ArrowDown: row > 1 ? Math.min(at + row, radios.length - 1) : wrap(at + 1),
+    ArrowUp: row > 1 ? Math.max(at - row, 0) : wrap(at - 1),
+    Home: 0,
+    End: radios.length - 1,
+  }[event.key];
+  if (next === undefined) return;
+  event.preventDefault();
+  if (next === at) return;
+  radios[next]?.focus();
+  radios[next]?.click();
 }
 
 /**

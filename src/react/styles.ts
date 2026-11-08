@@ -6,6 +6,8 @@ import { UPDATE_NOTICE_CSS } from './UpdateNotice';
 
 /** One shared set of tokens and controls for the shadow-root and inline mounts. */
 const MARKER = 'data-isotone-styles';
+/** Thumbnail options sit in rows of this many; the arrow keys move by a row. */
+export const GRID_COLUMNS = 2;
 export const PANEL_CSS = `
 ${APPEARANCE_CSS}
 .isotone-root, .isotone-root *, .isotone-root *::before, .isotone-root *::after { box-sizing: border-box; }
@@ -167,7 +169,7 @@ ${APPEARANCE_CSS}
 /* The option leads, the selector follows in the same line and size, quieter, as in “Compact Spacing”. */
 .isotone-menu-heading > strong { flex: 0 1 auto; }
 .isotone-menu-heading > span { flex: 0 1000 auto; color: var(--iso-muted); font-weight: 400; }
-.isotone-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.isotone-grid { display: grid; grid-template-columns: repeat(${GRID_COLUMNS},minmax(0,1fr)); gap: 8px; }
 .isotone-thumb { position: relative; display: block; min-width: 0; border-radius: 5px; overflow: hidden; background: var(--iso-well); box-shadow: var(--iso-thumb-shadow); color: var(--iso-muted); }
 .isotone-thumb img { display: block; width: 100%; height: 72px; object-fit: cover; }
 .isotone-thumb > span { position: absolute; bottom: 5px; left: 5px; max-width: calc(100% - 10px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 6px; border-radius: 5px; background: var(--iso-label-face); box-shadow: var(--iso-label-shadow); color: var(--iso-fg); text-align: left; font-size: 10px; font-weight: 500; }
@@ -281,7 +283,8 @@ ${PILL_ACTIVE_CSS}
 .isotone-page[aria-pressed='true'] { color: var(--iso-fg); background: var(--iso-label-face); box-shadow: var(--iso-label-lift-shadow); }
 /* An agent has said it is working on a note: a soft pulse on the note, and a ring on the launcher.
    Both are driven by one shared clock (see syncPulse), so they beat together. */
-.isotone-note-hit { position: relative; }
+/* A long list lays out only the rows in view. The placeholder is one line of text; a row keeps its height once seen. */
+.isotone-note-hit { position: relative; content-visibility: auto; contain-intrinsic-size: auto 18px; }
 .isotone-working { position: absolute; left: 3px; top: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--iso-focus); }
 .isotone-ring { position: absolute; inset: 0; border-radius: 999px; pointer-events: none; }
 .isotone-list:empty { display: none; }

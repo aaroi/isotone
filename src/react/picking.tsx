@@ -1,6 +1,9 @@
-import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect, useRef, useState } from 'react';
+import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { describeIterationElement, elementAsNode, resolveElementSource } from '../core/element';
 import type { IterationElement } from '../core/types';
+import type { DockFocus } from './useDockFocus';
+import type { Mode, UpdateMode } from './useDockMode';
+import { useFloatingComposer } from './useFloatingComposer';
 
 /**
  * Where the composer floats while writing about pinned elements: the point
@@ -42,7 +45,7 @@ const isPanelElement = (node: EventTarget | null) => node instanceof Element && 
  * open or take focus from the pin; Shift passes everything through, so the
  * page can still open menus and tabs first.
  */
-export function usePicker(context: PickerContext) {
+function usePicker(context: PickerContext) {
   const latest = useRef(context);
   latest.current = context;
   // The elements clicked, by selector. A re-render can shift a path onto a
@@ -173,6 +176,69 @@ const boxOf = (el: Element): Box => {
   const r = el.getBoundingClientRect();
   return { top: r.top, left: r.left, width: r.width, height: r.height };
 };
+
+interface SelectModeOptions {
+  mode: Mode;
+  update: UpdateMode;
+  focus: DockFocus;
+  rootRef: RefObject<HTMLElement | null>;
+  fieldRef: RefObject<HTMLTextAreaElement | null>;
+  floatRef: RefObject<HTMLDivElement | null>;
+  targets: IterationElement[];
+  setTargets: Dispatch<SetStateAction<IterationElement[]>>;
+  touch: boolean;
+}
+
+/**
+ * Select mode in the dock: pins float the composer beside the element, the
+ * composer's own controls start and end selecting, and focus follows.
+ */
+export function useSelectMode({ mode, update, focus, rootRef, fieldRef, floatRef, targets, setTargets, touch }: SelectModeOptions) {
+  // The dock keeps the composer's height while it floats, so the panel stays put.
+  const slotHeight = useRef(0);
+  const locate = usePicker({
+    picking: mode.picking,
+    rootRef,
+    fieldRef,
+    targets,
+    setTargets,
+    anchored: mode.anchor !== null,
+    touch,
+    onPin: (pin, slot) => {
+      if (slot !== null) slotHeight.current = slot;
+      update({ anchor: pin, notesOpen: true });
+      focus.composerWhilePicking();
+    },
+    onFinish: (how) => {
+      if (how === 'escape') setTargets([]);
+      update({ picking: false, notesOpen: true, ...(how === 'escape' ? { anchor: null } : {}) });
+      if (how === 'typing') fieldRef.current?.focus();
+      else focus.composer();
+    },
+  });
+  useFloatingComposer(floatRef, rootRef, mode.anchor, locate);
+  /** Stop selecting and write: the composer keeps what was pinned. */
+  const done = useCallback(() => {
+    update({ picking: false });
+    focus.composer();
+  }, [update, focus]);
+  /** The composer's handlers for select mode. */
+  const controls = useMemo(
+    () => ({
+      onFieldFocus: () => {
+        if (!focus.pinning()) update({ picking: false });
+      },
+      onFieldPointerDown: () => update({ picking: false }),
+      onTogglePicking: () => {
+        focus.cancel();
+        update((m) => ({ picking: !m.picking, pickingWithPanel: false }));
+      },
+      onDonePicking: done,
+    }),
+    [update, focus, done],
+  );
+  return { locate, slotHeight, done, controls };
+}
 
 /**
  * Outlines for the element under the pointer and the pinned ones. The hover

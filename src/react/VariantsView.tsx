@@ -1,12 +1,13 @@
 import {
+  type HTMLAttributes,
   memo,
   type ReactNode,
+  startTransition,
   useCallback,
   useDeferredValue,
   useEffect,
   useId,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -18,6 +19,7 @@ import {
   isDirty,
   type VariantAction,
   type VariantAxis,
+  type VariantSection,
   type VariantSelections,
   type VariantsSource,
   sectionAxes,
@@ -27,6 +29,8 @@ import { AxisActionsDialog } from './AxisActionsDialog';
 import { AxisControl, type OpenMenu } from './AxisControl';
 import { ColorPicker } from './ColorPicker';
 import { Icon } from './icons';
+import { MAX_ANIMATED_ITEMS } from './motion';
+import { PanelClose } from './NotesPanel';
 import { useLayoutMotion } from './useLayoutMotion';
 import { showOverflowTitle } from './tooltips';
 
@@ -35,24 +39,102 @@ export function refreshSource(source: VariantsSource): void {
   if (typeof candidate === 'function') void Promise.resolve(candidate.call(source)).catch(() => {});
 }
 
-/** How many times each source has notified; the snapshot that selectors are derived from. */
-const versions = new WeakMap<VariantsSource, number>();
-const noSource = () => () => {};
+/** What the panel draws from a source: read once per change and shared by every view of it. */
+export interface VariantsSnapshot {
+  selections: Readonly<VariantSelections>;
+  /** The axes on show: conditional ones only while their condition holds. */
+  shown: VariantAxis[];
+  sections: VariantSection[];
+  /** Each shown axis's name, without and with its section. */
+  names: Map<string, VariantSection['axes'][number]>;
+  error: string | null;
+}
 
-/** Re-render when the source changes. Returns its change count, to key derived values on. */
-export function useVariantsVersion(source: VariantsSource | undefined): number {
-  const subscribe = useCallback(
-    (notify: () => void) =>
-      source
-        ? source.subscribe(() => {
-            versions.set(source, (versions.get(source) ?? 0) + 1);
-            notify();
-          })
-        : noSource(),
-    [source],
-  );
-  const read = () => (source ? (versions.get(source) ?? 0) : 0);
-  return useSyncExternalStore(subscribe, read, read);
+interface SnapshotStore {
+  subscribe(listener: () => void): () => void;
+  read(): VariantsSnapshot;
+}
+
+function takeSnapshot(source: VariantsSource): VariantsSnapshot {
+  const selections = { ...source.getSelections() };
+  const shown = visibleAxes(source.getAxes(), selections);
+  const sections = sectionAxes(shown);
+  return {
+    selections,
+    shown,
+    sections,
+    names: new Map(sections.flatMap((section) => section.axes).map((entry) => [entry.axis.id, entry])),
+    error: source.getError?.() ?? null,
+  };
+}
+
+const stores = new WeakMap<VariantsSource, SnapshotStore>();
+const EMPTY: VariantsSnapshot = { selections: {}, shown: [], sections: [], names: new Map(), error: null };
+const NO_SOURCE: SnapshotStore = { subscribe: () => () => {}, read: () => EMPTY };
+
+/**
+ * One subscription per source, however many views read it, made the first
+ * time the source is read and kept as long as the source lives, so a snapshot
+ * is never stale between a render and its subscription.
+ */
+function storeFor(source: VariantsSource | undefined): SnapshotStore {
+  if (!source) return NO_SOURCE;
+  let store = stores.get(source);
+  if (store) return store;
+  const listeners = new Set<() => void>();
+  let snapshot: VariantsSnapshot | null = null;
+  source.subscribe(() => {
+    snapshot = null;
+    for (const listener of listeners) listener();
+  });
+  store = {
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    read: () => (snapshot ??= takeSnapshot(source)),
+  };
+  stores.set(source, store);
+  return store;
+}
+
+/** The source's current snapshot; a new one after each change. */
+export function useVariantsSnapshot(source: VariantsSource | undefined): VariantsSnapshot {
+  const store = storeFor(source);
+  return useSyncExternalStore(store.subscribe, store.read, store.read);
+}
+
+/** Selectors in the commit that opens the panel: more than a tall panel shows at once. */
+const FIRST_AXES = 16;
+/** Selectors added per task after that; each chunk stays well inside a frame on a slow machine. */
+const AXES_PER_CHUNK = 48;
+
+/**
+ * How many selectors to render. None while closed. Opening renders a first
+ * screenful and paints; the rest follow a chunk per task, so a page with
+ * hundreds of selectors opens at once and no single task holds up input.
+ */
+function useRenderLimit(open: boolean, total: number): number {
+  const [limit, setLimit] = useState(0);
+  const rendered = open ? Math.min(Math.max(limit, FIRST_AXES), total) : 0;
+  useEffect(() => {
+    if (!open) {
+      setLimit(0);
+      return;
+    }
+    if (rendered >= total) return;
+    // Each chunk waits for the frame that shows the last one to be painted. A transition renders in slices
+    // that yield to input, so a click or keystroke meanwhile goes first.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      timer = setTimeout(() => startTransition(() => setLimit(rendered + AXES_PER_CHUNK)));
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [open, rendered, total]);
+  return rendered;
 }
 
 const NO_PENDING_ACTIONS: VariantAction[] = [];
@@ -79,32 +161,25 @@ export const VariantsView = memo(function VariantsView({
   pendingActions = NO_PENDING_ACTIONS,
   emptyText = DEFAULT_EMPTY_TEXT,
 }: VariantsViewProps) {
-  const version = useVariantsVersion(source);
+  const { selections, shown, sections, names, error: sourceError } = useVariantsSnapshot(source);
   useEffect(() => {
     if (active) refreshSource(source);
   }, [active, source]);
   // A closed panel renders no selectors. The body stays one more render after
   // closing, so the dock's exit snapshot still shows them.
   const lingering = useDeferredValue(active);
-  const bodyShown = active || lingering;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: version represents external source updates.
-  const { selections, shown, sections, names, sourceError } = useMemo(() => {
-    const selections = source.getSelections();
-    const shown = visibleAxes(source.getAxes(), selections);
-    const sections = sectionAxes(shown);
-    return {
-      selections,
-      shown,
-      sections,
-      names: new Map(sections.flatMap((section) => section.axes).map((entry) => [entry.axis.id, entry])),
-      sourceError: source.getError?.(),
-    };
-  }, [source, version]);
   const value = (axis: VariantAxis) => selections[axis.id] ?? axisDefault(axis);
   // Collapsed sections, by case-insensitive name; kept while the panel closes.
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const expandedCount = sections.reduce(
+    (n, section) => n + (section.name !== null && collapsed.has(section.key) ? 0 : section.axes.length),
+    0,
+  );
+  let left = useRenderLimit(active || lingering, expandedCount);
+  let stopped = false;
   const bodyRef = useRef<HTMLDivElement | null>(null);
-  useLayoutMotion(bodyRef, shown, active);
+  // A long list arrives in chunks and is past the size that animates anyway.
+  useLayoutMotion(bodyRef, shown, active && shown.length <= MAX_ANIMATED_ITEMS);
 
   // The action dialog: which selector, which option, and each opening's own session.
   const [menu, setMenu] = useState<{ axisId: string; optionId: string | null; session: number } | null>(null);
@@ -224,29 +299,37 @@ export const VariantsView = memo(function VariantsView({
           </p>
         )}
         {shown.length === 0 && <p className="isotone-empty">{emptyText}</p>}
-        {bodyShown &&
-          sections.map((section) =>
-            section.name === null ? (
-              section.axes.map(renderAxis)
-            ) : (
-              <SectionBlock
-                key={`section:${section.key}`}
-                name={section.name}
-                sectionKey={section.key}
-                count={section.axes.length}
-                collapsed={collapsed.has(section.key)}
-                onToggle={() =>
-                  setCollapsed((previous) => {
-                    const next = new Set(previous);
-                    if (!next.delete(section.key)) next.add(section.key);
-                    return next;
-                  })
-                }
-              >
-                {section.axes.map(renderAxis)}
-              </SectionBlock>
-            ),
-          )}
+        {sections.map((section) => {
+          // A folded section costs nothing; the list stops at the first selector past the limit.
+          const folded = section.name !== null && collapsed.has(section.key);
+          if (stopped || (!folded && left === 0)) {
+            stopped = true;
+            return null;
+          }
+          const axes = folded ? [] : section.axes.slice(0, left);
+          left -= axes.length;
+          stopped = !folded && axes.length < section.axes.length;
+          return section.name === null ? (
+            axes.map(renderAxis)
+          ) : (
+            <SectionBlock
+              key={`section:${section.key}`}
+              name={section.name}
+              sectionKey={section.key}
+              count={section.axes.length}
+              collapsed={folded}
+              onToggle={() =>
+                setCollapsed((previous) => {
+                  const next = new Set(previous);
+                  if (!next.delete(section.key)) next.add(section.key);
+                  return next;
+                })
+              }
+            >
+              {axes.map(renderAxis)}
+            </SectionBlock>
+          );
+        })}
       </div>
       {colourAxis?.kind === 'color' && (
         <ColorPicker
@@ -277,6 +360,32 @@ export const VariantsView = memo(function VariantsView({
     </div>
   );
 });
+
+/** The variants panel in the dock: its close control, resize handle and selectors. */
+export function VariantsPanel({
+  id,
+  resizeHandle,
+  onClose,
+  ...view
+}: VariantsViewProps & { id: string; active: boolean; resizeHandle: HTMLAttributes<HTMLDivElement>; onClose: () => void }) {
+  return (
+    <section
+      id={id}
+      role="dialog"
+      aria-label="Iteration variants"
+      className="isotone-panel isotone-variants-panel"
+      data-open={view.active}
+      aria-hidden={!view.active}
+      ref={(node) => {
+        node?.toggleAttribute('inert', !view.active);
+      }}
+    >
+      <PanelClose label="Close variants" onClose={onClose} />
+      {view.active && <div {...resizeHandle} />}
+      <VariantsView {...view} />
+    </section>
+  );
+}
 
 /**
  * A section of selectors: a sticky header that names the part of the page and

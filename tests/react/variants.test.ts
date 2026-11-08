@@ -98,6 +98,14 @@ async function render(element: React.ReactElement) {
   await act(async () => r.render(element));
 }
 
+/** A long list renders a first screenful, then the rest a chunk per frame: wait for every chunk. */
+async function renderRemaining() {
+  for (let count = -1; count !== container.querySelectorAll('.isotone-axis').length; ) {
+    count = container.querySelectorAll('.isotone-axis').length;
+    await act(async () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0))));
+  }
+}
+
 function click(el: Element | null | undefined) {
   if (!el) throw new Error('nothing to click');
   return act(async () => {
@@ -223,6 +231,7 @@ describe('VariantsView', () => {
     }));
     const source = createVariantsSource({ axes });
     await render(createElement(VariantsView, { source }));
+    await renderRemaining();
     expect(container.querySelectorAll('.isotone-axis')).toHaveLength(500);
     const last = container.querySelectorAll<HTMLButtonElement>('.isotone-seg')[999];
     await click(last);
@@ -365,6 +374,25 @@ describe('VariantsView', () => {
     expect(container.querySelectorAll('.isotone-grid .isotone-thumb')).toHaveLength(2);
     expect(container.querySelector('.isotone-thumb[aria-checked=true]')?.textContent).toBe('Left');
     expect(container.querySelector('.isotone-segs')).toBeNull();
+  });
+
+  it('moves a row at a time with Up and Down in a thumbnail grid', async () => {
+    const options = ['One', 'Two', 'Three'].map((label, i) => ({ id: String(i), label, image: `data:,${i}` }));
+    const source = createVariantsSource({ axes: [{ id: 'hero', label: 'Hero', options, defaultOption: '0' }] });
+    await render(createElement(VariantsView, { source }));
+    const press = (key: string) =>
+      act(async () => {
+        const checked = container.querySelector<HTMLElement>('.isotone-thumb[aria-checked=true]');
+        checked?.focus();
+        checked?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      });
+    const picks: (string | undefined)[] = [];
+    for (const key of ['ArrowDown', 'ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowRight', 'ArrowRight']) {
+      await press(key);
+      picks.push(source.getSelections().hero);
+    }
+    // Down goes to the next row and stops at the last; Right goes along and wraps.
+    expect(picks).toEqual(['2', '2', '0', '1', '2', '0']);
   });
 
   it('renders colour swatches and the custom picker', async () => {
@@ -980,7 +1008,7 @@ describe('review dock interactions', () => {
     expect(saved[0]?.variantAction).toEqual({ axisId: 'headline', action: 'remove-option', optionId: 'b' });
     expect(manage).not.toHaveBeenCalled();
     expect(labels()).toEqual(['Headline', 'Tagline', 'Haze']);
-    expect(byText('Cancel removal')).toBeDefined();
+    expect(byText('Cancel removal: Remove “Bold” from Headline.')).toBeDefined();
     await click(container.querySelector('.isotone-note-hit'));
     expect(container.querySelector('textarea')?.value).toContain('Remove “Bold”');
     await typeFeedback('Remove this option after checking the alternative layout.');
@@ -999,7 +1027,7 @@ describe('review dock interactions', () => {
     expect(labels()).toEqual(['Headline', 'Tagline', 'Haze']);
     // The rail button's name carries the count the badge shows.
     await click(byText('Feedback, 1 note'));
-    await click(byText('Cancel removal'));
+    await click(container.querySelector('[title="Cancel removal"]'));
     expect(labels()).toEqual(['Headline', 'Tagline', 'Haze']);
     expect(source.getSelections().headline).toBe('b');
     expect(source.getAxes()).toHaveLength(3);
@@ -1535,6 +1563,7 @@ describe('review dock interactions', () => {
       }));
       const source = createVariantsSource({ axes });
       await render(createElement(VariantsView, { source }));
+      await renderRemaining();
       expect(container.querySelectorAll('.isotone-axis')).toHaveLength(500);
       expect(container.querySelectorAll('.isotone-section')).toHaveLength(42);
       const last = container.querySelectorAll<HTMLButtonElement>('.isotone-seg')[999];
