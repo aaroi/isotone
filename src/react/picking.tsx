@@ -45,7 +45,7 @@ const isPanelElement = (node: EventTarget | null) => node instanceof Element && 
  * open or take focus from the pin; Shift passes everything through, so the
  * page can still open menus and tabs first.
  */
-export function usePicker(context: PickerContext) {
+function usePicker(context: PickerContext) {
   const latest = useRef(context);
   latest.current = context;
   // The elements clicked, by selector. A re-render can shift a path onto a
