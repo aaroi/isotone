@@ -2,7 +2,8 @@
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { IterationPanel, mountIteration, type IterationNote, type IterationTheme } from '../../src/react/index';
+import type { IterationNote } from '../../src/core';
+import { IterationPanel, mountIteration, type IterationTheme } from '../../src/react/index';
 
 let container: HTMLDivElement;
 let root: Root;

@@ -20,7 +20,8 @@ import { dirname, join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createServer, type ViteDevServer } from 'vite';
 
-import { iteration, withNativeFetch, type IterationViteOptions } from '../../src/vite/index';
+import { withNativeFetch } from '../../src/vite/html-inject';
+import { isotone, iteration, type IterationViteOptions } from '../../src/vite/index';
 import { NOTES_ENDPOINT } from '../../src/node/notes/handler';
 import { VARIANTS_ENDPOINT } from '../../src/core/variants';
 import { UPDATE_ENDPOINT } from '../../src/node/update/check';
@@ -53,7 +54,7 @@ beforeAll(async () => {
       },
     },
     plugins: [
-      iteration({ file: notesFile, theme: 'system' }),
+      isotone({ file: notesFile, theme: 'system' }),
       {
         // A stand-in for a framework's SSR handler: the document arrives as
         // Uint8Array chunks through res.write/res.end, with the ETag and
@@ -232,7 +233,7 @@ describe('the Vite adapter, served', () => {
       logLevel: 'silent',
       server: { port: 0, host: '127.0.0.1', watch: null },
       optimizeDeps: { noDiscovery: true, include: [] },
-      plugins: [iteration({ file: 'notes/here.json' })],
+      plugins: [isotone({ file: 'notes/here.json' })],
     });
     try {
       await relativeServer.listen();
@@ -261,7 +262,7 @@ describe('the Vite adapter, served', () => {
       logLevel: 'silent',
       server: { port: 0, host: '127.0.0.1', watch: null },
       optimizeDeps: { noDiscovery: true, include: [] },
-      plugins: [iteration({ panel: false, checkForUpdates: false })],
+      plugins: [isotone({ panel: false, checkForUpdates: false })],
     });
     try {
       await manual.listen();
@@ -341,6 +342,12 @@ describe('the Vite adapter, served', () => {
   });
 });
 
+describe('iteration (deprecated name)', () => {
+  it('is the same plugin as isotone()', () => {
+    expect(iteration).toBe(isotone);
+  });
+});
+
 describe('withNativeFetch', () => {
   it('lands right after <head>, and after <body> when there is no head', () => {
     expect(withNativeFetch('<html><head lang="en"><title>x</title></head><body></body></html>')).toMatch(
@@ -363,7 +370,7 @@ describe('withNativeFetch', () => {
 /* ── overlay variants, hooks driven directly ─────────────────────────── */
 
 /**
- * The hooks as this file calls them. `iteration()` returns the structural
+ * The hooks as this file calls them. `isotone()` returns the structural
  * `IterationPlugin` on purpose (see its doc comment), so the test reaches
  * the hooks through a cast rather than vite's `Plugin` type.
  */
@@ -429,7 +436,7 @@ function tempProject(): { root: string; source: string; override: string; table:
 }
 
 function plugin(root: string, command: 'serve' | 'build', options: IterationViteOptions = {}): Hooks {
-  const hooks = iteration(options) as unknown as Hooks;
+  const hooks = isotone(options) as unknown as Hooks;
   hooks.configResolved({ root, command, assetsInclude: () => false });
   return hooks;
 }
@@ -1000,7 +1007,7 @@ interface LiveHooks extends Hooks {
 
 /** A React project on Vite 6+: live switching turns itself on. */
 function livePlugin(root: string): { hooks: LiveHooks; server: FakeServer & { environments: unknown } } {
-  const hooks = iteration({}) as unknown as LiveHooks;
+  const hooks = isotone({}) as unknown as LiveHooks;
   (hooks.configResolved as (c: unknown) => void)({
     root,
     command: 'serve',

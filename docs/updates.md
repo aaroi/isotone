@@ -64,10 +64,7 @@ The note carries a structured `update` field next to its text:
 }
 ```
 
-The [agent guide](agent-guide.md#update-notes) says how the agent carries it out:
-run the command only in that exact form and directory, restart and check the
-panel, refresh its `AGENTS.md` section with `npx isotone init --yes`, summarize the
-changelog for you and close the note.
+The [agent guide](agent-guide.md#update-notes) says how the agent carries it out.
 
 The button needs a notes endpoint and a command Isotone can name. When it
 cannot name one (Bun, competing lockfiles, an optional or peer dependency, or
@@ -76,7 +73,7 @@ the Isotone source checkout), the dialog explains why instead.
 ## Update notes without asking
 
 ```ts
-iteration({ checkForUpdates: 'note' });
+isotone({ checkForUpdates: 'note' });
 ```
 
 ```sh
@@ -89,12 +86,6 @@ once per version for each notes file. If you don't want that version, delete the
 note; it is not filed again until a newer release. The versions already offered
 are remembered in the same per-user cache directory as the daily check. The
 default stays as it is: a notice, with the button.
-
-There is deliberately no mode that installs updates silently: a compromised or
-broken release would land in every project unreviewed, one developer's dev
-server would rewrite the lockfile for the whole team, and a dev server would
-restart mid-work. An update note keeps a person in the loop at the cost of one
-click, and the agent's diff can be reviewed.
 
 ## Checking and upgrading
 
@@ -124,7 +115,7 @@ your registry credentials.
 Vite:
 
 ```ts
-iteration({ checkForUpdates: false });
+isotone({ checkForUpdates: false });
 ```
 
 Standalone:
@@ -141,7 +132,13 @@ only show update information when given an `updateEndpoint` supplied by a local
 server; they do not contact npm from the browser. GET on that endpoint returns
 the cached check, and POST files the update note.
 
-## Version ranges
+## Why nothing installs by itself
+
+There is deliberately no mode that installs updates silently: a compromised or
+broken release would land in every project unreviewed, one developer's dev
+server would rewrite the lockfile for the whole team, and a dev server would
+restart mid-work. An update note keeps a person in the loop at the cost of one
+click, and the agent's diff can be reviewed.
 
 A lockfile pins the installed version: `npm ci` and publishing a new release
 change nothing, and `npm update` stays within the declared range (`^1.0.0`

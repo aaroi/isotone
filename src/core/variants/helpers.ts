@@ -60,15 +60,6 @@ export function isDirty(axes: VariantAxis[], selections: VariantSelections): boo
   return axes.some((a) => selections[a.id] !== undefined && selections[a.id] !== axisDefault(a));
 }
 
-/**
- * Whether an axis shows, given every axis and the current selections.
- * A hidden parent hides its children. Cycles are hidden, and long chains
- * are evaluated iteratively rather than consuming the call stack.
- */
-export function isAxisVisible(axis: VariantAxis, axes: VariantAxis[], selections: VariantSelections, _depth = 0): boolean {
-  return visibilityById(axes.includes(axis) ? axes : [...axes, axis], selections).get(axis.id) ?? false;
-}
-
 export function visibleAxes(axes: VariantAxis[], selections: VariantSelections): VariantAxis[] {
   const visibility = visibilityById(axes, selections);
   return axes.filter((axis) => visibility.get(axis.id));

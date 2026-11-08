@@ -25,7 +25,8 @@ Inspect both themes, keyboard use, reduced motion, scrolling, and long content
 when changing UI.
 
 [Onboarding](onboarding.md) explains how the README prompt, `init` and its first
-run fit together, and the simulations behind them. Re-run one when changing them.
+run fit together, and the agent trial (`scripts/trial/`) that re-runs a fresh
+agent through them. Re-run it when changing them.
 
 Merging into `main` publishes automatically. Follow [the release guide](releasing.md)
 before merging; use a development branch until the change is ready for npm.
@@ -44,7 +45,7 @@ Each topic lives in one file, for one reader; other files link to it.
 | `docs/agent-guide.md` | The agent in a user's app | Setup steps, the notes loop, the note record, update notes, variant procedure |
 | The section `init` writes | The same agent, every session | Dev-only rule, the loop, trust, where the guide is |
 | `docs/integrations.md` | Whoever wires up a host | Hosts, endpoint rules, themes, production guards |
-| `docs/variants.md` | Agent and host developer | Variants, knobs, sections, live switching |
+| `docs/variants.md` | Agent and host developer | Making file variants, knobs, sections and host sources well; how switching works, last |
 | `docs/blast.md`, `updates.md`, `migration.md` | The person using Isotone | Blast, update checks, the rename |
 | `AGENTS.md`, `docs/development.md`, `design.md`, `releasing.md`, `onboarding.md` | Maintainers | Not shipped |
 
@@ -92,9 +93,13 @@ same outline.
 included, keeps `node:*` out of core, react and standalone, and keeps React
 packages out of everything but react and standalone. Biome refuses import cycles.
 
-Public entry points are `react`, `core`, `server`, `serve`, `vite`, and `cli`.
-Keep browser code out of server entries and keep React/Vite optional for CLI and
-standalone consumers. The build bundles only the icons used by the panel.
+Public entry points are `react`, `core`, `server`, `serve`, `vite`, and `cli`,
+built to `dist/<name>.js`; the `isotone` binary is `dist/bin.js`. Each barrel
+(`src/<name>/index.ts`) exports only names the docs or the demo use, listed in
+`tests/package/exports.test.ts`: add one there on purpose, and list a removal
+in the CHANGELOG. Keep browser code out of server entries and keep React/Vite
+optional for CLI and standalone consumers. The build bundles only the icons
+used by the panel.
 
 ## Local workflow
 

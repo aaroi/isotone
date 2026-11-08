@@ -71,7 +71,7 @@ const read = (file) => readFileSync(file, 'utf8');
 const rel = (file) => relative(app, file);
 
 function isotone(args) {
-  const bin = join(app, 'node_modules', 'isotone', 'dist', 'cli.js');
+  const bin = join(app, 'node_modules', 'isotone', 'dist', 'bin.js');
   if (!existsSync(bin)) return { status: 127, stdout: '', stderr: 'isotone is not installed' };
   return run(process.execPath, [bin, ...args], { cwd: app, env: { ...process.env, ISOTONE_UPDATE_CHECK: '0' } });
 }

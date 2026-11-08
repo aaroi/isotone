@@ -97,7 +97,7 @@ export function knobVar(id: string): string {
 /** Fired on `<html>`, bubbling, when a knob's value changes. `detail` is
  *  `{ id, value }` with the same value the custom property holds, or `null`
  *  when the knob went back to its default. */
-export const KNOBS_EVENT = 'isotone:knob';
+const KNOBS_EVENT = 'isotone:knob';
 
 /** The property's value: a range carries its unit, a colour is its hex, a select is the option id. */
 export function knobCssValue(axis: KnobAxis, value: string): string {

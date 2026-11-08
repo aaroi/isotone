@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { describeIterationElement, isRouteVisible, type NodeLike } from '../../src/core/index';
+import { describeIterationElement, type NodeLike } from '../../src/core/element';
+import { isRouteVisible } from '../../src/core/routes';
 
 function node(tagName: string, overrides: Partial<NodeLike> = {}) {
   return { tagName, children: [], ...overrides } as NodeLike;

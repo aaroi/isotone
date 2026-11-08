@@ -71,7 +71,8 @@ plugin line that only acts on the dev server; on any other dev server, a small
 local server and a script tag that loads only on localhost. `init --yes` also
 adds a short section to `AGENTS.md` that teaches your agent the loop. The
 [integration guide](docs/integrations.md) covers every setup and how each stays
-out of production. Coming from `iso-iterate`? See the [migration guide](docs/migration.md).
+out of production, and how to review from your phone. Coming from `iso-iterate`?
+See the [migration guide](docs/migration.md).
 
 ## Blast mode
 

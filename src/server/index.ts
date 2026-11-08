@@ -1,34 +1,20 @@
-import { checkRequest, type HandlerResponse, httpFailure, readWebJson } from '../node/http';
 /**
- * isotone — server.
+ * isotone/server — the notes and variants endpoints for any Request runtime.
  *
- * The transport-agnostic side of the loop: the file store and a pure request
- * handler that any dev runtime (Vite middleware, Next route handler, Bun.serve,
- * Vercel function, plain `node:http`) can render. No React and no Vite here —
- * keep this subpath framework-free.
+ * `serveNotesRequest` and `serveVariantsRequest` take a `Request` (a Next
+ * route handler, Bun.serve, a Vercel function) and apply the endpoint rules;
+ * `notesResponse` and `variantsResponse` are the unguarded handlers under
+ * them, and `readNotes` reads the notes file from a script. No React and no
+ * Vite here. tests/package/exports.test.ts lists every name.
  */
-
-export { ensureFileIgnored } from '../node/fs/git-exclude';
-export { notesResponse, NOTES_ENDPOINT } from '../node/notes/handler';
-export { readNotes, writeNotes, updateNotes } from '../node/notes/store';
-export { PAYLOAD_MAX } from '../core/limits';
+import { checkRequest, type HandlerResponse, httpFailure, readWebJson } from '../node/http';
 import { notesResponse } from '../node/notes/handler';
-export type { NotesRequest, NotesResponse } from '../node/notes/handler';
-export type { StoredNote } from '../node/notes/store';
-
-export {
-  ACTIVE_FILE,
-  DEFAULT_VARIANTS_DIR,
-  listVariants,
-  readActive,
-  variantsResponse,
-  writeActive,
-} from '../node/variants';
-import { variantsResponse } from '../node/variants';
-import type { VariantsStoreOptions } from '../node/variants';
-export type { VariantsStoreOptions } from '../node/variants';
-export { VARIANTS_ENDPOINT } from '../core/variants';
+import { type VariantsStoreOptions, variantsResponse } from '../node/variants';
 import { VARIANTS_ENDPOINT } from '../core/variants';
+
+export { notesResponse, type NotesRequest, type NotesResponse } from '../node/notes/handler';
+export { readNotes, type StoredNote } from '../node/notes/store';
+export { variantsResponse, type VariantsStoreOptions } from '../node/variants';
 
 export interface ServeRequestOptions {
   /**

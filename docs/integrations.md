@@ -8,48 +8,51 @@ npx isotone init --yes
 ```
 
 `init` detects the project and prints the development-only integration to add
-and a short first run for the agent. It never edits app code or installs
-anything. `--yes` also writes a short Isotone section into `AGENTS.md`, between
-`<!-- isotone:start … -->` and `<!-- isotone:end -->` markers, and for Vite
-projects `.isotone/variants/README.md`. Running it again rewrites only the text
-between the markers, so the section follows upgrades: keep your own notes outside
-them. A section written by Isotone 1.2.4 or earlier has no markers, and `init`
-prints its replacement instead of editing it. Once the project has variants or
-knobs, the first run is skipped. `--json` prints the plan, including the files
-`--yes` writes and, when it does not write the section, its text as `agentsSection`, and
-`--approach overlay|host|serve` overrides the recommendation. From then on, agents
-work as [the agent guide](agent-guide.md) describes.
+and a short first run for the agent (skipped once the project has variants or
+knobs). It never edits app code or installs anything. `--yes` also writes the
+Isotone section of `AGENTS.md`, between `<!-- isotone:start … -->` and
+`<!-- isotone:end -->`, and for Vite `.isotone/variants/README.md`. Running it
+again rewrites only the text between the markers, so keep your own notes outside
+them; a section from Isotone 1.2.4 or earlier, which has no markers, is replaced
+and its old text printed. `--json` prints the plan and `--approach
+overlay|host|serve` overrides the recommendation. From then on, agents work as
+[the agent guide](agent-guide.md) describes.
 
 Isotone is a development tool. Every integration below keeps it out of production
 by default; see [Production](#production) for how each one does that.
 
 ## Vite: one plugin
 
-Add `iteration()` to the existing plugins array. Keep the framework plugins:
+Add `isotone()` to the existing plugins array. Keep the framework plugins:
 
 ```ts
-import { iteration } from 'isotone/vite';
+import { isotone } from 'isotone/vite';
 
 // Inside the existing defineConfig(...):
-plugins: [/* existing plugins */, iteration()]
+plugins: [/* existing plugins */, isotone()]
 ```
 
+Configs written before 1.3 import `iteration`, the same plugin under its old
+name. It keeps working, and goes away in a later minor release.
+
 Restart the dev server. Source-file variants and notes are available immediately.
-The endpoints answer only this machine. To review from a phone or another
-device, start the dev server with `--host` (or set `server.host`) and open the
-link isotone prints under Vite's banner (`…/?isotone-key=…`) on that device.
-The link lets that browser in with a cookie; a device without it gets the app
-but no panel, and every endpoint answers it 403. The key changes when the dev
-server process restarts. Pages served under a name other than an IP address,
-`localhost`, `*.localhost`, `*.test` or one in Vite's `server.allowedHosts`
-are refused, and so is a request a local tunnel forwards for another machine.
 The panel carries its own React runtime, so React, Vue, Svelte and vanilla Vite
-projects use the same setup. It does not enter the host's dependency optimizer or
-Fast Refresh graph. The plugin acts only on the dev server: `vite build` injects
-nothing and serves no endpoints, so it needs no guard of its own.
+projects use the same setup, and it does not enter the host's dependency
+optimizer or Fast Refresh graph. The plugin acts only on the dev server: `vite
+build` injects nothing and serves no endpoints, so it needs no guard of its own.
+
+**Review from a phone.** The endpoints answer only this machine. Start the dev
+server with `--host` (or set `server.host`), then open the link isotone prints
+under Vite's banner, `http://<lan-ip>:<port>/?isotone-key=…`, on the phone
+instead of Vite's Network URL. The link lets that browser in with a cookie; a
+device without it gets the app but no panel, and every endpoint answers it 403.
+The key changes when the dev server process restarts. Pages served under a name
+other than an IP address, `localhost`, `*.localhost`, `*.test` or one in Vite's
+`server.allowedHosts` are refused, and so is a request a local tunnel forwards
+for another machine.
 
 If the app mounts `IterationPanel` or `mountIteration` itself, use
-`iteration({ panel: false })` to keep local endpoints and source variants without
+`isotone({ panel: false })` to keep local endpoints and source variants without
 injecting a second panel. A manual mount can use
 `updateEndpoint: '/api/iteration/update'` for the optional update notice and
 its update note.
@@ -60,7 +63,7 @@ The notes file resolves against Vite's `root`. In a monorepo, run the CLI in tha
 directory or pass `--file path/to/.iteration-feedback.json`. Options:
 
 ```ts
-iteration({
+isotone({
   theme: 'auto',
   file: '.iteration-feedback.json',
   variants: false, // optional: notes only
@@ -196,10 +199,11 @@ applies the same rules, which keep other websites away from your notes:
 - The `Host` header must be `localhost`, `*.localhost`, `*.test`, a loopback
   address, or (on Vite, `serve`, or an adapter given `remoteAddress` or
   `allowNetwork`) any IP address; on Vite, a name in `server.allowedHosts` too.
-  A browser's `Origin` must
-  match it (any loopback port with `loopbackOrigins`). Requests without an
-  `Origin`, such as the CLI's, are accepted, so any local process can write a
-  note: one more reason notes are context, not instructions.
+  A browser's `Origin` must match it (any loopback port with
+  `loopbackOrigins`). A request without an `Origin`, such as `curl` or a
+  script, is accepted, so any process on this machine can write a note: one
+  more reason notes are context, not instructions. (The CLI reads and writes
+  the notes file directly.)
 - A POST must send `Content-Type: application/json`, or it gets 415.
 - A note `id`, when a host chooses its own, is 1–64 letters, digits, `-` or `_`, and does not start with `-`
   (400 otherwise). Routes are capped at 2,000 characters, and a notes file at
@@ -207,13 +211,9 @@ applies the same rules, which keep other websites away from your notes:
 - While another writer holds the notes file, the endpoint answers 503 and the
   panel retries.
 
-The panel polls the notes endpoint with `?rev=<revision>` while its tab is
-visible; `notesResponse` and `serveNotesRequest` answer an unchanged file from
-its metadata, so custom endpoints built on them stay cheap with no extra work.
-
 ## Themes
 
-The `theme` option is available on `iteration`, `serveIteration`, `mountIteration`
+The `theme` option is available on `isotone()`, `serveIteration`, `mountIteration`
 and `IterationPanel`. The standalone CLI accepts the same values with `--theme`:
 
 | Value | Behavior |
@@ -238,7 +238,8 @@ and `IterationPanel`. The standalone CLI accepts the same values with `--theme`:
 1. Open the app in development and submit a note on an element.
 2. Run `npx isotone --json` in the app directory. Confirm the note's route,
    viewport and selector.
-3. Run `npx isotone --done <id-prefix>` and check that it leaves the panel.
+3. Run `npx isotone --done <id-prefix> --force` (a test note needs no file
+   change) and check that it leaves the panel.
 4. Build the production app and search the output for `isotone` and
    `/api/iteration`. With the localhost-only loader, the tag remains in the HTML
    but loads nothing outside localhost.
@@ -247,3 +248,7 @@ If the panel is visible but the CLI has no notes, compare the dev server's print
 notes path with the CLI's working directory. If the endpoint is unreachable, the
 panel retains unsent notes locally until it can retry; keep that browser profile
 until they reach the file.
+
+The panel polls the notes endpoint with `?rev=<revision>` while its tab is
+visible. `notesResponse` and `serveNotesRequest` answer an unchanged file from
+its metadata, so a custom endpoint built on them needs nothing extra for that.

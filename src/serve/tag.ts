@@ -1,3 +1,6 @@
+/** The port `isotone serve` listens on unless given `--port`. */
+export const DEFAULT_PORT = 4123;
+
 /**
  * The script tag for a page served by another dev server, guarded so it
  * requests nothing unless the page itself is on loopback. A plain tag that

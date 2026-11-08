@@ -3,7 +3,7 @@
 import type { VariantAxis } from './axes';
 
 /** How a section and its selector are joined for display: `Header › Logo size`. */
-export const SECTION_SEPARATOR = ' › ';
+const SECTION_SEPARATOR = ' › ';
 
 export interface SectionedLabel {
   /** The section's display name, or `null` for a selector without one. */
