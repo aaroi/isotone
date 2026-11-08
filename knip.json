@@ -1,5 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["scripts/capture/record-loop.mjs"],
+  "entry": ["scripts/capture/record-loop.mjs", "scripts/trial/{prepare,seed-notes,score}.mjs"],
+  "ignore": ["scripts/trial/fixtures/**"],
   "ignoreBinaries": ["ffmpeg"]
 }
