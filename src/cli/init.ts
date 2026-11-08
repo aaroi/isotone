@@ -400,6 +400,10 @@ function printRouteAlternative(print: Print): void {
   print();
   for (const line of ROUTE_HANDLER_EXAMPLE) print(line ? `  ${line}` : '');
   print();
+  print('`next dev` listens on every network interface, so bind it to this machine in the');
+  print('package.json dev script, "dev": "next dev -H 127.0.0.1", or other devices on the');
+  print('network can reach the route.');
+  print();
   print('Manual handlers do not change Git exclusions: add .iteration-feedback.json to');
   print('.gitignore. Then mount the panel from a client module, in development only, and');
   print('call the disposer it returns on unmount (direct imports need react and react-dom):');

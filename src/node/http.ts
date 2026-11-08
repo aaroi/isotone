@@ -1,5 +1,4 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { isIP } from 'node:net';
 
 import { MAX_BODY_BYTES } from '../core/limits';
 import { LockBusyError } from './fs/lock';
@@ -52,12 +51,11 @@ function isLoopbackName(name: string): boolean {
 
 /**
  * Whether a Host header names this machine the way a local browser would: a
- * loopback name ({@link isLoopbackName}), one the dev server was told to
- * allow (Vite's `server.allowedHosts`; a leading dot allows subdomains), or,
- * with `anyAddress`, any IP literal (a LAN address the server listens on). A
+ * loopback name ({@link isLoopbackName}) or one the dev server was told to
+ * allow (Vite's `server.allowedHosts`; a leading dot allows subdomains). A
  * DNS-rebinding page sends its own public domain, which fails.
  */
-function isLocalHostHeader(host: string | null | undefined, allowed: readonly string[], anyAddress: boolean): boolean {
+function isLocalHostHeader(host: string | null | undefined, allowed: readonly string[]): boolean {
   if (!host) return false;
   let name: string;
   try {
@@ -65,7 +63,7 @@ function isLocalHostHeader(host: string | null | undefined, allowed: readonly st
   } catch {
     return false;
   }
-  if (isLoopbackName(name) || (anyAddress && isIP(name))) return true;
+  if (isLoopbackName(name)) return true;
   return allowed.some((entry) => {
     const rule = entry.toLowerCase();
     return rule.startsWith('.') ? name === rule.slice(1) || name.endsWith(rule) : name === rule;
@@ -123,23 +121,14 @@ export function isFromThisMachine(request: RequestFacts): boolean {
 }
 
 /**
- * Every endpoint's gate. Unless `network` is set, the request must come from
- * this machine ({@link isFromThisMachine}). The Host must be local
- * ({@link isLocalHostHeader}; an IP literal counts only when the peer was
- * checked or `network` is set, since without a peer address a LAN client
- * shows up as nothing but the server's LAN IP), and a page's Origin must
- * match it (or be any loopback page with `loopbackOrigins`). `network` is for
- * a caller that has let the request in some other way: the Vite plugin's
- * access cookie, or a Request adapter's explicit `allowNetwork`.
+ * Every endpoint's gate. The request must come from this machine
+ * ({@link isFromThisMachine}), its Host must be local
+ * ({@link isLocalHostHeader}), and a page's Origin must match it (or be any
+ * loopback page with `loopbackOrigins`).
  */
-export function checkRequest(
-  request: RequestFacts & { allowedHosts?: readonly string[]; loopbackOrigins?: boolean; network?: boolean },
-): void {
-  if (!request.network && !isFromThisMachine(request)) {
-    throw new HttpError(403, 'isotone answers only requests from this machine');
-  }
-  const anyAddress = request.network === true || request.remoteAddress !== undefined;
-  if (!isLocalHostHeader(request.host, request.allowedHosts ?? [], anyAddress)) throw new HttpError(403, 'host not allowed');
+export function checkRequest(request: RequestFacts & { allowedHosts?: readonly string[]; loopbackOrigins?: boolean }): void {
+  if (!isFromThisMachine(request)) throw new HttpError(403, 'isotone answers only requests from this machine');
+  if (!isLocalHostHeader(request.host, request.allowedHosts ?? [])) throw new HttpError(403, 'host not allowed');
   checkOrigin(request.origin, request.host ?? '', request.loopbackOrigins);
 }
 

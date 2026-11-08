@@ -348,7 +348,7 @@ describe('Request adapter boundaries', () => {
     }
   });
 
-  it('keeps other devices on the network out unless the host opts in', async () => {
+  it('keeps other devices on the network out', async () => {
     // `next dev` listens on every interface, so a phone or laptop on the same
     // Wi-Fi reaches the route at the machine's LAN address.
     const file = tempFile();
@@ -371,16 +371,11 @@ describe('Request adapter boundaries', () => {
     // This machine: directly, through a local proxy, or by its peer address.
     const local = note('http://localhost:3000/api/notes', { ...json, 'x-forwarded-for': '127.0.0.1, ::1' });
     expect((await serveNotesRequest(file, local)).status).toBe(201);
-    expect((await serveNotesRequest(file, note('http://192.168.1.20:3000/api/notes'), { remoteAddress: '::ffff:127.0.0.1' })).status).toBe(
-      201,
-    );
-    // A deliberate opt-in lets the phone in.
-    const phone = note(lan, { ...json, origin: 'http://192.168.1.20:3000' });
-    expect((await serveNotesRequest(file, phone, { allowNetwork: true, remoteAddress: '192.168.1.30' })).status).toBe(201);
-    // Opting in does not let other websites in.
-    const foreign = note(lan, { ...json, origin: 'https://outside.example' });
-    expect((await serveNotesRequest(file, foreign, { allowNetwork: true })).status).toBe(403);
-    expect(readNotes(file)).toHaveLength(3);
+    const peer = note('http://localhost:3000/api/notes');
+    expect((await serveNotesRequest(file, peer, { remoteAddress: '::ffff:127.0.0.1' })).status).toBe(201);
+    // A LAN address as Host is refused even from a loopback peer.
+    expect((await serveNotesRequest(file, note(lan), { remoteAddress: '127.0.0.1' })).status).toBe(403);
+    expect(readNotes(file)).toHaveLength(2);
   });
 
   it('returns a JSON failure when the store cannot be read', async () => {

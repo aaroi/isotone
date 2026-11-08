@@ -5,8 +5,7 @@
  *
  * The plugin composes: ./overrides (what the variants store answers for a
  * path), ./switching (swapping the active set and the watcher), ./middleware
- * (the endpoints), ./html-inject (the panel in each page) and ./access (other
- * devices on the network).
+ * (the endpoints), and ./html-inject (the panel in each page).
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
@@ -30,7 +29,7 @@ import { NOTES_ENDPOINT } from '../node/notes/handler';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
 import { autoUpdateNote } from '../node/update/note';
 import { listVariants } from '../node/variants';
-import { hostPolicy, type NetworkAccess, networkAccess } from './access';
+import { isLoopback } from '../node/http';
 import { mountModuleSource, servePanel } from './html-inject';
 import {
   BASE_VERSION,
@@ -59,23 +58,20 @@ const DEFAULT_FILE = '.iteration-feedback.json';
  */
 const SPECIAL_QUERY = /[?&](raw|url|inline|no-inline|worker|sharedworker|html-proxy)(?:[&=]|$)/;
 
-/** Say where the notes go, and how another device gets in, after Vite's own
- *  banner so it is not buried under it. Portable setups fail quietly
- *  otherwise: a reviewer writes notes and the agent looks in the wrong place. */
-function announce(server: ViteDevServer, file: string, variantsDir: string | null, count: () => number, access: NetworkAccess): void {
+/** Say where the notes go after Vite's own banner, so it is not buried under
+ *  it. Portable setups fail quietly otherwise: a reviewer writes notes and the
+ *  agent looks in the wrong place. */
+function announce(server: ViteDevServer, file: string, variantsDir: string | null, count: () => number): void {
   server.httpServer?.once('listening', () => {
-    const { logger, root, server: config, base } = server.config;
+    const { logger, root, server: config } = server.config;
     logger.info(`  isotone  notes → ${relative(root, file) || file}  (${NOTES_ENDPOINT})`);
     if (variantsDir && existsSync(variantsDir)) {
       const n = count();
       logger.info(`  isotone  variants → ${relative(root, variantsDir) || variantsDir}  (${n} variant${n === 1 ? '' : 's'})`);
     }
-    if (!hostPolicy(config).network) return;
-    const address = server.httpServer?.address();
-    const port = typeof address === 'object' && address ? address.port : (config?.port ?? 5173);
-    const protocol = config?.https ? 'https' : 'http';
-    for (const link of access.links(server.resolvedUrls?.network, { protocol, host: config?.host, port, base: base ?? '/' })) {
-      logger.info(`  isotone  other devices get the panel from ${link}`);
+    const host = config?.host;
+    if (host === true || (typeof host === 'string' && !isLoopback(host))) {
+      logger.info('  isotone  the panel answers only this machine; other devices get the app alone');
     }
   });
 }
@@ -159,9 +155,11 @@ export function isotone(options: IterationViteOptions = {}): IterationPlugin {
       if (!isDev) return;
       // Here, not at construction: a production build should not touch .git.
       ensureFileIgnored(file);
-      const access = networkAccess();
-      const gate: Gate = { policy: () => hostPolicy(server.config.server), access };
-      announce(server, file, variantsOptions ? overrides.dir : null, () => listVariants(overrides.opts).length, access);
+      const allowedHosts: Gate = () => {
+        const hosts = server.config.server?.allowedHosts;
+        return Array.isArray(hosts) ? hosts : [];
+      };
+      announce(server, file, variantsOptions ? overrides.dir : null, () => listVariants(overrides.opts).length);
 
       const updates = startUpdateCheck(server.config.root, options.checkForUpdates !== false);
       server.httpServer?.once('close', updates.dispose);
@@ -170,11 +168,11 @@ export function isotone(options: IterationViteOptions = {}): IterationPlugin {
       }
       server.middlewares.use(
         UPDATE_ENDPOINT,
-        updateEndpoint(() => file, updates, gate),
+        updateEndpoint(() => file, updates, allowedHosts),
       );
       server.middlewares.use(
         NOTES_ENDPOINT,
-        notesEndpoint(() => file, gate),
+        notesEndpoint(() => file, allowedHosts),
       );
 
       if (variantsOptions) {
@@ -185,7 +183,7 @@ export function isotone(options: IterationViteOptions = {}): IterationPlugin {
         const activate = switching.attach(server, { live, ignored: variantsOptions.ignored });
         server.middlewares.use(
           VARIANTS_ENDPOINT,
-          variantsEndpoint(() => overrides.opts, activate, gate),
+          variantsEndpoint(() => overrides.opts, activate, allowedHosts),
         );
       }
 
@@ -196,7 +194,7 @@ export function isotone(options: IterationViteOptions = {}): IterationPlugin {
         options.panel === false
           ? null
           : mountModuleSource(options.rule ?? {}, options.key ?? '', variantsOptions !== null, options.shortcut, options.theme);
-      servePanel(server.middlewares.use.bind(server.middlewares) as never, access, mount, liveScript);
+      servePanel(server.middlewares.use.bind(server.middlewares) as never, mount, liveScript);
     },
   } satisfies Plugin;
 

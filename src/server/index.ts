@@ -34,15 +34,10 @@ export interface ServeRequestOptions {
   /**
    * The client's address, where the runtime exposes it (Bun's
    * `server.requestIP(request)`, a Node socket's `remoteAddress`). With it,
-   * other machines are refused whatever `Host` they send.
+   * other machines are refused whatever `Host` they send. Without it, bind
+   * the dev server to loopback (`next dev -H 127.0.0.1`).
    */
   remoteAddress?: string;
-  /**
-   * Let other devices on the network in, such as a phone you review on. Off
-   * by default: only this machine's names and addresses are accepted. Anyone
-   * on that network can then read and write your notes.
-   */
-  allowNetwork?: boolean;
 }
 
 /** The gate for a `Request`, with what the adapter was told about its sender. */
@@ -54,7 +49,6 @@ function checkWebRequest(request: Request, url: URL, options: ServeRequestOption
     forwarded: request.headers.get('forwarded'),
     ...(options.remoteAddress !== undefined ? { remoteAddress: options.remoteAddress } : {}),
     loopbackOrigins: options.loopbackOrigins,
-    network: options.allowNetwork,
   });
 }
 

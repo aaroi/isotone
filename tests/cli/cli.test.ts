@@ -490,6 +490,7 @@ describe('init', () => {
     expect(await runCli(['init', '--approach', 'serve'], serve)).toBe(0);
     expect(serve.text.out).toContain("import { serveNotesRequest } from 'isotone/server';");
     expect(serve.text.out).toContain('a Next route handler');
+    expect(serve.text.out).toContain('"dev": "next dev -H 127.0.0.1"');
   });
 
   it('warns when overlay is asked for outside a Vite repo', async () => {
