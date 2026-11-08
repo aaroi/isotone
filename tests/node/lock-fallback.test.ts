@@ -16,12 +16,21 @@ const NO_LINKS = `
   syncBuiltinESMExports();
 `;
 
+/** An error code the exclusive create of the lock fails with, when set. */
+const openFails = vi.hoisted(() => ({ code: null as string | null }));
+
 vi.mock('node:fs', async (original) => {
   const fs = await original<typeof import('node:fs')>();
   return {
     ...fs,
     linkSync: () => {
       throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+    },
+    openSync: (...args: Parameters<typeof fs.openSync>) => {
+      if (openFails.code && String(args[0]).endsWith('.lock')) {
+        throw Object.assign(new Error(`${openFails.code}: refused, open '${args[0]}'`), { code: openFails.code });
+      }
+      return fs.openSync(...args);
     },
   };
 });
@@ -31,6 +40,7 @@ beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'iso-lock-nolink-'));
 });
 afterEach(() => {
+  openFails.code = null;
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -44,6 +54,23 @@ it('holds the lock with its owner written, refuses a second writer, and cleans u
   });
   expect(seen).toBe('first');
   expect(readdirSync(root)).toEqual([]);
+});
+
+it('reports a lock it cannot create as an error at once, not as a busy store', () => {
+  const file = join(root, 'notes.json');
+  for (const code of ['EACCES', 'EROFS', 'ENOENT']) {
+    openFails.code = code;
+    const started = Date.now();
+    let caught: unknown;
+    try {
+      withFileLock(file, () => 'ran', { waitMs: 2_000 });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught, code).not.toBeInstanceOf(LockBusyError);
+    expect((caught as Error).message, code).toBe(`Cannot lock the local store ${file}: ${code}: refused, open '${file}.lock'`);
+    expect(Date.now() - started, code).toBeLessThan(1_000);
+  }
 });
 
 it('still takes over an abandoned lock', () => {
