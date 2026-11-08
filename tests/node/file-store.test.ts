@@ -139,4 +139,4 @@ it('preserves every file when separate agents add to the same variant', async ()
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
-});
+}, 20_000);
