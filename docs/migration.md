@@ -30,10 +30,3 @@ storage keys for offline notes, drafts, and knob selections. A different host,
 port, or browser profile has separate storage. Custom keys stay unchanged.
 
 Existing `iso-iterate` versions remain installable.
-
-## Request handlers are off in production
-
-Since 1.2.0, `serveNotesRequest` and `serveVariantsRequest` answer 404 when
-`NODE_ENV` is `production`. A deliberate, access-controlled review deployment
-passes `{ allowProduction: true }` as the third argument; see
-[Production](integrations.md#production).
