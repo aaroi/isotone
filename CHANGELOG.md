@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- **The panel reads more clearly in both themes, with a softer, rounder look.** Panels are rounded cards with layered shadows, and buttons, chips and segmented choices are capsules. Send is the one coloured control, and the count on the pill shares its colour. Labels are lighter, sliders are round knobs on a clear groove, and the default option's dot sits beside the label so the hover chevron no longer hides it. Layout, behaviour and the light and dark themes are otherwise unchanged.
+- **A selector's action dialog no longer covers its heading on a short panel.** When it fits neither above nor below the heading, it opens on the roomier side and scrolls there.
+- **Scrolled notes no longer show through under the page chips** in the feedback panel.
+
 ## 1.3.1
 
 - Merge pull request #42 from aaroi/prompt-followup

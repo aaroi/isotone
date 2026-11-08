@@ -383,6 +383,28 @@ function useRemovalFocus(
  * dialog sits directly above the clicked heading or option when there is room.
  * `content` lists what changes the dialog's size.
  */
+/** The least height worth scrolling a selector dialog in beside its heading rather than over it. */
+const MIN_SIDE_HEIGHT = 160;
+
+/**
+ * Where a selector dialog sits in its panel, in pixels from the panel's top. It
+ * opens above the heading or option that opened it, else below, so it never
+ * covers it. When it fits on neither side, it takes the roomier side and scrolls
+ * there (`max` bounds a dialog squeezed above); only when neither side has a
+ * useful height does it cover the heading from the panel's top.
+ */
+export function placeDialog(natural: number, panelHeight: number, anchor?: { top: number; bottom: number }): { top: number; max?: number } {
+  if (!anchor) return { top: 6 };
+  const above = anchor.top - natural - 6;
+  const below = anchor.bottom + 6;
+  if (above >= 6) return { top: above };
+  if (below + natural <= panelHeight - 6) return { top: below };
+  const roomAbove = anchor.top - 12;
+  const roomBelow = panelHeight - below - 6;
+  if (Math.max(roomAbove, roomBelow) < MIN_SIDE_HEIGHT) return { top: 6 };
+  return roomBelow >= roomAbove ? { top: below } : { top: 6, max: roomAbove };
+}
+
 function useMenuPlacement(
   menuRef: RefObject<HTMLDivElement | null>,
   opener: RefObject<HTMLButtonElement | null>,
@@ -400,6 +422,7 @@ function useMenuPlacement(
     const clear = () => {
       root.style.removeProperty('--iso-menu-need');
       root.style.removeProperty('--iso-menu-top');
+      root.style.removeProperty('--iso-menu-max');
     };
     // A closing dialog keeps its place and the room it took until its fade has
     // finished; dropping them at once moved it to the panel's top mid-fade.
@@ -411,23 +434,33 @@ function useMenuPlacement(
       clear();
       return;
     }
+    let overflowFrame = 0;
     const place = () => {
       const natural = dialog.offsetHeight + scroll.scrollHeight - scroll.clientHeight;
       root.style.setProperty('--iso-menu-need', `${natural + 12}px`);
       const from = opener.current?.isConnected ? opener.current : null;
       const anchor = (from?.closest<HTMLElement>('.isotone-opt') ?? from)?.getBoundingClientRect();
-      const rootRect = root.getBoundingClientRect();
-      const above = anchor ? anchor.top - rootRect.top - natural - 6 : 6;
-      const below = anchor ? anchor.bottom - rootRect.top + 6 : 6;
-      // Opens below when it cannot fit above, so it never covers the option or heading that opened it.
-      const top = above >= 6 ? above : below + natural <= root.clientHeight - 6 ? below : 6;
+      const rootTop = root.getBoundingClientRect().top;
+      const { top, max } = placeDialog(
+        natural,
+        root.clientHeight,
+        anchor && { top: anchor.top - rootTop, bottom: anchor.bottom - rootTop },
+      );
       root.style.setProperty('--iso-menu-top', `${top}px`);
+      if (max === undefined) root.style.removeProperty('--iso-menu-max');
+      else root.style.setProperty('--iso-menu-max', `${max}px`);
+      // Marks a dialog that has to scroll once its placed height is laid out, for its longer bottom fade.
+      cancelAnimationFrame(overflowFrame);
+      overflowFrame = requestAnimationFrame(() => {
+        scroll.dataset.overflow = String(scroll.scrollHeight > scroll.clientHeight + 1);
+      });
     };
     place();
     window.addEventListener('resize', place);
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(place);
     observer?.observe(scroll);
     return () => {
+      cancelAnimationFrame(overflowFrame);
       window.removeEventListener('resize', place);
       observer?.disconnect();
     };
@@ -440,6 +473,7 @@ function useMenuPlacement(
       clearTimeout(release.current);
       root?.style.removeProperty('--iso-menu-need');
       root?.style.removeProperty('--iso-menu-top');
+      root?.style.removeProperty('--iso-menu-max');
     };
   }, []);
 }
