@@ -101,7 +101,9 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
     return 0;
   }
   try {
-    if (parseArgs(args, ['--file', '--port', '--host', '--theme'], ['--no-update-check', '--update-note']).length)
+    if (
+      parseArgs(args, ['--file', '--port', '--host', '--theme'], ['--no-update-check', '--update-note'], 'npx isotone serve --help').length
+    )
       throw new Error('serve does not take positional arguments.');
   } catch (error) {
     errOut(io, (error as Error).message);

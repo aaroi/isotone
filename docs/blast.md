@@ -30,16 +30,18 @@ npx isotone blast stop        # end it; a waiting agent sees it at once
 
 ## The loop
 
-The agent runs `npx isotone blast`, which waits and then ends one of three ways:
+The agent runs `npx isotone blast`, which waits and then ends in one of these ways:
 
 | Output | Exit | What the agent does |
 | --- | --- | --- |
 | A batch of new notes, in the same shape as `npx isotone --json` | 0 | Act on each note as usual (`--working`, fix, verify, `--done`), then run it again |
 | `No new notes · 32 min left · run npx isotone blast again` (a check-in every `--every`) | 0 | Run it again |
 | `Blast session over` | 3 | Stop, and give the user a short summary |
+| An error on stderr | 1 | Fix what it names; a busy notes file at the start only needs a retry |
 
 A waiting run never starts a session, so an agent that runs it after the end
-is only ever told to stop.
+is only ever told to stop. Once it is waiting, a notes file another writer
+holds for a while only delays a heartbeat or a batch.
 
 A check-in exists only so a run ends before the agent's command timeout, and
 each costs the agent a turn. An agent that can run a background task and be woken

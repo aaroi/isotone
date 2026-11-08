@@ -90,7 +90,7 @@ export function runVariant(args: string[], io: CliIO): number {
   try {
     // Validate every flag before anything is read or written: a typo such as
     // `drop x --dry-run` must fail, not delete.
-    const positionals = parseArgs(rest, spec[0], spec[1]);
+    const positionals = parseArgs(rest, spec[0], spec[1], 'npx isotone variant --help');
     if (positionals.length > spec[2]) throw new Error(`Unexpected "${positionals[spec[2]]}". Run \`isotone variant --help\`.`);
     return command(positionals, rest, io, opts);
   } catch (err) {

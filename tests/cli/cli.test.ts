@@ -50,16 +50,28 @@ function landFix(root: string, file = 'fix.txt'): void {
 describe('notes (unchanged default behaviour)', () => {
   it('prints "No open notes" for an empty file', async () => {
     const root = tempRepo();
+    writeFileSync(join(root, '.iteration-feedback.json'), '[]');
     const io = makeIo(root);
     const code = await runCli([], io);
     expect(code).toBe(0);
     expect(io.text.out).toContain('No open notes.');
   });
 
+  it('says where it looked when there is no notes file, on stderr with --json', async () => {
+    const root = tempRepo();
+    const text = makeIo(root);
+    expect(await runCli([], text)).toBe(0);
+    expect(text.text.out).toContain(`No notes file at ${join(root, '.iteration-feedback.json')} yet`);
+    const json = makeIo(root);
+    expect(await runCli(['--json'], json)).toBe(0);
+    expect(JSON.parse(json.text.out)).toEqual([]);
+    expect(json.text.err).toContain('No notes file at');
+  });
+
   it('rejects an unknown option instead of listing notes', async () => {
     const io = makeIo(tempRepo());
     expect(await runCli(['--bogus'], io)).toBe(1);
-    expect(io.text.err).toContain('Unknown option "--bogus"');
+    expect(io.text.err).toContain('Unknown option "--bogus". Run `npx isotone --help`.');
     expect(io.text.out).toBe('');
   });
 });
@@ -490,6 +502,53 @@ describe('init', () => {
     expect(await runCli(['init', '--approach', 'serve'], serve)).toBe(0);
     expect(serve.text.out).toContain('npx isotone serve');
     expect(serve.text.out).not.toContain('isotone/server');
+  });
+
+  it('says an existing integration is set up instead of adding it again, and asks to rename iteration()', async () => {
+    const root = tempRepo();
+    writeFileSync(
+      join(root, 'vite.config.ts'),
+      "import react from '@vitejs/plugin-react';\nimport { iteration } from 'isotone/vite';\nexport default { plugins: [react(), iteration()] };\n",
+    );
+    const io = makeIo(root);
+    expect(await runCli(['init'], io)).toBe(0);
+    expect(io.text.out).toContain('Already set up: vite.config.ts loads Isotone. Do not add it again.');
+    expect(io.text.out).toContain('In vite.config.ts, rename `iteration` to `isotone`');
+    expect(io.text.out).not.toContain('Add the plugin');
+    const json = makeIo(root);
+    expect(await runCli(['init', '--json'], json)).toBe(0);
+    expect(JSON.parse(json.text.out)).toMatchObject({ integration: 'rename' });
+
+    writeFileSync(join(root, 'vite.config.ts'), "import { isotone } from 'isotone/vite';\nexport default { plugins: [isotone()] };\n");
+    const current = makeIo(root);
+    expect(await runCli(['init', '--json'], current)).toBe(0);
+    expect(JSON.parse(current.text.out)).toMatchObject({ integration: 'present' });
+    expect(JSON.parse(current.text.out).instructions).not.toContain('rename');
+    // Asking for an approach by name still prints its setup.
+    const explicit = makeIo(root);
+    expect(await runCli(['init', '--approach', 'overlay'], explicit)).toBe(0);
+    expect(explicit.text.out).toContain('Add the plugin');
+  });
+
+  it('finds the serve loader tag and adapter routes as an existing integration', async () => {
+    const plain = tempRepo();
+    writeFileSync(join(plain, 'index.html'), '<head><script src="http://127.0.0.1:4123/isotone.js" defer></script></head>');
+    const io = makeIo(plain);
+    expect(await runCli(['init', '--json'], io)).toBe(0);
+    expect(JSON.parse(io.text.out)).toMatchObject({ integration: 'present' });
+    expect(JSON.parse(io.text.out).instructions).toContain('Already set up: index.html loads Isotone.');
+
+    const next = tempRepo();
+    writeFileSync(join(next, 'next.config.ts'), 'export default {};\n');
+    mkdirSync(join(next, 'app/api/iteration/notes'), { recursive: true });
+    writeFileSync(join(next, 'app/api/iteration/notes/route.ts'), "import { serveNotesRequest } from 'isotone/server';\n");
+    const routed = makeIo(next);
+    expect(await runCli(['init'], routed)).toBe(0);
+    expect(routed.text.out).toContain('Already set up: app/api/iteration/notes/route.ts loads Isotone.');
+
+    const fresh = makeIo(tempRepo());
+    expect(await runCli(['init', '--json'], fresh)).toBe(0);
+    expect(JSON.parse(fresh.text.out)).toMatchObject({ integration: 'missing' });
   });
 
   it('warns when overlay is asked for outside a Vite repo', async () => {
@@ -1069,7 +1128,7 @@ describe('variant flags', () => {
     await runCli(['variant', 'new', 'keep-me'], makeIo(root));
     const io = makeIo(root);
     expect(await runCli(['variant', 'drop', 'keep-me', '--dry-run'], io)).toBe(1);
-    expect(io.text.err).toContain('Unknown option "--dry-run"');
+    expect(io.text.err).toContain('Unknown option "--dry-run". Run `npx isotone variant --help`.');
     expect(readVariant(root, 'keep-me')).not.toBeNull();
     expect(await runCli(['variant', 'new', 'x', '--lable', 'Typo'], makeIo(root))).toBe(1);
     expect(await runCli(['variant', 'drop', 'keep-me', 'extra'], makeIo(root))).toBe(1);

@@ -8,7 +8,7 @@
  * poll as a fallback. Isotone never runs the agent.
  */
 import { type FSWatcher, statSync, watch } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname } from 'node:path';
 
 import {
   BLAST,
@@ -39,7 +39,8 @@ import {
 } from '../node/blast';
 import { noteFingerprint, notesRevision, readNotes, type StoredNote } from '../node/notes/store';
 import { notesProjectRoot } from '../node/update/request';
-import { noteRecord, printNotes } from './notes';
+import { LockBusyError } from '../node/fs/lock';
+import { findNotesFile, noteRecord, printNotes } from './notes';
 import { oneLine, shellQuote, toJson } from './text';
 import { type CliIO, errOut, extractFlag, has, out, parseArgs, valueFor } from './util';
 
@@ -117,7 +118,7 @@ export async function runBlast(argv: string[], io: CliIO, timingOverrides: Parti
   let everyArg = '';
   let notice = '';
   try {
-    const positionals = parseArgs(rest, ['--every', '--file'], ['--json', '--stream']);
+    const positionals = parseArgs(rest, ['--every', '--file'], ['--json', '--stream'], `${BLAST_CLI} --help`);
     const waits = command === 'wait' || thenWait;
     if (!waits && (has(rest, '--every') || has(rest, '--stream')))
       throw new Error('--every and --stream apply to the waiting run, `npx isotone blast`.');
@@ -149,7 +150,7 @@ export async function runBlast(argv: string[], io: CliIO, timingOverrides: Parti
   }
   const json = has(rest, '--json');
   const fileText = valueFor(rest, '--file');
-  const notesFile = resolve(io.cwd, fileText ?? '.iteration-feedback.json');
+  const notesFile = findNotesFile(io.cwd, fileText).file;
   const file = blastFile(notesFile);
   const fileFlag = fileText ? ` --file ${shellQuote(fileText)}` : '';
 
@@ -465,11 +466,23 @@ async function waitOnce(notesFile: string, file: string, every: number, timing: 
   } catch {
     /* The poll covers file systems that cannot be watched. */
   }
+  // A busy lock (another writer for over two seconds) skips a heartbeat or
+  // puts a claim off to the next wake; it never ends the wait.
+  const unlessBusy = <T>(work: () => T): T | undefined => {
+    try {
+      return work();
+    } catch (error) {
+      if (error instanceof LockBusyError) return undefined;
+      throw error;
+    }
+  };
   const beat = (now: number, waiting: boolean) =>
-    updateSession(file, (s) => ({
-      session: s && !isEnded(s, now) ? { ...s, heartbeatAt: new Date(now).toISOString(), waiting } : null,
-      result: undefined,
-    }));
+    unlessBusy(() =>
+      updateSession(file, (s) => ({
+        session: s && !isEnded(s, now) ? { ...s, heartbeatAt: new Date(now).toISOString(), waiting } : null,
+        result: undefined,
+      })),
+    );
   try {
     while (true) {
       if (interrupted) {
@@ -491,24 +504,27 @@ async function waitOnce(notesFile: string, file: string, every: number, timing: 
         const readyAt = Math.min(lastChange + timing.debounceMs, firstPending + timing.maxDebounceMs);
         if (now >= readyAt) {
           // Claim under the lock: two waiting commands never get the same note.
-          const claimed = updateSession(file, (s) => {
-            if (!s || isEnded(s, now)) return { session: null, result: null };
-            const latest = readNotesSafe(notesFile);
-            const batch = unseenNotes(latest, s);
-            const open = new Set(latest.filter((n) => !n.done).map((n) => n.id));
-            // Closed and deleted notes leave the record, so it stays small and
-            // a reopened note is handed out again.
-            const seen = Object.fromEntries(Object.entries(s.seen).filter(([id]) => open.has(id)));
-            for (const note of batch) seen[note.id] = noteFingerprint(note);
-            const nextSession = { ...s, seen, waiting: false, heartbeatAt: new Date(now).toISOString() };
-            return { session: nextSession, result: { batch, session: nextSession } };
-          });
-          if (!claimed) continue;
-          if (claimed.batch.length) return { type: 'batch', notes: claimed.batch, session: claimed.session };
-          firstPending = undefined;
-          continue;
-        }
-        wakeAt = Math.min(wakeAt, readyAt);
+          const claimed = unlessBusy(() =>
+            updateSession(file, (s) => {
+              if (!s || isEnded(s, now)) return { session: null, result: null };
+              const latest = readNotesSafe(notesFile);
+              const batch = unseenNotes(latest, s);
+              const open = new Set(latest.filter((n) => !n.done).map((n) => n.id));
+              // Closed and deleted notes leave the record, so it stays small and
+              // a reopened note is handed out again.
+              const seen = Object.fromEntries(Object.entries(s.seen).filter(([id]) => open.has(id)));
+              for (const note of batch) seen[note.id] = noteFingerprint(note);
+              const nextSession = { ...s, seen, waiting: false, heartbeatAt: new Date(now).toISOString() };
+              return { session: nextSession, result: { batch, session: nextSession } };
+            }),
+          );
+          if (claimed === null) continue;
+          if (claimed?.batch.length) return { type: 'batch', notes: claimed.batch, session: claimed.session };
+          if (claimed) {
+            firstPending = undefined;
+            continue;
+          }
+        } else wakeAt = Math.min(wakeAt, readyAt);
       } else firstPending = undefined;
       if (now >= started + every) {
         beat(now, false);

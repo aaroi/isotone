@@ -102,6 +102,63 @@ describe('--done waits for the fix to land', () => {
     expect(bad.text.err).toContain('--force only goes with --done.');
   });
 
+  it('counts a staged edit, a revert and a dropped uncommitted variant after --working', async () => {
+    const root = repo();
+    notes(root, [
+      { id: 'aaaa1111', createdAt: ago(60_000) },
+      { id: 'bbbb2222', createdAt: ago(60_000) },
+      { id: 'cccc3333', createdAt: ago(60_000) },
+    ]);
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: root });
+
+    expect(await runCli(['--working', 'aaaa'], captureIo(root))).toBe(0);
+    write(root, 'src/App.jsx', 'export default () => 1;\n');
+    git('add', 'src/App.jsx');
+    expect(await runCli(['--done', 'aaaa'], captureIo(root))).toBe(0);
+
+    // Reverting the staged edit restores the committed file: still a change.
+    expect(await runCli(['--working', 'bbbb'], captureIo(root))).toBe(0);
+    expect(await runCli(['--done', 'bbbb'], captureIo(root))).toBe(1);
+    git('restore', '--staged', '--worktree', 'src/App.jsx');
+    expect(await runCli(['--done', 'bbbb'], captureIo(root))).toBe(0);
+
+    expect(await runCli(['variant', 'new', 'alt', '--route', '/'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'add', 'alt', 'src/App.jsx'], captureIo(root))).toBe(0);
+    expect(await runCli(['--working', 'cccc'], captureIo(root))).toBe(0);
+    // Showing a variant is bookkeeping, not a fix.
+    expect(await runCli(['variant', 'use', 'alt'], captureIo(root))).toBe(0);
+    expect(await runCli(['--done', 'cccc'], captureIo(root))).toBe(1);
+    expect(await runCli(['variant', 'drop', 'alt'], captureIo(root))).toBe(0);
+    expect(await runCli(['--done', 'cccc'], captureIo(root))).toBe(0);
+  });
+
+  it('counts a staged or restored file without --working too', async () => {
+    const root = repo();
+    notes(root, [
+      { id: 'aaaa1111', createdAt: ago(1000) },
+      { id: 'bbbb2222', createdAt: ago(1000) },
+    ]);
+    write(root, 'src/App.jsx', 'export default () => 1;\n', Date.now() + 2000);
+    execFileSync('git', ['add', 'src/App.jsx'], { cwd: root });
+    expect(await runCli(['--done', 'aaaa'], captureIo(root))).toBe(0);
+    execFileSync('git', ['restore', '--staged', '--worktree', 'src/App.jsx'], { cwd: root });
+    expect(await runCli(['--done', 'bbbb'], captureIo(root))).toBe(0);
+  });
+
+  it('ignores only the notes file and its own side files, whatever --file is called', async () => {
+    const root = repo();
+    const file = join(root, 'src/feedback.json');
+    writeFileSync(
+      file,
+      JSON.stringify([{ id: 'aaaa1111', route: '/', feedback: 'x', done: false, doneAt: null, element: null, createdAt: ago(1000) }]),
+    );
+    write(root, 'src/feedback.blast.json', '{}', Date.now() + 2000);
+    write(root, 'src/feedback.json.lock', '{}', Date.now() + 2000);
+    expect(await runCli(['--done', 'aaaa', '--file', 'src/feedback.json'], captureIo(root))).toBe(1);
+    write(root, 'src/feedback-form.jsx', 'export default () => null;\n', Date.now() + 2000);
+    expect(await runCli(['--done', 'aaaa', '--file', 'src/feedback.json'], captureIo(root))).toBe(0);
+  });
+
   it('works without Git, skipping dependencies and build output', async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-plain-')));
     dirs.push(root);
@@ -131,7 +188,7 @@ describe('--done and variants', () => {
 
     const io = captureIo(root);
     expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
-    expect(io.text.out).toContain('These variants copy files that changed after they were made');
+    expect(io.text.out).toContain('These variants copy files changed since the note (or --working)');
     expect(io.text.out).toContain('hero-left (src/App.jsx): npx isotone variant sync hero-left');
     expect(io.text.out).toContain('hero-centered (src/App.jsx): npx isotone variant sync hero-centered');
 
@@ -151,6 +208,43 @@ describe('--done and variants', () => {
     const other = captureIo(root);
     expect(await runCli(['--done', 'cccc'], other)).toBe(0);
     expect(other.text.out).not.toContain('variant sync');
+  });
+
+  it('names only copies of files changed since --working on the note', async () => {
+    const root = repo();
+    write(root, 'src/App.css', 'button { color: red; }\n');
+    notes(root, [
+      { id: 'aaaa1111', createdAt: ago(60_000) },
+      { id: 'bbbb2222', createdAt: ago(60_000) },
+    ]);
+    expect(await runCli(['variant', 'new', 'hero-split', '--route', '/'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'add', 'hero-split', 'src/App.jsx'], captureIo(root))).toBe(0);
+    expect(await runCli(['--working', 'aaaa'], captureIo(root))).toBe(0);
+    write(root, 'src/App.jsx', 'export default () => 1;\n');
+    const first = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], first)).toBe(0);
+    expect(first.text.out).toContain('hero-split (src/App.jsx)');
+
+    // Note B's fix touched only the stylesheet: the stale copy is not its business.
+    expect(await runCli(['--working', 'bbbb'], captureIo(root))).toBe(0);
+    write(root, 'src/App.css', 'button { color: blue; }\n', Date.now() + 5000);
+    const second = captureIo(root);
+    expect(await runCli(['--done', 'bbbb'], second)).toBe(0);
+    expect(second.text.out).not.toContain('variant sync');
+  });
+});
+
+describe('from a subdirectory', () => {
+  it("finds the app's notes file above it and says which one, on stderr", async () => {
+    const root = repo();
+    notes(root, [{ id: 'aaaa1111', createdAt: ago(1000) }]);
+    const io = captureIo(join(root, 'src'));
+    expect(await runCli(['--json'], io)).toBe(0);
+    expect(JSON.parse(io.text.out)).toMatchObject([{ id: 'aaaa1111' }]);
+    expect(io.text.err).toContain(`Notes: ${join('..', NOTES)}`);
+    write(root, 'src/App.jsx', 'export default () => 1;\n', Date.now() + 2000);
+    expect(await runCli(['--done', 'aaaa'], captureIo(join(root, 'src')))).toBe(0);
+    expect(stored(root)[0]?.done).toBe(true);
   });
 });
 
