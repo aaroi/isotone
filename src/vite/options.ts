@@ -15,8 +15,10 @@ export interface IsotoneViteOptions {
   /** Where notes persist. Relative paths resolve against Vite's `root` (the
    *  directory of the app, whatever the shell's cwd), so a monorepo package
    *  started from the workspace root still writes next to its own config.
-   *  Defaults to `.iteration-feedback.json`; git-ignored automatically via
-   *  `.git/info/exclude`, with the pattern anchored at the repository root. */
+   *  Defaults to `.isotone/notes.json`, where a `.iteration-feedback.json`
+   *  from before 1.3 is moved on the first dev server start; git-ignored
+   *  automatically via `.git/info/exclude`, with the pattern anchored at the
+   *  repository root. */
   file?: string;
   /** Route visibility rule (denylist/allowlist) for the injected panel. */
   rule?: RouteGateOptions;

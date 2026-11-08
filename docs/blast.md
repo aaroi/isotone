@@ -84,7 +84,7 @@ lists it as waiting for you.
 
 ## Session state
 
-The session lives beside the notes file, in `.iteration-feedback.blast.json`,
+The session lives beside the notes file, in `.isotone/notes.blast.json`,
 which Isotone adds to `.git/info/exclude` like the notes:
 
 ```json

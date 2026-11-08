@@ -59,12 +59,12 @@ The adapters check for updates in the background; see [Updates](updates.md) for
 the cache, explicit upgrade commands, and opt-out controls.
 
 The notes file resolves against Vite's `root`. In a monorepo, run the CLI in that
-directory or pass `--file path/to/.iteration-feedback.json`. Options:
+directory or pass `--file path/to/.isotone/notes.json`. Options:
 
 ```ts
 isotone({
   theme: 'auto',
-  file: '.iteration-feedback.json',
+  file: '.isotone/notes.json', // the default
   variants: false, // optional: notes only
 })
 ```

@@ -149,7 +149,7 @@ it('maps a React 19 callsite back to the original line through the module source
 it('keeps the context through the store and prints it for the agent', async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-element-')));
   dirs.push(root);
-  const file = join(root, '.iteration-feedback.json');
+  const file = join(root, '.isotone/notes.json');
   const element = {
     tag: 'button',
     text: 'Changes',

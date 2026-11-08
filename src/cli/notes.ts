@@ -13,13 +13,12 @@ import { updateNoteText } from '../core/update';
 import { variantAppliesTo } from '../core/variants';
 import { blastFile, touchSession } from '../node/blast';
 import { noteFingerprint, readNotes, replyView, type StoredNote, updateNotes } from '../node/notes/store';
+import { defaultNotesFile, NOTES_FILE } from '../node/notes/location';
 import { notesProjectRoot, updateRequestOf } from '../node/update/request';
 import { listVariants, readActive } from '../node/variants';
 import { latestChange, mtime, snapshot } from './changes';
 import { oneLine, quoted, shellCommand, toJson, utcStamp } from './text';
 import { type CliIO, errOut, findNoteByPrefix, has, out, parseArgs, valueFor } from './util';
-
-export const NOTES_FILE = '.iteration-feedback.json';
 
 const VALUE_FLAGS = ['--days', '--file', '--done', '--undone', '--working', '--reply'] as const;
 const BOOLEAN_FLAGS = ['--all', '--json', '--force'] as const;
@@ -71,7 +70,7 @@ function splitIds(values: string[]): string[] {
     .filter(Boolean);
 }
 
-function parseNotesArgs(input: string[], cwd: string): NotesArgs {
+function parseNotesArgs(input: string[], io: CliIO): NotesArgs {
   const { argv, text } = takeReplyText(input);
   const positionals = parseArgs(argv, VALUE_FLAGS, BOOLEAN_FLAGS);
   const actions = ACTIONS.filter((flag) => has(argv, flag));
@@ -100,7 +99,7 @@ function parseNotesArgs(input: string[], cwd: string): NotesArgs {
   const days = Number(daysText);
   if (daysText !== undefined && (!Number.isFinite(days) || days <= 0)) throw new Error('--days must be a positive number.');
   return {
-    ...findNotesFile(cwd, valueFor(argv, '--file')),
+    ...findNotesFile(io, valueFor(argv, '--file')),
     json: has(argv, '--json'),
     force: has(argv, '--force'),
     action,
@@ -115,13 +114,14 @@ function parseNotesArgs(input: string[], cwd: string): NotesArgs {
 /**
  * The notes file: `--file` from the current directory, or else the nearest
  * {@link NOTES_FILE} at or above it, up to the Git root, so a command run
- * from `src/` still finds the app's notes.
+ * from `src/` still finds the app's notes. An old notes file found on the
+ * way is moved first (`defaultNotesFile`), saying so on stderr.
  */
-export function findNotesFile(cwd: string, file: string | undefined): { file: string; dir: string; foundAbove: boolean } {
-  const here = resolve(cwd);
+export function findNotesFile(io: CliIO, file: string | undefined): { file: string; dir: string; foundAbove: boolean } {
+  const here = resolve(io.cwd);
   if (file !== undefined) return { file: resolve(here, file), dir: here, foundAbove: false };
   for (let dir = here; ; dir = dirname(dir)) {
-    const candidate = join(dir, NOTES_FILE);
+    const candidate = defaultNotesFile(dir, (line) => errOut(io, line));
     if (existsSync(candidate)) return { file: candidate, dir, foundAbove: dir !== here };
     if (existsSync(join(dir, '.git')) || dirname(dir) === dir) return { file: join(here, NOTES_FILE), dir: here, foundAbove: false };
   }
@@ -130,7 +130,7 @@ export function findNotesFile(cwd: string, file: string | undefined): { file: st
 export function runNotes(argv: string[], io: CliIO): number {
   let args: NotesArgs;
   try {
-    args = parseNotesArgs(argv, io.cwd);
+    args = parseNotesArgs(argv, io);
   } catch (error) {
     errOut(io, (error as Error).message);
     return 1;

@@ -80,7 +80,7 @@ if (commit.status !== 0 && !/nothing to commit/.test(commit.stdout + commit.stde
 const base = git(app, ['rev-parse', 'HEAD']).stdout.trim();
 
 const { serveIsotone } = await import(pathToFileURL(server).href);
-const file = join(app, '.iteration-feedback.json');
+const file = join(app, '.isotone', 'notes.json');
 const notes = [];
 const served = await serveIsotone({ file, port: 0, checkForUpdates: false });
 try {

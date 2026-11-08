@@ -8,11 +8,12 @@ import { resolve } from 'node:path';
 
 import { version } from '../../package.json';
 import { BLAST } from '../core/blast';
+import { defaultNotesFile, NOTES_FILE } from '../node/notes/location';
 import { DEFAULT_PORT, guardedScriptTag } from '../serve/tag';
 import { runBlast } from './blast';
 import { docPath } from './docs';
 import { runInit } from './init';
-import { NOTES_FILE, runNotes } from './notes';
+import { runNotes } from './notes';
 import { runCheckUpdate } from './update';
 import { type CliIO, errOut, has, makeIo, out, parseArgs, valueFor } from './util';
 import { runVariant } from './variant';
@@ -109,7 +110,8 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
     errOut(io, (error as Error).message);
     return 1;
   }
-  const file = resolve(io.cwd, valueFor(args, '--file') ?? NOTES_FILE);
+  const fileFlag = valueFor(args, '--file');
+  const file = fileFlag === undefined ? defaultNotesFile(io.cwd, (line) => errOut(io, line)) : resolve(io.cwd, fileFlag);
   const port = Number(valueFor(args, '--port') ?? DEFAULT_PORT);
   const host = valueFor(args, '--host');
   const theme = valueFor(args, '--theme') ?? 'auto';

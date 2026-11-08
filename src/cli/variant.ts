@@ -33,6 +33,7 @@ import {
 import { mutateVariants } from '../node/variants/options';
 import { repoRelativeKey } from '../node/variants/paths';
 import { docPath } from './docs';
+import { findNotesFile } from './notes';
 import { toJson } from './text';
 import { type CliIO, errOut, extractFlag, findNoteByPrefix, has, out, parseArgs, printTable, valueFor } from './util';
 
@@ -311,7 +312,7 @@ function cmdNew(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
   let element: ReturnType<typeof readNotes>[number]['element'] | undefined;
   let note: string | undefined;
   if (notePrefix) {
-    const file = resolve(io.cwd, notesFile ?? '.iteration-feedback.json');
+    const { file } = findNotesFile(io, notesFile);
     const match = findNoteByPrefix(readNotes(file), notePrefix);
     seededRoute = seededRoute ?? match.route;
     element = match.elements?.[0] ?? match.element;

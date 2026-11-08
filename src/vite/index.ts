@@ -25,6 +25,7 @@ import {
 
 import { VARIANTS_ENDPOINT } from '../core/variants';
 import { blastFile } from '../node/blast';
+import { defaultNotesFile, LEGACY_NOTES_FILE, NOTES_FILE } from '../node/notes/location';
 import { ensureFileIgnored } from '../node/fs/git-exclude';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
@@ -47,8 +48,6 @@ import { createOverrides } from './overrides';
 import { createSwitching } from './switching';
 
 export type { IsotonePlugin, IsotoneViteOptions } from './options';
-
-const DEFAULT_FILE = '.iteration-feedback.json';
 
 /** Vite's own `server.fs.deny`, which a plugin that sets the option replaces
  *  unless it repeats it. */
@@ -82,7 +81,7 @@ function announce(server: ViteDevServer, file: string, variantsDir: string | nul
 }
 
 export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
-  let file = resolve(options.file ?? DEFAULT_FILE);
+  let file = resolve(options.file ?? NOTES_FILE);
   let isDev = false;
   let hasReact = false;
   let ssrHost = false;
@@ -99,14 +98,15 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
     // Isotone's own files are read through its endpoints, never as static
     // files: keep Vite's file server from handing them out.
     config(config: { server?: { fs?: { deny?: string[] } } }) {
-      const notes = basename(options.file ?? DEFAULT_FILE);
+      // The default notes file and its Blast session are under `.isotone/`.
+      const notes = options.file === undefined ? LEGACY_NOTES_FILE : basename(options.file);
       const own = [`**/${notes}`, `**/${basename(blastFile(notes))}`, '**/.isotone/**'];
       // Vite concatenates a plugin's array with the user's.
       return { server: { fs: { deny: config.server?.fs?.deny ? own : [...VITE_DENY, ...own] } } };
     },
     configResolved(config: ResolvedConfig) {
       isDev = config.command === 'serve';
-      file = resolve(config.root, options.file ?? DEFAULT_FILE);
+      file = resolve(config.root, options.file ?? NOTES_FILE);
       overrides.configure(config);
       hasReact = (config.plugins ?? []).some((p) => /react/i.test(p.name));
       ssrHost = config.appType !== 'spa' && config.appType !== 'mpa';
@@ -169,7 +169,10 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
     },
     configureServer(server) {
       if (!isDev) return;
-      // Here, not at construction: a production build should not touch .git.
+      // Here, not at construction: a production build should not touch .git
+      // or move the notes.
+      if (options.file === undefined)
+        file = defaultNotesFile(server.config.root, (line) => server.config.logger.info(`  isotone  ${line}`));
       ensureFileIgnored(file);
       const allowedHosts: Gate = () => {
         const hosts = server.config.server?.allowedHosts;

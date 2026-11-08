@@ -25,7 +25,7 @@ const FAST = { debounceMs: 120, maxDebounceMs: 600, pollMs: 40, heartbeatMs: 100
 function project() {
   const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-blast-')));
   dirs.push(cwd);
-  const notes = join(cwd, '.iteration-feedback.json');
+  const notes = join(cwd, '.isotone/notes.json');
   writeNotes(notes, []);
   const io = captureIo(cwd);
   const text = io.text;
@@ -124,9 +124,9 @@ describe(`isotone ${BLAST.command} start`, () => {
 
   it('prints the same as one JSON object', async () => {
     const p = project();
-    expect(await runBlast(['start', '--json', '--file', '.iteration-feedback.json'], p.io, FAST)).toBe(0);
+    expect(await runBlast(['start', '--json', '--file', '.isotone/notes.json'], p.io, FAST)).toBe(0);
     const started = JSON.parse(p.take());
-    expect(started).toMatchObject({ type: 'started', route: null, next: `${BLAST_CLI} --json --file .iteration-feedback.json` });
+    expect(started).toMatchObject({ type: 'started', route: null, next: `${BLAST_CLI} --json --file .isotone/notes.json` });
     expect(started.loop[0]).toContain(started.next);
     expect(started.guardrails.length).toBeGreaterThan(0);
   });

@@ -356,7 +356,7 @@ function printOverlay(print: Print, host: Host): void {
   print('   endpoints, so the plugin needs no guard of its own. Keep @vitejs/plugin-react (or');
   print('   the framework plugin) in the list so a variant switch swaps in place.');
   print('2. Start or restart the dev server and leave it running. It prints');
-  print('   `isotone  notes → .iteration-feedback.json`; the panel is the small pill in the');
+  print('   `isotone  notes → .isotone/notes.json`; the panel is the small pill in the');
   print('   bottom-right corner of every page.');
   print();
   print('Variants are copies of source files under .isotone/variants/<id>/ that the dev');

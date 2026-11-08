@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { noteRecord } from '../../src/cli/notes';
 import { runCli } from '../../src/cli/run';
-import type { StoredNote } from '../../src/node/notes/store';
+import { type StoredNote, writeNotes } from '../../src/node/notes/store';
 import { captureIo } from '../helpers/cli';
 import { tempGitRepo } from '../helpers/fs';
 
@@ -112,7 +112,7 @@ describe('the note record JSON Schema', () => {
 
   it('matches what --json, --working, --reply and --done print', async () => {
     const root = tempGitRepo('isotone-schema-', dirs);
-    writeFileSync(join(root, '.iteration-feedback.json'), JSON.stringify(notes(root)));
+    writeNotes(join(root, '.isotone/notes.json'), notes(root));
     const outputs: unknown[] = [];
     for (const argv of [
       ['--json', '--all'],

@@ -3,7 +3,7 @@
  * of the package manifest and the network so the notes store can use it.
  */
 import { existsSync, realpathSync, statSync } from 'node:fs';
-import { dirname, isAbsolute, join } from 'node:path';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 
 import type { PackageManager, UpdateRequest } from '../../core/update';
 import { isWithin } from '../fs/paths';
@@ -102,11 +102,13 @@ export function canonicalUpgradeCommands(manager: PackageManager, version: strin
 
 /**
  * The project a notes file belongs to: the nearest directory holding it that
- * is a Git checkout, or the file's own directory outside one. An update note
- * may only name a directory inside it.
+ * is a Git checkout, or outside one the file's own directory (the one holding
+ * `.isotone/` for the default file). An update note may only name a directory
+ * inside it.
  */
 export function notesProjectRoot(file: string): string {
-  const start = dirname(file);
+  const own = dirname(file);
+  const start = basename(own) === '.isotone' ? dirname(own) : own;
   for (let directory = start; ; directory = dirname(directory)) {
     if (existsSync(join(directory, '.git'))) return directory;
     if (dirname(directory) === directory) return start;

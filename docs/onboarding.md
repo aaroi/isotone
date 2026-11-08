@@ -58,6 +58,3 @@ left file-variant copies stale; and layout notes ignored their viewport.
 - A small first-run hint in the panel that points at the variants the agent built.
 - `isotone serve` needs a second process next to the app's dev server.
 - No trial agent checked its work visually; they had only `curl`.
-- The notes file is still `.iteration-feedback.json`. Manual routes, `file`
-  options and `--file` flags name it, so renaming it would split notes between
-  two files until every one of them changed. The Vite export is now `isotone()`.

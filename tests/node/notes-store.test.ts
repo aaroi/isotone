@@ -226,13 +226,14 @@ describe('ensureFileIgnored', () => {
     execFileSync('git', ['init', '-q', repo]);
     const consoleDir = join(repo, 'app', 'console');
     mkdirSync(consoleDir, { recursive: true });
-    const file = join(consoleDir, '.iteration-feedback.json');
+    // Before the first note, `.isotone/` does not exist either.
+    const file = join(consoleDir, '.isotone', 'notes.json');
+    ensureFileIgnored(file);
+    mkdirSync(dirname(file));
     writeFileSync(file, '[]\n');
 
-    ensureFileIgnored(file);
-
     const exclude = readFileSync(join(repo, '.git', 'info', 'exclude'), 'utf8');
-    expect(exclude).toContain('\n/app/console/.iteration-feedback.json\n');
+    expect(exclude).toContain('\n/app/console/.isotone/notes.json\n');
     expect(exclude).not.toContain(repo);
     // A crash can leave the lock or a temporary write beside the file.
     writeFileSync(`${file}.lock`, '');
@@ -275,7 +276,7 @@ describe('ensureFileIgnored', () => {
       stdio: 'ignore',
     });
 
-    const file = join(worktree, 'app', '.iteration-feedback.json');
+    const file = join(worktree, 'app', '.isotone', 'notes.json');
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, '[]\n');
     ensureFileIgnored(file);
@@ -294,7 +295,7 @@ describe('ensureFileIgnored', () => {
     // The shared repository's file, not anything under the worktree.
     expect(reported.startsWith(join(repo, '.git'))).toBe(true);
     const exclude = readFileSync(reported, 'utf8');
-    expect(exclude).toContain('\n/app/.iteration-feedback.json\n');
+    expect(exclude).toContain('\n/app/.isotone/notes.json\n');
     expect(exclude).toContain('\n/app/variants/\n');
     expect(
       execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], {

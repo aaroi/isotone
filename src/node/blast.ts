@@ -26,7 +26,7 @@ export interface BlastSession {
   seen: Record<string, string>;
 }
 
-/** `.iteration-feedback.json` → `.iteration-feedback.blast.json`, beside it. */
+/** `.isotone/notes.json` → `.isotone/notes.blast.json`, beside it. */
 export function blastFile(notesFile: string): string {
   return `${notesFile.replace(/\.json$/i, '')}${BLAST.stateSuffix}`;
 }
