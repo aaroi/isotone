@@ -42,6 +42,26 @@ describe('checkRequest, the gate isotone serve and the Vite plugin share', () =>
       }
     }
   });
+
+  it('holds the edges of a local name, a loopback address and an allowed host', () => {
+    // A name that merely contains "localhost" is a name anyone can register.
+    for (const host of ['localhost.attacker.example:4123', 'xlocalhost:4123', 'localhostx:4123']) {
+      expect(() => checkRequest({ ...local, host }), host).toThrow('host not allowed');
+    }
+    // 127.0.0.0/8 is loopback only at the start of the address.
+    for (const remoteAddress of ['192.168.127.5', '10.127.0.1', '::ffff:10.127.0.1']) {
+      expect(() => checkRequest({ ...local, remoteAddress }), remoteAddress).toThrow('only requests from this machine');
+    }
+    expect(() => checkRequest({ ...local, remoteAddress: '127.8.9.10' })).not.toThrow();
+    // A leading dot allows the name and its subdomains, not names ending in the same letters.
+    const allowedHosts = ['.example.com'];
+    for (const host of ['example.com:4123', 'a.example.com:4123']) {
+      expect(() => checkRequest({ ...local, host, allowedHosts }), host).not.toThrow();
+    }
+    for (const host of ['evilexample.com:4123', 'example.com.attacker.example:4123']) {
+      expect(() => checkRequest({ ...local, host, allowedHosts }), host).toThrow('host not allowed');
+    }
+  });
 });
 
 describe('a stored update request', () => {

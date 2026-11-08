@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
@@ -194,3 +194,17 @@ it('sweeps temporary files a killed writer left beside the store, once they are 
   expect(existsSync(fresh)).toBe(true);
   expect(existsSync(unrelated)).toBe(true);
 });
+
+it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+  'reports a store in a directory it cannot write as an error, not as busy',
+  () => {
+    const dir = join(root, 'locked');
+    mkdirSync(dir, { mode: 0o500 });
+    try {
+      const file = join(dir, 'notes.json');
+      expect(() => withFileLock(file, () => 'ran', { waitMs: 2_000 })).toThrow(`Cannot lock the local store ${file}: EACCES`);
+    } finally {
+      chmodSync(dir, 0o700);
+    }
+  },
+);

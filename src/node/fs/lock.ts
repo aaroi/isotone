@@ -66,9 +66,17 @@ interface LockOwner {
 /** Serialize read-modify-write across the CLI and the dev server. A dead
  * process's lock is recoverable; a busy store fails without discarding data. */
 export function withFileLock<T>(file: string, work: () => T, options: FileLockOptions = {}): T {
-  mkdirSync(dirname(file), { recursive: true });
   const lock = `${file}.lock`;
-  const token = acquire(lock, file, options.waitMs ?? CLI_LOCK_WAIT_MS);
+  let token: string;
+  try {
+    mkdirSync(dirname(file), { recursive: true });
+    token = acquire(lock, file, options.waitMs ?? CLI_LOCK_WAIT_MS);
+  } catch (error) {
+    // Only an existing lock means busy; a permission or read-only failure
+    // would never clear by waiting, so it is reported as what it is.
+    if (error instanceof LockBusyError) throw error;
+    throw new Error(`Cannot lock the local store ${file}: ${(error as Error).message}`, { cause: error });
+  }
   try {
     sweepLeftovers(file);
     return work();
