@@ -6,21 +6,19 @@ app, and pin feedback to the exact elements you want changed.
 ![Switching layout, spacing and colour variants, pinning a card with a note, and an agent picking the note up and closing it](https://raw.githubusercontent.com/aaroi/isotone/main/docs/assets/loop.gif)
 
 Isotone is not an agent, an MCP server or an AI product. It is a small review
-panel that runs inside your app during development, and it works with the coding
-agent you already use: the agent runs a few CLI commands and reads a JSON file.
-Nothing is added to production.
+panel inside your app during development, working with the coding agent you
+already use through a few CLI commands and a JSON file. Nothing reaches
+production.
 
 Try it in your browser at [isotone.vercel.app](https://isotone.vercel.app). Nothing to install.
 
 ## How it works
 
-Isotone adds a small panel to your app while it runs in development.
-
 Ask your agent for variants of anything on the page: a layout, a spacing scale,
 a colour, a component. They appear in the panel's Variants tab as thumbnails,
 segmented choices, colour swatches or sliders, and switching one updates the
-live page. Save your picks as the defaults for the agent to apply, or leave
-feedback on a single option.
+live page. Save your picks as defaults for the agent to apply, or leave feedback
+on a single option.
 
 ![The Variants panel with thumbnail, segmented, colour and range selectors above the feedback notes](https://raw.githubusercontent.com/aaroi/isotone/main/docs/assets/preview.png)
 
@@ -34,9 +32,8 @@ closes each note when it's done. The panel marks the note the agent is working
 on and updates without a reload, so you can keep adding notes while it works.
 
 Comparing design directions one prompt at a time is slow, and so is describing
-UI to an agent in words. Element pickers built into agents such as Claude Code
-only work inside the agent's own browser. Isotone works in the browser you
-already use, with any agent that can run a command.
+UI in words. Element pickers built into agents work only in the agent's own
+browser; Isotone works in yours, with any agent that can run a command.
 
 ## Get started
 
@@ -66,19 +63,18 @@ npm install -D isotone
 npx isotone init
 ```
 
-`init` looks at your project and prints the one change to make: on Vite, a
-plugin line that only acts on the dev server; on any other dev server, a small
-local server and a script tag that loads only on localhost. `init --yes` also
-adds a short section to `AGENTS.md` that teaches your agent the loop. The
-[integration guide](docs/integrations.md) covers every setup and how each stays
-out of production. Isotone works only on the machine running the dev server.
+`init` prints the one change to make: on Vite, a plugin line that acts only on
+the dev server; elsewhere, a small local server and a script tag that loads only
+on localhost. `init --yes` also adds a short `AGENTS.md` section that teaches
+your agent the loop. Isotone works only on the machine running the dev server;
+the [integration guide](docs/integrations.md) covers every setup and how each
+stays out of production.
 
 ## Blast mode
 
-Once Isotone is set up, ask your agent for a [Blast session](docs/blast.md): for
-the time you choose, it keeps picking up each batch of new notes, fixing and
-closing them, without being prompted again. Isotone still never runs the agent;
-it hands your agent the notes.
+Ask your agent for a [Blast session](docs/blast.md): for the time you choose, it
+keeps picking up, fixing and closing each batch of new notes without another
+prompt. Isotone still never runs the agent; it only hands it the notes.
 
 ## Keys
 
@@ -93,11 +89,10 @@ you clicked, and you can start typing right away. Once you're done selecting,
 
 ## Updates
 
-The dev server checks npm for a newer version at most once a day. When one is out,
-the panel says so, and **Ask agent to update** files a feedback note your agent
-picks up with the others. The check sends no project content and stays quiet
-offline. Nothing installs by itself. Set `checkForUpdates: false` to turn it off.
-[Update details](docs/updates.md).
+The dev server checks npm for a newer version at most once a day, sending no
+project content. When one is out, **Ask agent to update** in the panel files a
+note your agent picks up with the others; nothing installs by itself.
+`checkForUpdates: false` turns it off ([details](docs/updates.md)).
 
 ## For agents and maintainers
 

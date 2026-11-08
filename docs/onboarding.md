@@ -1,57 +1,41 @@
 # Onboarding
 
-Maintainer notes on how a new user's first run is designed, and why. Most people
-set Isotone up through their coding agent, so the first run is designed as the
-conversation between the user and that agent. Re-run [the agent trial](#the-agent-trial)
-when changing it.
+Maintainer notes on the first run, which is designed as the conversation between
+a new user and their coding agent, since most people set Isotone up that way.
+Re-run [the agent trial](#the-agent-trial) when changing it.
 
 ## The flow
 
 1. The user pastes the README's **Start with your agent** prompt, naming a page.
 2. The agent installs `isotone` as a dev dependency and runs `npx isotone init --yes`.
-3. `init` detects the framework and prints the development-only setup, a **first
-   run** and the `AGENTS.md` status. The first run has the agent build two real,
-   opt-in variants on the user's page (Vite: one file-variant selector and one
-   knob; any other dev server: a select knob and a range or colour knob), check
-   them with `npx isotone variant list`, and send a short message in a fixed
-   order: the URL, what was made, how to pin a note, what changed.
+3. `init` prints the development-only setup, the `AGENTS.md` status and, until
+   the project has variants or knobs, a **first run**: build two real, opt-in
+   variants on the user's page (Vite: a file-variant selector and a knob;
+   otherwise a select knob and a range or colour knob), check them with
+   `npx isotone variant list`, and reply in a fixed order: the URL, what was
+   made, how to pin a note, what changed.
 4. The user switches the variants, pins a note and says "check my Isotone notes".
-   The short `AGENTS.md` section carries the loop into later sessions and points
-   to the shipped agent guide for the rest.
-
-`init` skips the first run once the project has variants or knobs.
+   The `AGENTS.md` section carries the loop into later sessions and points to the
+   shipped agent guide.
 
 ## Why the CLI leads
 
-Three designs were simulated with fresh agents given only the user's prompt and
-the docs, against a packed tarball, in Vite + React, Next.js 16 with Tailwind and
-plain HTML projects whose default ports were taken:
-
-- **A, prompt-led:** a long README prompt; `init` prints setup only. As good on
-  Vite, but on Next the agent had to read type declarations for the knob schema
-  and grep the bundle for the endpoint.
-- **B, CLI-led (chosen):** a short prompt; `init` prints a framework-specific
-  first run. The most consistent result: about 80 seconds and 26–29 tool calls to
-  a first visible variant on every framework, and the user opens the panel to
-  alternatives of their own page.
-- **C, panel-led:** a setup-only prompt and a checklist in the panel. Fastest to
-  set up, but a strict agent leaves an empty Variants tab.
-
-The simulations led to `isotone serve` serving `.isotone/knobs.json`, `variant
-list` naming skipped knobs, the Next `next/script` tag in the root layout, the
-static localhost-only loader, and the first run covering ports, Tailwind and
-checking without a browser.
+Fresh agents given only the prompt and the docs, against a packed tarball, set
+up Vite + React, Next.js 16 with Tailwind and plain HTML with their default ports
+taken, under three designs. A long prompt with setup-only `init` stalled on
+Next (the agent read type declarations and grepped the bundle). A setup-only
+prompt with a checklist in the panel was fastest but left a strict agent's
+Variants tab empty. A short prompt with a framework-specific first run from
+`init` (chosen) was the most consistent: about 80 seconds to a first visible
+variant on every framework, on the user's own page.
 
 ## The agent trial
 
-`scripts/trial/` makes the simulations repeatable: it packs the package, prepares
-Vite + React, Next.js and plain-HTML fixtures, seeds notes, and scores a fresh
-agent's setup and notes loop from its transcript. [Its README](../scripts/trial/README.md)
-has the prompts and steps; it never starts an agent itself.
-
-The round-2 baseline passed every check in 5 to 17 tool calls, and shaped `--done`:
-agents chained an edit and `--done`, so a failed edit still closed the note; fixes
-left file-variant copies stale; and layout notes ignored their viewport.
+`scripts/trial/` repeats this: it packs the package, prepares Vite + React,
+Next.js and plain-HTML fixtures, seeds notes, and scores a fresh agent's setup
+and notes loop from its transcript. [Its README](../scripts/trial/README.md) has
+the prompts and steps; it never starts an agent itself. The `--done` gate, the
+stale-copy warning and the viewport rule came from its failures.
 
 ## Open follow-ups
 

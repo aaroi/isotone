@@ -21,20 +21,17 @@ Choose the control for the decision being reviewed, not for variety in the panel
 | One numeric property across a useful interval | `kind: 'range'` | Card radius, padding, opacity or animation duration |
 | A colour | `kind: 'color'` with named `swatches` | Accent or surface colour, with the built-in custom picker |
 
-Thumbnail grids are a presentation of select axes, not another `kind`. There are
-no separate checkbox, toggle, dropdown or free-text axis kinds. Use stable IDs,
-short descriptive labels, and independent axes for independent decisions.
-`showWhen` hides a dependent axis until its parent has the relevant selection.
-Keep the default among the available options or swatches.
+Thumbnails are a presentation of select axes, not a `kind`, and there are no
+checkbox, toggle, dropdown or free-text kinds. Use stable IDs, short labels, and
+independent axes for independent decisions; `showWhen` hides a dependent axis
+until its parent has the relevant selection. Keep the default among the options
+or swatches.
 
-For a range, choose bounds that give a valid design at both extremes (padding
-8–32px in 2px steps, not 0–1000px), a positive `step` matching the decision's
-precision, and a default on a step within `min` and `max`. Use a unit such as
-`px`, `%` or `ms`; a bare 0–1 range displays as a percentage, and `unit: ''`
-keeps the raw number.
-
-Check that every control changes the intended property at its minimum, maximum
-and reset, and keep the source fallback and the default in sync.
+A range needs bounds that are valid designs at both ends (padding 8–32px in 2px
+steps, not 0–1000px), a positive `step` at the decision's precision, a default
+on a step between them, and a unit such as `px`, `%` or `ms` (a bare 0–1 range shows as a
+percentage; `unit: ''` keeps the raw number). Check every control at its
+minimum, maximum and reset, and keep the source fallback and default in sync.
 
 ## File variants
 
@@ -45,53 +42,49 @@ get their own selectors and can be active at the same time. Two groups that
 override the same file cannot both be active: the panel names them when you pick
 the second, and `variant add` warns when the overlap is created.
 
-A selector shows only on the variant's route: `/items` is that page, `/items/*`
-also every page under it, and `/items*` any route starting with `/items`. A
-variant made without a route shows everywhere.
+A selector shows only on the variant's route, a pattern as in [the agent
+guide](agent-guide.md#act-on-notes); a variant made without one shows
+everywhere. Copy only files that export components where you can
+([why](#live-switching)). `variant add <id> --new <file>` starts a file the
+project does not have; import it relatively, or through an alias whose last path
+segments name it.
 
-Copy only files that export components where you can ([why](#live-switching)).
-A variant can add a file the project does not
-have: `variant add <id> --new <file>` starts an empty one. Import it relatively,
-or through an alias whose last path segments name it.
-
-Variant files are committed by default, since they are the change under review,
-so `variant add` refuses to copy a git-ignored file or one that looks like a
-secret (`.env`, private keys, `*credentials*.json`, `*.keystore`, anything under
-`.aws/` or `.ssh/`). `--force` copies it anyway. `variants: { ignored: true }`
-keeps the variants directory local. The active pointer, `.isotone/active.json`,
-is local and never committed. `ISOTONE_VARIANT=<id>` (a comma-separated list)
-bakes variants into a `vite build` for a preview.
+Variant files are the change under review, so they are committed by default and
+`variant add` refuses a git-ignored file or one that looks like a secret
+(`.env`, private keys, `*credentials*.json`, `*.keystore`, anything under
+`.aws/` or `.ssh/`) unless given `--force`. `variants: { ignored: true }` keeps
+the variants directory local. The active pointer, `.isotone/active.json`, is
+local and never committed. `ISOTONE_VARIANT=<id>` (a comma-separated list) bakes
+variants into a `vite build` for a preview.
 
 **Keeping copies current.** A copy records the version of the real file it was
-made from, and reads as stale once that file moves on. `variant sync <id>` merges
-the real file's changes into the copy and works on files git does not track yet.
-When both sides changed the same lines, the copy gets conflict markers to resolve,
-and while they are there the copy is a syntax error, which in live mode also breaks
-pages that import the real file. `variant promote <id>` lands a copy over the real
-file. The other variants in its group stay available and stop reading as stale,
-since they are alternatives to what was just promoted.
+made from and reads as stale once that file moves on. `variant sync <id>` merges
+the real file's changes in, untracked files included. Where both sides changed
+the same lines the copy gets conflict markers, and until they are resolved it is
+a syntax error, which in live mode also breaks pages importing the real file.
+After `variant promote <id>`, the other variants in its group stay available and
+stop reading as stale: they are alternatives to what was promoted.
 
 ### What the host needs
 
-- **Framework HMR support.** Keep the host's Vite framework plugin (React Fast
-  Refresh through `@vitejs/plugin-react` or its framework wrapper; Vue and
-  Svelte use their own). Without an HMR accept boundary, a switch reloads.
+- **Framework HMR.** Keep the host's Vite framework plugin (`@vitejs/plugin-react`
+  or its wrapper; Vue and Svelte their own): without an accept boundary, a
+  switch reloads.
 - **Tailwind v4** scans only the sources it is pointed at. Add
   `@source "../.isotone/variants/**/*.{ts,tsx}";` (relative to the CSS
   file) or classes new to a variant render unstyled.
 - **A sibling dev server** that aliases into another package sets
   `variants: { root: '../that-package' }` so both serve the same variants.
-- **Routes** come from `window.location.pathname`. An app on a memory
-  router sees `/` everywhere; leave `--route` off there.
+- **Routes** come from `window.location.pathname`; on a memory router (`/`
+  everywhere) leave `--route` off.
 - **Linters** should ignore `.isotone` (Biome: `"!.isotone"` in
   `files.includes`; ESLint: `{ ignores: ['.isotone/**'] }`).
 
 ## Knobs
 
-Some decisions are a number, not an alternative file: how far a fade reaches,
-how dense a dot field is. Declare those in `.isotone/knobs.json`, a JSON array of
-range, colour or select axes with an optional `route` (a pattern as above, or a
-list of them):
+A decision that is a number, colour or named style, not an alternative file,
+is a knob in `.isotone/knobs.json`: a JSON array of range, colour or select axes,
+each with an optional `route` (a pattern or a list of them):
 
 ```json
 [
@@ -124,32 +117,29 @@ A colour knob takes a `defaultColor` and named `swatches`, all as hex values:
 }
 ```
 
-The panel renders range knobs as sliders and colour knobs as swatches with a
-custom picker, on their configured routes. An entry with a missing or invalid
-field is skipped; `npx isotone variant list` names each one. Knobs also work with
-`isotone serve`, so any dev server gets them, not only Vite. A value reaches the
-page as a custom property on `<html>`, `--knob-<id>`, with the unit appended, so
-the source reads it with the committed default as the fallback:
+Ranges render as sliders and colours as swatches with a custom picker. An
+invalid entry is skipped, and `npx isotone variant list` names it. Knobs work
+with `isotone serve` too. A value reaches the page as `--knob-<id>` on `<html>`,
+unit appended, so the source reads it with the committed default as fallback:
 
 ```css
 mask-image: radial-gradient(ellipse, black var(--knob-fade-from, 0%), transparent 100%);
 ```
 
-A select knob names a style rather than a number, for a choice that one line of
-CSS or a draw call can act on. Give it `options` of `{ "id", "label" }` and a
-`defaultOption`. CSS cannot branch on a custom property, so its value also lands
-as `data-knob-<id>` on `<html>`:
+A select knob names a style that one line of CSS or a draw call can act on. Give
+it `options` of `{ "id", "label" }` and a `defaultOption`. Its value also lands
+as `data-knob-<id>` on `<html>`, since CSS cannot branch on a custom property:
 
 ```css
 html[data-knob-tick-style="dots"] .tick { border-radius: 50%; }
 ```
 
-When the alternative changes structure, a file variant is still the right tool,
-because a select knob leaves both branches in the source until someone removes one.
+When the alternative changes structure, use a file variant: a select knob leaves
+both branches in the source until someone removes one.
 
-Code that draws for itself, such as a canvas chart, reads the custom property and
+Code that draws for itself, such as a canvas chart, reads the property and
 redraws on the `isotone:knob` event, which bubbles from `<html>` with
-`{ id, value }` and a `null` value when the knob returns to its default:
+`{ id, value }` (`null` when the knob returns to its default):
 
 ```js
 document.addEventListener('isotone:knob', ({ detail }) => {
@@ -163,51 +153,48 @@ moved ones in its `[set-defaults]` note (`payload.knobs` as `fade-from:40`).
 
 ## Sections
 
-Once a page has more than a few selectors, put each one in a section named after
-the part of the page it changes. Write the section as a label prefix, a `>`
-with a space on each side:
+Once a page has more than a few selectors, put each in a section named after the
+part of the page it changes, as a label prefix with a spaced `>`:
 
 ```ts
 { id: 'logo-size', label: 'Header > Logo size', kind: 'range', min: 16, max: 48, step: 2, defaultValue: 24, unit: 'px' }
 ```
 
-The panel shows a **Header** heading with *Logo size* under it. The heading stays
-at the top of the list while you scroll through its selectors, shows how many it
-holds, and folds the section away. Screen readers, notes and saved defaults keep
-the full name, `Header › Logo size`.
+The panel shows *Logo size* under a sticky, foldable **Header** heading with a
+count. Screen readers, notes and saved defaults keep the full name,
+`Header › Logo size`.
 
-- Only the first ` > ` splits, so `Header > Nav > Gap` is *Nav > Gap* in Header.
-  ` › ` works the same way. The spaces matter: `a>b` stays one label.
-- A slash never makes a section, so binary selectors such as `Light / Dark` or
-  `Grid / List` keep their whole label.
-- Sections match without regard to case and keep the casing of their first selector.
-- Selectors without a section come first, without a heading. Sections follow in
-  the order their first selector appears, and selectors keep their order inside them.
-- A `showWhen` selector without its own section joins its parent's section.
-- Section names are display text only. IDs, `?v=` links and `selections` do not change.
+- Only the first ` > ` (or ` › `) splits: `Header > Nav > Gap` is *Nav > Gap*
+  in Header, and `a>b` stays one label. A slash never splits, so `Light / Dark`
+  keeps its whole label.
+- Sections match case-insensitively and keep their first selector's casing.
+  Unsectioned selectors come first; sections follow in order of their first
+  selector, and selectors keep their order inside them.
+- A `showWhen` selector without its own section joins its parent's.
+- Sections are display text only: IDs, `?v=` links and `selections` do not change.
 
-An explicit `section` field overrides the prefix. The label then shows as written,
-less a prefix that repeats the section. `section: ''` keeps a label that needs a
-spaced `>`, such as `Before > After`, out of every section:
+An explicit `section` field overrides the prefix, and the label shows as
+written, less a prefix repeating the section. `section: ''` keeps a label that
+needs a spaced `>`, such as `Before > After`, out of every section:
 
 ```ts
 { id: 'order', label: 'Before > After', section: '', options: [/* … */], defaultOption: 'before' }
 ```
 
-The same works everywhere a selector is defined. Host axes and `.isotone/knobs.json`
-entries take a prefixed `label` or a `section` field. File variants take it from the
-group label (`variant new <id> --group-label "Header > Logo"`), or from
-`variant new <id> --section Header`. `variant section <id> <text>` moves an existing
-selector, with every variant in its group; `variant section <id> --none` takes it out
-of every section. `variant list` shows a SECTION column.
+Host axes and `.isotone/knobs.json` entries take a prefixed `label` or a
+`section` field. File variants take it from the group label
+(`variant new <id> --group-label "Header > Logo"`) or
+`variant new <id> --section Header`.
+`variant section <id> <text>` moves an existing selector with its whole group,
+`variant section <id> --none` takes it out of every section, and `variant list`
+shows a SECTION column.
 
 ## The Variants panel
 
-Each option's chevron (or a right click) opens its actions: feedback on it, keep
-only it, or remove it. Keep and remove actions, and **Make default**, file a
-request note for the agent ([what each asks](agent-guide.md#requests-from-the-variants-panel));
-the selector stays as it is until the agent changes the project, and deleting a
-pending request cancels it.
+Each option's chevron (or a right click) offers feedback on it, keeping only it,
+or removing it. Keep, remove and **Make default** file a request note
+([what each asks](agent-guide.md#requests-from-the-variants-panel)); the
+selector stays as it is until the agent changes the project.
 
 ## A host source
 
@@ -238,46 +225,43 @@ mountIsotone({ variants: source, defaultTab: 'variants' });
 and `onChange` must apply it to the app's state or styles. The axis types
 (`VariantAxis` and the select, range and colour axes) come from `isotone/core`.
 
-A host that manages its own definitions can use the source's `manage(action)`
-API: its `onManage(axes, selections, action)` callback persists edited definitions
-or rejects to leave them unchanged; the panel never calls it when filing a note.
-A custom source can expose `getError(): string | null` to show load or update
-failures in the panel, notifying subscribers when it changes.
+A host that manages its own definitions can use the source's `manage(action)`:
+its `onManage(axes, selections, action)` callback persists edited definitions or
+rejects to leave them unchanged (filing a note never calls it). A custom source
+can expose `getError(): string | null`, notifying subscribers on change, to show
+load or update failures in the panel.
 
 ## How switching works
 
 ### Live switching
 
-In a React project on Vite 6 or later, the plugin serves each overridden
-script as a small dispatcher module that imports every version of the file:
-the real one as `<file>?isotone=_base` and each variant's copy as
-`<file>?isotone=<id>`. Each export becomes one binding, decided in the
-browser:
+In a React project on Vite 6 or later, the plugin serves each overridden script
+as a dispatcher module importing every version: the real file as
+`<file>?isotone=_base` and each copy as `<file>?isotone=<id>`. Each export
+becomes one binding, decided in the browser:
 
-- A component becomes a wrapper that renders the active version. A switch
+- A component becomes a wrapper rendering the active version; a switch
   re-renders it, and state outside it survives.
-- A value that is identical in every version passes through.
-- Anything else (a hook, a helper function, a constant object, a context) is
-  fixed when the page loads, because React cannot swap a hook under a mounted
-  component. A switch that changes one reloads the page. Every copy defines its
-  functions and objects afresh, so a copied file that exports a hook or helper
-  reloads on every switch: move shared helpers into files the variant leaves alone.
+- A value identical in every version passes through.
+- Anything else (a hook, helper, constant object, context) is fixed at page
+  load, since React cannot swap a hook under a mounted component, and a switch
+  that changes one reloads. Every copy defines these afresh, so a copied file
+  exporting one reloads on every switch: move shared helpers into files the
+  variant leaves alone.
 
-The selection belongs to the tab: a pick is written to the URL as
-`?v=<group>:<variant>` (the grammar host variants use), kept through client-side
-navigation, so a copied link opens the same variant and two tabs can compare
-side by side. The pick also goes to `.isotone/active.json`, which tabs without
-`?v=` and the agent follow.
-
-The browser loads every version of a dispatched file, so a copy runs even while
-its variant is off: a global stylesheet it imports applies everywhere, and a
-syntax error in it breaks pages that import the real file.
+The selection belongs to the tab: a pick goes into the URL as
+`?v=<group>:<variant>` (the host-variant grammar), kept through client-side
+navigation, so a copied link opens the same variant and two tabs can compare. It
+also goes to `.isotone/active.json`, which tabs without `?v=` and the agent
+follow. Every version of a dispatched file loads, so a copy runs even while off:
+a global stylesheet it imports applies everywhere, and a syntax error in it
+breaks pages importing the real file.
 
 ### Whole-file switching
 
-`variants: { live: false }` turns live switching off and switches by swapping
-whole files over HMR, which is also what non-React hosts, CSS files, Vite 5 and
-`vite build` use. In live mode the plugin still serves these files whole:
+`variants: { live: false }` swaps whole files over HMR instead, as non-React
+hosts, CSS files, Vite 5 and `vite build` always do. Live mode still serves these
+whole:
 
 - route modules (a default export beside `loader`, `action`, `meta` and
   similar, which the router's plugin reads one by one);
@@ -287,18 +271,16 @@ whole files over HMR, which is also what non-React hosts, CSS files, Vite 5 and
 - files whose exports it cannot list (`export *`, destructuring, several
   declarators in one `export const`).
 
-A file served whole, and every CSS file, follows `.isotone/active.json` in every
-tab. Its switch is a Vite hot update, so it swaps in place exactly where an edit
-to that file would. A React file that also exports data or a hook cannot be
-swapped alone: the update climbs to its importer, and an entry with no accept
-handler reloads. Accept the import in the entry and re-render from the new
-module, or move the extra exports out.
+Such a file, and every CSS file, follows `.isotone/active.json` in every tab, and
+switches as a Vite hot update, exactly as an edit to it would. A React file that
+also exports data or a hook cannot be swapped alone: the update climbs to its
+importer, and an entry with no accept handler reloads. Accept the import in the
+entry and re-render from the new module, or move the extra exports out.
 
 ### Server rendering
 
 Server rendering follows `.isotone/active.json`, since the server cannot tell
-tabs apart. A tab whose components differ hydrates from the server's version and
-switches right after. When a link opens a tab whose `?v=` differs in a fixed
-export, the tab saves its set as the default and reloads once; a later reload
-hydrates with a recoverable mismatch instead, so two tabs never fight over the
-default.
+tabs apart; a tab whose components differ hydrates from it and switches right
+after. A link whose `?v=` differs in a fixed export saves its set as the default
+and reloads once; later reloads hydrate with a recoverable mismatch, so two tabs
+never fight over the default.
