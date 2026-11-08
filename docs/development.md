@@ -10,7 +10,8 @@ experimental alternatives separate until the reviewer chooses one.
 
 Run `pnpm check` for types, lint, unused files and exports (knip), build, and
 tests. `pnpm test` rebuilds a stale `dist/isotone.global.js` itself. For
-package, adapter or shipped-doc changes, also run `pnpm check:package`, which installs the packed archive in a clean consumer.
+package, adapter or shipped-doc changes, also run `pnpm check:package`, which
+installs the packed archive in a clean consumer.
 `pnpm smoke` (after `pnpm build`; it needs the network) installs it into fresh
 Vite 5 and Vite 8 apps with React 18 and 19 and checks that a production build
 has no panel. Tests focus on observable behaviour, transport and store failures,
