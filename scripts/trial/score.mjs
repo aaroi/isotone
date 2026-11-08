@@ -126,10 +126,10 @@ function scoreSetup() {
     unguarded.length ? `unguarded: ${unguarded.map(rel).join(', ')}` : '',
   );
 
-  // 3. The production build works and carries no panel.
+  // 3. The production build works and carries no panel. (Next 16 keeps dev-server output in .next/dev.)
   if (productionBuild()) {
     const outDir = kind === 'next' ? '.next' : 'dist';
-    const built = walk(join(app, outDir), new Set(['cache'])).filter((file) => !/\.(?:nft\.json|map)$|\/trace$/.test(file));
+    const built = walk(join(app, outDir), new Set(['cache', 'dev'])).filter((file) => !/\.(?:nft\.json|map)$|\/trace$/.test(file));
     const hits = built.filter((file) => MARKERS.some((marker) => read(file).replace(OWN_PATHS, '').includes(marker)));
     check(
       'production build has no panel code',
