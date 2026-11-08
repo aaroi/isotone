@@ -31,7 +31,7 @@ const ABANDONED_MS = 30_000;
 const STEAL_ABANDONED_MS = 5_000;
 
 /** How long the CLI waits for another writer by default. */
-export const CLI_LOCK_WAIT_MS = 2_000;
+const CLI_LOCK_WAIT_MS = 2_000;
 /** How long a dev server waits before answering 503: it must not freeze its
  *  event loop on someone else's lock. */
 export const SERVER_LOCK_WAIT_MS = 250;

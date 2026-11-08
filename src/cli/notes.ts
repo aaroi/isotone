@@ -254,7 +254,7 @@ export function noteRecord(record: StoredNote, root: string) {
 }
 
 /** The shell command that closes a note, quoted so any id is one argument. */
-export function doneCommand(id: string): string {
+function doneCommand(id: string): string {
   return shellCommand('npx', 'isotone', '--done', id);
 }
 
