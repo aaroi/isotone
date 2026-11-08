@@ -171,3 +171,12 @@ describe('forced colors', () => {
     expect(block).toMatch(/Highlight/);
   });
 });
+
+describe('touch', () => {
+  // iOS zooms the page into a focused field under 16px, and a zoomed page turns off the dock's keyboard lift.
+  it('sets every field a finger types in at 16px or more', () => {
+    const coarse = [...PANEL_CSS.matchAll(/@media \(pointer: coarse\) \{([\s\S]*?)\n\}/g)].map((match) => match[1]).join('\n');
+    const typed = selectors(coarse.match(/[^{}]*\{[^{}]*font-size: 16px[^{}]*\}/)?.[0] ?? '');
+    expect(typed).toEqual(expect.arrayContaining(['.isotone-root .isotone-textarea', '.isotone-root .isotone-colour-hex']));
+  });
+});

@@ -398,8 +398,11 @@ ${APPEARANCE_CSS}
   .isotone-root[data-selecting='true'] .isotone-notes-panel > :is(.isotone-list, .isotone-pages) { display: none; }
 }
 /* A finger needs more than the drawn faces. Hit areas grow without moving
-   anything; the faces keep Instrument's geometry. */
+   anything; the faces keep Instrument's geometry. Fields a finger types in
+   are 16px, below which iOS zooms the page on focus and the dock loses its
+   keyboard lift. */
 @media (pointer: coarse) {
+  .isotone-root .isotone-textarea, .isotone-root .isotone-colour-hex { font-size: 16px; }
   .isotone-pick::after, .isotone-send::after { inset: -8px -10px; }
   .isotone-chip button { position: relative; }
   .isotone-chip button::after, .isotone-note > .isotone-x::after, .isotone-panel-close::after { content: ''; position: absolute; inset: -6px; border-radius: 50%; }
