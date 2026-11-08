@@ -7,7 +7,7 @@
  * This file only re-exports, and each name here is supported API:
  * tests/package/exports.test.ts lists them, so adding one is a deliberate act.
  */
-export type { IterationElement, IterationNote, NoteContext, NoteReply, VariantReference, VariantRemoval } from './types';
+export type { IsotoneElement, IsotoneNote, NoteContext, NoteReply, VariantReference, VariantRemoval } from './types';
 export type { RouteGateOptions } from './routes';
 export { createVariantsSource } from './variants';
 export type {

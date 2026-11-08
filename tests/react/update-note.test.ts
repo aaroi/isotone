@@ -2,9 +2,9 @@
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { IterationNote } from '../../src/core/index';
+import type { IsotoneNote } from '../../src/core/index';
 import type { UpdateInfo } from '../../src/core/update';
-import { IterationPanel } from '../../src/react/index';
+import { IsotonePanel } from '../../src/react/index';
 
 const info: UpdateInfo = {
   status: 'available',
@@ -14,7 +14,7 @@ const info: UpdateInfo = {
 };
 let container: HTMLDivElement;
 let root: Root | null = null;
-let notes: IterationNote[];
+let notes: IsotoneNote[];
 let rev = 0;
 
 /** A small stand-in for the dev server: notes, and the update endpoint that files one. */
@@ -106,7 +106,7 @@ describe('asking the agent to update from the panel', () => {
     const mounted = root;
     await act(async () =>
       mounted.render(
-        createElement(IterationPanel, {
+        createElement(IsotonePanel, {
           route: '/',
           theme: 'light',
           store: { endpoint: '/notes' },
@@ -159,7 +159,7 @@ describe('asking the agent to update from the panel', () => {
     const mounted = root;
     await act(async () =>
       mounted.render(
-        createElement(IterationPanel, {
+        createElement(IsotonePanel, {
           route: '/',
           theme: 'light',
           store: { endpoint: '/notes' },

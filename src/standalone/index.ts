@@ -8,11 +8,11 @@
  * point rather than mounting on load — the config lives with the server that
  * owns the notes file, not baked into the bundle.
  */
-import type { MountIterationOptions } from '../core/types';
-import { mountIteration } from '../react/IterationMount';
+import type { MountIsotoneOptions } from '../core/types';
+import { mountIsotone } from '../react/IsotoneMount';
 
 interface IsotoneGlobal {
-  mount(options: MountIterationOptions): void;
+  mount(options: MountIsotoneOptions): void;
   unmount(): void;
   readonly mounted: boolean;
 }
@@ -33,7 +33,7 @@ const api: IsotoneGlobal = {
    *  instead of stacking a second one. */
   mount(options) {
     off?.();
-    off = mountIteration(options);
+    off = mountIsotone(options);
   },
   unmount() {
     off?.();

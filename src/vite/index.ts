@@ -42,11 +42,11 @@ import {
   VERSION_QUERY,
 } from './live';
 import { type Gate, notesEndpoint, updateEndpoint, variantsEndpoint } from './middleware';
-import type { IterationPlugin, IterationViteOptions } from './options';
+import type { IsotonePlugin, IsotoneViteOptions } from './options';
 import { createOverrides } from './overrides';
 import { createSwitching } from './switching';
 
-export type { IterationPlugin, IterationViteOptions } from './options';
+export type { IsotonePlugin, IsotoneViteOptions } from './options';
 
 const DEFAULT_FILE = '.iteration-feedback.json';
 
@@ -81,7 +81,7 @@ function announce(server: ViteDevServer, file: string, variantsDir: string | nul
   });
 }
 
-export function isotone(options: IterationViteOptions = {}): IterationPlugin {
+export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
   let file = resolve(options.file ?? DEFAULT_FILE);
   let isDev = false;
   let hasReact = false;
@@ -94,7 +94,7 @@ export function isotone(options: IterationViteOptions = {}): IterationPlugin {
   // types, but the object keeps its own shape, so `handleHotUpdate` stays a
   // plain method and drops into the structural type below.
   const plugin = {
-    name: 'iso:iteration',
+    name: 'isotone',
     enforce: 'pre',
     // Isotone's own files are read through its endpoints, never as static
     // files: keep Vite's file server from handing them out.

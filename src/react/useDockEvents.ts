@@ -1,5 +1,5 @@
 import { type FocusEvent, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
-import type { IterationShortcut } from '../core/types';
+import type { IsotoneShortcut } from '../core/types';
 import { prefersTouch } from './viewport';
 
 /**
@@ -12,10 +12,10 @@ import { prefersTouch } from './viewport';
 const FENCED_EVENTS =
   'pointerdown mousedown touchstart click contextmenu keydown keyup keypress beforeinput input focusin focusout wheel'.split(' ');
 
-export const DEFAULT_SHORTCUT: IterationShortcut = { code: 'Period', mod: true, shift: true };
+export const DEFAULT_SHORTCUT: IsotoneShortcut = { code: 'Period', mod: true, shift: true };
 
 /** The shortcut as the panel's hints spell it. */
-export function shortcutText(shortcut: IterationShortcut | false): string {
+export function shortcutText(shortcut: IsotoneShortcut | false): string {
   if (!shortcut) return '';
   const key = shortcut.code === 'Period' ? '.' : shortcut.code.replace(/^Key/, '');
   return [shortcut.mod && '⌘/Ctrl', shortcut.alt && 'Alt', shortcut.shift && 'Shift', key].filter(Boolean).join('+');
@@ -24,7 +24,7 @@ export function shortcutText(shortcut: IterationShortcut | false): string {
 interface DockEventsOptions {
   rootRef: RefObject<HTMLElement | null>;
   visible: boolean;
-  shortcut: IterationShortcut | false;
+  shortcut: IsotoneShortcut | false;
   /** The shortcut was pressed, anywhere on the page. */
   onShortcut: () => void;
   /** Escape was pressed in the dock, or with nothing focused. */
@@ -33,7 +33,7 @@ interface DockEventsOptions {
   onLeave: () => void;
 }
 
-const matches = (e: KeyboardEvent, shortcut: IterationShortcut) =>
+const matches = (e: KeyboardEvent, shortcut: IsotoneShortcut) =>
   e.code === shortcut.code &&
   Boolean(e.metaKey || e.ctrlKey) === Boolean(shortcut.mod) &&
   e.shiftKey === Boolean(shortcut.shift) &&

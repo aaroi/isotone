@@ -91,7 +91,7 @@ function printHelp(io: CliIO): void {
  * (index.ts) awaits this the same way it awaits any other command.
  */
 async function runServe(args: string[], io: CliIO): Promise<number> {
-  const { serveIteration } = await import('../serve/index');
+  const { serveIsotone } = await import('../serve/index');
   if (isHelp(args[0])) {
     out(io, 'Usage: isotone serve [--port 4123] [--host 127.0.0.1] [--file <path>] [--theme auto|light|dark|system]');
     out(io, '                     [--no-update-check | --update-note]');
@@ -121,9 +121,9 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
     errOut(io, 'Port must be an integer between 0 and 65535.');
     return 1;
   }
-  let served: Awaited<ReturnType<typeof serveIteration>>;
+  let served: Awaited<ReturnType<typeof serveIsotone>>;
   try {
-    served = await serveIteration({
+    served = await serveIsotone({
       file,
       port,
       host,
@@ -158,7 +158,7 @@ export function serveBanner(served: { url: string; bundleUrl: string }, file: st
   return [
     `isotone serving on ${served.url}`,
     `  notes  ${file}`,
-    `  knobs  ${served.url}/api/iteration/variants  (from .isotone/knobs.json)`,
+    `  knobs  ${served.url}/api/isotone/variants  (from .isotone/knobs.json)`,
     `  panel  ${served.bundleUrl}  (load it on development pages only)`,
     `  setup  ${served.url}  (a localhost-only script tag + bookmarklet)`,
     `  tag    ${guardedScriptTag(served.bundleUrl)}`,

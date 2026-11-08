@@ -3,16 +3,16 @@
  * what it keeps and drops anything malformed, so a hostile or buggy page
  * cannot bloat or corrupt the notes file.
  */
-import type { IterationElement, VariantReference, VariantRemoval } from '../../core/types';
+import type { IsotoneElement, VariantReference, VariantRemoval } from '../../core/types';
 import { MAX_SELECTOR, PAYLOAD_MAX } from '../../core/limits';
 
 export function cap(v: string, max: number): string {
   return v.slice(0, max);
 }
 
-export function elementOf(value: unknown): IterationElement | null {
+export function elementOf(value: unknown): IsotoneElement | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const v = value as Partial<IterationElement>;
+  const v = value as Partial<IsotoneElement>;
   if (typeof v.selector !== 'string' || !v.selector) return null;
   return {
     tag: cap(String(v.tag ?? ''), 30),
@@ -32,9 +32,9 @@ function stringList(value: unknown, count: number, length: number): string[] {
 }
 
 /** The optional identifying fields, each bounded; anything malformed is dropped. */
-export function elementContext(value: object): Partial<IterationElement> {
+export function elementContext(value: object): Partial<IsotoneElement> {
   const v = value as Record<string, unknown>;
-  const out: Partial<IterationElement> = {};
+  const out: Partial<IsotoneElement> = {};
   if (v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes)) {
     const entries = Object.entries(v.attributes)
       .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && !UNSAFE_KEYS.has(entry[0]))
@@ -50,7 +50,7 @@ export function elementContext(value: object): Partial<IterationElement> {
   if (typeof v.near === 'string' && v.near) out.near = cap(v.near, 120);
   const rect = v.rect as Record<string, unknown> | null | undefined;
   if (rect && typeof rect === 'object' && [rect.x, rect.y, rect.w, rect.h].every((n) => typeof n === 'number' && Number.isFinite(n))) {
-    out.rect = { x: rect.x, y: rect.y, w: rect.w, h: rect.h } as NonNullable<IterationElement['rect']>;
+    out.rect = { x: rect.x, y: rect.y, w: rect.w, h: rect.h } as NonNullable<IsotoneElement['rect']>;
   }
   return out;
 }

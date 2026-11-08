@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 function post(file: string, body: unknown) {
-  return notesResponse(file, { method: 'POST', url: '/api/iteration/notes', body });
+  return notesResponse(file, { method: 'POST', url: '/api/isotone/notes', body });
 }
 
 function get(file: string, url: string) {
@@ -34,7 +34,7 @@ function get(file: string, url: string) {
 function del(file: string, id: string | null) {
   return notesResponse(file, {
     method: 'DELETE',
-    url: `/api/iteration/notes${id ? `?id=${id}` : ''}`,
+    url: `/api/isotone/notes${id ? `?id=${id}` : ''}`,
   });
 }
 
@@ -92,7 +92,7 @@ describe('notesResponse', () => {
     expect(created.status).toBe(201);
     const id = (created.body as { id: string }).id;
 
-    const listed = get(file, '/api/iteration/notes?route=/projects');
+    const listed = get(file, '/api/isotone/notes?route=/projects');
     const rows = listed.body as Array<{ id: string; feedback: string }>;
     expect(rows).toHaveLength(1);
     expect(rows[0]?.feedback).toBe('hello');
@@ -140,7 +140,7 @@ describe('notesResponse', () => {
     const first = all.find((n) => n.route === '/a');
     if (first) first.done = true;
     writeNotes(file, all);
-    const pending = get(file, '/api/iteration/notes');
+    const pending = get(file, '/api/isotone/notes');
     expect((pending.body as Array<{ route: string }>).map((r) => r.route)).toEqual(['/b']);
   });
 
@@ -325,7 +325,7 @@ describe('feedback references', () => {
     const variantAction = { axisId: 'layout', action: 'remove-option', optionId: 'stack' };
     const created = post(file, { route: '/', feedback: '[remove-option] Stack', variantAction, payload: { host: true } });
     const id = (created.body as { id: string }).id;
-    expect(get(file, '/api/iteration/notes').body).toMatchObject([{ variantAction, payload: { host: true } }]);
+    expect(get(file, '/api/isotone/notes').body).toMatchObject([{ variantAction, payload: { host: true } }]);
     post(file, { id, route: '/', feedback: 'Keep the same request' });
     expect(readNotes(file)[0]).toMatchObject({ variantAction });
     expect(post(file, { route: '/', feedback: 'Invalid', variantAction: { axisId: 'layout', action: 'remove-option' } }).status).toBe(400);

@@ -13,19 +13,19 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { VARIANTS_ENDPOINT } from '../../src/core/variants';
-import { serveIteration, type ServedIteration } from '../../src/serve/index';
+import { serveIsotone, type ServedIsotone } from '../../src/serve/index';
 import { guardedScriptTag } from '../../src/serve/tag';
 import { NOTES_ENDPOINT } from '../../src/node/notes/handler';
 import { UPDATE_ENDPOINT } from '../../src/node/update/check';
 
-let served: ServedIteration;
+let served: ServedIsotone;
 let dir: string;
 let file: string;
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), 'iso-serve-'));
   file = join(dir, 'notes.json');
-  served = await serveIteration({ file, port: 0, rule: { hidden: ['/login'] }, theme: 'light' });
+  served = await serveIsotone({ file, port: 0, rule: { hidden: ['/login'] }, theme: 'light' });
 });
 
 afterAll(async () => {
@@ -117,7 +117,7 @@ describe('the update endpoint', () => {
 
 describe('Blast', () => {
   it('has no HTTP endpoint and no panel wiring: it is a CLI feature', async () => {
-    expect((await fetch(`${served.url}/api/iteration/blast`, { headers: { origin: 'http://localhost:3000' } })).status).toBe(404);
+    expect((await fetch(`${served.url}/api/isotone/blast`, { headers: { origin: 'http://localhost:3000' } })).status).toBe(404);
     const js = await (await fetch(served.bundleUrl)).text();
     expect(js.includes('blastEndpoint')).toBe(false);
   });
@@ -266,6 +266,6 @@ describe('bounded local requests', () => {
   });
 
   it('refuses to expose the local file server on every interface', () => {
-    expect(() => serveIteration({ file, host: '0.0.0.0' })).toThrow('binds only');
+    expect(() => serveIsotone({ file, host: '0.0.0.0' })).toThrow('binds only');
   });
 });

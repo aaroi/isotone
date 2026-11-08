@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it } from 'vitest';
 import { LockBusyError, withFileLock } from '../../src/node/fs/lock';
 import { notesResponse } from '../../src/node/notes/handler';
 import { variantsDir, variantsResponse } from '../../src/node/variants';
-import { serveIteration } from '../../src/serve';
+import { serveIsotone } from '../../src/serve';
 import { compileSources } from '../helpers/compile';
 
 let root: string;
@@ -130,8 +130,8 @@ it('answers 503 quickly from a server while another writer holds the store', asy
   const file = join(root, 'notes.json');
   writeLock(file, owner(process.pid), 0);
   const started = Date.now();
-  const served = await serveIteration({ file, port: 0, checkForUpdates: false });
-  const response = await fetch(`${served.url}/api/iteration/notes`, {
+  const served = await serveIsotone({ file, port: 0, checkForUpdates: false });
+  const response = await fetch(`${served.url}/api/isotone/notes`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ route: '/', feedback: 'Hi' }),

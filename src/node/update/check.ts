@@ -7,7 +7,7 @@ import type { PackageManager, UpdateInfo } from '../../core/update';
 import { readJsonBounded, writeJsonAtomic } from '../fs/atomic';
 import { name as packageName, version as currentVersion } from '../../../package.json';
 
-export const UPDATE_ENDPOINT = '/api/iteration/update';
+export const UPDATE_ENDPOINT = '/api/isotone/update';
 const REGISTRY_URL = `https://registry.npmjs.org/${packageName}/latest`;
 const CHECK_TIMEOUT = 5_000;
 const CACHE_TTL = 24 * 60 * 60 * 1000;

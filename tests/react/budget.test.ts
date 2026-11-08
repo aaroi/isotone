@@ -9,8 +9,8 @@
 import { act, createElement, memo, Profiler } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { IterationNote } from '../../src/core';
-import { createVariantsSource, IterationPanel, type VariantAxis } from '../../src/react/index';
+import type { IsotoneNote } from '../../src/core';
+import { createVariantsSource, IsotonePanel, type VariantAxis } from '../../src/react/index';
 import { useNotes } from '../../src/react/useNotes';
 
 let host: HTMLDivElement;
@@ -22,7 +22,7 @@ let root: Root;
 let commits = 0;
 /** How many selectors each commit left in the panel. */
 let axesPerCommit: number[] = [];
-let notes: IterationNote[] = [];
+let notes: IsotoneNote[] = [];
 
 const axes: VariantAxis[] = Array.from({ length: 500 }, (_, i) => ({
   id: `axis-${i}`,
@@ -33,7 +33,7 @@ const axes: VariantAxis[] = Array.from({ length: 500 }, (_, i) => ({
     { id: 'b', label: 'Alternative' },
   ],
 }));
-const manyNotes = (): IterationNote[] =>
+const manyNotes = (): IsotoneNote[] =>
   Array.from({ length: 500 }, (_, i) => ({
     id: `note-${i}`,
     route: '/',
@@ -82,7 +82,7 @@ afterEach(async () => {
 });
 
 async function render(withVariants = false) {
-  const panel = createElement(IterationPanel, {
+  const panel = createElement(IsotonePanel, {
     route: '/',
     theme: 'light',
     store: { endpoint: '/notes' },
@@ -188,10 +188,10 @@ it('commits nothing for pointer moves in select mode', async () => {
 it('leaves 500 notes alone when a load returns them unchanged', async () => {
   notes = manyNotes();
   let rowRenders = 0;
-  let shown: IterationNote[] = [];
+  let shown: IsotoneNote[] = [];
   let load = () => {};
   // Stands in for the memoized note rows: it renders again only for a list that changed.
-  const Rows = memo(function Rows({ list }: { list: IterationNote[] }) {
+  const Rows = memo(function Rows({ list }: { list: IsotoneNote[] }) {
     rowRenders++;
     shown = list;
     return createElement('p', null, list.length);
@@ -210,7 +210,7 @@ it('leaves 500 notes alone when a load returns them unchanged', async () => {
   await act(async () => load());
   await act(async () => load());
   expect(rowRenders).toBe(loaded);
-  notes[0] = { ...notes[0], feedback: 'Changed' } as IterationNote;
+  notes[0] = { ...notes[0], feedback: 'Changed' } as IsotoneNote;
   await act(async () => load());
   expect(rowRenders).toBe(loaded + 1);
   // Only the changed note is a new object, so every other row skips its render.

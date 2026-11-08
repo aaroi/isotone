@@ -1,7 +1,7 @@
 import { type Dispatch, type SetStateAction, useCallback, useMemo, useRef, useState } from 'react';
 import { createNoteId } from '../core/id';
 import { MAX_FEEDBACK_LENGTH } from '../core/limits';
-import type { IterationElement, IterationNote, VariantReference } from '../core/types';
+import type { IsotoneElement, IsotoneNote, VariantReference } from '../core/types';
 import type { VariantAction } from '../core/variants';
 import type { UpdateMode } from './useDockMode';
 import { createDraftText, type DraftText, useDraft } from './useDraft';
@@ -15,7 +15,7 @@ interface NoteActionsOptions {
   draftKey: string;
   store: Notes['store'];
   write: Notes['write'];
-  setNotes: Dispatch<SetStateAction<IterationNote[]>>;
+  setNotes: Dispatch<SetStateAction<IsotoneNote[]>>;
   getPayload?: () => unknown;
   update: UpdateMode;
   focusComposer: () => void;
@@ -24,9 +24,9 @@ interface NoteActionsOptions {
 /** What the composer shows, besides its text: one object that changes only when one of these does. */
 export interface ComposerDraft {
   text: DraftText;
-  editing: IterationNote | null;
+  editing: IsotoneNote | null;
   variantTarget: VariantReference | null;
-  targets: IterationElement[];
+  targets: IsotoneElement[];
   notice: string;
 }
 
@@ -46,9 +46,9 @@ function removalText(action: VariantAction, reference: VariantReference): string
  */
 export function useNoteActions({ route, draftKey, store, write, setNotes, getPayload, update, focusComposer }: NoteActionsOptions) {
   const [text] = useState(createDraftText);
-  const [targets, setTargets] = useState<IterationElement[]>([]);
+  const [targets, setTargets] = useState<IsotoneElement[]>([]);
   const [variantTarget, setVariantTarget] = useState<VariantReference | null>(null);
-  const [editing, setEditing] = useState<IterationNote | null>(null);
+  const [editing, setEditing] = useState<IsotoneNote | null>(null);
   const [notice, setNotice] = useState('');
   // Handlers read the current render here, so they stay stable and memoized children skip unrelated renders.
   const latest = useRef({ route, getPayload, targets, variantTarget, editing });
@@ -79,7 +79,7 @@ export function useNoteActions({ route, draftKey, store, write, setNotes, getPay
     const noteRoute = previous?.route ?? route;
     const element = targets[0] ?? null;
     const tempId = previous?.id ?? `pending-${createNoteId()}`;
-    const entry: IterationNote = {
+    const entry: IsotoneNote = {
       ...(previous ?? {}),
       id: tempId,
       route: noteRoute,
@@ -121,7 +121,7 @@ export function useNoteActions({ route, draftKey, store, write, setNotes, getPay
   }, [text, store, write, setNotes, cancelEdit, update, focusComposer]);
 
   const beginEdit = useCallback(
-    (note: IterationNote) => {
+    (note: IsotoneNote) => {
       update({ anchor: null });
       setEditing(note);
       text.set(note.feedback);
@@ -133,7 +133,7 @@ export function useNoteActions({ route, draftKey, store, write, setNotes, getPay
   );
 
   const removeNote = useCallback(
-    (note: IterationNote) => {
+    (note: IsotoneNote) => {
       void write(async () => {
         setNotes((prev) => prev.filter((n) => n.id !== note.id));
         if (latest.current.editing?.id === note.id) cancelEdit();

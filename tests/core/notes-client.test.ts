@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { createIterationStore } from '../../src/core/notes-client';
+import { createIsotoneStore } from '../../src/core/notes-client';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -12,7 +12,7 @@ it('replaces pending defaults offline and migrates only the latest snapshot', as
       removeItem: (key: string) => values.delete(key),
     },
   });
-  const local = createIterationStore({ key: 'defaults-test' });
+  const local = createIsotoneStore({ key: 'defaults-test' });
   const first = await local.saveNote('/', '[set-defaults] v1', null, null, { variants: 'old' });
   const second = await local.saveNote('/', '[set-defaults] v2', null, null, { variants: 'new' });
   expect(second).toBe(first);
@@ -33,7 +33,7 @@ it('replaces pending defaults offline and migrates only the latest snapshot', as
       return { ok: true, json: async () => [] };
     }),
   );
-  await createIterationStore({ key: 'defaults-test', endpoint: '/notes' }).listNotes();
+  await createIsotoneStore({ key: 'defaults-test', endpoint: '/notes' }).listNotes();
   expect(posted.filter((n) => n.route === '/' && String(n.feedback).startsWith('[set-defaults]'))).toEqual([
     expect.objectContaining({ feedback: '[set-defaults] v2', payload: { variants: 'new' } }),
   ]);

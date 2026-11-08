@@ -2,7 +2,7 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import type { IterationElement } from '../../core/types';
+import type { IsotoneElement } from '../../core/types';
 import { OVERLAY_GROUP_ID, type OverlayVariant, type OverlayVariantStatus } from '../../core/variants/overlay';
 import { writeJson } from '../fs/atomic';
 import { isWithin } from '../fs/paths';
@@ -147,7 +147,7 @@ export function createVariant(
     id: string;
     label?: string;
     route?: string;
-    element?: IterationElement | null;
+    element?: IsotoneElement | null;
     note?: string;
     description?: string;
     group?: string;

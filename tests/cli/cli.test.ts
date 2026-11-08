@@ -493,8 +493,8 @@ describe('init', () => {
     const root = tempRepo();
     const host = makeIo(root);
     expect(await runCli(['init', '--approach', 'host'], host)).toBe(0);
-    expect(host.text.out).toContain("import { createVariantsSource, mountIteration } from 'isotone/react';");
-    expect(host.text.out).toContain('mountIteration({ variants: source });');
+    expect(host.text.out).toContain("import { createVariantsSource, mountIsotone } from 'isotone/react';");
+    expect(host.text.out).toContain('mountIsotone({ variants: source });');
     expect(host.text.out).not.toContain('myAxes');
 
     writeFileSync(join(root, 'next.config.ts'), 'export default {};\n');
@@ -540,11 +540,11 @@ describe('init', () => {
 
     const next = tempRepo();
     writeFileSync(join(next, 'next.config.ts'), 'export default {};\n');
-    mkdirSync(join(next, 'app/api/iteration/notes'), { recursive: true });
-    writeFileSync(join(next, 'app/api/iteration/notes/route.ts'), "import { serveNotesRequest } from 'isotone/server';\n");
+    mkdirSync(join(next, 'app/api/isotone/notes'), { recursive: true });
+    writeFileSync(join(next, 'app/api/isotone/notes/route.ts'), "import { serveNotesRequest } from 'isotone/server';\n");
     const routed = makeIo(next);
     expect(await runCli(['init'], routed)).toBe(0);
-    expect(routed.text.out).toContain('Already set up: app/api/iteration/notes/route.ts loads Isotone.');
+    expect(routed.text.out).toContain('Already set up: app/api/isotone/notes/route.ts loads Isotone.');
 
     const fresh = makeIo(tempRepo());
     expect(await runCli(['init', '--json'], fresh)).toBe(0);
@@ -615,7 +615,7 @@ describe('init', () => {
     const io = makeIo(tempRepo());
     expect(await runCli(['init'], io)).toBe(0);
     expect(io.text.out).toContain('if(/^(localhost|127\\.0\\.0\\.1|\\[::1\\])$/.test(location.hostname))');
-    expect(io.text.out).not.toContain('app/api/iteration/notes/route.ts');
+    expect(io.text.out).not.toContain('app/api/isotone/notes/route.ts');
   });
 
   it('prints a first run until the project has variants or knobs', async () => {

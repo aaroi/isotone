@@ -54,7 +54,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { runCli } from 'isotone/cli';
 import * as core from 'isotone/core';
-import { serveIteration } from 'isotone/serve';
+import { serveIsotone } from 'isotone/serve';
 import { createRequire } from 'node:module';
 
 assert.equal(existsSync('node_modules/react'), false, 'standalone must not require React');
@@ -89,16 +89,16 @@ let earlyErr = '';
 early.stderr.on('data', (chunk) => { earlyErr += chunk; });
 assert.equal(await new Promise((resolve) => early.on('close', resolve)), 0, earlyErr);
 assert.equal(earlyErr, '');
-const app = await serveIteration({ file: 'notes.json', port: 0, theme: 'system', checkForUpdates: false });
+const app = await serveIsotone({ file: 'notes.json', port: 0, theme: 'system', checkForUpdates: false });
 try {
   const bundle = await (await fetch(app.bundleUrl)).text();
   assert.ok(bundle.includes('window.__isotone'));
   assert.ok(bundle.includes('"theme":"system"'));
-  const note = await fetch(app.url + '/api/iteration/notes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ route: '/', feedback: 'Package smoke test' }) });
+  const note = await fetch(app.url + '/api/isotone/notes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ route: '/', feedback: 'Package smoke test' }) });
   assert.equal(note.status, 201);
   assert.equal(JSON.parse(readFileSync('notes.json', 'utf8')).length, 1);
   // Blast is a CLI feature: no HTTP endpoint serves its session.
-  assert.equal((await fetch(app.url + '/api/iteration/blast')).status, 404);
+  assert.equal((await fetch(app.url + '/api/isotone/blast')).status, 404);
 } finally { await app.close(); }
 console.log('Packed package: isolated install, public imports, CLI, bundle and notes endpoint passed.');
 `,

@@ -22,7 +22,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { createServer, type ViteDevServer } from 'vite';
 
 import { withNativeFetch } from '../../src/vite/html-inject';
-import { isotone, iteration, type IterationViteOptions } from '../../src/vite/index';
+import { isotone, iteration, type IsotoneViteOptions } from '../../src/vite/index';
 import { NOTES_ENDPOINT } from '../../src/node/notes/handler';
 import { VARIANTS_ENDPOINT } from '../../src/core/variants';
 import { UPDATE_ENDPOINT } from '../../src/node/update/check';
@@ -381,7 +381,7 @@ describe('withNativeFetch', () => {
 
 /**
  * The hooks as this file calls them. `isotone()` returns the structural
- * `IterationPlugin` on purpose (see its doc comment), so the test reaches
+ * `IsotonePlugin` on purpose (see its doc comment), so the test reaches
  * the hooks through a cast rather than vite's `Plugin` type.
  */
 interface Hooks {
@@ -445,7 +445,7 @@ function tempProject(): { root: string; source: string; override: string; table:
   return { root, source, override, table };
 }
 
-function plugin(root: string, command: 'serve' | 'build', options: IterationViteOptions = {}): Hooks {
+function plugin(root: string, command: 'serve' | 'build', options: IsotoneViteOptions = {}): Hooks {
   const hooks = isotone(options) as unknown as Hooks;
   hooks.configResolved({ root, command, assetsInclude: () => false });
   return hooks;

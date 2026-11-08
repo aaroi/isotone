@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { expect, it } from 'vitest';
-import { describeIterationElement, elementAsNode } from '../../src/core/element';
+import { describeIsotoneElement, elementAsNode } from '../../src/core/element';
 
 it('describes an element without visiting unrelated DOM subtrees', () => {
   document.body.innerHTML = '<main><button>Selected</button><section><span>Unrelated</span></section></main>';
@@ -17,7 +17,7 @@ it('describes an element without visiting unrelated DOM subtrees', () => {
   });
   const button = document.querySelector('button');
   if (!button) throw new Error('Missing fixture button');
-  expect(describeIterationElement(elementAsNode(button))).toEqual({
+  expect(describeIsotoneElement(elementAsNode(button))).toEqual({
     tag: 'button',
     text: 'Selected',
     selector: 'main:nth-child(1) > button:nth-child(1)',
@@ -29,7 +29,7 @@ it('produces queryable selectors for numeric and framework-generated ids', () =>
   document.body.replaceChildren(button);
   for (const id of ['123', ':r1:', 'one.two', 'hello world']) {
     button.id = id;
-    const descriptor = describeIterationElement(elementAsNode(button));
+    const descriptor = describeIsotoneElement(elementAsNode(button));
     expect(document.querySelector(descriptor.selector)).toBe(button);
   }
 });
@@ -39,21 +39,21 @@ it('separates block children in the pinned text instead of running them together
     '<article><p>Active projects</p><strong>12</strong><small style="display: block">+2 this <b>month</b></small></article>';
   const card = document.querySelector('article');
   if (!card) throw new Error('Missing fixture card');
-  expect(describeIterationElement(elementAsNode(card)).text).toBe('Active projects 12 +2 this month');
+  expect(describeIsotoneElement(elementAsNode(card)).text).toBe('Active projects 12 +2 this month');
 });
 
 it('prefers the browser rendering of the text when it has one', () => {
   document.body.innerHTML = '<div>One<div>Two</div></div>';
   const div = document.querySelector('div') as HTMLElement;
   Object.defineProperty(div, 'innerText', { value: 'One\nTwo' });
-  expect(describeIterationElement(elementAsNode(div)).text).toBe('One Two');
+  expect(describeIsotoneElement(elementAsNode(div)).text).toBe('One Two');
 });
 
 it('keeps the case of SVG tags, so the selector finds the element again', () => {
   document.body.innerHTML =
     '<svg><defs><linearGradient id="g"><stop offset="0"/></linearGradient></defs><foreignObject><p>Hi</p></foreignObject></svg>';
   for (const target of [document.querySelector('stop'), document.querySelector('foreignObject p')] as Element[]) {
-    const { selector } = describeIterationElement(elementAsNode(target), 8);
+    const { selector } = describeIsotoneElement(elementAsNode(target), 8);
     expect(document.querySelector(selector)).toBe(target);
   }
 });

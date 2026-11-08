@@ -5,7 +5,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { RouteGateOptions } from '../core/routes';
-import type { IterationShortcut, IterationTheme } from '../core/types';
+import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
 import { readBundle } from '../node/bundle';
 import { isFromThisMachine, nodeRequestFacts } from '../node/http';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
@@ -19,8 +19,8 @@ export function mountModuleSource(
   rule: RouteGateOptions,
   key: string,
   variants: boolean,
-  shortcut?: IterationShortcut | false,
-  theme?: IterationTheme,
+  shortcut?: IsotoneShortcut | false,
+  theme?: IsotoneTheme,
 ): string {
   const config = JSON.stringify({
     endpoint: NOTES_ENDPOINT,

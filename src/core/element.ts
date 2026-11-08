@@ -3,7 +3,7 @@
  * the agent can find it in code. Framework-free and unit-testable against
  * plain objects as well as a real DOM.
  */
-import type { IterationElement } from './types';
+import type { IsotoneElement } from './types';
 
 /** The minimal structural surface the descriptor builder needs from a DOM
  *  node. `children` is `readonly` so both a real `HTMLCollection` and a plain
@@ -22,7 +22,7 @@ export interface NodeLike {
    *  path stops at an id or the depth cap, unchecked. */
   isOnlyMatch?(selector: string): boolean;
   /** What else identifies the node, beyond its path. */
-  context?(): Partial<IterationElement>;
+  context?(): Partial<IsotoneElement>;
 }
 
 /**
@@ -32,7 +32,7 @@ export interface NodeLike {
  * DOM the walk goes on past `maxDepth` until the path matches this element
  * alone. Kept framework-free so it is unit-testable.
  */
-export function describeIterationElement(el: NodeLike, maxDepth = 4): IterationElement {
+export function describeIsotoneElement(el: NodeLike, maxDepth = 4): IsotoneElement {
   const parts: string[] = [];
   let node: NodeLike | null | undefined = el;
   let depth = 0;
@@ -82,7 +82,7 @@ const IDENTIFYING_ATTRIBUTES = ['role', 'type', 'name', 'href', 'aria-label', 't
 
 /** Names from React's dev-mode bookkeeping on the DOM node. Absent on other
  *  frameworks and production builds, which simply leaves the fields out. */
-function reactContext(el: Element): Pick<IterationElement, 'component' | 'source'> {
+function reactContext(el: Element): Pick<IsotoneElement, 'component' | 'source'> {
   type Fiber = {
     type?: unknown;
     return?: Fiber | null;
@@ -189,7 +189,7 @@ function mapPosition(mappings: string, line: number, column: number): { source: 
  * The pinned element's JSX callsite in its original file, on React 19 hosts:
  * the served module's source map turns the stack's transformed line into the
  * line the agent will open. Resolves to undefined when there is nothing better
- * than what `describeIterationElement` already recorded.
+ * than what `describeIsotoneElement` already recorded.
  */
 export async function resolveElementSource(el: Element): Promise<string | undefined> {
   type Fiber = { return?: Fiber | null; _debugSource?: unknown; _debugStack?: Parameters<typeof stackFrame>[0] };
@@ -223,7 +223,7 @@ export async function resolveElementSource(el: Element): Promise<string | undefi
 
 /** Everything about a pinned element that says which one it is, for the agent
  *  reading the note later and without the page open. */
-function elementContext(el: Element): Partial<IterationElement> {
+function elementContext(el: Element): Partial<IsotoneElement> {
   const attributes: Record<string, string> = {};
   for (const name of IDENTIFYING_ATTRIBUTES) {
     const value = el.getAttribute(name);

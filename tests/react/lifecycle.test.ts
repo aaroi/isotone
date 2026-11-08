@@ -2,8 +2,8 @@
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { IterationNote } from '../../src/core';
-import { IterationPanel, mountIteration, type IterationTheme } from '../../src/react/index';
+import type { IsotoneNote } from '../../src/core';
+import { IsotonePanel, mountIsotone, type IsotoneTheme } from '../../src/react/index';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -41,9 +41,9 @@ function response(value: unknown) {
   return { ok: true, status: 200, json: async () => value };
 }
 
-function render(theme: IterationTheme = 'light') {
+function render(theme: IsotoneTheme = 'light') {
   return act(async () => {
-    root.render(createElement(IterationPanel, { route: '/', theme, store: { endpoint: '/notes' } }));
+    root.render(createElement(IsotonePanel, { route: '/', theme, store: { endpoint: '/notes' } }));
   });
 }
 
@@ -61,7 +61,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-const note: IterationNote = {
+const note: IsotoneNote = {
   id: 'existing',
   route: '/',
   feedback: 'Original note',
@@ -91,7 +91,7 @@ it('applies theme prop changes and follows system changes while mounted', async 
 
 it('passes an explicit theme through the standalone React mount', async () => {
   document.body.style.backgroundColor = 'black';
-  const off = mountIteration({ endpoint: '/notes', theme: 'light' });
+  const off = mountIsotone({ endpoint: '/notes', theme: 'light' });
   await act(async () => {
     await vi.advanceTimersByTimeAsync(0);
   });
@@ -195,8 +195,8 @@ it('deletes a note whose save is still in flight by the id the server gives it',
 it('follows a new notes endpoint on a mounted panel', async () => {
   const fetchMock = vi.fn(async (_url: unknown) => response([]));
   vi.stubGlobal('fetch', fetchMock);
-  await act(async () => root.render(createElement(IterationPanel, { route: '/', theme: 'light', store: { endpoint: '/a' } })));
-  await act(async () => root.render(createElement(IterationPanel, { route: '/', theme: 'light', store: { endpoint: '/b' } })));
+  await act(async () => root.render(createElement(IsotonePanel, { route: '/', theme: 'light', store: { endpoint: '/a' } })));
+  await act(async () => root.render(createElement(IsotonePanel, { route: '/', theme: 'light', store: { endpoint: '/b' } })));
   fetchMock.mockClear();
   await click('.isotone-fab');
   const paths = fetchMock.mock.calls.map(([url]) => String(url).split('?')[0]);

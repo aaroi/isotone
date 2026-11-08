@@ -1,5 +1,5 @@
 import { type RefObject, useLayoutEffect, useState } from 'react';
-import type { IterationTheme } from '../core/types';
+import type { IsotoneTheme } from '../core/types';
 import { ensurePanelStyles } from './styles';
 
 type ResolvedTheme = 'light' | 'dark';
@@ -73,7 +73,7 @@ function systemTheme(): ResolvedTheme {
  * browser canvas. Background images and closed shadow roots cannot be sampled;
  * hosts using those can set an explicit theme or choose system.
  */
-export function detectTheme(preference: IterationTheme = 'auto', shadows?: Set<ShadowRoot>): ResolvedTheme {
+export function detectTheme(preference: IsotoneTheme = 'auto', shadows?: Set<ShadowRoot>): ResolvedTheme {
   if (preference === 'light' || preference === 'dark') return preference;
   if (preference === 'system') return systemTheme();
   if (typeof document === 'undefined') return 'light';
@@ -120,7 +120,7 @@ function paintRelevant(record: MutationRecord): boolean {
 }
 
 /** Observe only the signals needed by the chosen mode, coalescing page events per frame and page mutations per interval. */
-export function observeTheme(onTheme: (theme: ResolvedTheme) => void, preference: IterationTheme = 'auto'): () => void {
+export function observeTheme(onTheme: (theme: ResolvedTheme) => void, preference: IsotoneTheme = 'auto'): () => void {
   let current: ResolvedTheme | undefined;
   let frame: number | undefined;
   let throttle: ReturnType<typeof setTimeout> | undefined;
@@ -203,7 +203,7 @@ export function observeTheme(onTheme: (theme: ResolvedTheme) => void, preference
  * it. The observer follows the page from mount; opening a panel or changing
  * route does not rebuild it.
  */
-export function useDockTheme(rootRef: RefObject<HTMLElement | null>, visible: boolean, preference: IterationTheme): ResolvedTheme {
+export function useDockTheme(rootRef: RefObject<HTMLElement | null>, visible: boolean, preference: IsotoneTheme): ResolvedTheme {
   const [theme, setTheme] = useState(() => detectTheme(preference));
   useLayoutEffect(() => {
     if (!visible) return;

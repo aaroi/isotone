@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client';
 
-import { createIterationStore } from '../core/notes-client';
+import { createIsotoneStore } from '../core/notes-client';
 import {
   createOverlayVariantsSource,
   axisSection,
@@ -9,9 +9,9 @@ import {
   type VariantsSource,
   VARIANTS_ENDPOINT,
 } from '../core/variants';
-import { IterationPanel } from './IterationPanel';
+import { IsotonePanel } from './IsotonePanel';
 import { ensurePanelStyles } from './styles';
-import type { MountIterationOptions } from '../core/types';
+import type { MountIsotoneOptions } from '../core/types';
 
 /**
  * Run a `createRoot` call and undo what it leaves on `document`.
@@ -46,7 +46,7 @@ function withDocumentUntouched<T>(create: () => T): T {
 }
 
 /**
- * Self-mount the Iteration panel into a shadow root on `document.body`,
+ * Self-mount the Isotone panel into a shadow root on `document.body`,
  * outside any app tree, tracking `window.location.pathname` so it needs no
  * router integration.
  *
@@ -61,7 +61,7 @@ function withDocumentUntouched<T>(create: () => T): T {
  * `document.elementFromPoint` retargets to the host for anything inside a
  * shadow root, so the element picker's self-exclusion matches on it.
  *
- * The host is created at runtime by `mountIteration` (never part of any HTML
+ * The host is created at runtime by `mountIsotone` (never part of any HTML
  * React hydrates) and is watched by a MutationObserver: if a whole-document
  * render — a React Router hydration failure made worse by an extension, for
  * instance — replaces `<body>` and drops the host, it is re-appended to the
@@ -71,7 +71,7 @@ function withDocumentUntouched<T>(create: () => T): T {
 const KNOBS_EMPTY_TEXT =
   'No knobs on this page yet. Ask your agent to add knobs for this page to .isotone/knobs.json and they will appear here.';
 
-export function mountIteration(opts: MountIterationOptions): () => void {
+export function mountIsotone(opts: MountIsotoneOptions): () => void {
   const getRoute = opts.getRoute ?? (() => window.location.pathname);
   const variants =
     opts.variants === 'overlay' || opts.variants === 'knobs'
@@ -116,7 +116,7 @@ export function mountIteration(opts: MountIterationOptions): () => void {
 
   function render() {
     root.render(
-      <IterationPanel
+      <IsotonePanel
         route={getRoute()}
         store={{ endpoint: opts.endpoint, key: opts.key }}
         rule={opts.rule}
@@ -148,7 +148,7 @@ export function mountIteration(opts: MountIterationOptions): () => void {
     }, 0);
   };
 
-  // Deferred, not synchronous — the host may call mountIteration from an
+  // Deferred, not synchronous — the host may call mountIsotone from an
   // effect (a React host mounts it from one), and a synchronous secondary root
   // render fires React 19 dev's "useInsertionEffect must not schedule
   // updates" because it commits while the host's own commit is in flight.
@@ -209,7 +209,7 @@ function overlaySourceWithSave(
 ): VariantsSource {
   const source = createOverlayVariantsSource({ endpoint: variantsEndpoint, getRoute });
   if (!endpoint) return source;
-  const notes = createIterationStore({ endpoint, key });
+  const notes = createIsotoneStore({ endpoint, key });
   source.saveDefaults = async (selections) => {
     // In axis order, so the note reads top to bottom like the panel did.
     const picked = source

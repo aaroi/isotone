@@ -1,5 +1,5 @@
 import { showOverflowTitle } from './tooltips';
-import type { IterationNote } from '../core/types';
+import type { IsotoneNote } from '../core/types';
 import { updateNoteText } from '../core/update';
 
 /** Pinned references and saved defaults use the same compact tag. */
@@ -13,7 +13,7 @@ function SummaryTag({ label }: { label: string }) {
 
 /** The agent's question about a note, from `isotone --reply`; edit the note to answer.
  *  Once answered it is no longer a question, so it is not shown. */
-function Reply({ note }: { note: IterationNote }) {
+function Reply({ note }: { note: IsotoneNote }) {
   if (!note.reply?.text || note.reply.answered) return null;
   return (
     <p className="isotone-reply" onPointerOver={showOverflowTitle}>
@@ -23,7 +23,7 @@ function Reply({ note }: { note: IterationNote }) {
 }
 
 /** Keep machine-directed requests readable without changing the agent's original text. */
-export function NoteSummary({ note, page }: { note: IterationNote; page?: string }) {
+export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }) {
   // The update request names no element: one compact tag says what it is.
   if (note.update)
     return (

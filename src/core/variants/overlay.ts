@@ -3,7 +3,7 @@
 import { readBrowserStorage } from '../browser-storage';
 import { request } from '../request';
 import { matchRoute } from '../routes';
-import type { IterationElement } from '../types';
+import type { IsotoneElement } from '../types';
 import type { SelectVariantAxis, RangeVariantAxis, ColorVariantAxis, VariantAxis, VariantSelections } from './axes';
 import { axisDefault, isValidSelection, formatRangeValue } from './helpers';
 import type { VariantsSource } from './source';
@@ -24,7 +24,7 @@ export interface OverlayVariant {
   route?: string;
   /** The element the variant was asked about — the handle, not a boundary;
    *  the changed files may affect more than this element. */
-  element?: IterationElement | null;
+  element?: IsotoneElement | null;
   /** The note id the variant answers, when it came from one. */
   note?: string;
   /** What the variant tries, in a sentence. */
@@ -153,7 +153,7 @@ export function knobDelta(knobs: KnobAxis[], values: VariantSelections): { axis:
 }
 
 /** The endpoint path the client calls. */
-export const VARIANTS_ENDPOINT = '/api/iteration/variants';
+export const VARIANTS_ENDPOINT = '/api/isotone/variants';
 
 /** Where the browser keeps knob values between reloads. */
 export const KNOBS_STORAGE_KEY = 'isotone:knobs';

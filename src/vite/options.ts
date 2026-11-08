@@ -1,17 +1,17 @@
 /** The Vite plugin's options and the structural plugin type it returns. */
 import type { RouteGateOptions } from '../core/routes';
-import type { IterationShortcut, IterationTheme } from '../core/types';
+import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
 
-export interface IterationViteOptions {
+export interface IsotoneViteOptions {
   /** Inject the bundled panel. false keeps endpoints and variants for a manual mount. */
   panel?: boolean;
   /** Background npm notice, at most once a day. false disables the check;
    *  'note' also files an update note for your agent once per new version. */
   checkForUpdates?: boolean | 'note';
   /** Defaults to auto (page background); system follows the OS preference. */
-  theme?: IterationTheme;
+  theme?: IsotoneTheme;
   /** Defaults to Cmd/Ctrl+Shift+Period; customize or disable with false. */
-  shortcut?: IterationShortcut | false;
+  shortcut?: IsotoneShortcut | false;
   /** Where notes persist. Relative paths resolve against Vite's `root` (the
    *  directory of the app, whatever the shell's cwd), so a monorepo package
    *  started from the workspace root still writes next to its own config.
@@ -69,7 +69,7 @@ export interface IterationViteOptions {
  * `PluginOption` while the hooks below stay checked against the real vite
  * types inside this file.
  */
-export interface IterationPlugin {
+export interface IsotonePlugin {
   name: string;
   /**
    * Declared with the loosest shape that still drops into vite's own

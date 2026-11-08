@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createIterationStore, type IterationStoreConfig } from '../core/notes-client';
-import type { IterationNote } from '../core/types';
+import { createIsotoneStore, type IsotoneStoreConfig } from '../core/notes-client';
+import type { IsotoneNote } from '../core/types';
 
 /** How often an open page asks whether the notes changed. */
 const POLL_MS = 2500;
@@ -12,7 +12,7 @@ const POLL_MAX_MS = 30_000;
  * previous list itself when nothing changed: memoized rows skip the notes a
  * load or poll did not touch.
  */
-function mergeNotes(previous: IterationNote[], fresh: IterationNote[]): IterationNote[] {
+function mergeNotes(previous: IsotoneNote[], fresh: IsotoneNote[]): IsotoneNote[] {
   const byId = new Map(previous.map((note) => [note.id, note]));
   let changed = previous.length !== fresh.length;
   const merged = fresh.map((note, index) => {
@@ -34,12 +34,12 @@ const minute = () => Math.floor(Date.now() / 60_000) * 60_000;
  * guards optimistic writes so an older response never restores a deleted note
  * or undoes an edit. `write` wraps one optimistic change and its request.
  */
-export function useNotes(config: IterationStoreConfig, visible: boolean) {
+export function useNotes(config: IsotoneStoreConfig, visible: boolean) {
   // A new endpoint or storage key is a new store; the same config spelled anew each render is not.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the store depends on these fields only.
-  const store = useMemo(() => createIterationStore(config), [config.endpoint, config.key]);
+  const store = useMemo(() => createIsotoneStore(config), [config.endpoint, config.key]);
   const available = Boolean(config.endpoint);
-  const [notes, setNotes] = useState<IterationNote[]>([]);
+  const [notes, setNotes] = useState<IsotoneNote[]>([]);
   // Coarse on purpose: the value only ages out stale claims, and an unchanged minute lets React skip the render.
   const [clock, setClock] = useState(minute);
   const pollRev = useRef<string | null>(null);

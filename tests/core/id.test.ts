@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createIterationStore } from '../../src/core/notes-client';
+import { createIsotoneStore } from '../../src/core/notes-client';
 import { createNoteId } from '../../src/core/id';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -25,7 +25,7 @@ describe('note IDs on HTTP development hosts', () => {
         return Response.json({ id: body.id });
       }),
     );
-    const store = createIterationStore({ endpoint: '/notes' });
+    const store = createIsotoneStore({ endpoint: '/notes' });
     const id = await store.saveNote('/', 'Review this layout', null, null);
     expect(id).toMatch(/^[0-9a-f-]{36}$/);
     expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body)).id).toBe(id);

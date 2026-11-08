@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createIterationStore } from '../../src/core/notes-client';
-import type { IterationNote } from '../../src/core/index';
+import { createIsotoneStore } from '../../src/core/notes-client';
+import type { IsotoneNote } from '../../src/core/index';
 import { createOverlayVariantsSource, KNOBS_STORAGE_KEY } from '../../src/core/variants';
 
 let values: Map<string, string>;
 let storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 const currentKey = 'isotone-feedback';
-const note = (id: string, feedback = id): IterationNote => ({
+const note = (id: string, feedback = id): IsotoneNote => ({
   id,
   feedback,
   route: '/',
@@ -32,19 +32,19 @@ afterEach(() => vi.unstubAllGlobals());
 
 it('reports malformed local feedback instead of overwriting it', async () => {
   values.set(currentKey, '{broken');
-  await expect(createIterationStore().listNotes()).rejects.toThrow('Browser storage has been left untouched');
+  await expect(createIsotoneStore().listNotes()).rejects.toThrow('Browser storage has been left untouched');
   expect(values.get(currentKey)).toBe('{broken');
 });
 
 it('keeps notes in an explicitly configured namespace', async () => {
   values.set(currentKey, JSON.stringify([note('default')]));
   values.set('project-review', JSON.stringify([note('custom')]));
-  expect(await createIterationStore({ key: 'project-review' }).listNotes()).toEqual([note('custom')]);
+  expect(await createIsotoneStore({ key: 'project-review' }).listNotes()).toEqual([note('custom')]);
 });
 
 it('synchronizes offline feedback once and clears only acknowledged local copies', async () => {
   values.set(currentKey, JSON.stringify([note('offline')]));
-  const posted: IterationNote[] = [];
+  const posted: IsotoneNote[] = [];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (_url: unknown, init?: RequestInit) => {
@@ -56,7 +56,7 @@ it('synchronizes offline feedback once and clears only acknowledged local copies
       return { ok: true, json: async () => posted };
     }),
   );
-  const store = createIterationStore({ endpoint: '/notes' });
+  const store = createIsotoneStore({ endpoint: '/notes' });
   await store.listNotes();
   await store.listNotes();
   expect(posted.map((item) => item.id)).toEqual(['offline']);

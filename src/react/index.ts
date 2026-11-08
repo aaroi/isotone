@@ -6,9 +6,9 @@
  * docs/variants.md shows. Everything else of core stays in core.
  * tests/package/exports.test.ts lists every name.
  */
-export { IterationPanel, type IterationPanelProps } from './IterationPanel';
-export { mountIteration } from './IterationMount';
-export type { IterationShortcut, IterationTheme, MountIterationOptions } from '../core/types';
-export type { IterationStoreConfig } from '../core/notes-client';
+export { IsotonePanel, type IsotonePanelProps } from './IsotonePanel';
+export { mountIsotone } from './IsotoneMount';
+export type { IsotoneShortcut, IsotoneTheme, MountIsotoneOptions } from '../core/types';
+export type { IsotoneStoreConfig } from '../core/notes-client';
 export { createVariantsSource } from '../core/variants';
 export type { VariantAxis, VariantSelections, VariantsSource } from '../core/variants';

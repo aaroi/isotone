@@ -24,7 +24,7 @@ const CONFIG: LiveConfig = {
   ],
   active: [],
   ssr: false,
-  endpoint: '/api/iteration/variants',
+  endpoint: '/api/isotone/variants',
 };
 const PUSH = history.pushState;
 const REPLACE = history.replaceState;
@@ -148,7 +148,7 @@ describe('the SSR sync', () => {
     try {
       const reload = await load(undefined);
       await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
-      expect(send).toHaveBeenCalledWith('/api/iteration/variants/active', expect.objectContaining({ method: 'POST' }));
+      expect(send).toHaveBeenCalledWith('/api/isotone/variants/active', expect.objectContaining({ method: 'POST' }));
     } finally {
       vi.unstubAllGlobals();
     }

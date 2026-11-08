@@ -44,7 +44,7 @@ if (!existsSync(join(app, 'package.json'))) {
 }
 
 /** Strings that only Isotone's panel or endpoints put into built output. */
-const MARKERS = ['isotone', '/api/iteration', '__isotone'];
+const MARKERS = ['isotone', '/api/isotone', '__isotone'];
 /** Built output can name the app's absolute path or an ancestor (Next does), which may contain "isotone". */
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const ancestors = (path) => (dirname(path) === path ? [path] : [path, ...ancestors(dirname(path))]);

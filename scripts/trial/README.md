@@ -30,7 +30,7 @@ header, a hero with a "Sign up" button, and a two-column card grid.
   `location.hostname` localhost test in HTML `<script>` tags. The Vite plugin
   only runs on the dev server, so it needs no check of its own.
 - `npm run build` succeeds with `NODE_ENV=production`, and the output (`dist/`
-  or `.next/`) has none of `isotone`, `/api/iteration` and `__isotone`. Plain
+  or `.next/`) has none of `isotone`, `/api/isotone` and `__isotone`. Plain
   HTML has no build, so its development check stands in for this one.
 - `AGENTS.md` has the Isotone section that `init --yes` writes.
 - `isotone variant list` shows at least two variants or knobs (the first run).

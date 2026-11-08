@@ -332,7 +332,7 @@ ${FEEDBACK_LAYOUT_CSS}
 .isotone-picking button { flex: none; display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 9px; }
 .isotone-picking kbd { font: inherit; color: var(--iso-muted); }
 /* After a pin, the composer floats beside the element on a panel surface, placed by
-   IterationPanel inside the viewport. It grows out of the point that was clicked. */
+   IsotonePanel inside the viewport. It grows out of the point that was clicked. */
 .isotone-float { position: fixed; z-index: 2147483002; width: min(300px, calc(100vw - 16px)); padding: 4px; background: var(--iso-bg); border: 1px solid var(--iso-line); border-radius: 12px; box-shadow: var(--iso-panel-shadow); }
 .isotone-float-hint { flex: 1 0 auto; white-space: nowrap; font-size: 10px; color: var(--iso-muted); }
 /* Meanwhile the dock keeps the composer's slot and says where the writing went. */
@@ -429,7 +429,7 @@ ${UPDATE_NOTICE_CSS}
  * same root is a no-op, so several panels (or a remount) do not stack copies.
  *
  * `target` is whatever `getRootNode()` returns for the panel — a `ShadowRoot`
- * when mounted by `mountIteration`, the `Document` when a host embeds the
+ * when mounted by `mountIsotone`, the `Document` when a host embeds the
  * component directly.
  */
 export function ensurePanelStyles(target: Document | ShadowRoot): void {
