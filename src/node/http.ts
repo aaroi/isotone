@@ -39,18 +39,25 @@ class HttpError extends Error {
   }
 }
 
+/** A host to bind or a page hostname that is this machine. */
 export function isLoopback(host: string): boolean {
   return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
 }
 
+/** A name or address only this machine answers: localhost, `*.localhost`,
+ *  `*.test`, 127.0.0.0/8 or ::1 (brackets and a port allowed). */
+function isLoopbackName(name: string): boolean {
+  return name === 'localhost' || name.endsWith('.localhost') || name.endsWith('.test') || isLoopbackAddress(name);
+}
+
 /**
- * Whether a Host header names this machine the way a local browser would: an
- * IP literal, localhost, a name no public DNS answers (`*.localhost`,
- * `*.test`), or one the dev server was told to allow (Vite's
- * `server.allowedHosts`; a leading dot allows subdomains). A DNS-rebinding
- * page sends its own public domain, which fails.
+ * Whether a Host header names this machine the way a local browser would: a
+ * loopback name ({@link isLoopbackName}), one the dev server was told to
+ * allow (Vite's `server.allowedHosts`; a leading dot allows subdomains), or,
+ * with `anyAddress`, any IP literal (a LAN address the server listens on). A
+ * DNS-rebinding page sends its own public domain, which fails.
  */
-function isLocalHostHeader(host: string | null | undefined, allowed: readonly string[] = []): boolean {
+function isLocalHostHeader(host: string | null | undefined, allowed: readonly string[], anyAddress: boolean): boolean {
   if (!host) return false;
   let name: string;
   try {
@@ -58,7 +65,7 @@ function isLocalHostHeader(host: string | null | undefined, allowed: readonly st
   } catch {
     return false;
   }
-  if (isIP(name) || name === 'localhost' || name.endsWith('.localhost') || name.endsWith('.test')) return true;
+  if (isLoopbackName(name) || (anyAddress && isIP(name))) return true;
   return allowed.some((entry) => {
     const rule = entry.toLowerCase();
     return rule.startsWith('.') ? name === rule.slice(1) || name.endsWith(rule) : name === rule;
@@ -66,31 +73,73 @@ function isLocalHostHeader(host: string | null | undefined, allowed: readonly st
 }
 
 /** A socket address on this machine (IPv4, IPv6, or IPv4-mapped IPv6). */
-function isLoopbackAddress(address: string | undefined): boolean {
+function isLoopbackAddress(address: string | null | undefined): boolean {
   return !!address && (address === '::1' || /^(::ffff:)?127\./.test(address));
 }
 
 /**
- * Every endpoint's gate. The Host must be local ({@link isLocalHostHeader}),
- * a page's Origin must match it (or be any loopback page with
- * `loopbackOrigins`), and, when the caller passes the peer address, the
- * request must come from this machine. The Vite plugin passes it unless the
- * dev server was exposed with `--host`, which opens the endpoints to the
- * network on purpose; the Request adapters cannot see the peer and rely on
- * Host and Origin alone.
+ * The client addresses a proxy or tunnel recorded in `X-Forwarded-For` or
+ * `Forwarded`. A local tunnel (ngrok, cloudflared) connects from loopback,
+ * so these are what show that the request really came from elsewhere.
  */
-export function checkRequest(request: {
+function forwardedAddresses(forwardedFor: string | null | undefined, forwarded: string | null | undefined): string[] {
+  const listed = (forwardedFor ?? '').split(',');
+  for (const match of (forwarded ?? '').matchAll(/for=("?)\[?([^\]";,]+)/gi)) listed.push(match[2] ?? '');
+  return listed.map((entry) => entry.trim()).filter(Boolean);
+}
+
+/** What {@link checkRequest} reads from a request. */
+export interface RequestFacts {
   origin?: string | null;
   host?: string | null;
   /** The peer address; omitted where the runtime does not expose it. */
   remoteAddress?: string | null;
-  allowedHosts?: readonly string[];
-  loopbackOrigins?: boolean;
-}): void {
-  if (request.remoteAddress !== undefined && !isLoopbackAddress(request.remoteAddress ?? undefined)) {
+  /** `X-Forwarded-For` and `Forwarded`, as received. */
+  forwardedFor?: string | null;
+  forwarded?: string | null;
+}
+
+/** The facts of a Node request, its peer address included. */
+export function nodeRequestFacts(req: IncomingMessage): RequestFacts {
+  const header = (name: string) => {
+    const value = req.headers[name];
+    return Array.isArray(value) ? value.join(',') : (value ?? null);
+  };
+  return {
+    origin: header('origin'),
+    host: header('host'),
+    remoteAddress: req.socket?.remoteAddress ?? null,
+    forwardedFor: header('x-forwarded-for'),
+    forwarded: header('forwarded'),
+  };
+}
+
+/** Whether the request comes from this machine: every address it names (the
+ *  peer, when known, and any a proxy forwarded for) is loopback. */
+export function isFromThisMachine(request: RequestFacts): boolean {
+  const addresses = forwardedAddresses(request.forwardedFor, request.forwarded);
+  if (request.remoteAddress !== undefined) addresses.push(request.remoteAddress ?? '');
+  return addresses.every(isLoopbackAddress);
+}
+
+/**
+ * Every endpoint's gate. Unless `network` is set, the request must come from
+ * this machine ({@link isFromThisMachine}). The Host must be local
+ * ({@link isLocalHostHeader}; an IP literal counts only when the peer was
+ * checked or `network` is set, since without a peer address a LAN client
+ * shows up as nothing but the server's LAN IP), and a page's Origin must
+ * match it (or be any loopback page with `loopbackOrigins`). `network` is for
+ * a caller that has let the request in some other way: the Vite plugin's
+ * access cookie, or a Request adapter's explicit `allowNetwork`.
+ */
+export function checkRequest(
+  request: RequestFacts & { allowedHosts?: readonly string[]; loopbackOrigins?: boolean; network?: boolean },
+): void {
+  if (!request.network && !isFromThisMachine(request)) {
     throw new HttpError(403, 'isotone answers only requests from this machine');
   }
-  if (!isLocalHostHeader(request.host, request.allowedHosts)) throw new HttpError(403, 'host not allowed');
+  const anyAddress = request.network === true || request.remoteAddress !== undefined;
+  if (!isLocalHostHeader(request.host, request.allowedHosts ?? [], anyAddress)) throw new HttpError(403, 'host not allowed');
   checkOrigin(request.origin, request.host ?? '', request.loopbackOrigins);
 }
 

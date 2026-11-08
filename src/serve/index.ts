@@ -23,7 +23,7 @@ import { dirname, resolve } from 'node:path';
 
 import type { RouteGateOptions } from '../core/routes';
 import type { IterationTheme } from '../core/types';
-import { checkRequest, isLoopback, readNodeJson, sendFailure, writeResponse } from '../node/http';
+import { checkRequest, isLoopback, nodeRequestFacts, readNodeJson, sendFailure, writeResponse } from '../node/http';
 import { ensureFileIgnored } from '../node/fs/git-exclude';
 import { notesResponse, NOTES_ENDPOINT } from '../node/notes/handler';
 import { VARIANTS_ENDPOINT } from '../core/variants';
@@ -84,6 +84,18 @@ function allowedOrigin(origin: string | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Whether a page on another site is loading the bundle: a `<script>` tag
+ * sends no Origin, so the browser's `Sec-Fetch-Site` says where it came
+ * from, and a cross-site load must name a loopback page in its Origin or
+ * Referer (another localhost port is a different site to the browser).
+ */
+function isForeignLoad(req: IncomingMessage): boolean {
+  if (req.headers['sec-fetch-site'] !== 'cross-site') return false;
+  const page = req.headers.origin ?? req.headers.referer;
+  return allowedOrigin(typeof page === 'string' ? page : undefined) === null;
 }
 
 function cors(req: IncomingMessage, res: ServerResponse): void {
@@ -215,7 +227,7 @@ export function serveIteration(opts: ServeIterationOptions): Promise<ServedItera
     const method = req.method ?? 'GET';
     const origin = `http://${host.includes(':') && !host.startsWith('[') ? `[${host}]` : host}:${boundPort}`;
     try {
-      checkRequest({ origin: req.headers.origin, host: req.headers.host, loopbackOrigins: true });
+      checkRequest({ ...nodeRequestFacts(req), loopbackOrigins: true });
     } catch (error) {
       sendFailure(res, error);
       return;
@@ -238,6 +250,12 @@ export function serveIteration(opts: ServeIterationOptions): Promise<ServedItera
     }
 
     if (path === BUNDLE_PATH && method === 'GET') {
+      if (isForeignLoad(req)) {
+        res.statusCode = 403;
+        res.setHeader('content-type', 'text/plain; charset=utf-8');
+        res.end('isotone loads only into pages on this machine');
+        return;
+      }
       let body: string;
       try {
         body = bundleWithMount(origin, opts, projectRoot);

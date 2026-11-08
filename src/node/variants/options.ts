@@ -1,5 +1,6 @@
 /** Where the variants tree and its state files live, and the lock every change takes. */
 
+import { mkdirSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { ensureFileIgnored } from '../fs/git-exclude';
 import { type FileLockOptions, withFileLock } from '../fs/lock';
@@ -39,15 +40,11 @@ const excluded = new Set<string>();
  * The lock lives in the committed variants dir, so its files are excluded. */
 export function mutateVariants<T>(opts: VariantsStoreOptions, change: () => T, lock?: FileLockOptions): T {
   const file = join(variantsDir(opts), '.mutation');
-  return withFileLock(
-    file,
-    () => {
-      if (!excluded.has(file)) {
-        excluded.add(file);
-        ensureFileIgnored(file);
-      }
-      return change();
-    },
-    lock,
-  );
+  // Outside the lock: git runs a few processes, which other writers need not wait on.
+  if (!excluded.has(file)) {
+    excluded.add(file);
+    mkdirSync(variantsDir(opts), { recursive: true });
+    ensureFileIgnored(file);
+  }
+  return withFileLock(file, change, lock);
 }
