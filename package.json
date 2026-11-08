@@ -56,7 +56,7 @@
     "lint:fix": "biome check --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "tsup",
+    "build": "tsdown",
     "check": "pnpm typecheck && pnpm lint && pnpm build && pnpm test",
     "prepublishOnly": "pnpm check",
     "dev": "vite --config examples/vite.config.ts",
@@ -81,7 +81,7 @@
     "publint": "^0.3.25",
     "react": "^19",
     "react-dom": "^19",
-    "tsup": "^8",
+    "tsdown": "^0.23.7",
     "typescript": "^5",
     "vite": "^7",
     "vitest": "^4.1.10"
