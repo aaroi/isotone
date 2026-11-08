@@ -1205,9 +1205,7 @@ describe('live variants', () => {
     addVariantFile({ root }, 'n', 'src/NewThing.tsx', { create: true });
     const hooks = plugin(root, 'build') as unknown as LiveHooks;
     (hooks as unknown as { resolve: unknown }).resolve = async () => null;
-    expect(await hooks.resolveId.call(hooks as never, './NewThing', id(root, 'src', 'Button.tsx'))).toBe(
-      id(root, 'src', 'NewThing.tsx'),
-    );
+    expect(await hooks.resolveId.call(hooks as never, './NewThing', id(root, 'src', 'Button.tsx'))).toBe(id(root, 'src', 'NewThing.tsx'));
   });
 
   it('drops the plain transform of a file that just gained a variant', () => {

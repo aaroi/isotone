@@ -31,7 +31,10 @@ export function compileSources(entries: string[], outDir: string): Record<string
         const target = resolveSource(file, specifier);
         visit(target);
         // An import specifier is a URL path: forward slashes on every OS.
-        let path = relative(dirname(file), target).split(sep).join('/').replace(/\.tsx?$/, '.mjs');
+        let path = relative(dirname(file), target)
+          .split(sep)
+          .join('/')
+          .replace(/\.tsx?$/, '.mjs');
         if (!path.startsWith('.')) path = `./${path}`;
         return `${start}${path}${end}`;
       });
