@@ -58,6 +58,8 @@
 
 **The panel**
 
+- The note list keeps your place when a note is deleted or edited, or an agent marks one working or done.
+- The note list is one Tab stop: arrow keys, Home and End move between notes and their delete buttons.
 - Keys, focus, input and wheel events inside Isotone no longer reach the app's handlers, and Escape in the app's own fields no longer closes Isotone.
 - In select mode, clicking pins an element without pressing it, so menus that open on press stay closed.
 - Closing a panel returns keyboard focus to the launcher instead of the page.
