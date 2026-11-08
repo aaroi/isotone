@@ -44,18 +44,14 @@ checking without a browser.
 
 ## The agent trial
 
-`scripts/trial/` makes the simulations repeatable: it packs the package,
-prepares Vite + React, Next.js and plain-HTML fixture apps, seeds three notes,
-and scores what a fresh agent did (setup and the notes loop, each with tool
-calls, failed `isotone` commands and reads of Isotone's internals).
-[Its README](../scripts/trial/README.md) has the prompts and steps. It never
-starts an agent: run one per fixture by hand, then score its transcript.
+`scripts/trial/` makes the simulations repeatable: it packs the package, prepares
+Vite + React, Next.js and plain-HTML fixtures, seeds notes, and scores a fresh
+agent's setup and notes loop from its transcript. [Its README](../scripts/trial/README.md)
+has the prompts and steps; it never starts an agent itself.
 
-The round-2 baseline passed every check on all three fixtures, in 5 to 17 tool
-calls. What it found shaped `--done`: agents chained an edit and `--done`, so a
-failed edit still closed the note (now refused while no file changed); fixes left
-file-variant copies stale (now named after `--done`); and a layout note's
-viewport was ignored (now called out as its breakpoint).
+The round-2 baseline passed every check in 5 to 17 tool calls, and shaped `--done`:
+agents chained an edit and `--done`, so a failed edit still closed the note; fixes
+left file-variant copies stale; and layout notes ignored their viewport.
 
 ## Open follow-ups
 

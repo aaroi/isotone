@@ -1,20 +1,13 @@
 # Variants
 
 A variant is an alternative of one specific element, chosen from the panel's
-Variants tab. There are three kinds, and the first sections of this page say how
-to make each one well:
-
-- **File variants**, on a Vite host: a copy of source files under
-  `.isotone/variants/<id>/` that the dev server serves in place of the real file
-  while the variant is active. The [agent guide](agent-guide.md#variants) lists
-  the commands.
-- **Knobs**, on Vite or `isotone serve`: a number, colour or named style declared
-  in `.isotone/knobs.json` that the page reads as a CSS custom property.
-- **A host source**, for an app with its own variant system: the app hands the
-  panel its axes and applies the selections itself.
-
-[How switching works](#how-switching-works), at the end, is reference for when a
-switch does not behave as expected.
+Variants tab. A **file variant** (Vite) is a copy of source files under
+`.isotone/variants/<id>/` that the dev server serves in place of the real file;
+the [agent guide](agent-guide.md#variants) has its commands. A **knob** (Vite or
+`isotone serve`) is a number, colour or named style in `.isotone/knobs.json`. A
+**host source** is an app's own variant system, rendered by the panel. This page
+says how to make each well; [How switching works](#how-switching-works), last,
+is reference.
 
 ## Choosing a selector
 
@@ -56,10 +49,8 @@ A selector shows only on the variant's route: `/items` is that page, `/items/*`
 also every page under it, and `/items*` any route starting with `/items`. A
 variant made without a route shows everywhere.
 
-Copy only files that export components where you can. In a React project on
-Vite 6 or later, a copied file that also exports a hook, helper, context or
-constant object makes every switch reload the page; move shared helpers into
-files the variant leaves alone. A variant can add a file the project does not
+Copy only files that export components where you can ([why](#live-switching)).
+A variant can add a file the project does not
 have: `variant add <id> --new <file>` starts an empty one. Import it relatively,
 or through an alias whose last path segments name it.
 
@@ -255,8 +246,6 @@ failures in the panel, notifying subscribers when it changes.
 
 ## How switching works
 
-Reference for file variants: what the dev server does when the reviewer switches.
-
 ### Live switching
 
 In a React project on Vite 6 or later, the plugin serves each overridden
@@ -271,7 +260,8 @@ browser:
 - Anything else (a hook, a helper function, a constant object, a context) is
   fixed when the page loads, because React cannot swap a hook under a mounted
   component. A switch that changes one reloads the page. Every copy defines its
-  functions and objects afresh, so this happens even when that export is unchanged.
+  functions and objects afresh, so a copied file that exports a hook or helper
+  reloads on every switch: move shared helpers into files the variant leaves alone.
 
 The selection belongs to the tab: a pick is written to the URL as
 `?v=<group>:<variant>` (the grammar host variants use), kept through client-side

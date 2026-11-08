@@ -64,10 +64,7 @@ The note carries a structured `update` field next to its text:
 }
 ```
 
-The [agent guide](agent-guide.md#update-notes) says how the agent carries it out:
-run the command only in that exact form and directory, restart and check the
-panel, refresh its `AGENTS.md` section with `npx isotone init --yes`, summarize the
-changelog for you and close the note.
+The [agent guide](agent-guide.md#update-notes) says how the agent carries it out.
 
 The button needs a notes endpoint and a command Isotone can name. When it
 cannot name one (Bun, competing lockfiles, an optional or peer dependency, or
