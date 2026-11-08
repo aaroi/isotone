@@ -31,12 +31,10 @@ import { readKnobs } from '../node/variants';
 
 import { readBundle } from '../node/bundle';
 import { serveMountOptions } from './mount-config';
-import { guardedScriptTag } from './tag';
+import { DEFAULT_PORT, guardedScriptTag } from './tag';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
 import { autoUpdateNote, updateResponse } from '../node/update/note';
-export { readBundle } from '../node/bundle';
 
-export const DEFAULT_PORT = 4123;
 const BUNDLE_PATH = '/isotone.js';
 
 export interface ServeIterationOptions {

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 import { notesResponse } from '../src/node/notes/handler';
 import { updateNotes, writeNotes } from '../src/node/notes/store';
-import { iteration } from '../src/vite/index';
+import { isotone } from '../src/vite/index';
 import { checkRequest, readNodeJson, sendFailure } from '../src/node/http';
 import type { UpdateInfo } from '../src/core/update';
 import { updateResponse } from '../src/node/update/note';
@@ -190,7 +190,7 @@ export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   plugins: [
     demoNotes(),
-    iteration({
+    isotone({
       panel: false,
       variants: { root: '..' },
       file: join(tmpdir(), 'isotone-demo-adapter.json'),

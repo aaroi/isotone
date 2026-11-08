@@ -311,8 +311,8 @@ function printOverlay(print: Print, host: Host): void {
   print('Setup (overlay)');
   print('1. Add the plugin to the existing plugins array in vite.config, keeping the others:');
   print();
-  print("     import { iteration } from 'isotone/vite';");
-  print('     plugins: [/* existing plugins */, iteration()]');
+  print("     import { isotone } from 'isotone/vite';");
+  print('     plugins: [/* existing plugins */, isotone()]');
   print();
   print('   Vite applies it to the dev server only: `vite build` output has no panel and no');
   print('   endpoints, so the plugin needs no guard of its own. Keep @vitejs/plugin-react (or');
@@ -338,7 +338,7 @@ function printHost(print: Print): void {
   print();
   print('onChange fires with the full selections after every change; the app renders from');
   print("them and keeps its own defaults and URL sync. Add endpoint: '/api/iteration/notes'");
-  print('for notes served by the Vite plugin, with iteration({ panel: false }) there to avoid');
+  print('for notes served by the Vite plugin, with isotone({ panel: false }) there to avoid');
   print('a second panel. With `isotone serve`, use the absolute endpoint');
   print("'http://127.0.0.1:4123/api/iteration/notes'. Set defaultTab: 'variants' when");
   print('reviewers come for the controls first.');

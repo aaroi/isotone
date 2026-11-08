@@ -28,15 +28,12 @@ export type {
   VariantOption,
   VariantSelections,
 } from './axes';
-export { SECTION_SEPARATOR, axisSection, sectionAxes, splitSectionLabel } from './sections';
+export { axisSection, sectionAxes, splitSectionLabel } from './sections';
 export type { SectionedLabel, VariantSection } from './sections';
 export {
   axisDefault,
-  defaultSelections,
   formatRangeValue,
-  isAxisVisible,
   isDirty,
-  isValidSelection,
   parseVariantParam,
   serializeVariantParam,
   visibleAxes,
@@ -44,10 +41,8 @@ export {
 export { createVariantsSource } from './source';
 export type { VariantsSource } from './source';
 export {
-  KNOBS_EVENT,
   KNOBS_STORAGE_KEY,
   OVERLAY_DEFAULT_OPTION,
-  OVERLAY_GROUP_ID,
   VARIANTS_ENDPOINT,
   applyKnobValues,
   createOverlayVariantsSource,
@@ -59,4 +54,4 @@ export {
   overlayGroups,
   variantAppliesTo,
 } from './overlay';
-export type { KnobAxis, LiveVariantSelection, OverlayGroup, OverlayVariant, OverlayVariantStatus, OverlayVariantsList } from './overlay';
+export type { KnobAxis, OverlayVariant, OverlayVariantStatus, OverlayVariantsList } from './overlay';

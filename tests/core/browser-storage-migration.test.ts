@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createIterationStore, type IterationNote } from '../../src/core/index';
+import { createIterationStore } from '../../src/core/notes-client';
+import type { IterationNote } from '../../src/core/index';
 import { createOverlayVariantsSource, KNOBS_STORAGE_KEY } from '../../src/core/variants';
 
 let values: Map<string, string>;

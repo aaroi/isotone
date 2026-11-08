@@ -74,7 +74,7 @@ try {
 
   assert.equal((await post(base, 'Smoke note')).status, 201, 'a same-origin note is stored');
   assert.equal((await post('https://evil.example', 'Foreign note')).status, 403, 'a foreign origin is refused');
-  const listed = JSON.parse(execFileSync(process.execPath, ['node_modules/isotone/dist/cli.js', '--json'], { encoding: 'utf8' }));
+  const listed = JSON.parse(execFileSync(process.execPath, ['node_modules/isotone/dist/bin.js', '--json'], { encoding: 'utf8' }));
   const texts = JSON.stringify(listed);
   assert.ok(texts.includes('Smoke note'), 'the CLI lists the stored note');
   assert.ok(!texts.includes('Foreign note'), 'the refused note was not stored');
@@ -139,7 +139,7 @@ try {
     writeFileSync(join(app, 'main.js'), "document.getElementById('app').dataset.ready = 'true';\n");
     writeFileSync(
       join(app, 'vite.config.mjs'),
-      "import { defineConfig } from 'vite';\nimport { iteration } from 'isotone/vite';\n\nexport default defineConfig({ plugins: [iteration()] });\n",
+      "import { defineConfig } from 'vite';\nimport { isotone } from 'isotone/vite';\n\nexport default defineConfig({ plugins: [isotone()] });\n",
     );
     writeFileSync(join(app, 'dev-check.mjs'), DEV_CHECK);
     run(

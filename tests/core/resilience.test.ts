@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createIterationStore, type IterationNote } from '../../src/core';
+import { createIterationStore } from '../../src/core/notes-client';
+import type { IterationNote } from '../../src/core';
 import { FEEDBACK_STORAGE_KEY } from '../../src/core/browser-storage';
 import { MAX_FEEDBACK_LENGTH } from '../../src/core/limits';
 import {

@@ -8,7 +8,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { VariantAction, VariantAxis } from '../../src/core/variants';
-import { createVariantsSource, IterationPanel, mountIteration, VariantsView } from '../../src/react/index';
+import { createVariantsSource, IterationPanel, mountIteration } from '../../src/react/index';
+import { VariantsView } from '../../src/react/VariantsView';
 import { PANEL_CSS } from '../../src/react/styles';
 
 const AXES: VariantAxis[] = [

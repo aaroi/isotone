@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { runCli } from '../../src/cli/run';
-import { describeIterationElement, elementAsNode } from '../../src/core';
+import { describeIterationElement, elementAsNode } from '../../src/core/element';
 import { resolveElementSource } from '../../src/core/element';
 import { applyKnobValues, knobDelta } from '../../src/core/variants';
 import { notesResponse } from '../../src/node/notes/handler';

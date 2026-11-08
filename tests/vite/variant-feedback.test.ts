@@ -11,7 +11,7 @@ import { createServer, type ViteDevServer } from 'vite';
 
 import { runCli } from '../../src/cli/run';
 import { createOverlayVariantsSource } from '../../src/core/variants';
-import { iteration } from '../../src/vite';
+import { isotone } from '../../src/vite';
 import {
   addVariantFile,
   createVariant,
@@ -242,7 +242,7 @@ describe('the dev server', () => {
       logLevel: 'silent',
       appType: 'custom',
       server: { middlewareMode: true, hmr: false, watch: { usePolling: true, interval: 20 } },
-      plugins: [iteration({ panel: false, variants: { live } }) as never, ...(live ? [{ name: 'react-fixture' }] : [])],
+      plugins: [isotone({ panel: false, variants: { live } }) as never, ...(live ? [{ name: 'react-fixture' }] : [])],
     });
     servers.push(server);
     return server;

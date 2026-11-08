@@ -6,7 +6,8 @@ import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 import { notesResponse } from '../../src/node/notes/handler';
 import { readNotes, updateNotes } from '../../src/node/notes/store';
 import * as server from '../../src/server/index';
-import { PAYLOAD_MAX, serveNotesRequest } from '../../src/server/index';
+import { PAYLOAD_MAX } from '../../src/core/limits';
+import { serveNotesRequest } from '../../src/server/index';
 import { tempNotesFile } from '../helpers/fs';
 
 const dirs: string[] = [];
@@ -182,15 +183,7 @@ describe('the ./server subpath surface', () => {
   // without importing vite — a regression here surfaced as "Export named
   // 'notesResponse' not found" at a consumer's module load.
   it('re-exports every symbol a non-Vite host serves the endpoint with', () => {
-    for (const name of [
-      'notesResponse',
-      'serveNotesRequest',
-      'readNotes',
-      'writeNotes',
-      'ensureFileIgnored',
-      'NOTES_ENDPOINT',
-      'PAYLOAD_MAX',
-    ]) {
+    for (const name of ['notesResponse', 'serveNotesRequest', 'serveVariantsRequest', 'variantsResponse', 'readNotes']) {
       expect(server, name).toHaveProperty(name);
     }
   });

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { expect, it } from 'vitest';
-import { describeIterationElement, elementAsNode } from '../../src/core';
+import { describeIterationElement, elementAsNode } from '../../src/core/element';
 
 it('describes an element without visiting unrelated DOM subtrees', () => {
   document.body.innerHTML = '<main><button>Selected</button><section><span>Unrelated</span></section></main>';

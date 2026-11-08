@@ -47,7 +47,6 @@ import { createOverrides } from './overrides';
 import { createSwitching } from './switching';
 
 export type { IterationPlugin, IterationViteOptions } from './options';
-export { withNativeFetch } from './html-inject';
 
 const DEFAULT_FILE = '.iteration-feedback.json';
 
@@ -81,7 +80,7 @@ function announce(server: ViteDevServer, file: string, variantsDir: string | nul
   });
 }
 
-export function iteration(options: IterationViteOptions = {}): IterationPlugin {
+export function isotone(options: IterationViteOptions = {}): IterationPlugin {
   let file = resolve(options.file ?? DEFAULT_FILE);
   let isDev = false;
   let hasReact = false;
@@ -203,3 +202,9 @@ export function iteration(options: IterationViteOptions = {}): IterationPlugin {
 
   return plugin;
 }
+
+/**
+ * @deprecated Renamed to {@link isotone}; this alias goes in a later minor release.
+ * @alias
+ */
+export const iteration: typeof isotone = isotone;

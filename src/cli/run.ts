@@ -1,14 +1,14 @@
 /**
- * isotone — CLI command dispatch, factored out of the executable entry point
- * (`./index.ts`) so tests can call `runCli` directly against an in-memory
- * sink, and so `dist/cli.js` and `import('isotone/cli')` share one function.
+ * isotone — CLI command dispatch, shared by the `isotone` binary
+ * (`./bin.ts`), `import('isotone/cli')` and tests, which call `runCli` against an
+ * in-memory sink.
  * Run `npx isotone --help` for the command surface.
  */
 import { resolve } from 'node:path';
 
 import { version } from '../../package.json';
 import { BLAST } from '../core/blast';
-import { guardedScriptTag } from '../serve/tag';
+import { DEFAULT_PORT, guardedScriptTag } from '../serve/tag';
 import { runBlast } from './blast';
 import { docPath } from './docs';
 import { runInit } from './init';
@@ -91,7 +91,7 @@ function printHelp(io: CliIO): void {
  * (index.ts) awaits this the same way it awaits any other command.
  */
 async function runServe(args: string[], io: CliIO): Promise<number> {
-  const { serveIteration, DEFAULT_PORT } = await import('../serve/index');
+  const { serveIteration } = await import('../serve/index');
   if (isHelp(args[0])) {
     out(io, 'Usage: isotone serve [--port 4123] [--host 127.0.0.1] [--file <path>] [--theme auto|light|dark|system]');
     out(io, '                     [--no-update-check | --update-note]');

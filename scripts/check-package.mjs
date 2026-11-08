@@ -75,16 +75,16 @@ for (const entry of ['core', 'server', 'serve', 'cli']) {
   }
 }
 assert.equal(existsSync('node_modules/vite'), false, 'standalone must not require Vite');
-assert.equal(typeof core.createIterationStore, 'function');
+assert.equal(typeof core.createVariantsSource, 'function');
 let output = '';
 const io = { cwd: process.cwd(), stdout: { write: text => { output += text; } }, stderr: { write: text => { throw new Error(text); } } };
 assert.equal(await runCli(['init', '--yes', '--json'], io), 0);
 assert.equal(JSON.parse(output).approach, 'serve');
 assert.equal(existsSync('AGENTS.md'), true);
-assert.match(execFileSync(process.execPath, ['node_modules/isotone/dist/cli.js', '--help'], { encoding: 'utf8' }), /--json/);
-assert.match(execFileSync(process.execPath, ['node_modules/isotone/dist/cli.js', 'blast', 'status'], { encoding: 'utf8' }), /No Blast session/);
+assert.match(execFileSync(process.execPath, ['node_modules/isotone/dist/bin.js', '--help'], { encoding: 'utf8' }), /--json/);
+assert.match(execFileSync(process.execPath, ['node_modules/isotone/dist/bin.js', 'blast', 'status'], { encoding: 'utf8' }), /No Blast session/);
 // A reader that stops early (\`| head\`) ends the output quietly, not with a stack trace.
-const early = spawn(process.execPath, ['node_modules/isotone/dist/cli.js', '--help'], { stdio: ['ignore', 'pipe', 'pipe'] });
+const early = spawn(process.execPath, ['node_modules/isotone/dist/bin.js', '--help'], { stdio: ['ignore', 'pipe', 'pipe'] });
 early.stdout.destroy();
 let earlyErr = '';
 early.stderr.on('data', (chunk) => { earlyErr += chunk; });

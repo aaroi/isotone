@@ -7,7 +7,8 @@
 import { act, createElement, memo, Profiler } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createVariantsSource, IterationPanel, type IterationNote, type VariantAxis } from '../../src/react/index';
+import type { IterationNote } from '../../src/core';
+import { createVariantsSource, IterationPanel, type VariantAxis } from '../../src/react/index';
 import { useNotes } from '../../src/react/useNotes';
 
 let host: HTMLDivElement;

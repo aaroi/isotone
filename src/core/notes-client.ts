@@ -13,7 +13,7 @@ import type { IterationElement, IterationNote, NoteContext } from './types';
 
 export interface IterationStoreConfig {
   /** Absolute or same-origin URL of the notes endpoint. Must be set (by the
-   *  Vite plugin's `iteration()` options or a framework preset) for a shared
+   *  Vite plugin's `isotone()` options or a framework preset) for a shared
    *  file-backed store; when omitted, only localStorage persists. */
   endpoint?: string | null;
   /** localStorage namespace. Default-scoped to the package; set it per hosted

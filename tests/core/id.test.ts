@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createIterationStore } from '../../src/core';
+import { createIterationStore } from '../../src/core/notes-client';
 import { createNoteId } from '../../src/core/id';
 
 afterEach(() => vi.unstubAllGlobals());

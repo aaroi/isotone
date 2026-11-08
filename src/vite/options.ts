@@ -56,7 +56,7 @@ export interface IterationViteOptions {
 }
 
 /**
- * What `iteration()` hands back.
+ * What `isotone()` hands back.
  *
  * Only `name` is public, and that is deliberate. isotone is consumed as a
  * linked (`file:` / workspace) dependency, so TypeScript resolves the `vite`
