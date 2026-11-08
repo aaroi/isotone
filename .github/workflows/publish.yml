@@ -70,6 +70,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       unpublished: ${{ steps.version.outputs.unpublished }}
+      sha256: ${{ steps.pack.outputs.sha256 }}
     steps:
       # The public repository fetches without a token, so none is left on disk
       # while dependencies install and tests run.
@@ -99,9 +100,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm check:package
-      # Nothing publishes without the packed install on the oldest and newest Vite and React.
-      - run: pnpm smoke
-      - run: mkdir release && npm pack --ignore-scripts --pack-destination release
+      # Pack before anything from outside the lockfile runs: the smoke job's
+      # Vite, React and jsdom never touch this tree, and the publish job checks
+      # it publishes exactly these bytes.
+      - name: Pack
+        id: pack
+        run: |
+          mkdir release && npm pack --ignore-scripts --pack-destination release
+          echo "sha256=$(sha256sum release/*.tgz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.version.outputs.unpublished == 'true'
         with:
@@ -110,8 +116,30 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  publish:
+  smoke:
     needs: check
+    if: needs.check.outputs.unpublished == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Nothing publishes without the packed archive installing into fresh
+      # apps on the oldest and newest Vite and React. Only the smoke script
+      # comes from the checkout; nothing is installed into it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-package
+          path: release
+      - run: node scripts/smoke.mjs release/*.tgz
+
+  publish:
+    needs: [check, smoke]
     if: needs.check.outputs.unpublished == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -127,6 +155,10 @@ jobs:
         with:
           name: npm-package
           path: release
+      - name: Check this is the archive the check job packed
+        env:
+          SHA256: ${{ needs.check.outputs.sha256 }}
+        run: echo "$SHA256  $(ls release/*.tgz)" | sha256sum --check
       - name: Check npm supports trusted publishing
         run: |
           node --input-type=module - <<'JS'
@@ -139,8 +171,8 @@ jobs:
       - run: npm publish ./release/*.tgz --ignore-scripts --provenance --access public
 
   release:
-    needs: [check, publish]
-    if: always() && needs.check.result == 'success' && (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+    needs: [check, smoke, publish]
+    if: always() && needs.check.result == 'success' && (needs.smoke.result == 'success' || needs.smoke.result == 'skipped') && (needs.publish.result == 'success' || needs.publish.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

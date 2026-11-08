@@ -20,16 +20,19 @@ npm; the archive's source maps contain source text. Keep the MIT notice and the
 
 ## Before merging
 
-1. Record notable changes under `Unreleased` in the changelog. If they add a
-   feature or change what users or agents type, read or import, raise the minor
-   in `package.json` in that PR (the major for a break that needs user action);
-   routine fixes get the automatic patch. Keep the lockfile's resolved versions
-   unless the release means to change dependencies. `pnpm check:release` (the
-   `release guard` check, and the first step of `Publish main`) enforces the
-   minor: only `### Fixed` and `### Security` headings (or `- fix:` notes) may
-   ship as a patch, and any other heading or a `- feat:` or `- change:` note
-   fails until `package.json` is above the published minor. The major stays
-   your call.
+1. Record notable changes under `Unreleased` in the changelog. If Unreleased
+   adds a feature or changes what users or agents type, read or import, raise
+   the minor version in `package.json` in that PR. Breaking changes ship as a
+   minor too, with what users must do under `### What you need to know`; a
+   major version is a deliberate maintainer decision, never required by a
+   change set. Routine fixes get the automatic patch. Preserve the lockfile's
+   resolved versions unless the release intentionally changes dependencies.
+   `pnpm check:release` (the `release guard` check, and the first step of
+   `Publish main`) enforces the minor: only `### Fixed` and `### Security`
+   headings (or `- fix:` notes) under Unreleased may ship as a patch. Any other
+   heading, such as `### What you need to know`, `### Changed` or `### Removed`,
+   or a `- feat:` or `- change:` note, fails it until `package.json` is above
+   the published minor.
 2. Run `pnpm install --frozen-lockfile`, `pnpm check`, `pnpm check:package` and
    `pnpm smoke` (which confirms a production Vite build contains no panel).
    Inspect both themes in the demo.
@@ -40,47 +43,71 @@ npm; the archive's source maps contain source text. Keep the MIT notice and the
    including on a phone, and confirm the demo shows any user-facing change.
 5. Merge the reviewed PR. Monitor `Publish main` until the npm version and
    GitHub Release appear. A green PR check alone does not prove publication.
-   Vercel then deploys the demo from `main` through its own Git connection,
-   independent of npm ([previews](development.md#hosted-demo)).
+   Vercel then deploys [isotone.vercel.app](https://isotone.vercel.app) from
+   `main`.
 
-The release check job builds and tests the prepared main commit, runs
-`pnpm smoke` and creates an archive; a separate job, the only one with OIDC
-permission, downloads and publishes it with provenance without installing
-dependencies or running project scripts. CI tests on Node 22, 24 and 26 (and on
-Windows, not yet required, where POSIX-only tests skip), runs types, lint, knip
-and the coverage floors once, `pnpm check:package` on every leg, the release
-guard, actionlint and zizmor on the workflows, and `pnpm smoke`.
+`Publish main` runs in four jobs. `check` builds and tests the prepared main
+commit, runs the packed-package check, then packs and uploads the archive.
+`smoke` downloads that archive and installs it into fresh Vite 5 and Vite 8
+apps (React 18 and 19); it runs after packing so the third-party code it
+installs cannot change what publishes, and `scripts/smoke.mjs` only installs
+versions published at least seven days earlier. `publish` checks the archive's
+SHA-256 against the one `check` recorded and publishes it with provenance; it is
+the only job with OIDC permission, and it installs nothing and runs no project
+scripts. `release` tags the commit and creates the GitHub Release.
+
+CI builds and tests on Node 22, 24 and 26 (and on Windows, not yet required,
+where POSIX-only tests skip), runs types, lint, knip and the coverage floors
+once, runs the packed-package check (with its size budgets) on every leg, the
+release guard, actionlint and zizmor on the workflows, and the same packed
+smoke test. A weekly `Mutation testing` run fails when Stryker's score drops
+below the `break` threshold in `stryker.config.json`.
 
 ## GitHub settings outside the repository
 
-These are account-side settings no commit can make. Do them once.
+No commit can make these account-side settings. Do them once, in order.
 
-1. **Ruleset on `main`** (Settings → Rules → Rulesets → New branch ruleset):
-   name `main`, Active, targeting the default branch, with Restrict deletions,
-   Block force pushes, Require a pull request (0 approvals is fine solo), and
-   Require status checks: `check (ubuntu-latest, Node 22)`, `check (ubuntu-latest, Node 24)`,
-   `check (ubuntu-latest, Node 26)`, `release guard`, `workflow lint` and
-   `packed smoke (oldest and newest Vite and React)` (they appear in the picker
-   after one pull-request run; add `check (windows-latest, Node 24)` once it is
-   green and its `continue-on-error` is gone from `ci.yml`). Require branches to
-   be up to date. Bypass: Repository admin, plus the github-actions app only if
-   `Publish main` fails at `git push origin HEAD:main` with a rule violation
-   (the `prepare` job pushes the version commit directly).
-2. **Release tags**: a tag ruleset named `release tags`, targeting `v*`, with
-   Restrict deletions, Restrict updates and Block force pushes. Bypass:
-   github-actions (the `release` job creates the tag) and Repository admin.
-3. **`npm` environment** (Settings → Environments → New environment → `npm`):
-   deployment branches and tags → Selected branches → `main`. Optionally add
+1. **Open a pull request and get it green** so the check names below exist
+   (they appear in the ruleset picker only after one run).
+2. **Ruleset on `main`** (Settings → Rules → Rulesets → New branch ruleset):
+   name `main`, Enforcement Active, target the default branch. Turn on
+   Restrict deletions, Block force pushes, Require a pull request before
+   merging (0 approvals is fine for a solo maintainer), Require branches to be
+   up to date, and Require status checks to pass with exactly:
+   - `check (ubuntu-latest, Node 22)`
+   - `check (ubuntu-latest, Node 24)`
+   - `check (ubuntu-latest, Node 26)`
+   - `packed smoke (oldest and newest Vite and React)`
+   - `release guard`
+   - `workflow lint`
+
+   Add `check (windows-latest, Node 24)` once it has passed and its
+   `continue-on-error` line is removed from `ci.yml`. Bypass list: Repository
+   admin, plus the github-actions app only if `Publish main` then fails at
+   `git push origin HEAD:main` with a rule violation (the `prepare` job pushes
+   the version commit directly).
+3. **Tag ruleset** named `release tags`, targeting `v*`: Restrict deletions,
+   Restrict updates, Block force pushes. Bypass: github-actions (the `release`
+   job creates the tag) and Repository admin.
+4. **`npm` environment** (Settings → Environments → New environment → `npm`):
+   deployment branches and tags → Selected branches → `main`; optionally add
    yourself as a required reviewer to approve each publish. In the same change,
    set Environment to `npm` on the trusted publisher in npm (isotone → Settings
    → Trusted publishing) and add `environment: npm` under `runs-on` in the
-   `publish` job of `.github/workflows/publish.yml`. Do both together: a
-   mismatch makes `npm publish` fail with E404.
-4. Optionally, in Settings → Actions → General, make workflow permissions
-   read-only by default (the workflows declare what they need) and allow only
+   `publish` job of `.github/workflows/publish.yml`. A mismatch between the two
+   makes `npm publish` fail with E404.
+5. **Actions** (Settings → Actions → General), optional: workflow permissions
+   read-only by default (the workflows declare what they need), and allow only
    actions from GitHub, verified creators and `pnpm/action-setup`.
-5. In Settings → Code security, enable Dependabot alerts and security updates;
+6. **Code security**: enable Dependabot alerts and security updates;
    `.github/dependabot.yml` only covers version updates.
+
+## Demo deployment outside the repository
+
+The hosted demo deploys through the Vercel project's Git connection to this
+repository; npm publication does not depend on it.
+[The development guide](development.md#hosted-demo) covers previews and
+preview protection.
 
 ## npm setup outside the repository
 
@@ -94,9 +121,9 @@ first publish within two days. The workflow uses GitHub-hosted runners, Node 24,
 and checks for npm 11.5.1 or newer. No long-lived publish token is needed.
 See [npm's trusted publishing guide](https://docs.npmjs.com/trusted-publishers/).
 
-Provenance needs a public repository and package, and `package.json`'s
-repository URL must match the publishing repository; local checks cannot verify
-any of this.
+Provenance needs the repository and package to be public, and `package.json`'s
+repository URL to match the publishing repository. Local checks cannot verify
+account-side configuration.
 
-After publishing, check the version, README image, exports and provenance on
-npm, and try the quick start in a clean project.
+After publishing, verify the new version, README image, exports and provenance
+on npm, then try the documented quick start in a clean project.

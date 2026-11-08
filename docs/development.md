@@ -17,7 +17,7 @@ guide](releasing.md) and keep work on a branch until it is ready.
 | `pnpm check:package` | Installs the packed archive in a clean consumer; fails when `dist/isotone.global.js` or the tarball outgrows its budget in `scripts/check-package.mjs` (raise one only in the change that needs it). Run it for package, adapter or shipped-doc changes. |
 | `pnpm smoke` | After `pnpm build`, with network: installs into fresh Vite 5 and Vite 8 apps with React 18 and 19 and checks a production build has no panel. |
 | `pnpm test:coverage` | The per-layer floors in `vitest.config.ts`; raise a floor when its layer improves. |
-| `pnpm mutate` | Stryker over `src/core` and `src/node` (weekly in CI; `--mutate <glob>` narrows it), into `reports/mutation/index.html`. |
+| `pnpm mutate` | Stryker over the Node-side layers (weekly in CI, failing below its `break` score; `--mutate <glob>` narrows it), into `reports/mutation/index.html`. |
 
 Tests check observable behaviour, transport and store failures, lifecycle
 cleanup and design boundaries; add a small regression case for each bug.

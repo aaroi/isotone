@@ -1,9 +1,13 @@
 // Smoke-test the packed package in fresh apps across the supported peers.
 //
-//   node scripts/smoke.mjs [vite:react ...]     e.g. node scripts/smoke.mjs 5:18 8:19
+//   node scripts/smoke.mjs [<isotone.tgz>] [vite:react ...]
+//                                        e.g. node scripts/smoke.mjs 5:18 8:19
 //
-// Each pair installs the packed tarball with that Vite and React major into a
-// new temporary app (network required) and checks what a user of the package
+// Each pair installs the packed tarball (the given one, or a fresh `npm pack`
+// of this checkout) with that Vite and React major into a new temporary app
+// (network required). Third-party packages resolve only to versions published
+// at least a week ago, as Dependabot's cooldown does, so a just-published
+// compromised release never runs here. It checks what a user of the package
 // relies on:
 //   - a production `vite build` contains no panel and no endpoint;
 //   - the dev server injects the panel into an HTML navigation and serves its
@@ -11,24 +15,27 @@
 //   - a same-origin notes POST is stored and the CLI lists it, while a POST
 //     from a foreign Origin is refused;
 //   - `isotone/react` mounts the panel with the app's own React (in jsdom).
-// Run `pnpm build` first. Without arguments it runs the oldest and newest
-// supported pairs.
+// Run `pnpm build` first when packing this checkout. Without pairs it runs the
+// oldest and newest supported pairs.
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { npm } from './npm.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const pairs = (process.argv.length > 2 ? process.argv.slice(2) : ['5:18', '8:19']).map((pair) => {
+const args = process.argv.slice(2);
+const given = args[0]?.endsWith('.tgz') ? resolve(/** @type {string} */ (args.shift())) : undefined;
+const pairs = (args.length ? args : ['5:18', '8:19']).map((pair) => {
   const match = /^(\d+):(\d+)$/.exec(pair);
   if (!match) throw new Error(`Expected <vite major>:<react major>, received ${JSON.stringify(pair)}`);
   return { vite: match[1] ?? '', react: match[2] ?? '' };
 });
 const JSDOM = `jsdom@${JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).devDependencies.jsdom}`;
+const BEFORE = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
 const scratch = mkdtempSync(join(tmpdir(), 'iso-smoke-'));
 /** @param {string[]} args @param {string} cwd */
@@ -118,12 +125,14 @@ try {
 
 try {
   /** @type {[{ filename: string, files: { path: string }[] }]} */
-  const [packed] = JSON.parse(run(['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], root));
+  const [packed] = JSON.parse(
+    run(['pack', '--ignore-scripts', '--json', ...(given ? ['--dry-run', given] : ['--pack-destination', scratch])], root),
+  );
   assert.ok(
     packed.files.some(({ path }) => path === 'dist/isotone.global.js'),
     'run pnpm build before the smoke test',
   );
-  const tarball = join(scratch, packed.filename);
+  const tarball = given ?? join(scratch, packed.filename);
 
   for (const { vite, react } of pairs) {
     const label = `Vite ${vite} + React ${react}`;
@@ -150,6 +159,7 @@ try {
         '--no-fund',
         '--package-lock=false',
         '--loglevel=error',
+        `--before=${BEFORE}`,
         tarball,
         `vite@${vite}`,
         `react@${react}`,

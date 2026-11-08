@@ -8,7 +8,9 @@
 // sit under `### Fixed` or `### Security` (or start with `- fix:`); any other
 // heading under Unreleased, such as `### What you need to know`, `### Changed`
 // or `### Removed`, or a bullet starting with `- feat:` or `- change:`, needs at
-// least a minor version bump. docs/releasing.md documents the convention.
+// least a minor version bump. Breaking changes ship as a minor too: a major is
+// the maintainer's deliberate choice, so the guard never asks for one.
+// docs/releasing.md documents the convention.
 import { readFileSync } from 'node:fs';
 
 import { npm } from './npm.mjs';
@@ -51,7 +53,7 @@ const raised = major > publishedMajor || (major === publishedMajor && minor > pu
 
 if (reasons.length && !raised) {
   process.stderr.write(
-    `CHANGELOG.md's Unreleased section has ${reasons.join(', ')}, which needs a minor or major release, ` +
+    `CHANGELOG.md's Unreleased section has ${reasons.join(', ')}, which needs at least a minor release, ` +
       `but package.json's version is not above the published ${published.trim()}'s minor. ` +
       `Raise the version in package.json (docs/releasing.md, "Before merging").\n`,
   );

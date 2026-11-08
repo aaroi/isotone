@@ -145,7 +145,8 @@ it('opens 500 selectors with a first screenful, then the rest in a few chunks, r
   // The commit that opens the panel renders only what fits on screen; each later one adds a chunk.
   expect(opening[0]).toBeLessThanOrEqual(16);
   expect(opening.at(-1)).toBe(500);
-  expect(opening.length).toBeLessThanOrEqual(14);
+  // Count the chunks, not commits: React may add an extra commit for the same count under load.
+  expect(new Set(opening).size).toBeLessThanOrEqual(12);
   // Chunks append: the first selector is the same element, not a remount.
   expect(shadow.querySelector('.isotone-axis')).toBe(first);
 });
