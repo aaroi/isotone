@@ -18,8 +18,8 @@ in `scripts/check-package.mjs`; raise a budget only in the change that needs it.
 Vite 5 and Vite 8 apps with React 18 and 19 and checks that a production build
 has no panel. `pnpm test:coverage` enforces the per-layer coverage floors in
 `vitest.config.ts`; raise a floor when its layer improves. `pnpm mutate` runs
-Stryker over `src/core` and `src/node` (weekly in CI; `--mutate <glob>` narrows
-it) and writes `reports/mutation/index.html`. Tests focus on observable behaviour, transport and store failures,
+Stryker over the Node-side layers (weekly in CI, failing below its `break`
+score; `--mutate <glob>` narrows it) and writes `reports/mutation/index.html`. Tests focus on observable behaviour, transport and store failures,
 lifecycle cleanup and design boundaries; add a small regression case for each bug.
 Inspect both themes, keyboard use, reduced motion, scrolling, and long content
 when changing UI.

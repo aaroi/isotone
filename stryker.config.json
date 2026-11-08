@@ -2,7 +2,13 @@
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "testRunner": "vitest",
   "plugins": ["@stryker-mutator/vitest-runner"],
-  "mutate": ["src/core/**/*.ts", "src/node/**/*.ts", "!src/**/index.ts", "!src/core/types.ts"],
+  "mutate": [
+    "src/{cli,core,node,serve,server,vite}/**/*.ts",
+    "!src/{cli,core,node/variants}/index.ts",
+    "!src/cli/bin.ts",
+    "!src/core/types.ts",
+    "!src/vite/live.ts"
+  ],
   "coverageAnalysis": "perTest",
   "ignoreStatic": true,
   "incremental": true,
@@ -17,7 +23,7 @@
   "thresholds": {
     "high": 85,
     "low": 70,
-    "break": null
+    "break": 65
   },
   "tempDirName": ".stryker-tmp"
 }
