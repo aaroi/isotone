@@ -87,7 +87,7 @@ describe('create / add / list', () => {
     names.push('gcp-credentials-prod.json', 'release.keystore', '.aws/config');
     for (const name of names) {
       writeFileSync(join(root, name), 'SECRET=1\n');
-      expect(() => addVariantFile(opts, 'v1', name)).toThrow(/looks like a secret/);
+      expect(() => addVariantFile(opts, 'v1', name)).toThrow(/looks like a secret.*Ask the user/);
       expect(existsSync(join(variantDir(opts, 'v1'), name))).toBe(false);
     }
     writeFileSync(join(root, '.env.example'), 'SECRET=\n');
@@ -95,7 +95,7 @@ describe('create / add / list', () => {
     // Whatever the project keeps out of git stays out of variants too.
     writeFileSync(join(root, '.gitignore'), 'private.txt\n');
     writeFileSync(join(root, 'private.txt'), 'token\n');
-    expect(() => addVariantFile(opts, 'v1', 'private.txt')).toThrow(/Git ignores.*--force/);
+    expect(() => addVariantFile(opts, 'v1', 'private.txt')).toThrow(/Git ignores.*Ask the user before copying it with --force/);
     // A deliberate copy goes through.
     expect(Object.keys(addVariantFile(opts, 'v1', 'private.txt', { force: true }).files)).toContain('private.txt');
     expect(Object.keys(addVariantFile(opts, 'v1', '.envrc', { force: true }).files)).toContain('.envrc');
