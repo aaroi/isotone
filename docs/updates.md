@@ -3,8 +3,7 @@
 Your project controls its installed version. Isotone checks for a newer release
 in the background and lets you hand the upgrade to your coding agent, or copy the
 exact command; it never installs packages, runs that command, or changes a
-manifest or lockfile itself. Moving from `iso-iterate` is a separate
-[migration](migration.md).
+manifest or lockfile itself.
 
 The Vite plugin and standalone server check the public npm `latest` tag at most
 once per day while their per-user cache (`~/.cache/isotone`, or `$XDG_CACHE_HOME/isotone`) is retained. Checks take at

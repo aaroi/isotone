@@ -46,7 +46,7 @@ Each topic lives in one file, for one reader; other files link to it.
 | The section `init` writes | The same agent, every session | Dev-only rule, the loop, trust, where the guide is |
 | `docs/integrations.md` | Whoever wires up a host | Hosts, endpoint rules, themes, production guards |
 | `docs/variants.md` | Agent and host developer | Making file variants, knobs, sections and host sources well; how switching works, last |
-| `docs/blast.md`, `updates.md`, `migration.md` | The person using Isotone | Blast, update checks, the rename |
+| `docs/blast.md`, `updates.md` | The person using Isotone | Blast, update checks |
 | `AGENTS.md`, `docs/development.md`, `design.md`, `releasing.md`, `onboarding.md` | Maintainers | Not shipped |
 
 `tests/package/docs.test.ts` checks that shipped docs link only to shipped files
