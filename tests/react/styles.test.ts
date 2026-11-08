@@ -154,6 +154,28 @@ describe('dock lists', () => {
   });
 });
 
+describe('variant sections', () => {
+  // A closed section followed by an open one kept the full gap meant between open sections.
+  it('puts the header after a closed section as close as one closed header to the next', () => {
+    const style = document.createElement('style');
+    style.textContent = PANEL_CSS;
+    document.head.append(style);
+    const root = document.createElement('div');
+    root.className = 'isotone-root';
+    root.innerHTML =
+      '<div class="isotone-vars-body"><div class="isotone-section" data-collapsed="true"></div><div class="isotone-section" data-collapsed="false"></div><div class="isotone-section" data-collapsed="true"></div></div>';
+    document.body.append(root);
+    try {
+      const [, afterClosed, afterOpen] = [...root.querySelectorAll('.isotone-section')].map((el) => getComputedStyle(el));
+      expect([afterClosed?.paddingTop, afterClosed?.marginTop]).toEqual(['0px', '-4px']);
+      expect(afterOpen?.paddingTop).toBe('8px');
+    } finally {
+      root.remove();
+      style.remove();
+    }
+  });
+});
+
 describe('forced colors', () => {
   // High contrast drops shadows and author colours, which drew the selection and the slider.
   it('marks selections, swatches and sliders with system colours', () => {

@@ -58,6 +58,7 @@
 
 **The panel**
 
+- In the Variants panel, a section header after a closed section sits as close as one closed header to the next, whether its own section is open or not.
 - The note list keeps your place when a note is deleted or edited, or an agent marks one working or done.
 - The note list is one Tab stop: arrow keys, Home and End move between notes and their delete buttons.
 - Keys, focus, input and wheel events inside Isotone no longer reach the app's handlers, and Escape in the app's own fields no longer closes Isotone.

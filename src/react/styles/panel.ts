@@ -125,11 +125,15 @@ ${APPEARANCE_CSS}
 .isotone-section, .isotone-section-body { flex: none; display: flex; flex-direction: column; gap: var(--iso-space); }
 .isotone-section-body[hidden] { display: none; }
 .isotone-vars-body > * + .isotone-section { padding-top: 8px; }
-/* Collapsed sections in a row read as one list of headers, not separated blocks. */
-.isotone-section[data-collapsed='true'] + .isotone-section[data-collapsed='true'] { padding-top: 0; margin-top: -4px; }
+/* After a collapsed section, the next header sits as close as a list of headers,
+   whether that next section is open or not. */
+.isotone-section[data-collapsed='true'] + .isotone-section { padding-top: 0; margin-top: -4px; }
 /* A collapsed section has nothing to stick over, so its header's backdrop only needs
    to reach the smaller gap; a full inset would cover the header above it. */
 .isotone-section[data-collapsed='true'] + .isotone-section[data-collapsed='true'] > .isotone-section-head { margin-top: -4px; padding-top: 4px; }
+/* An open section keeps its full backdrop so it covers content when stuck; the
+   collapsed header above paints over the part that reaches into the gap. */
+.isotone-section[data-collapsed='true'] > .isotone-section-head { z-index: 2; }
 /* Sticky offsets start inside the scroller's padding; the negative top reaches its edge. */
 .isotone-section-head { position: sticky; top: calc(0px - var(--iso-space)); z-index: 1; margin: calc(0px - var(--iso-space)) calc(0px - var(--iso-space)) -4px; padding: var(--iso-space) var(--iso-space) 0; background: var(--iso-bg); font: inherit; }
 .isotone-section-head::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 8px; background: linear-gradient(var(--iso-bg), transparent); pointer-events: none; }
