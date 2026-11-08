@@ -14,7 +14,6 @@ const ALLOWED: Record<string, readonly string[]> = {
   react: ['core', 'react'],
   standalone: ['core', 'react', 'standalone'],
   node: ['core', 'node'],
-  server: ['core', 'node', 'server'],
   serve: ['core', 'node', 'serve'],
   vite: ['core', 'node', 'vite'],
   cli: ['core', 'node', 'serve', 'cli'],
@@ -81,7 +80,7 @@ describe('import boundaries', () => {
     expect(check('react/bad.ts', "import { readFileSync } from 'node:fs';")).toHaveLength(1);
     expect(check('react/bad.ts', "import { readNotes } from '../node/notes/store';")).toHaveLength(1);
     expect(check('core/bad.ts', "const fs = await import('node:fs');")).toHaveLength(1);
-    expect(check('server/bad.ts', "export { iteration } from '../vite/index';")).toHaveLength(1);
+    expect(check('serve/bad.ts', "export { iteration } from '../vite/index';")).toHaveLength(1);
     expect(check('node/bad.ts', "import { mountIteration } from '../standalone/index';")).toHaveLength(1);
     expect(check('cli/ok.ts', "import { readNotes } from '../node/notes/store';")).toEqual([]);
   });

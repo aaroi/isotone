@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it } from 'vitest';
 import { LockBusyError, withFileLock } from '../../src/node/fs/lock';
 import { notesResponse } from '../../src/node/notes/handler';
 import { variantsDir, variantsResponse } from '../../src/node/variants';
-import { serveNotesRequest } from '../../src/server';
+import { serveIteration } from '../../src/serve';
 import { compileSources } from '../helpers/compile';
 
 let root: string;
@@ -130,14 +130,12 @@ it('answers 503 quickly from a server while another writer holds the store', asy
   const file = join(root, 'notes.json');
   writeLock(file, owner(process.pid), 0);
   const started = Date.now();
-  const response = await serveNotesRequest(
-    file,
-    new Request('http://localhost:5173/api/iteration/notes', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ route: '/', feedback: 'Hi' }),
-    }),
-  );
+  const served = await serveIteration({ file, port: 0, checkForUpdates: false });
+  const response = await fetch(`${served.url}/api/iteration/notes`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ route: '/', feedback: 'Hi' }),
+  }).finally(() => served.close());
   expect(response.status).toBe(503);
   expect(Date.now() - started).toBeLessThan(1_000);
 });

@@ -3,8 +3,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { MAX_BODY_BYTES } from '../core/limits';
 import { LockBusyError } from './fs/lock';
 
-/** The transport-agnostic result of a request — any runtime (Vite
- *  middleware, Next route handler, Bun serve, Vercel) can render it. */
+/** The result of a request, which the Vite middleware and `isotone serve`
+ *  both render. */
 export interface HandlerResponse {
   status: number;
   /** Response headers object (frameworks set them on their own res). */
@@ -13,7 +13,7 @@ export interface HandlerResponse {
   body: unknown;
 }
 
-/** A request the pure handlers understand (framework-neutral). */
+/** A request the pure handlers understand. */
 export interface HandlerRequest {
   method?: string;
   url?: string;
@@ -90,8 +90,8 @@ function forwardedAddresses(forwardedFor: string | null | undefined, forwarded: 
 export interface RequestFacts {
   origin?: string | null;
   host?: string | null;
-  /** The peer address; omitted where the runtime does not expose it. */
-  remoteAddress?: string | null;
+  /** The peer's socket address. */
+  remoteAddress: string | null;
   /** `X-Forwarded-For` and `Forwarded`, as received. */
   forwardedFor?: string | null;
   forwarded?: string | null;
@@ -113,11 +113,9 @@ export function nodeRequestFacts(req: IncomingMessage): RequestFacts {
 }
 
 /** Whether the request comes from this machine: every address it names (the
- *  peer, when known, and any a proxy forwarded for) is loopback. */
+ *  peer, and any a proxy forwarded for) is loopback. */
 export function isFromThisMachine(request: RequestFacts): boolean {
-  const addresses = forwardedAddresses(request.forwardedFor, request.forwarded);
-  if (request.remoteAddress !== undefined) addresses.push(request.remoteAddress ?? '');
-  return addresses.every(isLoopbackAddress);
+  return [...forwardedAddresses(request.forwardedFor, request.forwarded), request.remoteAddress].every(isLoopbackAddress);
 }
 
 /**
@@ -178,34 +176,7 @@ export async function readNodeJson(req: IncomingMessage): Promise<unknown> {
   });
 }
 
-export async function readWebJson(request: Request): Promise<unknown> {
-  requireJson(request.headers.get('content-type'));
-  const reader = request.body?.getReader();
-  if (!reader) return undefined;
-  const chunks: Uint8Array[] = [];
-  let bytes = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      bytes += value.byteLength;
-      if (bytes > MAX_BODY_BYTES) {
-        await reader.cancel();
-        throw new HttpError(413, 'request body too large');
-      }
-      chunks.push(value);
-    }
-    try {
-      return JSON.parse(Buffer.concat(chunks).toString('utf8'));
-    } catch {
-      return undefined;
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-export function httpFailure(error: unknown): HandlerResponse {
+function httpFailure(error: unknown): HandlerResponse {
   // A busy store is temporary: 503 tells the panel to keep the note and retry.
   const known = error instanceof HttpError ? error : error instanceof LockBusyError ? new HttpError(503, error.message) : null;
   return {

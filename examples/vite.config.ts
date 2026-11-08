@@ -6,7 +6,7 @@ import { defineConfig, type Plugin } from 'vite';
 import { notesResponse } from '../src/node/notes/handler';
 import { updateNotes, writeNotes } from '../src/node/notes/store';
 import { isotone } from '../src/vite/index';
-import { checkRequest, readNodeJson, sendFailure } from '../src/node/http';
+import { checkRequest, nodeRequestFacts, readNodeJson, sendFailure } from '../src/node/http';
 import type { UpdateInfo } from '../src/core/update';
 import { updateResponse } from '../src/node/update/note';
 
@@ -119,7 +119,7 @@ function demoNotes(): Plugin {
         const preview = /^\/demo-update\/([a-z]+)$/.exec((req.url ?? '').replace(/\?.*$/s, ''));
         if (preview) {
           try {
-            checkRequest({ origin: req.headers.origin, host: req.headers.host });
+            checkRequest(nodeRequestFacts(req));
             const body = req.method === 'POST' ? await readNodeJson(req) : undefined;
             const result = updateResponse(files.get(`/demo-notes/${preview[1]}`) ?? null, demoUpdate(directory), {
               method: req.method,
@@ -135,7 +135,7 @@ function demoNotes(): Plugin {
         // The pretend agent: `start` is `isotone --working` on one note, `finish` is `--done`.
         if ((req.url ?? '').startsWith('/demo-agent') && req.method === 'POST') {
           try {
-            checkRequest({ origin: req.headers.origin, host: req.headers.host });
+            checkRequest(nodeRequestFacts(req));
           } catch (error) {
             sendFailure(res, error);
             return;
@@ -173,7 +173,7 @@ function demoNotes(): Plugin {
           return;
         }
         try {
-          checkRequest({ origin: req.headers.origin, host: req.headers.host });
+          checkRequest(nodeRequestFacts(req));
           const body = req.method === 'POST' ? await readNodeJson(req) : undefined;
           const result = notesResponse(file, { method: req.method, url: req.url, body });
           res.writeHead(result.status, result.headers);

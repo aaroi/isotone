@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { checkOrigin } from '../../src/node/http';
+import { checkOrigin, checkRequest } from '../../src/node/http';
 import { updateRequestOf } from '../../src/node/update/request';
 
 describe('checkOrigin', () => {
@@ -10,6 +10,36 @@ describe('checkOrigin', () => {
     for (const origin of ['ws://127.0.0.1:5173', 'ftp://127.0.0.1:5173', 'file:///', 'null']) {
       expect(() => checkOrigin(origin, '127.0.0.1:5173'), origin).toThrow('origin not allowed');
       expect(() => checkOrigin(origin, '127.0.0.1:5173', true), origin).toThrow('origin not allowed');
+    }
+  });
+});
+
+describe('checkRequest, the gate isotone serve and the Vite plugin share', () => {
+  const local = { host: '127.0.0.1:4123', remoteAddress: '127.0.0.1' };
+
+  it('refuses a peer on another machine whatever Host and forwarding headers it claims', () => {
+    for (const remoteAddress of ['192.168.1.20', '::ffff:192.168.1.20', '10.0.0.5', null]) {
+      for (const claims of [{}, { host: 'localhost:4123' }, { forwardedFor: '127.0.0.1' }, { forwarded: 'for=127.0.0.1' }]) {
+        expect(() => checkRequest({ ...local, ...claims, remoteAddress }), `${remoteAddress} ${JSON.stringify(claims)}`).toThrow(
+          'only requests from this machine',
+        );
+      }
+    }
+  });
+
+  it('refuses a local peer forwarding for another machine, or under a LAN or rebinding Host', () => {
+    expect(() => checkRequest({ ...local, forwardedFor: '203.0.113.9' })).toThrow('only requests from this machine');
+    expect(() => checkRequest({ ...local, forwarded: 'for="[2001:db8::1]";proto=https' })).toThrow('only requests from this machine');
+    for (const host of ['192.168.1.10:4123', 'rebind.attacker.example:4123', '']) {
+      expect(() => checkRequest({ ...local, host }), host).toThrow('host not allowed');
+    }
+  });
+
+  it('accepts this machine under its local names and loopback addresses', () => {
+    for (const remoteAddress of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
+      for (const host of ['127.0.0.1:4123', 'localhost:4123', '[::1]:4123', 'app.localhost:4123', 'shop.test']) {
+        expect(() => checkRequest({ host, remoteAddress, forwardedFor: '127.0.0.1, ::1' }), `${remoteAddress} ${host}`).not.toThrow();
+      }
     }
   });
 });

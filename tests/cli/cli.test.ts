@@ -477,7 +477,7 @@ describe('init', () => {
     expect(io.text.out).toContain('Recommended: host');
   });
 
-  it('prints a host example and a route handler that name real exports', async () => {
+  it('prints a host example that names real exports, and serve for Next', async () => {
     const root = tempRepo();
     const host = makeIo(root);
     expect(await runCli(['init', '--approach', 'host'], host)).toBe(0);
@@ -488,9 +488,8 @@ describe('init', () => {
     writeFileSync(join(root, 'next.config.ts'), 'export default {};\n');
     const serve = makeIo(root);
     expect(await runCli(['init', '--approach', 'serve'], serve)).toBe(0);
-    expect(serve.text.out).toContain("import { serveNotesRequest } from 'isotone/server';");
-    expect(serve.text.out).toContain('a Next route handler');
-    expect(serve.text.out).toContain('"dev": "next dev -H 127.0.0.1"');
+    expect(serve.text.out).toContain('npx isotone serve');
+    expect(serve.text.out).not.toContain('isotone/server');
   });
 
   it('warns when overlay is asked for outside a Vite repo', async () => {
@@ -535,7 +534,7 @@ describe('init', () => {
     expect(await runCli(['init'], io)).toBe(0);
     expect(io.text.out).toContain('In src/app/layout.tsx');
     expect(io.text.out).toContain("{process.env.NODE_ENV === 'development' && (");
-    expect(io.text.out).toContain('{ allowProduction: true }');
+    expect(io.text.out).not.toContain('isotone/server');
     // No plain, unguarded tag for a Next app.
     expect(io.text.out).not.toContain('<script src=');
     expect(io.text.out).toContain('render the tag inside <body>');

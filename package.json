@@ -17,10 +17,6 @@
       "types": "./dist/core.d.ts",
       "default": "./dist/core.js"
     },
-    "./server": {
-      "types": "./dist/server.d.ts",
-      "default": "./dist/server.js"
-    },
     "./serve": {
       "types": "./dist/serve.d.ts",
       "default": "./dist/serve.js"
