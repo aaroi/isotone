@@ -129,19 +129,23 @@ describe('input modality', () => {
   });
 });
 
-describe('variants list', () => {
+describe('dock lists', () => {
   // A label of one long word used to make its segment as wide as the word, so the list scrolled sideways.
-  it('keeps an option no wider than its row and the list from scrolling sideways', () => {
+  // On touch, a note's enlarged delete target reached past the note list's edge and did the same.
+  it('keeps an option no wider than its row and neither list from scrolling sideways', () => {
     const style = document.createElement('style');
     style.textContent = PANEL_CSS;
     document.head.append(style);
     const root = document.createElement('div');
     root.className = 'isotone-root';
-    root.innerHTML = '<div class="isotone-vars-body"><div class="isotone-segs"><div class="isotone-opt isotone-opt-seg"></div></div></div>';
+    root.innerHTML =
+      '<div class="isotone-vars-body"><div class="isotone-segs"><div class="isotone-opt isotone-opt-seg"></div></div></div><ul class="isotone-list"></ul>';
     document.body.append(root);
     try {
-      const body = getComputedStyle(root.querySelector('.isotone-vars-body') as Element);
-      expect([body.overflowX, body.overflowY]).toEqual(['hidden', 'auto']);
+      for (const scroller of ['.isotone-vars-body', '.isotone-list']) {
+        const body = getComputedStyle(root.querySelector(scroller) as Element);
+        expect([body.overflowX, body.overflowY]).toEqual(['hidden', 'auto']);
+      }
       const option = getComputedStyle(root.querySelector('.isotone-opt-seg') as Element);
       expect([option.minWidth, option.maxWidth]).toEqual(['auto', '100%']);
     } finally {
