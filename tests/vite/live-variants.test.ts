@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 /**
  * Live overlay variants in the browser: the tab's store (selection, `?v=`,
  * reload decisions) and the binder that turns each version's exports into

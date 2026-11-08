@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 /**
  * The live store's and binder's less common paths: back/forward, following
  * the server, the SSR sync's failure modes, odd query strings and older

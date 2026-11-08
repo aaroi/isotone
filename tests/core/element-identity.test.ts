@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 /**
  * A pin has to mean one element, for the panel finding it again and for the
  * agent reading the note. Both used to rest on a path four levels deep, which

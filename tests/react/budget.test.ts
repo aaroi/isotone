@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 /**
  * Render budgets on long collections, as React commit counts rather than
  * wall-clock times, so they hold on any machine. Timers and frames are fake:

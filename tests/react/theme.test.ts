@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { detectTheme, observeTheme } from '../../src/react/styles/theme';
 

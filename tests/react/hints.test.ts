@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { HINTS } from '../../src/react/notes/hints';
 import { PANEL_CSS } from '../../src/react/styles/panel';

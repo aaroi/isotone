@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 /**
  * The variants surface: the view on its own, and the panel deciding between
  * a Variants / Notes tab bar, variants only, or nothing at all.

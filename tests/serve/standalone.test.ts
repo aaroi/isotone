@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest';
 import { readBundle } from '../../src/node/bundle';
 import type { MountIsotoneOptions } from '../../src/core/types';
