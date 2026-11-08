@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import ts from 'typescript';
 
@@ -30,7 +30,11 @@ export function compileSources(entries: string[], outDir: string): Record<string
       .outputText.replace(/(from\s+['"])(\.[^'"]+)(['"])/g, (_, start: string, specifier: string, end: string) => {
         const target = resolveSource(file, specifier);
         visit(target);
-        let path = relative(dirname(file), target).replace(/\.tsx?$/, '.mjs');
+        // An import specifier is a URL path: forward slashes on every OS.
+        let path = relative(dirname(file), target)
+          .split(sep)
+          .join('/')
+          .replace(/\.tsx?$/, '.mjs');
         if (!path.startsWith('.')) path = `./${path}`;
         return `${start}${path}${end}`;
       });

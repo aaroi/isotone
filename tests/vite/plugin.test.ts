@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { createServer, type ViteDevServer } from 'vite';
+import { createServer, normalizePath, type ViteDevServer } from 'vite';
 
 import { withNativeFetch } from '../../src/vite/html-inject';
 import { isotone, iteration, type IsotoneViteOptions } from '../../src/vite/index';
@@ -457,19 +457,26 @@ afterEach(() => {
 
 /** A project that is its own git repo, so the exclude helpers write into
  *  its `.git/info/exclude` and not into this checkout's. */
+/** A file's module id the way Vite names it: forward slashes, so the same
+ *  `C:/…` form on Windows as in Vite's module graph and hot updates. */
+function id(...parts: string[]): string {
+  return normalizePath(join(...parts));
+}
+
 function tempProject(): { root: string; source: string; override: string; table: string } {
   const root = tempGitRepo('isotone-vite-variants-', repos);
   mkdirSync(join(root, 'src'), { recursive: true });
-  const source = join(root, 'src', 'Button.tsx');
+  // Module ids as Vite hands them to plugins: forward slashes on every OS.
+  const source = id(root, 'src', 'Button.tsx');
   writeFileSync(source, 'export const label = "real";\n');
-  const table = join(root, 'src', 'Table.tsx');
+  const table = id(root, 'src', 'Table.tsx');
   writeFileSync(table, 'export const rows = "real";\n');
   execFileSync('git', ['add', '.'], { cwd: root });
   execFileSync('git', ['commit', '-q', '-m', 'init'], { cwd: root });
 
   createVariant({ root }, { id: 'b', label: 'B' });
   addVariantFile({ root }, 'b', 'src/Button.tsx');
-  const override = join(variantDir({ root }, 'b'), 'src', 'Button.tsx');
+  const override = id(variantDir({ root }, 'b'), 'src', 'Button.tsx');
   writeFileSync(override, 'export const label = "variant b";\n');
   // A second decision over another file, so two variants can be active at once.
   createVariant({ root }, { id: 't', label: 'T' });
@@ -562,7 +569,7 @@ describe('overlay variants in load()', () => {
     expect(hooks.load(`${source}#frag`)?.code).toContain('variant b');
     // Files the variant does not touch, and paths that are not files at
     // all, are left alone.
-    expect(hooks.load(join(root, 'src', 'Other.tsx'))).toBeNull();
+    expect(hooks.load(id(root, 'src', 'Other.tsx'))).toBeNull();
     expect(hooks.load('\0virtual:something')).toBeNull();
   });
 
@@ -580,7 +587,7 @@ describe('overlay variants in load()', () => {
     writeActive({ root }, ['b']);
     const hooks = plugin(root, 'serve');
     expect(hooks.load(override)).toBeNull();
-    const dep = join(root, 'node_modules', 'src', 'Button.tsx');
+    const dep = id(root, 'node_modules', 'src', 'Button.tsx');
     expect(hooks.load(dep)).toBeNull();
   });
 
@@ -614,7 +621,7 @@ describe('overlay variants in load()', () => {
     writeActive({ root }, ['b']);
     // A sibling dev server whose Vite root is elsewhere points at the
     // project the manifests describe.
-    const sibling = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-sibling-')));
+    const sibling = realpathSync.native(mkdtempSync(join(tmpdir(), 'isotone-sibling-')));
     repos.push(sibling);
     const hooks = plugin(sibling, 'serve', { variants: { root } });
     expect(hooks.load(source)?.code).toContain('variant b');
@@ -626,7 +633,7 @@ describe('overlay variants in load()', () => {
     // Vite keeps `config.root` as configured and realpaths every module id,
     // so a variants root taken from the config verbatim would never contain
     // `source` and no override would ever apply.
-    const linkParent = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-link-')));
+    const linkParent = realpathSync.native(mkdtempSync(join(tmpdir(), 'isotone-link-')));
     repos.push(linkParent);
     const link = join(linkParent, 'app');
     symlinkSync(root, link);
@@ -847,7 +854,7 @@ describe('overlay variants in the dev server', () => {
     hooks.configureServer(server);
     for (const cb of listeners) cb();
     const lines = server.config.logger.info.mock.calls.map((c) => String(c[0]));
-    expect(lines.some((l) => l.includes('variants → .isotone/variants  (2 variants)'))).toBe(true);
+    expect(lines.some((l) => l.includes(`variants → ${join('.isotone', 'variants')}  (2 variants)`))).toBe(true);
   });
 });
 
@@ -967,9 +974,9 @@ describe('overlay variants in handleHotUpdate()', () => {
     // The real file's edit is invisible: the browser is showing the override.
     expect(hooks.handleHotUpdate({ file: source, server })).toEqual([]);
     // The manifest is not a module anywhere.
-    expect(hooks.handleHotUpdate({ file: join(variantDir({ root }, 'b'), 'variant.json'), server })).toEqual([]);
+    expect(hooks.handleHotUpdate({ file: id(variantDir({ root }, 'b'), 'variant.json'), server })).toEqual([]);
     // Files the variant does not touch go through vite's default handling.
-    expect(hooks.handleHotUpdate({ file: join(root, 'src', 'Other.tsx'), server })).toBeUndefined();
+    expect(hooks.handleHotUpdate({ file: id(root, 'src', 'Other.tsx'), server })).toBeUndefined();
   });
 
   it('swallows edits to an inactive variant and leaves the real file to vite', () => {
@@ -1039,7 +1046,7 @@ describe('live variants', () => {
     const { hooks } = livePlugin(root);
     for (const version of ['_base', 'b', 'zzz']) {
       for (const file of ['.env', '.git/config', '.git/HEAD', 'src/Table.tsx.bak', 'package.json']) {
-        expect(hooks.load(`${join(root, file)}?isotone=${version}`), `${file}?isotone=${version}`).toBeNull();
+        expect(hooks.load(`${id(root, file)}?isotone=${version}`), `${file}?isotone=${version}`).toBeNull();
       }
     }
     // A tracked file keeps its versions; a variant without a copy has none.
@@ -1073,7 +1080,7 @@ describe('live variants', () => {
 
   it('swaps a route module whole, since its framework reads the exports', () => {
     const { root } = tempProject();
-    const route = join(root, 'src', 'route.tsx');
+    const route = id(root, 'src', 'route.tsx');
     writeFileSync(route, 'export async function loader() {}\nexport default function Page() {}\n');
     execFileSync('git', ['add', '.'], { cwd: root });
     createVariant({ root }, { id: 'r' });
@@ -1090,12 +1097,12 @@ describe('live variants', () => {
     const { hooks } = livePlugin(root);
     (hooks as unknown as { resolve: unknown }).resolve = async () => null;
     const resolveId = hooks.resolveId.bind(hooks as never);
-    const importer = `${join(root, 'src', 'Button.tsx')}?isotone=n`;
-    const added = join(root, 'src', 'parts', 'NewThing.tsx');
+    const importer = `${id(root, 'src', 'Button.tsx')}?isotone=n`;
+    const added = id(root, 'src', 'parts', 'NewThing.tsx');
     expect(await resolveId('./parts/NewThing', importer)).toBe(added);
     expect(await resolveId('@/parts/NewThing', importer)).toBe(added);
     expect(await resolveId('./parts/Missing', importer)).toBeNull();
-    expect(await resolveId('./NewThing.tsx?isotone=n', join(root, 'src', 'parts', 'NewThing.tsx'))).toBe(`${added}?isotone=n`);
+    expect(await resolveId('./NewThing.tsx?isotone=n', id(root, 'src', 'parts', 'NewThing.tsx'))).toBe(`${added}?isotone=n`);
     // Its dispatcher has no real version to import.
     expect(hooks.load(added)?.code).not.toContain('_base');
   });
@@ -1177,8 +1184,8 @@ describe('live variants', () => {
 
   it('serves files whole that have no exports or compare element types', () => {
     const { root } = tempProject();
-    const entry = join(root, 'src', 'main.tsx');
-    const tabs = join(root, 'src', 'Tabs.tsx');
+    const entry = id(root, 'src', 'main.tsx');
+    const tabs = id(root, 'src', 'Tabs.tsx');
     writeFileSync(entry, 'render();\n');
     writeFileSync(
       tabs,
@@ -1198,9 +1205,7 @@ describe('live variants', () => {
     addVariantFile({ root }, 'n', 'src/NewThing.tsx', { create: true });
     const hooks = plugin(root, 'build') as unknown as LiveHooks;
     (hooks as unknown as { resolve: unknown }).resolve = async () => null;
-    expect(await hooks.resolveId.call(hooks as never, './NewThing', join(root, 'src', 'Button.tsx'))).toBe(
-      join(root, 'src', 'NewThing.tsx'),
-    );
+    expect(await hooks.resolveId.call(hooks as never, './NewThing', id(root, 'src', 'Button.tsx'))).toBe(id(root, 'src', 'NewThing.tsx'));
   });
 
   it('drops the plain transform of a file that just gained a variant', () => {

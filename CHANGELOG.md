@@ -41,6 +41,7 @@
 - `--reply` accepts text starting with a dash, "Unknown option" errors name the `--help` to read, and `| head` no longer prints an EPIPE stack trace.
 - `init` after an upgrade says "Already set up" instead of asking for the plugin again, and asks to rename `iteration()` if the config still uses it (`init --json` adds `integration`).
 - `init` prints the install command for your package manager and explains that a `file://` page never loads the panel.
+- On Windows, in a project whose path Node names with an 8.3 short name (`C:\Users\RUNNER~1\…`) while Git prints the long one, Isotone's files are kept out of Git again and `--done` no longer counts its own write to the notes file as the fix.
 
 **Blast**
 
@@ -54,6 +55,7 @@
 - `variant use` refuses a file another group's active variant overrides, and `promote` replaces all of a variant's files or none.
 - `variant add` records a file under its real spelling, so a case mismatch on macOS or Windows still overrides it.
 - On Windows, switching variants updates the page without a manual reload.
+- On Windows, overrides apply in a project reached through an 8.3 short name, as Vite names its modules by the long one.
 - `variant sync` exits 1 on a conflict, `variant list` (`conflicts` in `--json`) and `--done` name copies with conflict markers, and in live mode such a copy no longer breaks the real page.
 
 **The panel**

@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, win32 } from 'node:path';
 
 import { afterEach, assert, describe, expect, it } from 'vitest';
 
@@ -225,14 +225,18 @@ describe('ensureFileIgnored', () => {
     // A dev server started in app/console of a checkout whose root is two
     // levels up: the shape that produced an absolute path in the exclude
     // file, which git reads as root-relative and so never matched.
-    const repo = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-repo-')));
+    // Reached through the temp dir as the OS names it, which is not how git
+    // names it: macOS's /var is a symlink to /private/var, and Windows's temp
+    // dir is the 8.3 short name `RUNNER~1` where git prints the long one.
+    const raw = mkdtempSync(join(tmpdir(), 'isotone-repo-'));
+    const repo = realpathSync.native(raw);
     dirs.push(repo);
     execFileSync('git', ['init', '-q', repo]);
     const consoleDir = join(repo, 'app', 'console');
     mkdirSync(consoleDir, { recursive: true });
     // Before the first note, `.isotone/` does not exist either.
     const file = join(consoleDir, '.isotone', 'notes.json');
-    ensureFileIgnored(file);
+    ensureFileIgnored(join(raw, 'app', 'console', '.isotone', 'notes.json'));
     mkdirSync(dirname(file));
     writeFileSync(file, '[]\n');
 
@@ -243,11 +247,12 @@ describe('ensureFileIgnored', () => {
     writeFileSync(`${file}.lock`, '');
     writeFileSync(`${file}.0d2c.tmp`, '');
     // The proof is git's own verdict, not the file's contents.
-    const ignored = execFileSync('git', ['check-ignore', '--no-index', file], {
+    // Asked by a repo-relative path, which git echoes back as given on every OS.
+    const ignored = execFileSync('git', ['check-ignore', '--no-index', 'app/console/.isotone/notes.json'], {
       cwd: repo,
       encoding: 'utf8',
     }).trim();
-    expect(ignored).toBe(file);
+    expect(ignored).toBe('app/console/.isotone/notes.json');
     expect(
       execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], {
         cwd: repo,
@@ -264,7 +269,7 @@ describe('ensureFileIgnored', () => {
     // In a worktree `.git` is a file pointing at the shared repository, so
     // `<toplevel>/.git/info/exclude` is not a path at all; git keeps the
     // exclude file in the common dir and `--git-path` is how it says where.
-    const repo = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-wt-repo-')));
+    const repo = realpathSync.native(mkdtempSync(join(tmpdir(), 'isotone-wt-repo-')));
     dirs.push(repo);
     execFileSync('git', ['init', '-q', repo]);
     execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repo });
@@ -272,7 +277,8 @@ describe('ensureFileIgnored', () => {
     writeFileSync(join(repo, 'README'), 'x\n');
     execFileSync('git', ['add', '.'], { cwd: repo });
     execFileSync('git', ['commit', '-q', '-m', 'init'], { cwd: repo });
-    const parent = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-wt-')));
+    const raw = mkdtempSync(join(tmpdir(), 'isotone-wt-'));
+    const parent = realpathSync.native(raw);
     dirs.push(parent);
     const worktree = join(parent, 'checkout');
     execFileSync('git', ['worktree', 'add', '-q', '-b', 'wt', worktree], {
@@ -283,11 +289,12 @@ describe('ensureFileIgnored', () => {
     const file = join(worktree, 'app', '.isotone', 'notes.json');
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, '[]\n');
-    ensureFileIgnored(file);
+    // Through the temp dir as the OS names it, as above.
+    ensureFileIgnored(join(raw, 'checkout', 'app', '.isotone', 'notes.json'));
     const variants = join(worktree, 'app', 'variants');
     mkdirSync(variants, { recursive: true });
     writeFileSync(join(variants, 'x'), '');
-    ensureDirIgnored(variants);
+    ensureDirIgnored(join(raw, 'checkout', 'app', 'variants'));
 
     const reported = resolve(
       worktree,
@@ -321,6 +328,14 @@ describe('ensureFileIgnored', () => {
     expect(excludePattern('/repo', '/repo/x.json')).toBe('/x.json');
     expect(excludePattern('/repo', '/elsewhere/x.json')).toBeNull();
     expect(excludePattern('/repo', '/repo')).toBeNull();
+  });
+
+  it('matches a Windows file against the forward-slash root git prints there', () => {
+    // `git rev-parse --show-toplevel` answers `C:/repo`; node names the file `C:\repo\…`.
+    expect(excludePattern('C:/repo', 'C:\\repo\\app\\.isotone\\notes.json', win32)).toBe('/app/.isotone/notes.json');
+    expect(excludePattern('C:/repo', 'C:\\repo\\x.json', win32)).toBe('/x.json');
+    expect(excludePattern('C:/repo', 'C:\\other\\x.json', win32)).toBeNull();
+    expect(excludePattern('C:/repo', 'D:\\repo\\x.json', win32)).toBeNull();
   });
 });
 

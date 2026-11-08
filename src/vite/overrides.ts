@@ -3,13 +3,13 @@
  * the active set, the manifests, which copy answers a path, and how a file
  * with copies is dispatched in live mode. Nothing here talks to the server.
  */
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
 import { normalizePath } from 'vite';
 
 import { type OverlayVariant, overlayGroups, VARIANTS_ENDPOINT } from '../core/variants';
-import { isWithin } from '../node/fs/paths';
+import { isWithin, realPath } from '../node/fs/paths';
 import {
   ACTIVE_FILE,
   hasConflictMarkers,
@@ -41,10 +41,12 @@ export interface VariantsSetup {
 }
 
 /** The canonical form of a directory, or the path as given when it does not
- *  exist yet (nothing to canonicalize; the comparison can only fail open). */
+ *  exist yet (nothing to canonicalize; the comparison can only fail open).
+ *  Native, as Vite's own module ids are: on Windows that expands an 8.3
+ *  short name (`RUNNER~1`) the JavaScript realpath keeps. */
 function realDir(path: string): string {
   try {
-    return realpathSync(path);
+    return realPath(path);
   } catch {
     return path;
   }
