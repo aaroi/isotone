@@ -79,13 +79,13 @@ if (commit.status !== 0 && !/nothing to commit/.test(commit.stdout + commit.stde
 }
 const base = git(app, ['rev-parse', 'HEAD']).stdout.trim();
 
-const { serveIteration } = await import(pathToFileURL(server).href);
-const file = join(app, '.iteration-feedback.json');
+const { serveIsotone } = await import(pathToFileURL(server).href);
+const file = join(app, '.isotone', 'notes.json');
 const notes = [];
-const served = await serveIteration({ file, port: 0, checkForUpdates: false });
+const served = await serveIsotone({ file, port: 0, checkForUpdates: false });
 try {
   for (const note of SEEDED) {
-    const response = await fetch(`${served.url}/api/iteration/notes`, {
+    const response = await fetch(`${served.url}/api/isotone/notes`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({

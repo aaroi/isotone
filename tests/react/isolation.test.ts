@@ -6,13 +6,13 @@
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { IterationNote } from '../../src/core';
-import { createVariantsSource, IterationPanel } from '../../src/react/index';
+import type { IsotoneNote } from '../../src/core';
+import { createVariantsSource, IsotonePanel } from '../../src/react/index';
 
 let host: HTMLDivElement;
 let shadow: ShadowRoot;
 let root: Root;
-let notes: IterationNote[] = [];
+let notes: IsotoneNote[] = [];
 
 const source = () =>
   createVariantsSource({
@@ -62,9 +62,9 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-function render(props: Partial<Parameters<typeof IterationPanel>[0]> = {}) {
+function render(props: Partial<Parameters<typeof IsotonePanel>[0]> = {}) {
   return act(async () => {
-    root.render(createElement(IterationPanel, { route: '/', theme: 'light', store: { endpoint: '/notes' }, ...props }));
+    root.render(createElement(IsotonePanel, { route: '/', theme: 'light', store: { endpoint: '/notes' }, ...props }));
   });
 }
 

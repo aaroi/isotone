@@ -58,7 +58,7 @@ const server = await createServer({
 });
 await server.listen();
 const base = server.resolvedUrls.local[0].replace(/\\/$/, '');
-const notes = base + '/api/iteration/notes';
+const notes = base + '/api/isotone/notes';
 const post = (origin, feedback) =>
   fetch(notes, {
     method: 'POST',
@@ -98,8 +98,8 @@ try {
 
   const { version } = await import('react');
   assert.equal(version.split('.')[0], expectedReact, 'the app resolves the requested React');
-  const { mountIteration } = await import('isotone/react');
-  const off = mountIteration({ endpoint: notes });
+  const { mountIsotone } = await import('isotone/react');
+  const off = mountIsotone({ endpoint: notes });
   const deadline = Date.now() + 10_000;
   let panel = null;
   while (Date.now() < deadline) {
@@ -169,7 +169,7 @@ try {
     });
     for (const file of files(join(app, 'dist'))) {
       const text = readFileSync(file, 'utf8');
-      for (const marker of ['isotone', '/api/iteration', '__isotone']) {
+      for (const marker of ['isotone', '/api/isotone', '__isotone']) {
         assert.ok(!text.includes(marker), `${file} contains ${marker} after a production build`);
       }
     }

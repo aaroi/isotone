@@ -22,7 +22,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { createServer, type ViteDevServer } from 'vite';
 
 import { withNativeFetch } from '../../src/vite/html-inject';
-import { isotone, iteration, type IterationViteOptions } from '../../src/vite/index';
+import { isotone, iteration, type IsotoneViteOptions } from '../../src/vite/index';
 import { NOTES_ENDPOINT } from '../../src/node/notes/handler';
 import { VARIANTS_ENDPOINT } from '../../src/core/variants';
 import { UPDATE_ENDPOINT } from '../../src/node/update/check';
@@ -358,6 +358,34 @@ describe('iteration (deprecated name)', () => {
   });
 });
 
+describe('the notes file from before 1.3', () => {
+  const NOTES = '[{"id":"n1","route":"/","feedback":"old","createdAt":"2026-01-01T00:00:00Z"}]';
+
+  it('moves .iteration-feedback.json to .isotone/notes.json when the dev server starts', () => {
+    const { root } = tempProject();
+    writeFileSync(join(root, '.iteration-feedback.json'), NOTES);
+    writeFileSync(join(root, '.iteration-feedback.blast.json'), '{}');
+    const build = plugin(root, 'build');
+    build.configureServer(fakeServer(root));
+    expect(existsSync(join(root, '.iteration-feedback.json'))).toBe(true);
+
+    const server = fakeServer(root);
+    plugin(root, 'serve').configureServer(server);
+    expect(readFileSync(join(root, '.isotone/notes.json'), 'utf8')).toBe(NOTES);
+    expect(existsSync(join(root, '.isotone/notes.blast.json'))).toBe(true);
+    expect(existsSync(join(root, '.iteration-feedback.json'))).toBe(false);
+    expect(server.config.logger.info).toHaveBeenCalledWith('  isotone  Moved .iteration-feedback.json to .isotone/notes.json.');
+  });
+
+  it('leaves a file the config names where it is', () => {
+    const { root } = tempProject();
+    writeFileSync(join(root, '.iteration-feedback.json'), NOTES);
+    plugin(root, 'serve', { file: '.iteration-feedback.json' }).configureServer(fakeServer(root));
+    expect(readFileSync(join(root, '.iteration-feedback.json'), 'utf8')).toBe(NOTES);
+    expect(existsSync(join(root, '.isotone/notes.json'))).toBe(false);
+  });
+});
+
 describe('withNativeFetch', () => {
   it('lands right after <head>, and after <body> when there is no head', () => {
     expect(withNativeFetch('<html><head lang="en"><title>x</title></head><body></body></html>')).toMatch(
@@ -381,7 +409,7 @@ describe('withNativeFetch', () => {
 
 /**
  * The hooks as this file calls them. `isotone()` returns the structural
- * `IterationPlugin` on purpose (see its doc comment), so the test reaches
+ * `IsotonePlugin` on purpose (see its doc comment), so the test reaches
  * the hooks through a cast rather than vite's `Plugin` type.
  */
 interface Hooks {
@@ -445,7 +473,7 @@ function tempProject(): { root: string; source: string; override: string; table:
   return { root, source, override, table };
 }
 
-function plugin(root: string, command: 'serve' | 'build', options: IterationViteOptions = {}): Hooks {
+function plugin(root: string, command: 'serve' | 'build', options: IsotoneViteOptions = {}): Hooks {
   const hooks = isotone(options) as unknown as Hooks;
   hooks.configResolved({ root, command, assetsInclude: () => false });
   return hooks;
@@ -1185,10 +1213,12 @@ describe('project files through the dev server', () => {
     writeFileSync(join(project, '.env'), 'SECRET_TOKEN=sk_live_FAKE_ENV\n');
     writeFileSync(join(project, '.git', 'config'), '[remote "origin"]\n\turl = https://FAKE_GIT_TOKEN@example.com/x.git\n', { flag: 'a' });
     writeFileSync(
-      join(project, '.iteration-feedback.json'),
+      join(project, '.isotone', 'notes.json'),
       JSON.stringify([{ id: 'n1', route: '/', feedback: 'FAKE_NOTE_TEXT', createdAt: '2026-11-08T00:00:00Z' }]),
     );
-    writeFileSync(join(project, '.iteration-feedback.blast.json'), '{"FAKE_BLAST_STATE":1}');
+    writeFileSync(join(project, '.isotone', 'notes.blast.json'), '{"FAKE_BLAST_STATE":1}');
+    // A notes file from before 1.3 that stayed beside the new one.
+    writeFileSync(join(project, '.iteration-feedback.json'), '[{"FAKE_NOTE_TEXT":1}]');
     writeFileSync(join(project, '.isotone', 'knobs.json'), '[{"id":"FAKE_KNOB"}]');
     live = await createServer({
       root: project,
@@ -1236,11 +1266,12 @@ describe('project files through the dev server', () => {
       '/%2eenv?isotone=_base',
       '/.%65nv?isotone=_base',
       `/@fs${project}/.env?isotone=_base`,
+      '/.isotone/notes.json',
+      '/.isotone/notes.json?import',
+      '/.isotone/notes.json?raw',
+      '/.isotone/notes.json?isotone=_base',
+      '/.isotone/notes.blast.json',
       '/.iteration-feedback.json',
-      '/.iteration-feedback.json?import',
-      '/.iteration-feedback.json?raw',
-      '/.iteration-feedback.json?isotone=_base',
-      '/.iteration-feedback.blast.json',
       '/.isotone/knobs.json',
       '/.isotone/knobs.json?import',
       '/.isotone/variants/b/src/Button.tsx',

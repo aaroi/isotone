@@ -22,7 +22,7 @@ const CONFIG: LiveConfig = {
   ],
   active: [],
   ssr: false,
-  endpoint: '/api/iteration/variants',
+  endpoint: '/api/isotone/variants',
 };
 
 type LiveWindow = Window & { __isotoneLive?: LiveStore };
@@ -149,7 +149,7 @@ describe('the live store', () => {
       store.register('src/use-label.ts', [null, 'hook-x'], true);
       await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
       expect(fetch).toHaveBeenCalledWith(
-        '/api/iteration/variants/active',
+        '/api/isotone/variants/active',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ active: ['hook-x'] }),

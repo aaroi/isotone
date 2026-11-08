@@ -1,5 +1,5 @@
 /**
- * File-backed store for iteration notes — shared by the Vite plugin (dev
+ * File-backed store for Isotone notes — shared by the Vite plugin (dev
  * server) and the CLI. Notes live in a gitignored JSON file on disk, no
  * database. The path comes from the plugin/CLI options. The HTTP endpoint
  * over this file is in `./handler`.
@@ -7,7 +7,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 
-import type { IterationElement, NoteContext, NoteReply } from '../../core/types';
+import type { IsotoneElement, NoteContext, NoteReply } from '../../core/types';
 import { NOTE_ID } from '../../core/id';
 import { MAX_REPLY_LENGTH } from '../../core/limits';
 import { writeJson } from '../fs/atomic';
@@ -18,7 +18,7 @@ export interface StoredNote extends NoteContext {
   id: string;
   route: string;
   feedback: string;
-  element: IterationElement | null;
+  element: IsotoneElement | null;
   done: boolean;
   doneAt: string | null;
   /** When an agent said it started on this note (`isotone --working <id>`).

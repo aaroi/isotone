@@ -356,7 +356,7 @@ function printOverlay(print: Print, host: Host): void {
   print('   endpoints, so the plugin needs no guard of its own. Keep @vitejs/plugin-react (or');
   print('   the framework plugin) in the list so a variant switch swaps in place.');
   print('2. Start or restart the dev server and leave it running. It prints');
-  print('   `isotone  notes → .iteration-feedback.json`; the panel is the small pill in the');
+  print('   `isotone  notes → .isotone/notes.json`; the panel is the small pill in the');
   print('   bottom-right corner of every page.');
   print();
   print('Variants are copies of source files under .isotone/variants/<id>/ that the dev');
@@ -375,10 +375,10 @@ function printHost(print: Print): void {
   for (const line of HOST_EXAMPLE) print(line ? `  ${line}` : '');
   print();
   print('onChange fires with the full selections after every change; the app renders from');
-  print("them and keeps its own defaults and URL sync. Add endpoint: '/api/iteration/notes'");
+  print("them and keeps its own defaults and URL sync. Add endpoint: '/api/isotone/notes'");
   print('for notes served by the Vite plugin, with isotone({ panel: false }) there to avoid');
   print('a second panel. With `isotone serve`, use the absolute endpoint');
-  print("'http://127.0.0.1:4123/api/iteration/notes'. Set defaultTab: 'variants' when");
+  print("'http://127.0.0.1:4123/api/isotone/notes'. Set defaultTab: 'variants' when");
   print('reviewers come for the controls first.');
 }
 
@@ -466,11 +466,11 @@ function printFirstRun(print: Print, approach: Approach): void {
   print('c. Check: `npx isotone variant list <route>` lists what you made and names any');
   print('   knob the panel would skip. Without a browser, confirm the panel is live:');
   if (approach === 'serve') {
-    print('   the page HTML has the tag, and `curl http://127.0.0.1:4123/api/iteration/variants`');
+    print('   the page HTML has the tag, and `curl http://127.0.0.1:4123/api/isotone/variants`');
     print('   returns the knobs the panel will show.');
   } else {
     print("   `curl -H 'Accept: text/html' <page URL>` includes `data-isotone-inject`, and");
-    print('   <origin>/api/iteration/variants lists the variants and knobs the panel will show.');
+    print('   <origin>/api/isotone/variants lists the variants and knobs the panel will show.');
     print('   <origin>/<file>?isotone=<id> serves one variant’s copy, to check that it compiles.');
   }
   print('d. Leave the dev server running and tell the user, briefly, in this order:');
@@ -512,7 +512,7 @@ function printKnobExamples(print: Print, withSelect: boolean): void {
 
 /** Typechecks against `isotone/react` as written; `kind` defaults to select. */
 const HOST_EXAMPLE = [
-  "import { createVariantsSource, mountIteration } from 'isotone/react';",
+  "import { createVariantsSource, mountIsotone } from 'isotone/react';",
   "import type { VariantAxis } from 'isotone/react';",
   '',
   'const axes: VariantAxis[] = [',
@@ -535,7 +535,7 @@ const HOST_EXAMPLE = [
   '  },',
   '});',
   '',
-  'const dispose = mountIteration({ variants: source });',
+  'const dispose = mountIsotone({ variants: source });',
   '// Call dispose() from the client lifecycle or HMR cleanup.',
 ];
 

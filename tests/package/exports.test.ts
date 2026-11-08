@@ -8,23 +8,23 @@ import { describe, expect, it } from 'vitest';
 // a name removed is a breaking change for the CHANGELOG.
 const SUPPORTED: Record<string, string[]> = {
   react: [
-    'IterationPanel',
-    'IterationPanelProps',
-    'IterationShortcut',
-    'IterationStoreConfig',
-    'IterationTheme',
-    'MountIterationOptions',
+    'IsotonePanel',
+    'IsotonePanelProps',
+    'IsotoneShortcut',
+    'IsotoneStoreConfig',
+    'IsotoneTheme',
+    'MountIsotoneOptions',
     'VariantAxis',
     'VariantSelections',
     'VariantsSource',
     'createVariantsSource',
-    'mountIteration',
+    'mountIsotone',
   ],
   core: [
     'ColorSwatch',
     'ColorVariantAxis',
-    'IterationElement',
-    'IterationNote',
+    'IsotoneElement',
+    'IsotoneNote',
     'NoteContext',
     'NoteReply',
     'RangeVariantAxis',
@@ -40,8 +40,8 @@ const SUPPORTED: Record<string, string[]> = {
     'VariantsSource',
     'createVariantsSource',
   ],
-  serve: ['ServeIterationOptions', 'ServedIteration', 'serveIteration'],
-  vite: ['IterationPlugin', 'IterationViteOptions', 'isotone', 'iteration'],
+  serve: ['ServeIsotoneOptions', 'ServedIsotone', 'serveIsotone'],
+  vite: ['IsotonePlugin', 'IsotoneViteOptions', 'isotone', 'iteration'],
   cli: ['CliIO', 'runCli'],
 };
 

@@ -342,7 +342,7 @@ Two limits are accepted rather than worked around:
 | `src/react/UpdateNotice.tsx` | Quiet update line, and the dialog that hands the upgrade to the agent |
 | `src/react/icons.tsx` | Icon choices, optical size and stroke |
 | `src/react/NoteSummary.tsx` | Saved feedback/defaults summaries and their shared tag rendering |
-| `src/react/IterationPanel.tsx` | The dock: composes the hooks below and the rules that join them |
+| `src/react/IsotonePanel.tsx` | The dock: composes the hooks below and the rules that join them |
 | `src/react/useDockMode.ts`, `useDockFocus.ts`, `useDockEvents.ts` | Which surfaces are open; where focus goes; hover, modality, shortcut, Escape and the host event fence |
 | `src/react/Rail.tsx` | The launcher pill and the rail's tool buttons |
 | `src/react/Composer.tsx`, `NotesPanel.tsx` | The composer and its text, and the feedback panel with its saved notes |

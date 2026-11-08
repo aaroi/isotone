@@ -22,7 +22,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { dirname, resolve } from 'node:path';
 
 import type { RouteGateOptions } from '../core/routes';
-import type { IterationTheme } from '../core/types';
+import type { IsotoneTheme } from '../core/types';
 import { checkRequest, isLoopback, nodeRequestFacts, readNodeJson, sendFailure, writeResponse } from '../node/http';
 import { ensureFileIgnored } from '../node/fs/git-exclude';
 import { notesResponse, NOTES_ENDPOINT } from '../node/notes/handler';
@@ -37,7 +37,7 @@ import { autoUpdateNote, updateResponse } from '../node/update/note';
 
 const BUNDLE_PATH = '/isotone.js';
 
-export interface ServeIterationOptions {
+export interface ServeIsotoneOptions {
   /** Background npm notice, at most once a day. false disables the check;
    *  'note' also files an update note for your agent once per new version. */
   checkForUpdates?: boolean | 'note';
@@ -45,7 +45,7 @@ export interface ServeIterationOptions {
    *  `.isotone/knobs.json`. Defaults to the notes directory. */
   projectRoot?: string;
   /** Defaults to auto (page background); system follows the OS preference. */
-  theme?: IterationTheme;
+  theme?: IsotoneTheme;
   /** Where notes persist. Git-ignored automatically via `.git/info/exclude`. */
   file: string;
   /** Defaults to 4123. */
@@ -58,7 +58,7 @@ export interface ServeIterationOptions {
   key?: string;
 }
 
-export interface ServedIteration {
+export interface ServedIsotone {
   port: number;
   url: string;
   bundleUrl: string;
@@ -108,7 +108,7 @@ function cors(req: IncomingMessage, res: ServerResponse): void {
 }
 
 /** The bundle plus the mount call, with the config the server itself knows. */
-function bundleWithMount(origin: string, opts: ServeIterationOptions, projectRoot: string): string {
+function bundleWithMount(origin: string, opts: ServeIsotoneOptions, projectRoot: string): string {
   const config = JSON.stringify(serveMountOptions(origin, projectRoot, opts));
   return `${readBundle()}\n;window.__isotone&&window.__isotone.mount(${config});\n`;
 }
@@ -191,7 +191,7 @@ function indexPage(origin: string, file: string): string {
   Behind a development flag, a plain <code>&lt;script src="${escapeHtml(origin + BUNDLE_PATH)}" defer&gt;</code> works too.</p>
 
   <h2>Bookmarklet — drag to your bookmarks bar</h2>
-  <a class="bm" href="${escapeHtml(mark)}">✎ Iteration</a>
+  <a class="bm" href="${escapeHtml(mark)}">✎ Isotone</a>
 
   <footer>
     notes → ${escapeHtml(file)}<br>
@@ -204,7 +204,7 @@ function indexPage(origin: string, file: string): string {
 }
 
 /** Start the server. Resolves once it is listening. */
-export function serveIteration(opts: ServeIterationOptions): Promise<ServedIteration> {
+export function serveIsotone(opts: ServeIsotoneOptions): Promise<ServedIsotone> {
   const file = resolve(opts.file);
   const projectRoot = resolve(opts.projectRoot ?? dirname(file));
   const port = opts.port ?? DEFAULT_PORT;

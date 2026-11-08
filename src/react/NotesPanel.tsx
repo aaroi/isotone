@@ -10,7 +10,7 @@ import {
   useRef,
 } from 'react';
 import { normalizeRoute } from '../core/routes';
-import type { IterationElement, IterationNote } from '../core/types';
+import type { IsotoneElement, IsotoneNote } from '../core/types';
 import { Icon } from './icons';
 import { dotPulse, fadeInContent, MAX_ANIMATED_ITEMS } from './motion';
 import { NoteSummary } from './NoteSummary';
@@ -30,8 +30,8 @@ interface NotesPanelProps {
   /** The composer, or the button that brings it back from the page. */
   compose: ReactNode;
   onClose: () => void;
-  onEdit: (note: IterationNote) => void;
-  onRemove: (note: IterationNote) => void;
+  onEdit: (note: IsotoneNote) => void;
+  onRemove: (note: IsotoneNote) => void;
 }
 
 /** The feedback panel: its close control, the page filter, saved notes and the compose slot. */
@@ -160,12 +160,12 @@ const NoteRow = memo(function NoteRow({
   onEdit,
   onRemove,
 }: {
-  note: IterationNote;
+  note: IsotoneNote;
   page: string | undefined;
   editing: boolean;
   working: boolean;
-  onEdit: (note: IterationNote) => void;
-  onRemove: (note: IterationNote) => void;
+  onEdit: (note: IsotoneNote) => void;
+  onRemove: (note: IsotoneNote) => void;
 }) {
   const remove = removeAction(note);
   return (
@@ -197,7 +197,7 @@ const NoteRow = memo(function NoteRow({
 });
 
 /** The corner action, and an accessible name with enough of the note to tell rows apart. */
-function removeAction(note: IterationNote): { action: string; name: string } {
+function removeAction(note: IsotoneNote): { action: string; name: string } {
   if (note.update) return { action: 'Cancel update request', name: 'Cancel update request' };
   const action = note.variantAction ? 'Cancel removal' : 'Delete note';
   const text = note.variantAction ? note.feedback.replace(/^\[[\w-]+\]\s*/, '') : note.feedback;
@@ -211,7 +211,7 @@ export function AwayButton({
   slot,
   onReturn,
 }: {
-  targets: IterationElement[];
+  targets: IsotoneElement[];
   /** Where the composer floats: beside the pinned element it names. */
   anchor: Anchor | null;
   /** The docked composer's height, kept so the panel does not jump. */

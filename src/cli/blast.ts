@@ -150,7 +150,7 @@ export async function runBlast(argv: string[], io: CliIO, timingOverrides: Parti
   }
   const json = has(rest, '--json');
   const fileText = valueFor(rest, '--file');
-  const notesFile = findNotesFile(io.cwd, fileText).file;
+  const notesFile = findNotesFile(io, fileText).file;
   const file = blastFile(notesFile);
   const fileFlag = fileText ? ` --file ${shellQuote(fileText)}` : '';
 

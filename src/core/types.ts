@@ -8,7 +8,7 @@ import type { UpdateRequest } from './update';
 import type { VariantsSource } from './variants';
 
 /** A UI element picked with the panel's selector mode. */
-export interface IterationElement {
+export interface IsotoneElement {
   /** Lowercase tag name, e.g. "button". */
   tag: string;
   /** Trimmed text-content snippet (may be empty for visual elements). */
@@ -47,7 +47,7 @@ export interface VariantRemoval {
 export interface NoteContext {
   /** Pending instruction: deleting its note cancels it before the agent acts. */
   variantAction?: VariantRemoval;
-  elements?: IterationElement[];
+  elements?: IsotoneElement[];
   variant?: VariantReference | null;
   /** The user's request to upgrade Isotone, built by the local server from
    *  its own update check. At most one is open at a time. */
@@ -70,12 +70,12 @@ export interface NoteReply {
 }
 
 /** A note written in the panel, read and answered by the coding agent. */
-export interface IterationNote extends NoteContext {
+export interface IsotoneNote extends NoteContext {
   id: string;
   /** The route the note was written on, e.g. "/projects". */
   route: string;
   feedback: string;
-  element: IterationElement | null;
+  element: IsotoneElement | null;
   done: boolean;
   doneAt?: string | null;
   /** Set while an agent says it is working on the note. Stale after a while. */
@@ -90,9 +90,9 @@ export interface IterationNote extends NoteContext {
 }
 
 /** Auto follows the page at the dock; system follows the OS preference. */
-export type IterationTheme = 'auto' | 'light' | 'dark' | 'system';
+export type IsotoneTheme = 'auto' | 'light' | 'dark' | 'system';
 
-export interface IterationShortcut {
+export interface IsotoneShortcut {
   /** Physical key code, stable across keyboard layouts. Default: Period. */
   code: string;
   mod?: boolean;
@@ -100,13 +100,13 @@ export interface IterationShortcut {
   alt?: boolean;
 }
 
-export interface MountIterationOptions {
+export interface MountIsotoneOptions {
   /** Auto follows the page at the dock. System follows the OS preference. */
-  theme?: IterationTheme;
+  theme?: IsotoneTheme;
   /** Local adapter endpoint for automatic update notices. */
   updateEndpoint?: string;
   /** Defaults to Cmd/Ctrl+Shift+Period. false disables keyboard access. */
-  shortcut?: IterationShortcut | false;
+  shortcut?: IsotoneShortcut | false;
   /** The notes endpoint the dev plugin serves (or a framework preset). Omit
    *  it and the panel has no Notes tab: a production host that only wants
    *  variants passes a source and nothing else. */
@@ -131,6 +131,6 @@ export interface MountIterationOptions {
   /** Override the auto-detected pathname (sub-apps). Default: pathname. */
   getRoute?: () => string;
   /** Host context attached to each new note as its opaque payload — see
-   *  IterationPanelProps.getPayload. */
+   *  IsotonePanelProps.getPayload. */
   getPayload?: () => unknown;
 }

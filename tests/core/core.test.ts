@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { describeIterationElement, type NodeLike } from '../../src/core/element';
+import { describeIsotoneElement, type NodeLike } from '../../src/core/element';
 import { isRouteVisible } from '../../src/core/routes';
 
 function node(tagName: string, overrides: Partial<NodeLike> = {}) {
   return { tagName, children: [], ...overrides } as NodeLike;
 }
 
-describe('describeIterationElement', () => {
+describe('describeIsotoneElement', () => {
   it('collects an id segment and stops at it', () => {
     const el = node('SPAN', { id: 'runtime', textContent: ' 158d 2h ' });
-    const desc = describeIterationElement(el);
+    const desc = describeIsotoneElement(el);
     expect(desc).toEqual({ tag: 'span', text: '158d 2h', selector: '#runtime' });
   });
 
@@ -22,14 +22,14 @@ describe('describeIterationElement', () => {
     body.children = [table];
     table.children = [node('thead'), row, node('caption')];
     row.children = [node('td'), cell];
-    const desc = describeIterationElement(cell);
+    const desc = describeIsotoneElement(cell);
     expect(desc.selector).toBe('table:nth-child(1) > tr:nth-child(2) > td:nth-child(2)');
     expect(desc.text).toBe('platform-api');
   });
 
   it('caps text at 80 chars and collapses whitespace', () => {
     const el = node('button', { textContent: ` x `.repeat(40) });
-    const desc = describeIterationElement(el);
+    const desc = describeIsotoneElement(el);
     expect(desc.text.length).toBeLessThanOrEqual(80);
     expect(desc.text).not.toContain('  ');
   });

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Gem, Moon, Play, Plus, Search, Sun } from 'lucide-react';
-import { createVariantsSource, IterationPanel, type IterationTheme, type VariantAxis } from '../../src/react/index';
+import { createVariantsSource, IsotonePanel, type IsotoneTheme, type VariantAxis } from '../../src/react/index';
 import { Tour, tourSeen } from './tour';
 
 const params = new URLSearchParams(location.search);
@@ -391,7 +391,7 @@ function savedTheme<T extends string>(key: string, choices: readonly T[], fallba
   }
 }
 
-function Panel({ theme }: { theme: IterationTheme }) {
+function Panel({ theme }: { theme: IsotoneTheme }) {
   const host = useRef<HTMLDivElement>(null);
   const panel = useRef<ReturnType<typeof createRoot> | null>(null);
   useEffect(() => {
@@ -414,10 +414,10 @@ function Panel({ theme }: { theme: IterationTheme }) {
   }, []);
   useEffect(() => {
     panel.current?.render(
-      <IterationPanel
+      <IsotonePanel
         route={page}
         theme={theme}
-        updateEndpoint={updatePreview ? updateEndpoint : screenshot || hosted ? undefined : '/api/iteration/update'}
+        updateEndpoint={updatePreview ? updateEndpoint : screenshot || hosted ? undefined : '/api/isotone/update'}
         store={{ endpoint, key: `isotone-public-demo-${session}` }}
         variants={source}
         defaultTab="variants"
@@ -596,7 +596,7 @@ function Demo() {
   const [pageTheme, setPageTheme] = useState<'light' | 'dark'>(() =>
     screenshot ? capture : savedTheme('iso-demo-page', ['light', 'dark'], 'dark'),
   );
-  const [panelTheme, setPanelTheme] = useState<IterationTheme>(() =>
+  const [panelTheme, setPanelTheme] = useState<IsotoneTheme>(() =>
     screenshot ? 'auto' : savedTheme('iso-demo-panel', ['auto', 'system', 'light', 'dark'], 'auto'),
   );
   // Every first visit starts with the tour. The Tour button brings it back.
@@ -633,7 +633,7 @@ function Demo() {
               <>
                 <label className="demo-select">
                   Panel{' '}
-                  <select value={panelTheme} onChange={(event) => setPanelTheme(event.target.value as IterationTheme)}>
+                  <select value={panelTheme} onChange={(event) => setPanelTheme(event.target.value as IsotoneTheme)}>
                     {(['auto', 'system', 'light', 'dark'] as const).map((theme) => (
                       <option key={theme}>{theme}</option>
                     ))}

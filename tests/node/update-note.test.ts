@@ -19,7 +19,7 @@ let project = '';
 function notesFile() {
   project = mkdtempSync(join(tmpdir(), 'iso-update-note-'));
   dirs.push(project);
-  return join(project, '.iteration-feedback.json');
+  return join(project, '.isotone/notes.json');
 }
 const info = (latest = '1.2.0', command = `pnpm add -D --exact isotone@${latest}`, cwd = project): UpdateInfo => ({
   currentVersion: '1.1.3',
@@ -302,7 +302,7 @@ describe('agents read the update note', () => {
   it('in --json with the request, a hint and its done command', async () => {
     const file = notesFile();
     const { id } = requestUpdateNote(file, info(), '/') ?? { id: '' };
-    const { code, text } = await cli(join(file, '..'), ['--json']);
+    const { code, text } = await cli(project, ['--json']);
     expect(code).toBe(0);
     const [record] = JSON.parse(text);
     expect(record).toMatchObject({
@@ -318,7 +318,7 @@ describe('agents read the update note', () => {
   it("in every route's listing, since it concerns the whole project", async () => {
     const file = notesFile();
     requestUpdateNote(file, info(), '/settings');
-    const [record] = JSON.parse((await cli(join(file, '..'), ['/projects', '--json'])).text);
+    const [record] = JSON.parse((await cli(project, ['/projects', '--json'])).text);
     expect(record?.update?.to).toBe('1.2.0');
   });
 
@@ -371,7 +371,7 @@ describe('agents read the update note', () => {
         update: { to: 'latest; rm -rf /' },
       } as unknown as StoredNote,
     ]);
-    const [record] = JSON.parse((await cli(join(file, '..'), ['--json'])).text);
+    const [record] = JSON.parse((await cli(project, ['--json'])).text);
     expect(record.update).toBeUndefined();
     expect(record.updateHint).toBeUndefined();
   });
@@ -379,7 +379,7 @@ describe('agents read the update note', () => {
   it('in the text listing, with the command and directory', async () => {
     const file = notesFile();
     requestUpdateNote(file, info(), '/');
-    const { text } = await cli(join(file, '..'), []);
+    const { text } = await cli(project, []);
     expect(text).toContain('⇧ update isotone 1.1.3 → 1.2.0 (pnpm)');
     expect(text).toContain('run: pnpm add -D --exact isotone@1.2.0');
     expect(text).toContain(`in: ${project}`);
@@ -390,7 +390,7 @@ describe('agents read the update note', () => {
 describe('automatic update notes', () => {
   it('files one note per version, and does not bring back a deleted one', async () => {
     const file = notesFile();
-    const stateFile = join(file, '..', 'noted.json');
+    const stateFile = join(project, 'noted.json');
     const id = await autoUpdateNote(file, info('1.2.0'), { stateFile });
     expect(id).toEqual(expect.any(String));
     expect(open(file)).toHaveLength(1);
@@ -408,7 +408,7 @@ describe('automatic update notes', () => {
 
   it('does nothing without an update to request', async () => {
     const file = notesFile();
-    const stateFile = join(file, '..', 'noted.json');
+    const stateFile = join(project, 'noted.json');
     expect(await autoUpdateNote(file, { ...info(), status: 'current' }, { stateFile })).toBeNull();
     expect(await autoUpdateNote(file, { ...info(), upgrade: null }, { stateFile })).toBeNull();
     expect(existsSync(file)).toBe(false);
@@ -417,7 +417,7 @@ describe('automatic update notes', () => {
 
   it('recovers from an unreadable state file', async () => {
     const file = notesFile();
-    const stateFile = join(file, '..', 'noted.json');
+    const stateFile = join(project, 'noted.json');
     writeFileSync(stateFile, '{not json');
     expect(await autoUpdateNote(file, info(), { stateFile })).toEqual(expect.any(String));
   });

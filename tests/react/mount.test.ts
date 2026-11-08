@@ -19,7 +19,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { mountIteration } from '../../src/react/index';
+import { mountIsotone } from '../../src/react/index';
 import { serveMountOptions } from '../../src/serve/mount-config';
 
 beforeEach(() => {
@@ -39,16 +39,16 @@ function dispose(off: () => void) {
   vi.runAllTimers();
 }
 
-describe('mountIteration next to a document-level host root', () => {
+describe('mountIsotone next to a document-level host root', () => {
   it('leaves no react-dom marker on the document', () => {
     const before = Object.getOwnPropertyNames(document);
-    const off = mountIteration({ endpoint: '/api/iteration/notes' });
+    const off = mountIsotone({ endpoint: '/api/isotone/notes' });
     expect(Object.getOwnPropertyNames(document)).toEqual(before);
     dispose(off);
   });
 
   it('a host root created on document afterwards still receives events', async () => {
-    const off = mountIteration({ endpoint: '/api/iteration/notes' });
+    const off = mountIsotone({ endpoint: '/api/isotone/notes' });
 
     const onClick = vi.fn();
     const host = createRoot(document);
@@ -75,7 +75,7 @@ describe('mountIteration next to a document-level host root', () => {
   });
 
   it('re-attaches the host (shadow root and panel intact) when the body is replaced', async () => {
-    const off = mountIteration({ endpoint: '/api/iteration/notes' });
+    const off = mountIsotone({ endpoint: '/api/isotone/notes' });
     // Let the deferred mount run and the observer take over.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
@@ -101,10 +101,10 @@ describe('mountIteration next to a document-level host root', () => {
   });
 });
 
-describe('mountIteration and history', () => {
+describe('mountIsotone and history', () => {
   it('restores pushState on unmount, but keeps a wrapper a router added after it', async () => {
     const original = window.history.pushState;
-    const off = mountIteration({ endpoint: '/api/iteration/notes' });
+    const off = mountIsotone({ endpoint: '/api/isotone/notes' });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
@@ -123,7 +123,7 @@ describe('mountIteration and history', () => {
     expect(window.location.pathname).toBe('/after-unmount');
     window.history.pushState = original;
 
-    const again = mountIteration({ endpoint: '/api/iteration/notes' });
+    const again = mountIsotone({ endpoint: '/api/isotone/notes' });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
@@ -133,10 +133,10 @@ describe('mountIteration and history', () => {
   });
 });
 
-describe('mountIteration with a cross-origin variants endpoint', () => {
+describe('mountIsotone with a cross-origin variants endpoint', () => {
   it('reads overlay knobs from the endpoint it is given, as isotone serve passes it', async () => {
     vi.useRealTimers();
-    const knobsEndpoint = 'http://127.0.0.1:4123/api/iteration/variants';
+    const knobsEndpoint = 'http://127.0.0.1:4123/api/isotone/variants';
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       if (String(input).startsWith(knobsEndpoint)) {
         return {
@@ -157,8 +157,8 @@ describe('mountIteration with a cross-origin variants endpoint', () => {
         await new Promise((r) => setTimeout(r, 0));
       });
 
-    const off = mountIteration({
-      endpoint: 'http://127.0.0.1:4123/api/iteration/notes',
+    const off = mountIsotone({
+      endpoint: 'http://127.0.0.1:4123/api/isotone/notes',
       variants: 'overlay',
       variantsEndpoint: knobsEndpoint,
     });
@@ -171,7 +171,7 @@ describe('mountIteration with a cross-origin variants endpoint', () => {
     await tick();
     const urls = fetchMock.mock.calls.map((c) => String(c[0]));
     expect(urls).toContain(knobsEndpoint);
-    expect(urls.some((url) => url.startsWith('/api/iteration/variants'))).toBe(false);
+    expect(urls.some((url) => url.startsWith('/api/isotone/variants'))).toBe(false);
 
     off();
     await tick();
@@ -198,14 +198,14 @@ describe('the panel isotone serve mounts', () => {
       vi.fn(async (input: RequestInfo | URL) => ({
         ok: true,
         status: 200,
-        json: async () => (String(input).includes('/api/iteration/variants') ? { variants: [], active: [], knobs } : []),
+        json: async () => (String(input).includes('/api/isotone/variants') ? { variants: [], active: [], knobs } : []),
       })),
     );
     const tick = () =>
       act(async () => {
         await new Promise((r) => setTimeout(r, 0));
       });
-    const off = mountIteration(serveMountOptions(origin, root, {}));
+    const off = mountIsotone(serveMountOptions(origin, root, {}));
     await tick();
     const shadow = document.querySelector('[data-isotone="root"]')?.shadowRoot;
     if (!shadow) throw new Error('no shadow root');

@@ -3,7 +3,7 @@
 For a coding agent working in an app that uses Isotone. The reviewer pins notes
 to elements in the running app and switches variants in its panel; you read the
 notes with the CLI, act on them and close them. Run commands in the app's
-directory (where `.iteration-feedback.json` lives) or below it, or pass
+directory (the one holding `.isotone/notes.json`) or below it, or pass
 `--file <path>`.
 
 ## Set up

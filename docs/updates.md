@@ -79,7 +79,7 @@ isotone({ checkForUpdates: 'note' });
 npx isotone serve --update-note
 ```
 
-With `checkForUpdates: 'note'` (`serveIteration` takes the same value), the dev
+With `checkForUpdates: 'note'` (`serveIsotone` takes the same value), the dev
 server files the update note by itself the first time it sees a new version,
 once per version for each notes file. If you don't want that version, delete the
 note; it is not filed again until a newer release. The versions already offered
@@ -123,7 +123,7 @@ Standalone:
 npx isotone serve --no-update-check
 ```
 
-`serveIteration` also accepts `checkForUpdates: false`. Turning checks off also
+`serveIsotone` also accepts `checkForUpdates: false`. Turning checks off also
 turns off update notes. Set
 `ISOTONE_UPDATE_CHECK=0` to disable automatic checks for either adapter.
 The explicit `check-update` command remains available. Manually mounted panels

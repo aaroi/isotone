@@ -36,6 +36,12 @@ function commit(root: string, file: string, contents: string): void {
 }
 
 const makeIo = captureIo;
+
+/** The default notes file in `root`, with its directory made. */
+function notesAt(root: string): string {
+  mkdirSync(join(root, '.isotone'), { recursive: true });
+  return join(root, '.isotone/notes.json');
+}
 const repoRoot = join(import.meta.dirname, '../..');
 
 /** The agent's fix: a project file changed after the notes were written, which `--done` checks for. */
@@ -47,10 +53,62 @@ function landFix(root: string, file = 'fix.txt'): void {
   utimesSync(abs, later, later);
 }
 
+describe('the notes file from before 1.3', () => {
+  const OLD = '.iteration-feedback.json';
+  const note = {
+    id: 'aaaa1111',
+    route: '/',
+    feedback: 'old note',
+    done: false,
+    doneAt: null,
+    element: null,
+    createdAt: '2026-01-01T00:00:00Z',
+  };
+
+  it('moves .iteration-feedback.json into .isotone/ on the first run, and says so once', async () => {
+    const root = tempRepo();
+    writeFileSync(join(root, OLD), JSON.stringify([note]));
+    writeFileSync(join(root, '.iteration-feedback.blast.json'), '{}');
+    const first = makeIo(root);
+    expect(await runCli([], first)).toBe(0);
+    expect(first.text.err).toContain('Moved .iteration-feedback.json to .isotone/notes.json.');
+    expect(first.text.out).toContain('old note');
+    expect(existsSync(join(root, OLD))).toBe(false);
+    expect(existsSync(join(root, '.isotone/notes.blast.json'))).toBe(true);
+    const second = makeIo(root);
+    expect(await runCli([], second)).toBe(0);
+    expect(second.text.err).toBe('');
+    expect(second.text.out).toContain('old note');
+  });
+
+  it('uses .isotone/notes.json when both exist and names the old file, without merging', async () => {
+    const root = tempRepo();
+    writeFileSync(join(root, OLD), JSON.stringify([note]));
+    writeFileSync(notesAt(root), JSON.stringify([{ ...note, id: 'bbbb2222', feedback: 'new note' }]));
+    const io = makeIo(root);
+    expect(await runCli([], io)).toBe(0);
+    expect(io.text.err).toContain('.iteration-feedback.json beside it is an older notes file and is not read');
+    expect(io.text.out).toContain('new note');
+    expect(io.text.out).not.toContain('old note');
+    expect(JSON.parse(readFileSync(join(root, OLD), 'utf8'))).toEqual([note]);
+  });
+
+  it('never moves a file named with --file', async () => {
+    const root = tempRepo();
+    writeFileSync(join(root, OLD), JSON.stringify([note]));
+    const io = makeIo(root);
+    expect(await runCli(['--file', OLD], io)).toBe(0);
+    expect(io.text.out).toContain('old note');
+    expect(io.text.err).toBe('');
+    expect(existsSync(join(root, OLD))).toBe(true);
+    expect(existsSync(join(root, '.isotone/notes.json'))).toBe(false);
+  });
+});
+
 describe('notes (unchanged default behaviour)', () => {
   it('prints "No open notes" for an empty file', async () => {
     const root = tempRepo();
-    writeFileSync(join(root, '.iteration-feedback.json'), '[]');
+    writeFileSync(notesAt(root), '[]');
     const io = makeIo(root);
     const code = await runCli([], io);
     expect(code).toBe(0);
@@ -61,7 +119,7 @@ describe('notes (unchanged default behaviour)', () => {
     const root = tempRepo();
     const text = makeIo(root);
     expect(await runCli([], text)).toBe(0);
-    expect(text.text.out).toContain(`No notes file at ${join(root, '.iteration-feedback.json')} yet`);
+    expect(text.text.out).toContain(`No notes file at ${notesAt(root)} yet`);
     const json = makeIo(root);
     expect(await runCli(['--json'], json)).toBe(0);
     expect(JSON.parse(json.text.out)).toEqual([]);
@@ -383,7 +441,7 @@ describe('variant', () => {
   it('new --note copies route and element from the matching note', async () => {
     const root = tempRepo();
     writeFileSync(
-      join(root, '.iteration-feedback.json'),
+      notesAt(root),
       JSON.stringify([
         {
           id: 'note-aaaa1111',
@@ -428,7 +486,7 @@ describe('variant', () => {
       const root = tempRepo();
       const now = new Date().toISOString();
       writeFileSync(
-        join(root, '.iteration-feedback.json'),
+        notesAt(root),
         JSON.stringify([
           { id: 'aaa111', route: '/a', feedback: 'x', element: null, done: false, doneAt: null, createdAt: now },
           { id: 'aaa222', route: '/b', feedback: 'y', element: null, done: false, doneAt: null, createdAt: now },
@@ -493,8 +551,8 @@ describe('init', () => {
     const root = tempRepo();
     const host = makeIo(root);
     expect(await runCli(['init', '--approach', 'host'], host)).toBe(0);
-    expect(host.text.out).toContain("import { createVariantsSource, mountIteration } from 'isotone/react';");
-    expect(host.text.out).toContain('mountIteration({ variants: source });');
+    expect(host.text.out).toContain("import { createVariantsSource, mountIsotone } from 'isotone/react';");
+    expect(host.text.out).toContain('mountIsotone({ variants: source });');
     expect(host.text.out).not.toContain('myAxes');
 
     writeFileSync(join(root, 'next.config.ts'), 'export default {};\n');
@@ -540,11 +598,11 @@ describe('init', () => {
 
     const next = tempRepo();
     writeFileSync(join(next, 'next.config.ts'), 'export default {};\n');
-    mkdirSync(join(next, 'app/api/iteration/notes'), { recursive: true });
-    writeFileSync(join(next, 'app/api/iteration/notes/route.ts'), "import { serveNotesRequest } from 'isotone/server';\n");
+    mkdirSync(join(next, 'app/api/isotone/notes'), { recursive: true });
+    writeFileSync(join(next, 'app/api/isotone/notes/route.ts'), "import { serveNotesRequest } from 'isotone/server';\n");
     const routed = makeIo(next);
     expect(await runCli(['init'], routed)).toBe(0);
-    expect(routed.text.out).toContain('Already set up: app/api/iteration/notes/route.ts loads Isotone.');
+    expect(routed.text.out).toContain('Already set up: app/api/isotone/notes/route.ts loads Isotone.');
 
     const fresh = makeIo(tempRepo());
     expect(await runCli(['init', '--json'], fresh)).toBe(0);
@@ -615,7 +673,7 @@ describe('init', () => {
     const io = makeIo(tempRepo());
     expect(await runCli(['init'], io)).toBe(0);
     expect(io.text.out).toContain('if(/^(localhost|127\\.0\\.0\\.1|\\[::1\\])$/.test(location.hostname))');
-    expect(io.text.out).not.toContain('app/api/iteration/notes/route.ts');
+    expect(io.text.out).not.toContain('app/api/isotone/notes/route.ts');
   });
 
   it('prints a first run until the project has variants or knobs', async () => {
@@ -799,7 +857,7 @@ describe('structured review context', () => {
   it('prints all pinned selectors and the exact variant option', async () => {
     const root = tempRepo();
     writeFileSync(
-      join(root, '.iteration-feedback.json'),
+      notesAt(root),
       JSON.stringify([
         {
           id: 'reference-note',
@@ -849,7 +907,7 @@ describe('agent onboarding and machine-readable notes', () => {
       done: true,
       payload: { x: 'a'.repeat(500) },
     };
-    writeFileSync(join(root, '.iteration-feedback.json'), JSON.stringify([note, { ...note, id: 'note-2', route: '/two' }]));
+    writeFileSync(notesAt(root), JSON.stringify([note, { ...note, id: 'note-2', route: '/two' }]));
     const io = makeIo(root);
     expect(await runCli(['--all', '/one', '--json'], io)).toBe(0);
     expect(JSON.parse(io.text.out)).toEqual([note]);
@@ -861,7 +919,7 @@ describe('agent onboarding and machine-readable notes', () => {
   it('tells the agent how to close an open note in text and JSON', async () => {
     const root = tempRepo();
     const note = { id: 'abcdef123456', route: '/', feedback: 'fix', createdAt: new Date().toISOString(), done: false };
-    writeFileSync(join(root, '.iteration-feedback.json'), JSON.stringify([note]));
+    writeFileSync(notesAt(root), JSON.stringify([note]));
     const text = makeIo(root);
     expect(await runCli([], text)).toBe(0);
     expect(text.text.out.trimEnd().split('\n').at(-1)).toBe(
@@ -875,10 +933,10 @@ describe('agent onboarding and machine-readable notes', () => {
   it('marks notes as working and clears the mark when they are closed', async () => {
     const root = tempRepo();
     const note = (id: string) => ({ id, route: '/', feedback: `fix ${id}`, createdAt: new Date().toISOString(), done: false });
-    writeFileSync(join(root, '.iteration-feedback.json'), JSON.stringify([note('aaaa1111'), note('bbbb2222')]));
+    writeFileSync(notesAt(root), JSON.stringify([note('aaaa1111'), note('bbbb2222')]));
     const started = makeIo(root);
     expect(await runCli(['--working', 'aaaa,bbbb'], started)).toBe(0);
-    const stored = () => JSON.parse(readFileSync(join(root, '.iteration-feedback.json'), 'utf8')) as { id: string; workingAt?: string }[];
+    const stored = () => JSON.parse(readFileSync(notesAt(root), 'utf8')) as { id: string; workingAt?: string }[];
     expect(stored().every((n) => typeof n.workingAt === 'string')).toBe(true);
     const listed = makeIo(root);
     await runCli([], listed);
@@ -911,7 +969,7 @@ describe('agent onboarding and machine-readable notes', () => {
 describe('corrupt feedback file', () => {
   it('fails clearly without overwriting the file', async () => {
     const root = tempRepo();
-    const file = join(root, '.iteration-feedback.json');
+    const file = notesAt(root);
     writeFileSync(file, '{broken');
     const io = makeIo(root);
     expect(await runCli(['--done', 'a'], io)).toBe(1);
@@ -923,7 +981,7 @@ describe('corrupt feedback file', () => {
 describe('output an agent can trust', () => {
   const write = (root: string, notes: Record<string, unknown>[]) =>
     writeFileSync(
-      join(root, '.iteration-feedback.json'),
+      notesAt(root),
       JSON.stringify(notes.map((n) => ({ route: '/', feedback: 'fix', done: false, createdAt: new Date().toISOString(), ...n }))),
     );
 
@@ -954,7 +1012,7 @@ describe('output an agent can trust', () => {
     const io = makeIo(root);
     landFix(root);
     expect(await runCli(['--done', 'note-1'], io)).toBe(0);
-    const stored = JSON.parse(readFileSync(join(root, '.iteration-feedback.json'), 'utf8'));
+    const stored = JSON.parse(readFileSync(notesAt(root), 'utf8'));
     expect(stored.map((n: { id: string; done: boolean }) => [n.id, n.done])).toEqual([
       ['note-1', true],
       ['note-10', false],
@@ -1042,7 +1100,7 @@ describe('note listing and actions', () => {
   const at = (ago: number) => new Date(Date.now() - ago).toISOString();
   const seed = (root: string) =>
     writeFileSync(
-      join(root, '.iteration-feedback.json'),
+      notesAt(root),
       JSON.stringify([
         { id: 'old-open', route: '/about', feedback: 'a', done: false, doneAt: null, createdAt: at(60 * day) },
         { id: 'recent-done', route: '/items/1', feedback: 'b', done: true, doneAt: at(2 * day), createdAt: at(30 * day) },
@@ -1076,7 +1134,7 @@ describe('note listing and actions', () => {
   it('closes every id given, spaced or comma-separated, or none of them', async () => {
     const root = tempRepo();
     const notes = ['aaaa1', 'bbbb2', 'cccc3', 'dddd4'].map((id) => ({ id, route: '/', feedback: id, done: false, createdAt: at(0) }));
-    writeFileSync(join(root, '.iteration-feedback.json'), JSON.stringify(notes));
+    writeFileSync(notesAt(root), JSON.stringify(notes));
     const io = makeIo(root);
     landFix(root);
     expect(await runCli(['--done', 'aaaa', 'bbbb'], io)).toBe(0);
@@ -1109,7 +1167,7 @@ describe('note listing and actions', () => {
     ]) {
       const io = makeIo(root);
       expect(await runCli(argv, io)).toBe(0);
-      expect(JSON.parse(readFileSync(join(root, '.iteration-feedback.json'), 'utf8'))[0].reply.text).toBe('-1px or -2px?');
+      expect(JSON.parse(readFileSync(notesAt(root), 'utf8'))[0].reply.text).toBe('-1px or -2px?');
     }
   });
 

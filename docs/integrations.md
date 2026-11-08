@@ -50,21 +50,21 @@ and so is a request a local tunnel forwards for another machine. The plugin also
 adds the notes file, the Blast session and `.isotone/` to Vite's
 `server.fs.deny`, so Vite's static server never hands them out.
 
-If the app mounts `IterationPanel` or `mountIteration` itself, use
+If the app mounts `IsotonePanel` or `mountIsotone` itself, use
 `isotone({ panel: false })` to keep local endpoints and source variants without
 injecting a second panel. A manual mount can use
-`updateEndpoint: '/api/iteration/update'` for the optional update notice and
+`updateEndpoint: '/api/isotone/update'` for the optional update notice and
 its update note.
 The adapters check for updates in the background; see [Updates](updates.md) for
 the cache, explicit upgrade commands, and opt-out controls.
 
 The notes file resolves against Vite's `root`. In a monorepo, run the CLI in that
-directory or pass `--file path/to/.iteration-feedback.json`. Options:
+directory or pass `--file path/to/.isotone/notes.json`. Options:
 
 ```ts
 isotone({
   theme: 'auto',
-  file: '.iteration-feedback.json',
+  file: '.isotone/notes.json', // the default
   variants: false, // optional: notes only
 })
 ```
@@ -136,8 +136,8 @@ export function ReviewTools() {
     if (process.env.NODE_ENV !== 'development') return;
     let dispose: (() => void) | undefined;
     let cancelled = false;
-    import('isotone/react').then(({ mountIteration }) => {
-      if (!cancelled) dispose = mountIteration({ endpoint: 'http://127.0.0.1:4123/api/iteration/notes' });
+    import('isotone/react').then(({ mountIsotone }) => {
+      if (!cancelled) dispose = mountIsotone({ endpoint: 'http://127.0.0.1:4123/api/isotone/notes' });
     });
     return () => { cancelled = true; dispose?.(); };
   }, []);
@@ -172,8 +172,8 @@ which keep other devices and other websites away from your notes:
 
 ## Themes
 
-The `theme` option is available on `isotone()`, `serveIteration`, `mountIteration`
-and `IterationPanel`. The standalone CLI accepts the same values with `--theme`:
+The `theme` option is available on `isotone()`, `serveIsotone`, `mountIsotone`
+and `IsotonePanel`. The standalone CLI accepts the same values with `--theme`:
 
 | Value | Behavior |
 | --- | --- |
@@ -188,7 +188,7 @@ and `IterationPanel`. The standalone CLI accepts the same values with `--theme`:
 | --- | --- |
 | Vite plugin | Acts only on `vite dev`. A build injects no panel and serves no endpoints. `ISOTONE_VARIANT` bakes chosen variants into a build only when set. |
 | `isotone serve` | A separate local process bound to loopback that accepts only localhost origins. The tag that loads it is either behind the framework's development check or the localhost-only loader above. |
-| `mountIteration`, `IterationPanel` | No guard, by design. Import them dynamically behind the development check. |
+| `mountIsotone`, `IsotonePanel` | No guard, by design. Import them dynamically behind the development check. |
 
 ## Confirm the integration
 
@@ -198,7 +198,7 @@ and `IterationPanel`. The standalone CLI accepts the same values with `--theme`:
 3. Run `npx isotone --done <id-prefix> --force` (a test note needs no file
    change) and check that it leaves the panel.
 4. Build the production app and search the output for `isotone` and
-   `/api/iteration`. With the localhost-only loader, the tag remains in the HTML
+   `/api/isotone`. With the localhost-only loader, the tag remains in the HTML
    but loads nothing outside localhost.
 
 If the panel is visible but the CLI has no notes, compare the dev server's printed

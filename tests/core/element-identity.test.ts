@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { runCli } from '../../src/cli/run';
-import { describeIterationElement, elementAsNode } from '../../src/core/element';
+import { describeIsotoneElement, elementAsNode } from '../../src/core/element';
 import { resolveElementSource } from '../../src/core/element';
 import { applyKnobValues, knobDelta } from '../../src/core/variants';
 import { notesResponse } from '../../src/node/notes/handler';
@@ -29,7 +29,7 @@ it('does not resolve to an earlier element with the same shape', () => {
   document.body.innerHTML = `<header>${nest('<button>All workspaces</button>', 5)}</header><main>${nest('<button>Changes</button>', 5)}</main>`;
   const changes = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Changes');
   if (!changes) throw new Error('Missing fixture');
-  const { selector } = describeIterationElement(elementAsNode(changes));
+  const { selector } = describeIsotoneElement(elementAsNode(changes));
   expect(document.querySelectorAll(selector)).toHaveLength(1);
   expect(document.querySelector(selector)).toBe(changes);
 });
@@ -38,13 +38,13 @@ it('roots a path at the body when it still matches elsewhere', () => {
   document.body.innerHTML = '<section><main><button>Nested</button></main></section><main><button>Top</button></main>';
   const top = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Top');
   if (!top) throw new Error('Missing fixture');
-  expect(document.querySelector(describeIterationElement(elementAsNode(top)).selector)).toBe(top);
+  expect(document.querySelector(describeIsotoneElement(elementAsNode(top)).selector)).toBe(top);
 });
 
 it('climbs past an id the page repeats', () => {
   document.body.innerHTML = '<div><span id="dup">a</span></div><div><span id="dup">b</span></div>';
   const second = document.querySelectorAll('span')[1] as Element;
-  expect(document.querySelector(describeIterationElement(elementAsNode(second)).selector)).toBe(second);
+  expect(document.querySelector(describeIsotoneElement(elementAsNode(second)).selector)).toBe(second);
 });
 
 it('says which element it is in terms an agent can search for', () => {
@@ -55,20 +55,20 @@ it('says which element it is in terms an agent can search for', () => {
       <button aria-label="Close"><svg></svg></button>
     </div></section>`;
   const [tab, icon] = document.querySelectorAll('button') as unknown as [Element, Element];
-  const described = describeIterationElement(elementAsNode(tab));
+  const described = describeIsotoneElement(elementAsNode(tab));
   expect(described.attributes).toEqual({ role: 'tab', class: 'tab tab-on', 'data-state': 'active' });
   expect(described.within).toEqual(['<section> labelled "Usage"', '<div data-testid="tabs">']);
   expect(described.near).toBeUndefined();
-  expect(describeIterationElement(elementAsNode(icon)).near).toContain('Changes');
+  expect(describeIsotoneElement(elementAsNode(icon)).near).toContain('Changes');
 });
 
 it('does not credit the element to a heading that comes after it', () => {
   document.body.innerHTML = '<main><div><button>New project</button></div><section><h2>Projects</h2></section></main>';
   const button = document.querySelector('button') as Element;
-  expect(describeIterationElement(elementAsNode(button)).within).toBeUndefined();
+  expect(describeIsotoneElement(elementAsNode(button)).within).toBeUndefined();
   document.body.innerHTML = '<main><section><h2>Projects</h2></section><h2>Team</h2><button>Add</button></main>';
   const add = document.querySelector('button') as Element;
-  expect(describeIterationElement(elementAsNode(add)).within).toEqual(['<main> headed "Team"']);
+  expect(describeIsotoneElement(elementAsNode(add)).within).toEqual(['<main> headed "Team"']);
 });
 
 it('names the React components around it, skipping internal names', () => {
@@ -83,7 +83,7 @@ it('names the React components around it, skipping internal names', () => {
       return: { type: TabButton, return: { type: { name: 'minified_x' }, return: { type: UsageTabs, return: null } } },
     },
   });
-  const described = describeIterationElement(elementAsNode(button));
+  const described = describeIsotoneElement(elementAsNode(button));
   expect(described.component).toEqual(['UsageTabs', 'TabButton']);
   expect(described.source).toBe('src/tabs.tsx:12');
 });
@@ -99,17 +99,17 @@ it('reads the JSX callsite from React 19 debug stacks', () => {
     '    at renderWithHooks (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=1a2b:4100:24)',
   ].join('\n');
   Object.assign(button, { __reactFiber$abc: { type: 'button', _debugStack: { stack: vite }, return: { type: TabButton, return: null } } });
-  expect(describeIterationElement(elementAsNode(button)).source).toBe('/src/tabs.tsx:12');
+  expect(describeIsotoneElement(elementAsNode(button)).source).toBe('/src/tabs.tsx:12');
 
   const next = ['Error: react-stack-top-frame', '    at TabButton (webpack-internal:///(app-pages-browser)/./src/app/tabs.tsx:30:5)'].join(
     '\n',
   );
   Object.assign(button, { __reactFiber$abc: { type: 'button', _debugStack: { stack: next }, return: null } });
-  expect(describeIterationElement(elementAsNode(button)).source).toBe('src/app/tabs.tsx:30');
+  expect(describeIsotoneElement(elementAsNode(button)).source).toBe('src/app/tabs.tsx:30');
 
   const fs = ['Error', 'TabButton@http://localhost:5173/@fs/Users/me/app/src/tabs.tsx:8:3'].join('\n');
   Object.assign(button, { __reactFiber$abc: { type: 'button', _debugStack: fs, return: null } });
-  expect(describeIterationElement(elementAsNode(button)).source).toBe('/Users/me/app/src/tabs.tsx:8');
+  expect(describeIsotoneElement(elementAsNode(button)).source).toBe('/Users/me/app/src/tabs.tsx:8');
 
   // React 18's field still wins when present.
   Object.assign(button, {
@@ -120,7 +120,7 @@ it('reads the JSX callsite from React 19 debug stacks', () => {
       return: null,
     },
   });
-  expect(describeIterationElement(elementAsNode(button)).source).toBe('src/old.tsx:3');
+  expect(describeIsotoneElement(elementAsNode(button)).source).toBe('src/old.tsx:3');
 });
 
 it('maps a React 19 callsite back to the original line through the module source map', async () => {
@@ -128,7 +128,7 @@ it('maps a React 19 callsite back to the original line through the module source
   const button = document.querySelector('button') as Element;
   const stack = ['Error: react-stack-top-frame', '    at TabButton (http://localhost:5173/src/tabs.tsx?t=1:2:7)'].join('\n');
   Object.assign(button, { __reactFiber$abc: { type: 'button', _debugStack: { stack }, return: null } });
-  expect(describeIterationElement(elementAsNode(button)).source).toBe('/src/tabs.tsx:2');
+  expect(describeIsotoneElement(elementAsNode(button)).source).toBe('/src/tabs.tsx:2');
   // Generated line 2 maps to line 10 of tabs.tsx.
   const map = btoa(JSON.stringify({ version: 3, sources: ['tabs.tsx'], mappings: ';AASA' }));
   const fetch = vi.fn(async () => ({
@@ -149,7 +149,7 @@ it('maps a React 19 callsite back to the original line through the module source
 it('keeps the context through the store and prints it for the agent', async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-element-')));
   dirs.push(root);
-  const file = join(root, '.iteration-feedback.json');
+  const file = join(root, '.isotone/notes.json');
   const element = {
     tag: 'button',
     text: 'Changes',

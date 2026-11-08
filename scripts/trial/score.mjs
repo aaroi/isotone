@@ -44,7 +44,7 @@ if (!existsSync(join(app, 'package.json'))) {
 }
 
 /** Strings that only Isotone's panel or endpoints put into built output. */
-const MARKERS = ['isotone', '/api/iteration', '__isotone'];
+const MARKERS = ['isotone', '/api/isotone', '__isotone'];
 /** Built output can name the app's absolute path or an ancestor (Next does), which may contain "isotone". */
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const ancestors = (path) => (dirname(path) === path ? [path] : [path, ...ancestors(dirname(path))]);
@@ -217,7 +217,7 @@ function scoreLoop() {
   const env = { ...process.env, GIT_INDEX_FILE: join(scratch, 'index') };
   run('git', ['read-tree', base], { cwd: app, env });
   run('git', ['add', '-A'], { cwd: app, env });
-  const exclude = [':!.iteration-feedback.json', ':!.isotone', ':!package-lock.json', ':!pnpm-lock.yaml', ':!yarn.lock', ':!AGENTS.md'];
+  const exclude = [':!.isotone', ':!package-lock.json', ':!pnpm-lock.yaml', ':!yarn.lock', ':!AGENTS.md'];
   const diff = run('git', ['diff', '--cached', '--unified=0', base, '--', '.', ...exclude], { cwd: app, env }).stdout;
   rmSync(scratch, { recursive: true, force: true });
   // Lines added per file, so each answer names where it landed.

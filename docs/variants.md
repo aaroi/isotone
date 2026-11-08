@@ -216,7 +216,7 @@ renders the axes; the app keeps its own state and URL sync.
 `npx isotone init --approach host` prints a complete example.
 
 ```ts
-import { createVariantsSource, mountIteration } from 'isotone/react';
+import { createVariantsSource, mountIsotone } from 'isotone/react';
 
 const source = createVariantsSource({
   axes: [{
@@ -227,7 +227,7 @@ const source = createVariantsSource({
     document.documentElement.style.setProperty('--card-radius', `${selections['card-radius']}px`);
   },
 });
-mountIteration({ variants: source, defaultTab: 'variants' });
+mountIsotone({ variants: source, defaultTab: 'variants' });
 ```
 
 ```css

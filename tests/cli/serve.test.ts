@@ -31,7 +31,7 @@ it('serves the notes file it prints, and exits 0 once a signal closes it', async
   expect(io.text.out).toContain(`notes  ${join(cwd, 'review.json')}`);
   expect(io.text.out).toContain(`panel  ${url}/isotone.js`);
 
-  const posted = await fetch(`${url}/api/iteration/notes`, {
+  const posted = await fetch(`${url}/api/isotone/notes`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', origin: url },
     body: JSON.stringify({ route: '/', feedback: 'Served through the CLI' }),
@@ -45,7 +45,7 @@ it('serves the notes file it prints, and exits 0 once a signal closes it', async
   (stop[0] as () => void)();
   expect(await exit).toBe(0);
   expect(process.listeners('SIGTERM').filter((listener) => !before.has(listener))).toHaveLength(0);
-  await expect(fetch(`${url}/api/iteration/notes`)).rejects.toThrow();
+  await expect(fetch(`${url}/api/isotone/notes`)).rejects.toThrow();
 });
 
 it('names --port when the port is taken', async () => {

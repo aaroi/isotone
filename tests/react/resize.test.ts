@@ -2,7 +2,7 @@
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createVariantsSource, IterationPanel } from '../../src/react/index';
+import { createVariantsSource, IsotonePanel } from '../../src/react/index';
 import { PANEL_CSS } from '../../src/react/styles';
 
 let container: HTMLDivElement;
@@ -71,7 +71,7 @@ afterEach(async () => {
 
 function render(route = '/') {
   return act(async () => {
-    panelRoot.render(createElement(IterationPanel, { route, theme: 'light', variants: source, store: { endpoint: '/notes' } }));
+    panelRoot.render(createElement(IsotonePanel, { route, theme: 'light', variants: source, store: { endpoint: '/notes' } }));
   });
 }
 

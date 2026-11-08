@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createIterationStore } from '../../src/core/notes-client';
-import type { IterationNote } from '../../src/core';
+import { createIsotoneStore } from '../../src/core/notes-client';
+import type { IsotoneNote } from '../../src/core';
 import { FEEDBACK_STORAGE_KEY } from '../../src/core/browser-storage';
 import { MAX_FEEDBACK_LENGTH } from '../../src/core/limits';
 import {
@@ -36,15 +36,15 @@ describe('offline recovery', () => {
       'fetch',
       vi.fn(async (_url, init?: RequestInit) => Response.json(init?.method === 'POST' ? {} : [])),
     );
-    const store = createIterationStore({ endpoint: '/notes' });
+    const store = createIsotoneStore({ endpoint: '/notes' });
     const id = await store.saveNote('/', 'Keep until acknowledged', null, null);
     expect(store.lastSave).toBe('local');
     expect(await store.listNotes()).toMatchObject([{ id, feedback: 'Keep until acknowledged' }]);
-    expect(await createIterationStore().listNotes()).toHaveLength(1);
+    expect(await createIsotoneStore().listNotes()).toHaveLength(1);
   });
   it('reuses the id when the server saved a note but its response was lost', async () => {
     storage();
-    const saved = new Map<string, IterationNote>();
+    const saved = new Map<string, IsotoneNote>();
     let fail = true;
     vi.stubGlobal(
       'fetch',
@@ -61,7 +61,7 @@ describe('offline recovery', () => {
         return Response.json([...saved.values()]);
       }),
     );
-    const store = createIterationStore({ endpoint: '/notes' });
+    const store = createIsotoneStore({ endpoint: '/notes' });
     const id = await store.saveNote('/', 'Keep me exactly once', null, null);
     expect(store.lastSave).toBe('local');
     const notes = await store.listNotes();
@@ -72,7 +72,7 @@ describe('offline recovery', () => {
 
   it('acknowledges successful items individually when a later upload fails', async () => {
     storage();
-    const local = createIterationStore();
+    const local = createIsotoneStore();
     const first = await local.saveNote('/', 'First', null, null);
     const second = await local.saveNote('/', 'Second', null, null);
     const posted: string[] = [];
@@ -85,7 +85,7 @@ describe('offline recovery', () => {
         return item.id === first ? Response.json({ id: first }) : new Response(null, { status: 503 });
       }),
     );
-    const remote = createIterationStore({ endpoint: '/notes' });
+    const remote = createIsotoneStore({ endpoint: '/notes' });
     await remote.listNotes();
     await remote.listNotes();
     expect(posted).toEqual([first, second, second]);
@@ -98,11 +98,11 @@ describe('offline recovery', () => {
       throw new Error('Offline');
     });
     vi.stubGlobal('fetch', fetcher);
-    const store = createIterationStore({ endpoint: '/notes' });
+    const store = createIsotoneStore({ endpoint: '/notes' });
     await expect(store.saveNote('/', 'x'.repeat(MAX_FEEDBACK_LENGTH + 1), null, null)).rejects.toThrow(
       `at most ${MAX_FEEDBACK_LENGTH} characters`,
     );
-    expect(await createIterationStore().listNotes()).toEqual([]);
+    expect(await createIsotoneStore().listNotes()).toEqual([]);
     expect(fetcher).not.toHaveBeenCalled();
   });
 
@@ -120,12 +120,12 @@ describe('offline recovery', () => {
     const later = { ...old, id: 'later', feedback: 'Sync this', createdAt: '2026-01-01T00:00:02Z' };
     values.set(FEEDBACK_STORAGE_KEY, JSON.stringify([old, rejected, later]));
     const posted: string[] = [];
-    const remote: IterationNote[] = [];
+    const remote: IsotoneNote[] = [];
     vi.stubGlobal(
       'fetch',
       vi.fn(async (_url, init?: RequestInit) => {
         if (init?.method === 'POST') {
-          const item = JSON.parse(String(init.body)) as IterationNote;
+          const item = JSON.parse(String(init.body)) as IsotoneNote;
           posted.push(item.id);
           if (item.id === rejected.id) return Response.json({ error: 'invalid' }, { status: 400 });
           remote.push(item);
@@ -134,19 +134,19 @@ describe('offline recovery', () => {
         return Response.json(remote);
       }),
     );
-    const store = createIterationStore({ endpoint: '/notes' });
+    const store = createIsotoneStore({ endpoint: '/notes' });
     expect((await store.listNotes()).map((note) => note.id)).toEqual(['later', 'rejected', 'old-long']);
     expect(posted).toEqual(['rejected', 'later']);
     expect(remote.map((note) => note.id)).toEqual(['later']);
     expect(store.hasUnsyncedNotes).toBe(true);
-    expect((await createIterationStore().listNotes()).map((note) => note.id)).toEqual(['rejected', 'old-long']);
+    expect((await createIsotoneStore().listNotes()).map((note) => note.id)).toEqual(['rejected', 'old-long']);
     await store.saveNote('/', 'New successful note', null, null);
     expect(store.lastSave).toBe('server');
   });
 
   it('keeps new notes and newer edits made while a backlog request is in flight', async () => {
     storage();
-    const local = createIterationStore();
+    const local = createIsotoneStore();
     const id = await local.saveNote('/', 'Before', null, null);
     let release!: () => void;
     const paused = new Promise<void>((resolve) => {
@@ -162,7 +162,7 @@ describe('offline recovery', () => {
         return Response.json([]);
       }),
     );
-    const remote = createIterationStore({ endpoint: '/notes' });
+    const remote = createIsotoneStore({ endpoint: '/notes' });
     const firstRead = remote.listNotes();
     const concurrentRead = remote.pendingNotes();
     await local.saveNote('/', 'After', null, id);
@@ -176,12 +176,12 @@ describe('offline recovery', () => {
   it('shows unsynced notes during an outage and does not queue validation errors', async () => {
     storage();
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Offline')));
-    const store = createIterationStore({ endpoint: '/notes' });
+    const store = createIsotoneStore({ endpoint: '/notes' });
     const id = await store.saveNote('/', 'Offline note', null, null);
     expect(await store.listNotes()).toMatchObject([{ id }]);
     vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 400 }));
     await expect(store.saveNote('/', 'Invalid request', null, null)).rejects.toThrow('400');
-    expect(await createIterationStore().listNotes()).toHaveLength(1);
+    expect(await createIsotoneStore().listNotes()).toHaveLength(1);
   });
 
   it('can save to the server when browser storage is blocked', async () => {
@@ -194,7 +194,7 @@ describe('offline recovery', () => {
       'fetch',
       vi.fn(async (_url, init?: RequestInit) => Response.json({ id: JSON.parse(String(init?.body)).id })),
     );
-    const store = createIterationStore({ endpoint: '/notes' });
+    const store = createIsotoneStore({ endpoint: '/notes' });
     await expect(store.saveNote('/', 'Server persisted', null, null)).resolves.toBeTypeOf('string');
     expect(store.lastSave).toBe('server');
   });
@@ -225,23 +225,23 @@ describe('bounded local transport', () => {
     vi.useFakeTimers();
     storage();
     stalledBody();
-    const store = createIterationStore({ endpoint: '/notes' });
+    const store = createIsotoneStore({ endpoint: '/notes' });
     const saving = store.saveNote('/', 'Still here', null, null);
     await vi.advanceTimersByTimeAsync(5000);
     const id = await saving;
     expect(store.lastSave).toBe('local');
-    expect(await createIterationStore().listNotes()).toMatchObject([{ id, feedback: 'Still here' }]);
+    expect(await createIsotoneStore().listNotes()).toMatchObject([{ id, feedback: 'Still here' }]);
   });
 
   it('does not queue a rejected save when its error body stalls', async () => {
     vi.useFakeTimers();
     storage();
     stalledBody(400);
-    const store = createIterationStore({ endpoint: '/notes' });
+    const store = createIsotoneStore({ endpoint: '/notes' });
     const rejected = expect(store.saveNote('/', 'Invalid', null, null)).rejects.toThrow('400');
     await vi.advanceTimersByTimeAsync(5000);
     await rejected;
-    expect(await createIterationStore().listNotes()).toEqual([]);
+    expect(await createIsotoneStore().listNotes()).toEqual([]);
   });
 
   it('honors a cancelled caller before starting any request', async () => {

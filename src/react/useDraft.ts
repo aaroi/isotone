@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { readBrowserStorage } from '../core/browser-storage';
-import type { IterationElement, IterationNote, VariantReference } from '../core/types';
+import type { IsotoneElement, IsotoneNote, VariantReference } from '../core/types';
 
 /**
  * The composer's text, outside React state: typing re-renders the composer
@@ -33,10 +33,10 @@ export function createDraftText(): DraftText {
 const DRAFT_SAVE_MS = 300;
 
 interface Draft {
-  targets: IterationElement[];
+  targets: IsotoneElement[];
   variantTarget: VariantReference | null;
   /** A note being edited is not a draft: nothing is saved meanwhile. */
-  editing: IterationNote | null;
+  editing: IsotoneNote | null;
 }
 
 function writeDraft(key: string, value: string, { editing, targets, variantTarget }: Draft): void {
@@ -59,7 +59,7 @@ export function useDraft(
   key: string,
   text: DraftText,
   current: Draft,
-  restore: (targets: IterationElement[], variantTarget: VariantReference | null) => void,
+  restore: (targets: IsotoneElement[], variantTarget: VariantReference | null) => void,
 ): void {
   const latest = useRef({ current, restore });
   latest.current = { current, restore };

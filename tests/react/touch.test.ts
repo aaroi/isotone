@@ -2,7 +2,7 @@
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createVariantsSource, IterationPanel } from '../../src/react/index';
+import { createVariantsSource, IsotonePanel } from '../../src/react/index';
 import { visibleBand } from '../../src/react/viewport';
 
 let container: HTMLDivElement;
@@ -49,7 +49,7 @@ async function render() {
   const mounted = root;
   await act(async () =>
     mounted.render(
-      createElement(IterationPanel, {
+      createElement(IsotonePanel, {
         route: '/',
         theme: 'light',
         variants: source,

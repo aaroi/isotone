@@ -4,7 +4,7 @@
  */
 import { randomUUID } from 'node:crypto';
 
-import type { IterationElement } from '../../core/types';
+import type { IsotoneElement } from '../../core/types';
 import { NOTE_ID } from '../../core/id';
 import { MAX_FEEDBACK_LENGTH, MAX_NOTES, MAX_ROUTE, MAX_SELECTOR, PAYLOAD_MAX } from '../../core/limits';
 import { updateNoteText } from '../../core/update';
@@ -15,7 +15,7 @@ import { noteFingerprint, notesRevision, readNotes, replyView, type StoredNote, 
 import { cap, elementContext, elementOf, removalOf, variantOf, viewportOf, withinPayloadCap } from './validate';
 
 /** The endpoint path the client calls. */
-export const NOTES_ENDPOINT = '/api/iteration/notes';
+export const NOTES_ENDPOINT = '/api/isotone/notes';
 
 /** The transport-agnostic result of a notes request — any runtime (Vite
  *  middleware, Next route handler, Bun serve, Vercel) can render it. */
@@ -122,11 +122,11 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     const elements =
       body.elements === undefined
         ? undefined
-        : (body.elements as unknown[]).map(elementOf).filter((el): el is IterationElement => el !== null);
+        : (body.elements as unknown[]).map(elementOf).filter((el): el is IsotoneElement => el !== null);
     const variant = body.variant === undefined ? undefined : variantOf(body.variant);
     const variantAction = removalOf(body.variantAction);
     if (body.variantAction !== undefined && !variantAction) return json(400, { error: 'Invalid variant action' });
-    let cleanElement: IterationElement | null = null;
+    let cleanElement: IsotoneElement | null = null;
     if (element && typeof element === 'object' && !Array.isArray(element)) {
       cleanElement = {
         tag: cap(String((element as { tag?: unknown }).tag ?? ''), 30),
@@ -235,7 +235,7 @@ function toItem(n: StoredNote, root: string) {
     id: string;
     route: string;
     feedback: string;
-    element: IterationElement | null;
+    element: IsotoneElement | null;
     done: boolean;
     createdAt: string;
     workingAt?: string;

@@ -1,6 +1,6 @@
 import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { describeIterationElement, elementAsNode, resolveElementSource } from '../core/element';
-import type { IterationElement } from '../core/types';
+import { describeIsotoneElement, elementAsNode, resolveElementSource } from '../core/element';
+import type { IsotoneElement } from '../core/types';
 import type { DockFocus } from './useDockFocus';
 import type { Mode, UpdateMode } from './useDockMode';
 import { useFloatingComposer } from './useFloatingComposer';
@@ -25,8 +25,8 @@ interface PickerContext {
   picking: boolean;
   rootRef: RefObject<HTMLElement | null>;
   fieldRef: RefObject<HTMLTextAreaElement | null>;
-  targets: IterationElement[];
-  setTargets: Dispatch<SetStateAction<IterationElement[]>>;
+  targets: IsotoneElement[];
+  setTargets: Dispatch<SetStateAction<IsotoneElement[]>>;
   anchored: boolean;
   touch: boolean;
   /** Pinned an element: the composer floats next to it. `slot` is the docked composer's height, measured before it leaves. */
@@ -78,7 +78,7 @@ function usePicker(context: PickerContext) {
       return el && !el.closest('[data-isotone]') ? el : null;
     };
     const toggleTarget = (el: Element) => {
-      const target = describeIterationElement(elementAsNode(el));
+      const target = describeIsotoneElement(elementAsNode(el));
       pinned.current.set(target.selector, el);
       const { targets, setTargets } = latest.current;
       const added = !targets.some((t) => t.selector === target.selector);
@@ -184,8 +184,8 @@ interface SelectModeOptions {
   rootRef: RefObject<HTMLElement | null>;
   fieldRef: RefObject<HTMLTextAreaElement | null>;
   floatRef: RefObject<HTMLDivElement | null>;
-  targets: IterationElement[];
-  setTargets: Dispatch<SetStateAction<IterationElement[]>>;
+  targets: IsotoneElement[];
+  setTargets: Dispatch<SetStateAction<IsotoneElement[]>>;
   touch: boolean;
 }
 
@@ -251,7 +251,7 @@ export function PickOverlay({
   locate,
 }: {
   picking: boolean;
-  targets: IterationElement[];
+  targets: IsotoneElement[];
   locate: (selector: string) => Element | null;
 }) {
   const hoverRef = useRef<HTMLDivElement>(null);

@@ -81,7 +81,7 @@ describe('import boundaries', () => {
     expect(check('react/bad.ts', "import { readNotes } from '../node/notes/store';")).toHaveLength(1);
     expect(check('core/bad.ts', "const fs = await import('node:fs');")).toHaveLength(1);
     expect(check('serve/bad.ts', "export { iteration } from '../vite/index';")).toHaveLength(1);
-    expect(check('node/bad.ts', "import { mountIteration } from '../standalone/index';")).toHaveLength(1);
+    expect(check('node/bad.ts', "import { mountIsotone } from '../standalone/index';")).toHaveLength(1);
     expect(check('cli/ok.ts', "import { readNotes } from '../node/notes/store';")).toEqual([]);
   });
 });

@@ -8,7 +8,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { VariantAction, VariantAxis } from '../../src/core/variants';
-import { createVariantsSource, IterationPanel, mountIteration } from '../../src/react/index';
+import { createVariantsSource, IsotonePanel, mountIsotone } from '../../src/react/index';
 import { VariantsView } from '../../src/react/VariantsView';
 import { PANEL_CSS } from '../../src/react/styles';
 
@@ -466,13 +466,13 @@ describe('VariantsView', () => {
   });
 });
 
-describe('IterationPanel with variants', () => {
+describe('IsotonePanel with variants', () => {
   const fab = () => container.querySelector<HTMLButtonElement>('.isotone-fab');
   const tabs = () => container.querySelectorAll('[role=tab]');
 
   it('without an endpoint it is variants only: no tabs, no composer', async () => {
     const source = createVariantsSource({ axes: AXES });
-    await render(createElement(IterationPanel, { route: '/', store: {}, variants: source }));
+    await render(createElement(IsotonePanel, { route: '/', store: {}, variants: source }));
     await click(fab());
 
     expect(tabs()).toHaveLength(0);
@@ -483,7 +483,7 @@ describe('IterationPanel with variants', () => {
 
   it('opens both surfaces independently and keeps the draft while switching variants', async () => {
     const source = createVariantsSource({ axes: AXES });
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/api/iteration/notes' }, variants: source }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/api/isotone/notes' }, variants: source }));
     await click(fab());
     await click(byText('Variants'));
     expect(container.querySelectorAll('.isotone-panel[data-open=true]')).toHaveLength(2);
@@ -503,7 +503,7 @@ describe('IterationPanel with variants', () => {
   });
 
   it('grows the composer with text and shrinks after clearing it', async () => {
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/api/iteration/notes' } }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/api/isotone/notes' } }));
     await click(fab());
     const field = container.querySelector<HTMLTextAreaElement>('textarea');
     if (!field) throw new Error('missing composer');
@@ -539,7 +539,7 @@ describe('IterationPanel with variants', () => {
         ],
       })),
     );
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(fab());
     const field = container.querySelector('textarea');
     if (!field) throw new Error('missing composer');
@@ -581,7 +581,7 @@ describe('IterationPanel with variants', () => {
       })),
     );
     await render(
-      createElement(IterationPanel, { route: '/', variants: createVariantsSource({ axes: AXES }), store: { endpoint: '/notes' } }),
+      createElement(IsotonePanel, { route: '/', variants: createVariantsSource({ axes: AXES }), store: { endpoint: '/notes' } }),
     );
     await click(fab());
     await click(byText('Variants'));
@@ -612,9 +612,9 @@ describe('IterationPanel with variants', () => {
   it('with an endpoint but no axes it is the notes panel as before', async () => {
     const source = createVariantsSource({ axes: [] });
     await render(
-      createElement(IterationPanel, {
+      createElement(IsotonePanel, {
         route: '/',
-        store: { endpoint: '/api/iteration/notes' },
+        store: { endpoint: '/api/isotone/notes' },
         variants: source,
       }),
     );
@@ -626,7 +626,7 @@ describe('IterationPanel with variants', () => {
 
   it('with neither notes nor axes it renders nothing', async () => {
     const source = createVariantsSource({ axes: [] });
-    await render(createElement(IterationPanel, { route: '/', store: {}, variants: source }));
+    await render(createElement(IsotonePanel, { route: '/', store: {}, variants: source }));
     expect(fab()).toBeNull();
   });
 
@@ -636,9 +636,9 @@ describe('IterationPanel with variants', () => {
     const refresh = vi.fn(async () => inner.setAxes(AXES));
     const source = Object.assign(inner, { refresh });
     await render(
-      createElement(IterationPanel, {
+      createElement(IsotonePanel, {
         route: '/',
-        store: { endpoint: '/api/iteration/notes' },
+        store: { endpoint: '/api/isotone/notes' },
         variants: source,
       }),
     );
@@ -656,7 +656,7 @@ describe('IterationPanel with variants', () => {
   });
 
   it('with no endpoint, a source that only has axes after refresh still gets a launcher', async () => {
-    // `mountIteration({ variants: 'overlay' })` with no notes endpoint: the
+    // `mountIsotone({ variants: 'overlay' })` with no notes endpoint: the
     // panel had nothing to render until the listing arrived, and nothing to
     // trigger the listing but an open, so the launcher never appeared.
     const inner = createVariantsSource({ axes: [] });
@@ -671,7 +671,7 @@ describe('IterationPanel with variants', () => {
         }),
     );
     const source = Object.assign(inner, { refresh });
-    await render(createElement(IterationPanel, { route: '/', store: {}, variants: source }));
+    await render(createElement(IsotonePanel, { route: '/', store: {}, variants: source }));
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(fab()).toBeNull();
 
@@ -684,7 +684,7 @@ describe('IterationPanel with variants', () => {
   it('does not refresh at mount when the source already has axes', async () => {
     const refresh = vi.fn(async () => {});
     const source = Object.assign(createVariantsSource({ axes: AXES }), { refresh });
-    await render(createElement(IterationPanel, { route: '/', store: {}, variants: source }));
+    await render(createElement(IsotonePanel, { route: '/', store: {}, variants: source }));
     expect(refresh).not.toHaveBeenCalled();
   });
 });
@@ -693,9 +693,9 @@ describe('panel refinements for variants-only hosts', () => {
   it('initially opens variants when requested, with feedback still available', async () => {
     const source = createVariantsSource({ axes: AXES });
     await render(
-      createElement(IterationPanel, {
+      createElement(IsotonePanel, {
         route: '/',
-        store: { endpoint: '/api/iteration/notes', key: 'preview' },
+        store: { endpoint: '/api/isotone/notes', key: 'preview' },
         variants: source,
         defaultTab: 'variants',
       }),
@@ -707,32 +707,32 @@ describe('panel refinements for variants-only hosts', () => {
 
   it('labels a variants-only launcher as Variants, with an icon', async () => {
     const source = createVariantsSource({ axes: AXES });
-    await render(createElement(IterationPanel, { route: '/', store: {}, variants: source }));
+    await render(createElement(IsotonePanel, { route: '/', store: {}, variants: source }));
     const button = container.querySelector('.isotone-fab');
     expect(button?.getAttribute('aria-label')).toBe('Variants');
     expect(button?.querySelector('svg')).not.toBeNull();
   });
 });
 
-describe('mountIteration variants options', () => {
+describe('mountIsotone variants options', () => {
   beforeEach(() => vi.useFakeTimers());
 
   it('mounts nothing without an endpoint or a source', () => {
-    const off = mountIteration({});
+    const off = mountIsotone({});
     expect(document.querySelector('[data-isotone="root"]')).toBeNull();
     off();
     vi.runAllTimers();
   });
 
   it('mounts nothing for a variants-only source with no axes and no refresh', () => {
-    const off = mountIteration({ variants: createVariantsSource({ axes: [] }) });
+    const off = mountIsotone({ variants: createVariantsSource({ axes: [] }) });
     expect(document.querySelector('[data-isotone="root"]')).toBeNull();
     off();
     vi.runAllTimers();
   });
 
   it('mounts with only a variants source', () => {
-    const off = mountIteration({ variants: createVariantsSource({ axes: AXES }) });
+    const off = mountIsotone({ variants: createVariantsSource({ axes: AXES }) });
     expect(document.querySelector('[data-isotone="root"]')).not.toBeNull();
     off();
     vi.runAllTimers();
@@ -743,7 +743,7 @@ describe('mountIteration variants options', () => {
     vi.useRealTimers();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.startsWith('/api/iteration/variants')) {
+      if (url.startsWith('/api/isotone/variants')) {
         return {
           ok: true,
           status: 200,
@@ -766,7 +766,7 @@ describe('mountIteration variants options', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const off = mountIteration({ endpoint: '/api/iteration/notes', variants: 'overlay' });
+    const off = mountIsotone({ endpoint: '/api/isotone/notes', variants: 'overlay' });
     // The mount renders one macrotask later.
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
@@ -780,7 +780,7 @@ describe('mountIteration variants options', () => {
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
     });
-    expect(fetchMock.mock.calls.map((c) => String(c[0]))).toContain('/api/iteration/variants');
+    expect(fetchMock.mock.calls.map((c) => String(c[0]))).toContain('/api/isotone/variants');
     expect(shadow.querySelectorAll('.isotone-rail-button')).toHaveLength(2);
 
     // An untouched overlay has nothing to promote; the save action stays hidden.
@@ -804,11 +804,11 @@ describe('mountIteration variants options', () => {
     let active: string[] = ['table-dense'];
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url === '/api/iteration/variants/active' && init?.method === 'POST') {
+      if (url === '/api/isotone/variants/active' && init?.method === 'POST') {
         active = JSON.parse(String(init.body)).active;
         return { ok: true, status: 200, json: async () => ({ active }) };
       }
-      if (url.startsWith('/api/iteration/variants')) {
+      if (url.startsWith('/api/isotone/variants')) {
         return {
           ok: true,
           status: 200,
@@ -862,8 +862,8 @@ describe('mountIteration variants options', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const off = mountIteration({
-      endpoint: '/api/iteration/notes',
+    const off = mountIsotone({
+      endpoint: '/api/isotone/notes',
       variants: 'overlay',
       getRoute: () => '/projects',
     });
@@ -895,7 +895,7 @@ describe('mountIteration variants options', () => {
     await clickIn(button('Tabs'));
     const posts = () =>
       (fetchMock.mock.calls as unknown as [RequestInfo | URL, RequestInit?][])
-        .filter((c) => String(c[0]) === '/api/iteration/variants/active')
+        .filter((c) => String(c[0]) === '/api/isotone/variants/active')
         .map((c) => JSON.parse(String(c[1]?.body)));
     expect(posts().at(-1)).toEqual({ active: ['table-dense', 'settings-tabs'] });
     await tick();
@@ -909,7 +909,7 @@ describe('mountIteration variants options', () => {
     // Make default names every pick, in panel order, and pins the first.
     await clickIn(button('Make default'));
     const calls = fetchMock.mock.calls as unknown as [RequestInfo | URL, RequestInit?][];
-    const note = calls.find((c) => String(c[0]) === '/api/iteration/notes' && c[1]?.method === 'POST');
+    const note = calls.find((c) => String(c[0]) === '/api/isotone/notes' && c[1]?.method === 'POST');
     const body = JSON.parse(String(note?.[1]?.body));
     expect(body.feedback).toBe(
       '[set-defaults] Make the default: "table.tsx: Striped" (table-striped); "Account › Settings: Tabs" (settings-tabs).',
@@ -931,7 +931,7 @@ describe('review dock interactions', () => {
   it.each(['mouse', 'pen'])('expands on %s hover, stays open across the pill and collapses on exit', async (pointerType) => {
     vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener() {}, removeEventListener() {} }));
     await render(
-      createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, variants: createVariantsSource({ axes: AXES }) }),
+      createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' }, variants: createVariantsSource({ axes: AXES }) }),
     );
     const dock = container.querySelector('.isotone-root');
     const launcher = container.querySelector('.isotone-fab');
@@ -966,7 +966,7 @@ describe('review dock interactions', () => {
 
   it('replaces the launcher with two tools and collapses after both surfaces close', async () => {
     await render(
-      createElement(IterationPanel, {
+      createElement(IsotonePanel, {
         route: '/',
         store: { endpoint: '/notes' },
         variants: createVariantsSource({ axes: AXES }),
@@ -1002,7 +1002,7 @@ describe('review dock interactions', () => {
     source.setSelection('headline', 'b');
     const manage = vi.spyOn(source, 'manage');
     const props = { route: '/', store: { endpoint: '/notes' }, variants: source, defaultTab: 'variants' as const };
-    await render(createElement(IterationPanel, props));
+    await render(createElement(IsotonePanel, props));
     await click(container.querySelector('.isotone-fab'));
     await click(byText('Headline actions'));
     await click(byText('Remove Bold'));
@@ -1023,7 +1023,7 @@ describe('review dock interactions', () => {
     // Persisted requests never hide or mutate the source controls, even on remount.
     await act(async () => root?.unmount());
     root = null;
-    await render(createElement(IterationPanel, props));
+    await render(createElement(IsotonePanel, props));
     await click(container.querySelector('.isotone-fab'));
     expect(labels()).toEqual(['Headline', 'Tagline', 'Haze']);
     // The rail button's name carries the count the badge shows.
@@ -1048,7 +1048,7 @@ describe('review dock interactions', () => {
     );
     const source = createVariantsSource({ axes: AXES });
     await render(
-      createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, variants: source, defaultTab: 'variants' as const }),
+      createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' }, variants: source, defaultTab: 'variants' as const }),
     );
     await click(container.querySelector('.isotone-fab'));
     await click(byText('Headline actions'));
@@ -1075,7 +1075,7 @@ describe('review dock interactions', () => {
   }
   it.each(['dark', 'light'] as const)('focuses the full %s composer without hijacking its controls', async (theme) => {
     document.body.style.backgroundColor = theme === 'dark' ? 'black' : 'white';
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(container.querySelector('.isotone-fab'));
     await act(async () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -1104,7 +1104,7 @@ describe('review dock interactions', () => {
   it('switches theme without replacing controls or losing review state', async () => {
     const source = createVariantsSource({ axes: AXES, saveDefaults: async () => {} });
     const props = { route: '/', store: { endpoint: '/notes' }, variants: source };
-    await render(createElement(IterationPanel, props));
+    await render(createElement(IsotonePanel, props));
     await click(container.querySelector('.isotone-fab'));
     await click(byText('Variants'));
     await click(byText('Bold'));
@@ -1115,7 +1115,7 @@ describe('review dock interactions', () => {
     for (const theme of ['light', 'dark'] as const) {
       await act(async () => {
         document.body.style.backgroundColor = theme === 'dark' ? 'black' : 'white';
-        root?.render(createElement(IterationPanel, props));
+        root?.render(createElement(IsotonePanel, props));
       });
       // Page mutations are sampled at most every 200ms: wait for the sample, not for a guess at its timing.
       await vi.waitFor(
@@ -1147,7 +1147,7 @@ describe('review dock interactions', () => {
   });
   it('captures the shortcut inside an input, starts selecting, preserves variants, and disables keyboard motion', async () => {
     await render(
-      createElement(IterationPanel, {
+      createElement(IsotonePanel, {
         route: '/',
         store: { endpoint: '/notes' },
         variants: createVariantsSource({ axes: AXES }),
@@ -1169,7 +1169,7 @@ describe('review dock interactions', () => {
     input.remove();
   });
   it('moves between selecting and the field with the shortcut', async () => {
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     const press = () =>
       act(async () => {
         window.dispatchEvent(
@@ -1191,7 +1191,7 @@ describe('review dock interactions', () => {
   it('attaches an option reference and keeps variants visible while writing', async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: 'saved' }) }));
     await render(
-      createElement(IterationPanel, {
+      createElement(IsotonePanel, {
         route: '/',
         store: { endpoint: '/notes' },
         variants: createVariantsSource({ axes: AXES }),
@@ -1216,7 +1216,7 @@ describe('review dock interactions', () => {
     });
   });
   it('pins several elements in one session, toggles a duplicate off, and saves every target', async () => {
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(container.querySelector('.isotone-fab'));
     const a = document.createElement('button');
     a.id = 'one';
@@ -1248,7 +1248,7 @@ describe('review dock interactions', () => {
     b.remove();
   });
   it('covers the composer while selecting, and Enter, Escape, Done or typing finishes', async () => {
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(container.querySelector('.isotone-fab'));
     const textarea = container.querySelector<HTMLTextAreaElement>('textarea');
     if (!textarea) throw new Error('missing composer');
@@ -1286,7 +1286,7 @@ describe('review dock interactions', () => {
     expect(fetchMock).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'POST' }));
   });
   it('starts selecting when feedback is opened with a pointer, and not from the keyboard', async () => {
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     // A real pointer over the dock hits the panel, which select mode ignores.
     Object.defineProperty(document, 'elementFromPoint', { value: () => container.querySelector('.isotone-root'), configurable: true });
     const pointer = (el: Element | null | undefined) =>
@@ -1311,7 +1311,7 @@ describe('review dock interactions', () => {
     expect(container.querySelector('.isotone-picking')).not.toBeNull();
   });
   it('floats the composer next to a pinned element and brings it back to the dock', async () => {
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(container.querySelector('.isotone-fab'));
     const card = document.createElement('section');
     card.id = 'card';
@@ -1401,7 +1401,7 @@ describe('review dock interactions', () => {
     card.remove();
   });
   it('cancels the selection on Escape, so selecting again starts fresh', async () => {
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(container.querySelector('.isotone-fab'));
     const card = document.createElement('section');
     card.id = 'card';
@@ -1717,7 +1717,7 @@ describe('review dock interactions', () => {
             ],
     }));
     vi.stubGlobal('fetch', fetchMock);
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' }, getPayload: () => ({ new: true }) }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' }, getPayload: () => ({ new: true }) }));
     await click(container.querySelector('.isotone-fab'));
     await click(container.querySelector('.isotone-page[title="/other"]'));
     await click(Array.from(container.querySelectorAll('.isotone-note-hit')).find((hit) => hit.textContent?.includes('Old note')) ?? null);
@@ -1776,7 +1776,7 @@ describe('live notes', () => {
         return { ok: true, status: 200, json: async () => (asked === state.rev ? { rev: state.rev, unchanged: true } : state) };
       }),
     );
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     await flush();
     await click(container.querySelector('.isotone-fab'));
     await flush();
@@ -1795,7 +1795,7 @@ describe('live notes', () => {
       { rev: 'a', notes: [note('one')] },
       { rev: 'a', unchanged: true },
     ]);
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     await flush();
     await click(container.querySelector('.isotone-fab'));
     await flush();
@@ -1806,7 +1806,7 @@ describe('live notes', () => {
 
   it('backs off while the server is down and recovers', async () => {
     const urls = server(['down']);
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     await flush();
     const start = urls.length;
     await advance(60_000);
@@ -1819,7 +1819,7 @@ describe('live notes', () => {
       { rev: 'a', notes: [] },
       { rev: 'a', unchanged: true },
     ]);
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     await flush();
     let hidden = true;
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
@@ -1858,7 +1858,7 @@ describe('page scope and agent progress', () => {
 
   it('lists this page first and reveals other pages from a row of chips', async () => {
     serve([note('a', '/'), note('b', '/pricing'), note('c', '/pricing')]);
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(container.querySelector('.isotone-fab'));
     expect(container.querySelectorAll('.isotone-note')).toHaveLength(1);
     const chips = Array.from(container.querySelectorAll('.isotone-page'));
@@ -1871,7 +1871,7 @@ describe('page scope and agent progress', () => {
 
   it('shows no page chips while every note is on this page', async () => {
     serve([note('a', '/')]);
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(container.querySelector('.isotone-fab'));
     expect(container.querySelector('.isotone-pages')).toBeNull();
   });
@@ -1881,7 +1881,7 @@ describe('page scope and agent progress', () => {
       note('a', '/', { workingAt: new Date().toISOString() }),
       note('b', '/', { workingAt: new Date(Date.now() - 60 * 60 * 1000).toISOString() }),
     ]);
-    await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(container.querySelector('.isotone-fab'));
     expect(container.querySelectorAll('.isotone-working')).toHaveLength(1);
     expect(container.querySelector('.isotone-root')?.getAttribute('data-working')).toBe('true');
@@ -1889,7 +1889,7 @@ describe('page scope and agent progress', () => {
 });
 
 it('pins a focused host control with Space without activating it', async () => {
-  await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+  await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
   await click(container.querySelector('.isotone-fab'));
   await click(byText('Select elements'));
   const target = document.createElement('button');
@@ -1918,7 +1918,7 @@ it('pins a focused host control with Space without activating it', async () => {
 });
 
 it('fades the composer top only after its text has scrolled', async () => {
-  await render(createElement(IterationPanel, { route: '/', store: { endpoint: '/notes' } }));
+  await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
   await click(container.querySelector('.isotone-fab'));
   const field = container.querySelector('textarea');
   if (!field) throw new Error('Missing composer');

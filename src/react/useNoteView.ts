@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { normalizeRoute } from '../core/routes';
-import type { IterationNote } from '../core/types';
+import type { IsotoneNote } from '../core/types';
 
 /** How long "an agent is working on this" is believed without a sign of life. */
 const WORKING_FRESH_MS = 20 * 60 * 1000;
@@ -11,7 +11,7 @@ export interface NoteView {
   pages: { counts: Map<string, number>; others: string[] };
   selectedPages: ReadonlySet<string>;
   /** Open notes on the selected pages, oldest first. */
-  notes: IterationNote[];
+  notes: IsotoneNote[];
   /** Notes an agent is working on now. */
   working: ReadonlySet<string>;
   togglePage: (page: string) => void;
@@ -21,7 +21,7 @@ export interface NoteView {
  * What the panel derives from the notes list. `clock` (a coarse minute) ages
  * out an agent's claim: a crashed or abandoned run should not pulse forever.
  */
-export function useNoteView(all: IterationNote[], route: string, clock: number) {
+export function useNoteView(all: IsotoneNote[], route: string, clock: number) {
   // Which pages' notes the list shows. Unset means this page only.
   const [scope, setScope] = useState<string[] | null>(null);
   const open = useMemo(() => all.filter((n) => !n.done), [all]);

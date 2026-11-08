@@ -1,7 +1,7 @@
 import { FEEDBACK_STORAGE_KEY } from '../core/browser-storage';
-import type { IterationStoreConfig } from '../core/notes-client';
+import type { IsotoneStoreConfig } from '../core/notes-client';
 import { isRouteVisible, normalizeRoute, type RouteGateOptions } from '../core/routes';
-import type { IterationShortcut, IterationTheme } from '../core/types';
+import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
 import type { VariantsSource } from '../core/variants';
 import { useEffect, useId, useRef } from 'react';
 import { Composer } from './Composer';
@@ -21,13 +21,13 @@ import { useNoteView } from './useNoteView';
 import { refreshSource, useVariantsSnapshot, VariantsPanel } from './VariantsView';
 import { useKeyboardInset } from './viewport';
 
-export interface IterationPanelProps {
+export interface IsotonePanelProps {
   /** Auto follows the page at the dock. System follows the OS preference. */
-  theme?: IterationTheme;
+  theme?: IsotoneTheme;
   /** Local adapter endpoint for an optional, nonblocking update notice. */
   updateEndpoint?: string;
   route: string;
-  store: IterationStoreConfig;
+  store: IsotoneStoreConfig;
   rule?: RouteGateOptions;
   getPayload?: () => unknown;
   variants?: VariantsSource;
@@ -36,7 +36,7 @@ export interface IterationPanelProps {
   /** Initial surface. Kept for compatibility; surfaces can now open together. */
   defaultTab?: 'variants' | 'notes';
   /** Default: Cmd/Ctrl+Shift+Period. false disables the shortcut. */
-  shortcut?: IterationShortcut | false;
+  shortcut?: IsotoneShortcut | false;
 }
 
 /**
@@ -44,7 +44,7 @@ export interface IterationPanelProps {
  * panels. Each concern lives in its own hook; this composes them and holds the
  * rules that join them: what opens what, and where focus goes.
  */
-export function IterationPanel({
+export function IsotonePanel({
   route: pageRoute,
   theme: themePreference = 'auto',
   updateEndpoint,
@@ -55,7 +55,7 @@ export function IterationPanel({
   variantsEmptyText,
   defaultTab = 'notes',
   shortcut = DEFAULT_SHORTCUT,
-}: IterationPanelProps) {
+}: IsotonePanelProps) {
   // One page, however the URL spells it: `/about/` and `/about?tab=2` are `/about`, as for the CLI.
   const route = normalizeRoute(pageRoute);
   const nsKey = storeCfg.key ?? FEEDBACK_STORAGE_KEY;

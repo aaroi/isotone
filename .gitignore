@@ -1,8 +1,8 @@
 node_modules
 dist
 *.tsbuildinfo
-.iteration-feedback.json
-.iteration-feedback.blast.json
+.isotone/notes.json*
+.isotone/notes.blast.json
 .tmp-vite-*/
 demo-dist
 .vercel

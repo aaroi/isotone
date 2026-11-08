@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 function post(file: string, body: unknown) {
-  return notesResponse(file, { method: 'POST', url: '/api/iteration/notes', body });
+  return notesResponse(file, { method: 'POST', url: '/api/isotone/notes', body });
 }
 
 function get(file: string, url: string) {
@@ -34,7 +34,7 @@ function get(file: string, url: string) {
 function del(file: string, id: string | null) {
   return notesResponse(file, {
     method: 'DELETE',
-    url: `/api/iteration/notes${id ? `?id=${id}` : ''}`,
+    url: `/api/isotone/notes${id ? `?id=${id}` : ''}`,
   });
 }
 
@@ -92,7 +92,7 @@ describe('notesResponse', () => {
     expect(created.status).toBe(201);
     const id = (created.body as { id: string }).id;
 
-    const listed = get(file, '/api/iteration/notes?route=/projects');
+    const listed = get(file, '/api/isotone/notes?route=/projects');
     const rows = listed.body as Array<{ id: string; feedback: string }>;
     expect(rows).toHaveLength(1);
     expect(rows[0]?.feedback).toBe('hello');
@@ -140,7 +140,7 @@ describe('notesResponse', () => {
     const first = all.find((n) => n.route === '/a');
     if (first) first.done = true;
     writeNotes(file, all);
-    const pending = get(file, '/api/iteration/notes');
+    const pending = get(file, '/api/isotone/notes');
     expect((pending.body as Array<{ route: string }>).map((r) => r.route)).toEqual(['/b']);
   });
 
@@ -226,13 +226,14 @@ describe('ensureFileIgnored', () => {
     execFileSync('git', ['init', '-q', repo]);
     const consoleDir = join(repo, 'app', 'console');
     mkdirSync(consoleDir, { recursive: true });
-    const file = join(consoleDir, '.iteration-feedback.json');
+    // Before the first note, `.isotone/` does not exist either.
+    const file = join(consoleDir, '.isotone', 'notes.json');
+    ensureFileIgnored(file);
+    mkdirSync(dirname(file));
     writeFileSync(file, '[]\n');
 
-    ensureFileIgnored(file);
-
     const exclude = readFileSync(join(repo, '.git', 'info', 'exclude'), 'utf8');
-    expect(exclude).toContain('\n/app/console/.iteration-feedback.json\n');
+    expect(exclude).toContain('\n/app/console/.isotone/notes.json\n');
     expect(exclude).not.toContain(repo);
     // A crash can leave the lock or a temporary write beside the file.
     writeFileSync(`${file}.lock`, '');
@@ -275,7 +276,7 @@ describe('ensureFileIgnored', () => {
       stdio: 'ignore',
     });
 
-    const file = join(worktree, 'app', '.iteration-feedback.json');
+    const file = join(worktree, 'app', '.isotone', 'notes.json');
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, '[]\n');
     ensureFileIgnored(file);
@@ -294,7 +295,7 @@ describe('ensureFileIgnored', () => {
     // The shared repository's file, not anything under the worktree.
     expect(reported.startsWith(join(repo, '.git'))).toBe(true);
     const exclude = readFileSync(reported, 'utf8');
-    expect(exclude).toContain('\n/app/.iteration-feedback.json\n');
+    expect(exclude).toContain('\n/app/.isotone/notes.json\n');
     expect(exclude).toContain('\n/app/variants/\n');
     expect(
       execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], {
@@ -325,7 +326,7 @@ describe('feedback references', () => {
     const variantAction = { axisId: 'layout', action: 'remove-option', optionId: 'stack' };
     const created = post(file, { route: '/', feedback: '[remove-option] Stack', variantAction, payload: { host: true } });
     const id = (created.body as { id: string }).id;
-    expect(get(file, '/api/iteration/notes').body).toMatchObject([{ variantAction, payload: { host: true } }]);
+    expect(get(file, '/api/isotone/notes').body).toMatchObject([{ variantAction, payload: { host: true } }]);
     post(file, { id, route: '/', feedback: 'Keep the same request' });
     expect(readNotes(file)[0]).toMatchObject({ variantAction });
     expect(post(file, { route: '/', feedback: 'Invalid', variantAction: { axisId: 'layout', action: 'remove-option' } }).status).toBe(400);

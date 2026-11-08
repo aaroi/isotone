@@ -2,7 +2,7 @@ import { FEEDBACK_STORAGE_KEY, readBrowserStorage } from './browser-storage';
 import { createNoteId } from './id';
 import { MAX_FEEDBACK_LENGTH } from './limits';
 import { request } from './request';
-import type { IterationElement, IterationNote, NoteContext } from './types';
+import type { IsotoneElement, IsotoneNote, NoteContext } from './types';
 
 /* ---------------------------------------------------------------------------
  * Store: client transport for the notes. The Vite plugin serves the endpoint
@@ -11,7 +11,7 @@ import type { IterationElement, IterationNote, NoteContext } from './types';
  * configurable so multi-app origins don't collide.
  * ------------------------------------------------------------------------- */
 
-export interface IterationStoreConfig {
+export interface IsotoneStoreConfig {
   /** Absolute or same-origin URL of the notes endpoint. Must be set (by the
    *  Vite plugin's `isotone()` options or a framework preset) for a shared
    *  file-backed store; when omitted, only localStorage persists. */
@@ -24,15 +24,15 @@ export interface IterationStoreConfig {
 /** Where the last `saveNote` landed; `null` before the first one. */
 export type SaveLocation = 'server' | 'local';
 
-export function createIterationStore(cfg: IterationStoreConfig = {}) {
+export function createIsotoneStore(cfg: IsotoneStoreConfig = {}) {
   const endpoint = cfg.endpoint ?? null;
   const key = cfg.key ?? FEEDBACK_STORAGE_KEY;
   let lastSave: SaveLocation | null = null;
   let migration: Promise<void> | null = null;
 
-  function parseLocal(raw: string | null): IterationNote[] {
+  function parseLocal(raw: string | null): IsotoneNote[] {
     try {
-      const items = JSON.parse(raw ?? '[]') as IterationNote[];
+      const items = JSON.parse(raw ?? '[]') as IsotoneNote[];
       if (
         !Array.isArray(items) ||
         !items.every(
@@ -56,7 +56,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     }
   }
 
-  function localAll(): IterationNote[] {
+  function localAll(): IsotoneNote[] {
     let storage: Storage;
     try {
       storage = window.localStorage;
@@ -66,11 +66,11 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     return parseLocal(readBrowserStorage(storage, key));
   }
 
-  function localWrite(items: IterationNote[]) {
+  function localWrite(items: IsotoneNote[]) {
     window.localStorage.setItem(key, JSON.stringify(items));
   }
 
-  function acknowledge(item: IterationNote): void {
+  function acknowledge(item: IsotoneNote): void {
     const current = localAll();
     const snapshot = JSON.stringify(item);
     const remaining = current.filter((note) => note.id !== item.id || JSON.stringify(note) !== snapshot);
@@ -129,13 +129,13 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     return migration;
   }
 
-  async function readRemote(url: string): Promise<IterationNote[]> {
+  async function readRemote(url: string): Promise<IsotoneNote[]> {
     await migrateLocalBacklog().catch(() => {});
     const local = localAll();
     try {
       const remote = await request(url, undefined, async (res) => {
-        if (!res.ok) throw new Error(`Loading iteration notes failed (${res.status})`);
-        return (await res.json()) as IterationNote[];
+        if (!res.ok) throw new Error(`Loading Isotone notes failed (${res.status})`);
+        return (await res.json()) as IsotoneNote[];
       });
       const pendingIds = new Set(local.map((note) => note.id));
       return [...remote.filter((note) => !pendingIds.has(note.id)), ...local];
@@ -146,7 +146,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
   }
 
   /** Notes for one route, or every note on every route when `route` is omitted. */
-  async function listNotes(route?: string): Promise<IterationNote[]> {
+  async function listNotes(route?: string): Promise<IsotoneNote[]> {
     if (!endpoint) {
       return localAll()
         .filter((i) => route === undefined || i.route === route)
@@ -165,13 +165,13 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
    * stay in the result until the server has them. Failures throw, so the
    * caller can back off.
    */
-  async function pollNotes(rev: string | null): Promise<{ rev: string | null; notes: IterationNote[] | null }> {
+  async function pollNotes(rev: string | null): Promise<{ rev: string | null; notes: IsotoneNote[] | null }> {
     if (!endpoint) return { rev: null, notes: localAll().filter((n) => !n.done) };
     if (localAll().length) await migrateLocalBacklog().catch(() => {});
     const local = localAll();
     const data = await request(`${endpoint}?rev=${encodeURIComponent(rev ?? '')}`, undefined, async (res) => {
-      if (!res.ok) throw new Error(`Loading iteration notes failed (${res.status})`);
-      return (await res.json()) as IterationNote[] | { rev?: unknown; unchanged?: unknown; notes?: unknown };
+      if (!res.ok) throw new Error(`Loading Isotone notes failed (${res.status})`);
+      return (await res.json()) as IsotoneNote[] | { rev?: unknown; unchanged?: unknown; notes?: unknown };
     });
     if (Array.isArray(data)) return { rev: null, notes: merge(data, local) };
     const next = typeof data?.rev === 'string' ? data.rev : null;
@@ -179,16 +179,16 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     // nothing to replace.
     if (data?.unchanged === true && next !== null) return { rev: next, notes: null };
     if (!Array.isArray(data?.notes)) throw new Error('Unexpected notes response');
-    return { rev: next, notes: merge(data.notes as IterationNote[], local) };
+    return { rev: next, notes: merge(data.notes as IsotoneNote[], local) };
   }
 
-  function merge(remote: IterationNote[], local: IterationNote[]): IterationNote[] {
+  function merge(remote: IsotoneNote[], local: IsotoneNote[]): IsotoneNote[] {
     const pendingIds = new Set(local.map((note) => note.id));
     return [...remote.filter((note) => !pendingIds.has(note.id)), ...local];
   }
 
   /** Every still-open note across all routes, newest first. */
-  async function pendingNotes(): Promise<IterationNote[]> {
+  async function pendingNotes(): Promise<IsotoneNote[]> {
     if (!endpoint) {
       return localAll()
         .filter((i) => !i.done)
@@ -200,7 +200,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
   function saveLocal(
     route: string,
     feedback: string,
-    element: IterationElement | null,
+    element: IsotoneElement | null,
     id: string | null,
     payload?: unknown,
     viewport?: { w: number; h: number },
@@ -259,7 +259,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
   async function saveNote(
     route: string,
     feedback: string,
-    element: IterationElement | null,
+    element: IsotoneElement | null,
     id: string | null,
     /** Opaque host context, attached only when the caller sends it. */
     payload?: unknown,
@@ -304,7 +304,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
         },
         async (response) => {
           res = response;
-          if (!response.ok && response.status >= 500) throw new Error(`Saving iteration note failed (${response.status})`);
+          if (!response.ok && response.status >= 500) throw new Error(`Saving Isotone note failed (${response.status})`);
           return (await response.json().catch((error) => {
             if (response.ok) throw error;
             return null;
@@ -312,12 +312,12 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
         },
       );
     } catch {
-      if (res && !res.ok && res.status < 500) throw new Error(`Saving iteration note failed (${res.status})`);
+      if (res && !res.ok && res.status < 500) throw new Error(`Saving Isotone note failed (${res.status})`);
       return saveOffline();
     }
     // Validation errors require a correction, not a permanently stuck queue.
     if (!res?.ok) {
-      throw new Error(`Saving iteration note failed (${res?.status})${typeof result?.error === 'string' ? `: ${result.error}` : ''}`);
+      throw new Error(`Saving Isotone note failed (${res?.status})${typeof result?.error === 'string' ? `: ${result.error}` : ''}`);
     }
     if (!result || typeof result.id !== 'string' || !result.id) return saveOffline();
     if (pendingBefore) acknowledge(pendingBefore);
@@ -333,7 +333,7 @@ export function createIterationStore(cfg: IterationStoreConfig = {}) {
     const res = await request(`${endpoint}?id=${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
-    if (!res.ok) throw new Error(`Deleting iteration note failed (${res.status})`);
+    if (!res.ok) throw new Error(`Deleting Isotone note failed (${res.status})`);
     const local = localAll();
     if (local.some((note) => note.id === id)) localWrite(local.filter((note) => note.id !== id));
   }

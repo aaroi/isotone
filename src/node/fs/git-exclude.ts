@@ -18,9 +18,10 @@ export function ensureFileIgnored(file: string): void {
   try {
     // Resolve through symlinks so the path is comparable with git's answer,
     // which is already canonical (macOS's /var → /private/var, for one).
-    // The file itself may not exist yet, so canonicalize its directory.
-    const dir = realpathSync(dirname(resolve(file)));
-    const absolute = join(dir, basename(file));
+    // The file, and `.isotone/` before the first note, may not exist yet.
+    const absolute = canonical(resolve(file));
+    let dir = dirname(absolute);
+    while (!existsSync(dir)) dir = dirname(dir);
     const gitRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
       cwd: dir,
       encoding: 'utf8',
@@ -44,6 +45,16 @@ export function ensureFileIgnored(file: string): void {
     writeFileSync(infoExclude, `${existing}${marker}${comment}${missing.map((p) => `${p}\n`).join('')}`);
   } catch {
     // A stray dev-only feedback file is non-fatal if we can't ignore it.
+  }
+}
+
+/** `path` through symlinks, for as much of it as exists. */
+function canonical(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    const parent = dirname(path);
+    return parent === path ? path : join(canonical(parent), basename(path));
   }
 }
 

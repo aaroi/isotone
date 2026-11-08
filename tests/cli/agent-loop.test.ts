@@ -17,7 +17,7 @@ afterEach(() => {
   dirs.length = 0;
 });
 
-const NOTES = '.iteration-feedback.json';
+const NOTES = join('.isotone', 'notes.json');
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 
 function write(root: string, file: string, text: string, mtime?: number): void {
@@ -28,8 +28,9 @@ function write(root: string, file: string, text: string, mtime?: number): void {
 }
 
 function notes(root: string, list: { id: string; createdAt: string; route?: string; viewport?: { w: number; h: number } }[]): void {
-  writeFileSync(
-    join(root, NOTES),
+  write(
+    root,
+    NOTES,
     JSON.stringify(list.map((n) => ({ route: '/', feedback: `fix ${n.id}`, done: false, doneAt: null, element: null, ...n }))),
   );
 }
