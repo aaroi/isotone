@@ -9,15 +9,15 @@ import {
   useLayoutEffect,
   useRef,
 } from 'react';
-import { normalizeRoute } from '../core/routes';
-import type { IsotoneElement, IsotoneNote } from '../core/types';
-import { Icon } from './icons';
-import { dotPulse, fadeInContent, MAX_ANIMATED_ITEMS } from './motion';
+import { normalizeRoute } from '../../core/routes';
+import type { IsotoneElement, IsotoneNote } from '../../core/types';
+import { Icon } from '../icons';
+import { dotPulse, fadeInContent, MAX_ANIMATED_ITEMS } from '../motion';
 import { NoteSummary } from './NoteSummary';
-import type { Anchor } from './picking';
-import { showOverflowTitle } from './tooltips';
-import { useLayoutMotion } from './useLayoutMotion';
-import { useRenderLimit } from './useRenderLimit';
+import type { Anchor } from '../dock/picking';
+import { showOverflowTitle } from '../tooltips';
+import { useLayoutMotion } from '../useLayoutMotion';
+import { useRenderLimit } from '../useRenderLimit';
 import type { NoteView } from './useNoteView';
 
 interface NotesPanelProps {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { HINTS } from '../../src/react/hints';
-import { PANEL_CSS } from '../../src/react/styles';
+import { HINTS } from '../../src/react/notes/hints';
+import { PANEL_CSS } from '../../src/react/styles/panel';
 
 // jsdom has no layout, so this holds hints to the room the panel leaves them at a
 // 375px viewport (measured in a browser), with a per-character width a little

@@ -1,5 +1,5 @@
 import { useLayoutEffect, type RefObject } from 'react';
-import { MAX_ANIMATED_ITEMS, MOTION } from './motion';
+import { MAX_ANIMATED_ITEMS, MOTION } from '../motion';
 
 type Position = { x: number; y: number; width: number; height: number; animation?: Animation };
 

@@ -1,8 +1,8 @@
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { VariantReference } from '../core/types';
-import { axisDefault, type SectionedLabel, type VariantAction, type VariantAxis, type VariantsSource } from '../core/variants';
-import { Icon } from './icons';
-import { MOTION } from './motion';
+import type { VariantReference } from '../../core/types';
+import { axisDefault, type SectionedLabel, type VariantAction, type VariantAxis, type VariantsSource } from '../../core/variants';
+import { Icon } from '../icons';
+import { MOTION } from '../motion';
 
 interface AxisActionsDialogProps {
   source: VariantsSource;

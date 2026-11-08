@@ -3,7 +3,7 @@ import { act, createElement as h, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_ANIMATED_ITEMS } from '../../src/react/motion';
-import { useDockMotion } from '../../src/react/useDockMotion';
+import { useDockMotion } from '../../src/react/dock/useDockMotion';
 import { useLayoutMotion } from '../../src/react/useLayoutMotion';
 
 let host: HTMLDivElement;

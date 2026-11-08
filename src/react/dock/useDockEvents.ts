@@ -1,5 +1,5 @@
 import { type FocusEvent, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
-import type { IsotoneShortcut } from '../core/types';
+import type { IsotoneShortcut } from '../../core/types';
 import { prefersTouch } from './viewport';
 
 /**

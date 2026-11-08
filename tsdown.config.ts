@@ -19,7 +19,11 @@ export default defineConfig([
     platform: 'node',
     target: 'es2022',
     fixedExtension: false,
-    dts: true,
+    // Oxc writes declarations file by file, without the type checker. It
+    // needs explicit types on every export of a module the public .d.ts
+    // reaches (internal hooks are not reached) and fails the build where
+    // one is missing; `pnpm typecheck` still checks everything.
+    dts: { generator: 'oxc' },
     checks,
     // Maps keep file and line names for stack traces; the sources themselves
     // are not shipped.

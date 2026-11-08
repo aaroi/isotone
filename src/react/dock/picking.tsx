@@ -1,6 +1,6 @@
 import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { describeIsotoneElement, elementAsNode, resolveElementSource } from '../core/element';
-import type { IsotoneElement } from '../core/types';
+import { describeIsotoneElement, elementAsNode, resolveElementSource } from '../../core/element';
+import type { IsotoneElement } from '../../core/types';
 import type { DockFocus } from './useDockFocus';
 import type { Mode, UpdateMode } from './useDockMode';
 import { useFloatingComposer } from './useFloatingComposer';

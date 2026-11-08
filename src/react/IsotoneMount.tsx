@@ -10,7 +10,7 @@ import {
   VARIANTS_ENDPOINT,
 } from '../core/variants';
 import { IsotonePanel } from './IsotonePanel';
-import { ensurePanelStyles } from './styles';
+import { ensurePanelStyles } from './styles/panel';
 import type { MountIsotoneOptions } from '../core/types';
 
 /**

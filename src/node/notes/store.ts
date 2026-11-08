@@ -7,35 +7,16 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 
-import type { IsotoneElement, NoteContext, NoteReply } from '../../core/types';
+import type { IsotoneNote, NoteReply } from '../../core/types';
 import { NOTE_ID } from '../../core/id';
 import { MAX_REPLY_LENGTH } from '../../core/limits';
 import { writeJson } from '../fs/atomic';
 import { withFileLock } from '../fs/lock';
 import { updateRequestOf } from '../update/request';
 
-export interface StoredNote extends NoteContext {
-  id: string;
-  route: string;
-  feedback: string;
-  element: IsotoneElement | null;
-  done: boolean;
+/** A note as the file holds it: always with `doneAt`. */
+export interface StoredNote extends IsotoneNote {
   doneAt: string | null;
-  /** When an agent said it started on this note (`isotone --working <id>`).
-   *  Cleared when the note is closed or reopened. */
-  workingAt?: string | null;
-  createdAt: string;
-  /** The window size the note was written at. Feedback about layout only
-   *  means something at the breakpoint it was seen on, so the agent reads
-   *  this next to the selector. Captured on create, kept on edit. */
-  viewport?: { w: number; h: number };
-  /** Host-specific context, stored and returned verbatim and never
-   *  interpreted here. A host with state that gives a note its meaning — the
-   *  knob settings a design note was written against, a feature-flag set, the
-   *  selected tenant — nests it under this key so the note survives a
-   *  round-trip through a store that knows nothing about it. Capped at
-   *  {@link PAYLOAD_MAX} serialized bytes. */
-  payload?: unknown;
 }
 
 export function readNotes(file: string): StoredNote[] {

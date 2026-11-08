@@ -78,15 +78,31 @@ export interface IsotoneNote extends NoteContext {
   element: IsotoneElement | null;
   done: boolean;
   doneAt?: string | null;
-  /** Set while an agent says it is working on the note. Stale after a while. */
+  /** When an agent said it started on this note (`isotone --working <id>`).
+   *  Cleared when the note is closed or reopened; stale after a while. */
   workingAt?: string | null;
   createdAt: string;
-  /** The window size the note was written at — layout feedback only means
-   *  something at the breakpoint it was seen on. */
+  /** The window size the note was written at. Feedback about layout only
+   *  means something at the breakpoint it was seen on, so the agent reads
+   *  this next to the selector. Captured on create, kept on edit. */
   viewport?: { w: number; h: number };
-  /** Host-specific context the store round-trips without interpreting — see
-   *  `StoredNote.payload`. */
+  /** Host-specific context, stored and returned verbatim and never
+   *  interpreted. A host with state that gives a note its meaning — the
+   *  knob settings a design note was written against, a feature-flag set, the
+   *  selected tenant — nests it under this key so the note survives a
+   *  round-trip through a store that knows nothing about it. Capped at
+   *  `PAYLOAD_MAX` serialized bytes. */
   payload?: unknown;
+}
+
+export interface IsotoneStoreConfig {
+  /** Absolute or same-origin URL of the notes endpoint. Must be set (by the
+   *  Vite plugin's `isotone()` options or a framework preset) for a shared
+   *  file-backed store; when omitted, only localStorage persists. */
+  endpoint?: string | null;
+  /** localStorage namespace. Default-scoped to the package; set it per hosted
+   *  app when two apps share an origin. */
+  key?: string;
 }
 
 /** Auto follows the page at the dock; system follows the OS preference. */

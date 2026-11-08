@@ -11,7 +11,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
-import type { VariantReference } from '../core/types';
+import type { VariantReference } from '../../core/types';
 import {
   axisDefault,
   axisSection,
@@ -23,16 +23,16 @@ import {
   type VariantsSource,
   sectionAxes,
   visibleAxes,
-} from '../core/variants';
+} from '../../core/variants';
 import { AxisActionsDialog } from './AxisActionsDialog';
 import { AxisControl, type OpenMenu } from './AxisControl';
 import { ColorPicker } from './ColorPicker';
-import { Icon } from './icons';
-import { MAX_ANIMATED_ITEMS } from './motion';
-import { PanelClose } from './NotesPanel';
-import { useLayoutMotion } from './useLayoutMotion';
-import { useRenderLimit } from './useRenderLimit';
-import { showOverflowTitle } from './tooltips';
+import { Icon } from '../icons';
+import { MAX_ANIMATED_ITEMS } from '../motion';
+import { PanelClose } from '../notes/NotesPanel';
+import { useLayoutMotion } from '../useLayoutMotion';
+import { useRenderLimit } from '../useRenderLimit';
+import { showOverflowTitle } from '../tooltips';
 
 export function refreshSource(source: VariantsSource): void {
   const candidate = (source as { refresh?: unknown }).refresh;

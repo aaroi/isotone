@@ -3,7 +3,7 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createVariantsSource, IsotonePanel } from '../../src/react/index';
-import { PANEL_CSS } from '../../src/react/styles';
+import { PANEL_CSS } from '../../src/react/styles/panel';
 
 let container: HTMLDivElement;
 let hostRoot: Root;

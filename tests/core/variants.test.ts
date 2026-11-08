@@ -245,7 +245,7 @@ describe('createVariantsSource manage', () => {
 });
 
 describe('colour picker maths', async () => {
-  const { hexToHsv, hsvToHex, normalizeHex } = await import('../../src/react/ColorPicker');
+  const { hexToHsv, hsvToHex, normalizeHex } = await import('../../src/react/variants/ColorPicker');
   it('round-trips hex through hsv and normalises short forms', () => {
     for (const hex of ['#000000', '#ffffff', '#ea382e', '#3b82f6', '#6687ff', '#808080']) expect(hsvToHex(hexToHsv(hex))).toBe(hex);
     expect(normalizeHex('ABC')).toBe('#aabbcc');

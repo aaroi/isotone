@@ -6,19 +6,25 @@
 import type { IsotoneElement, VariantReference, VariantRemoval } from '../../core/types';
 import { MAX_SELECTOR, PAYLOAD_MAX } from '../../core/limits';
 
-export function cap(v: string, max: number): string {
+function cap(v: string, max: number): string {
   return v.slice(0, max);
 }
 
+/** A pinned element, or null without an object and a selector. */
 export function elementOf(value: unknown): IsotoneElement | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const v = value as Partial<IsotoneElement>;
-  if (typeof v.selector !== 'string' || !v.selector) return null;
+  const selector = (value as { selector?: unknown }).selector;
+  return typeof selector === 'string' && selector ? elementFields(value) : null;
+}
+
+/** Every element field, each bounded, from any object; a missing selector is empty. */
+export function elementFields(value: object): IsotoneElement {
+  const v = value as { tag?: unknown; text?: unknown; selector?: unknown };
   return {
     tag: cap(String(v.tag ?? ''), 30),
     text: cap(String(v.text ?? ''), 120),
-    selector: cap(v.selector, MAX_SELECTOR),
-    ...elementContext(v),
+    selector: cap(String(v.selector ?? ''), MAX_SELECTOR),
+    ...elementContext(value),
   };
 }
 
@@ -32,7 +38,7 @@ function stringList(value: unknown, count: number, length: number): string[] {
 }
 
 /** The optional identifying fields, each bounded; anything malformed is dropped. */
-export function elementContext(value: object): Partial<IsotoneElement> {
+function elementContext(value: object): Partial<IsotoneElement> {
   const v = value as Record<string, unknown>;
   const out: Partial<IsotoneElement> = {};
   if (v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes)) {

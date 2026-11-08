@@ -18,7 +18,7 @@ Gray means recessed in light mode; selection means raised. A note being
 edited, selected segments and thumbnails and the picker toggle use the shared
 selection recipe. Open pill buttons use Clean Highlight, the accepted
 active-pill material (lighter solid face, fine border, crisp 1px contact shadow;
-one recipe for both themes in `pill-active.ts`). A selected swatch keeps its
+one recipe for both themes in `styles/panel.ts`). A selected swatch keeps its
 colour inside the raised frame.
 
 Raised actions (Make default, Send) share one normal and one hover recipe: no
@@ -37,7 +37,7 @@ swatches and the colour picker keep theirs.
 
 ## Geometry and content
 
-Layout constants live in `styles.ts`:
+Layout constants live in `styles/panel.ts`:
 
 | Measure | Value |
 | --- | --- |
@@ -167,7 +167,7 @@ ignored.
 Hints and instructions (the select-mode cover, the floating composer's line) are
 never truncated: each fits on one line in pointer and touch copy, at 375px and
 desktop, in both themes, by size, shorter copy or reserved space, never an
-ellipsis or clip. `tests/react/hints.test.ts` holds `src/react/hints.ts` to a
+ellipsis or clip. `tests/react/hints.test.ts` holds `src/react/notes/hints.ts` to a
 375px viewport; the demo tour's copy wraps. User content (note text, element
 names) may truncate, keeping its full text in the accessible name.
 
@@ -272,34 +272,33 @@ Two limits are accepted rather than worked around:
 
 | File | Responsibility |
 | --- | --- |
-| `src/react/appearance.ts` | Complete light/dark palettes and the shared material recipe |
-| `src/react/styles.ts` | Geometry, typography, shared control classes and state selectors |
-| `src/react/feedback-layout.ts`, `pill-active.ts` | The inline-reference layout and Clean Highlight recipes |
-| `src/react/UpdateNotice.tsx` | Update line and dialog |
+| `src/react/styles/appearance.ts` | Complete light/dark palettes and the shared material recipe |
+| `src/react/styles/panel.ts` | Geometry, typography, shared control classes, state selectors and the accepted recipes (inline references, Clean Highlight) |
+| `src/react/dock/UpdateNotice.tsx` | Update line and dialog |
 | `src/react/icons.tsx` | Icon choices, optical size and stroke |
-| `src/react/NoteSummary.tsx` | Saved note summaries and their tags |
+| `src/react/notes/NoteSummary.tsx` | Saved note summaries and their tags |
 | `src/react/IsotonePanel.tsx` | The dock, composing the hooks below |
-| `src/react/useDockMode.ts`, `useDockFocus.ts`, `useDockEvents.ts` | Open surfaces; focus; hover, modality, shortcut, Escape and the host event fence |
-| `src/react/Rail.tsx` | The launcher pill and the rail's tool buttons |
-| `src/react/Composer.tsx`, `NotesPanel.tsx` | The composer; the feedback panel |
-| `src/react/picking.tsx`, `useFloatingComposer.ts` | Select mode and outlines; the composer beside a pin |
-| `src/react/useNotes.ts`, `useNoteView.ts`, `useNoteActions.ts`, `useDraft.ts` | Loading and polling; what the list shows; saving, editing, deleting; each page's draft |
-| `src/react/VariantsView.tsx` | The selector list, sections, colour popover and the defaults bar |
-| `src/react/AxisControl.tsx`, `AxisActionsDialog.tsx` | A selector's controls; its action dialog |
-| `src/react/theme.ts` | Theme resolution, observation and cleanup |
+| `src/react/dock/useDockMode.ts`, `useDockFocus.ts`, `useDockEvents.ts` | Open surfaces; focus; hover, modality, shortcut, Escape and the host event fence |
+| `src/react/dock/Rail.tsx` | The launcher pill and the rail's tool buttons |
+| `src/react/notes/Composer.tsx`, `NotesPanel.tsx` | The composer; the feedback panel |
+| `src/react/dock/picking.tsx`, `useFloatingComposer.ts` | Select mode and outlines; the composer beside a pin |
+| `src/react/notes/useNotes.ts`, `useNoteView.ts`, `useNoteActions.ts`, `useDraft.ts` | Loading and polling; what the list shows; saving, editing, deleting; each page's draft |
+| `src/react/variants/VariantsView.tsx` | The selector list, sections, colour popover and the defaults bar |
+| `src/react/variants/AxisControl.tsx`, `AxisActionsDialog.tsx` | A selector's controls; its action dialog |
+| `src/react/styles/theme.ts` | Theme resolution, observation and cleanup |
 | `src/react/motion.ts` | Motion timing and work limits |
-| `src/react/viewport.ts` | Small-screen, touch and on-screen keyboard rules |
-| `src/react/useDockMotion.ts`, `useLayoutMotion.ts` | Measured movement and interruption handling |
+| `src/react/dock/viewport.ts` | Small-screen, touch and on-screen keyboard rules |
+| `src/react/dock/useDockMotion.ts`, `src/react/useLayoutMotion.ts` | Measured movement and interruption handling |
 
 To add a control, choose its semantic role first (surface, well, raised action
 or selection) and reuse that recipe and an existing control class. Add a new
-state selector once in `styles.ts`. A new paint token exists in both palettes; a
+state selector once in `styles/panel.ts`. A new paint token exists in both palettes; a
 spacing or behaviour change never belongs in a theme branch. Extract repeated
 markup when it shares behaviour or content rules, as summary tags do, rather
 than copying a component for another theme.
 
 A design alternative under review lives under `.isotone/variants/` as an edited
-copy of its recipe (`pill-active.ts`, `feedback-layout.ts`), with shared
+copy of `styles/panel.ts`, with shared
 geometry, tokens and unrelated controls left in the main stylesheet, until the
 reviewer chooses it.
 

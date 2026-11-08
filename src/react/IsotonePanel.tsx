@@ -1,25 +1,25 @@
 import { FEEDBACK_STORAGE_KEY } from '../core/browser-storage';
-import type { IsotoneStoreConfig } from '../core/notes-client';
+import type { IsotoneStoreConfig } from '../core/types';
 import { isRouteVisible, normalizeRoute, type RouteGateOptions } from '../core/routes';
 import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
 import type { VariantsSource } from '../core/variants';
-import { useEffect, useId, useRef } from 'react';
-import { Composer } from './Composer';
-import { AwayButton, NotesPanel } from './NotesPanel';
-import { PickOverlay, useSelectMode } from './picking';
-import { Launcher, Rail, RailButton } from './Rail';
-import { useDockTheme } from './theme';
-import { UpdateNotice } from './UpdateNotice';
-import { DEFAULT_SHORTCUT, shortcutText, useDockEvents } from './useDockEvents';
-import { type Surface, useDockFocus } from './useDockFocus';
-import { CLOSED, useDockMode } from './useDockMode';
-import { useDockMotion } from './useDockMotion';
-import { useDockSize } from './useDockSize';
-import { useNoteActions } from './useNoteActions';
-import { useNotes } from './useNotes';
-import { useNoteView } from './useNoteView';
-import { refreshSource, useVariantsSnapshot, VariantsPanel } from './VariantsView';
-import { useKeyboardInset } from './viewport';
+import { type ReactElement, useEffect, useId, useRef } from 'react';
+import { Composer } from './notes/Composer';
+import { AwayButton, NotesPanel } from './notes/NotesPanel';
+import { PickOverlay, useSelectMode } from './dock/picking';
+import { Launcher, Rail, RailButton } from './dock/Rail';
+import { useDockTheme } from './styles/theme';
+import { UpdateNotice } from './dock/UpdateNotice';
+import { DEFAULT_SHORTCUT, shortcutText, useDockEvents } from './dock/useDockEvents';
+import { type Surface, useDockFocus } from './dock/useDockFocus';
+import { CLOSED, useDockMode } from './dock/useDockMode';
+import { useDockMotion } from './dock/useDockMotion';
+import { useDockSize } from './dock/useDockSize';
+import { useNoteActions } from './notes/useNoteActions';
+import { useNotes } from './notes/useNotes';
+import { useNoteView } from './notes/useNoteView';
+import { refreshSource, useVariantsSnapshot, VariantsPanel } from './variants/VariantsView';
+import { useKeyboardInset } from './dock/viewport';
 
 export interface IsotonePanelProps {
   /** Auto follows the page at the dock. System follows the OS preference. */
@@ -55,7 +55,7 @@ export function IsotonePanel({
   variantsEmptyText,
   defaultTab = 'notes',
   shortcut = DEFAULT_SHORTCUT,
-}: IsotonePanelProps) {
+}: IsotonePanelProps): ReactElement | null {
   // One page, however the URL spells it: `/about/` and `/about?tab=2` are `/about`, as for the CLI.
   const route = normalizeRoute(pageRoute);
   const nsKey = storeCfg.key ?? FEEDBACK_STORAGE_KEY;

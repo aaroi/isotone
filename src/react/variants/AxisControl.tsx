@@ -1,8 +1,8 @@
 import { type CSSProperties, type KeyboardEvent, memo, type ReactNode } from 'react';
-import { formatRangeValue, type VariantAxis, type VariantsSource } from '../core/variants';
-import { Icon } from './icons';
-import { GRID_COLUMNS } from './styles';
-import { showOverflowTitle } from './tooltips';
+import { formatRangeValue, type VariantAxis, type VariantsSource } from '../../core/variants';
+import { Icon } from '../icons';
+import { GRID_COLUMNS } from '../styles/panel';
+import { showOverflowTitle } from '../tooltips';
 
 export type OpenMenu = (axis: VariantAxis, opener: HTMLButtonElement | null, optionId?: string | null) => void;
 

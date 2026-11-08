@@ -11,7 +11,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { IsotoneNote } from '../../src/core';
 import { createVariantsSource, IsotonePanel, type VariantAxis } from '../../src/react/index';
-import { useNotes } from '../../src/react/useNotes';
+import { useNotes } from '../../src/react/notes/useNotes';
 
 let host: HTMLDivElement;
 let shadow: ShadowRoot;

@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Copy, X } from 'lucide-react';
 import { AGENT_PROMPT, SETUP_COMMANDS } from './agent-prompt';
-import { prefersTouch } from '../../src/react/viewport';
+import { prefersTouch } from '../../src/react/dock/viewport';
 
 /**
  * A short guided tour for first-time visitors. It never blocks the page: each

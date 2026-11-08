@@ -1,7 +1,7 @@
-import { showOverflowTitle } from './tooltips';
+import { showOverflowTitle } from '../tooltips';
 import { useEffect, useId, useRef, useState } from 'react';
-import { type UpdateInfo, updatePrompt } from '../core/update';
-import { Icon } from './icons';
+import { type UpdateInfo, updatePrompt } from '../../core/update';
+import { Icon } from '../icons';
 
 export interface UpdateNoticeProps {
   /** The local adapter's update endpoint; the browser never contacts npm. */
@@ -196,26 +196,3 @@ export function UpdateNotice({ endpoint, active, route = '/', requested = false,
     </div>
   );
 }
-
-export const UPDATE_NOTICE_CSS = `
-.isotone-notices { position: absolute; z-index: 5; bottom: 10px; right: calc(var(--iso-rail-length) + 10px); display: flex; flex-direction: row-reverse; flex-wrap: wrap-reverse; align-items: center; justify-content: flex-start; gap: 6px; width: max-content; max-width: calc(100vw - var(--iso-rail-length) - 36px); pointer-events: none; }
-.isotone-root[data-tools='1'] .isotone-notices { right: calc(var(--iso-rail-size) + 10px); max-width: calc(100vw - var(--iso-rail-size) - 36px); }
-.isotone-notices > * { pointer-events: auto; }
-.isotone-update-trigger { white-space: nowrap; color: var(--iso-muted); font-size: 10px; padding: 4px 6px; border-radius: 5px; background: var(--iso-bg); box-shadow: 0 0 0 1px var(--iso-line); }
-.isotone-update-dialog { position: absolute; right: calc(0px - var(--iso-rail-length) - 10px); bottom: 40px; width: min(var(--iso-dock-width), 260px); max-width: calc(100vw - 32px); max-height: calc(100dvh - 100px); overflow: auto; padding: 10px var(--iso-space) var(--iso-space); display: grid; gap: 8px; border-radius: 8px; background: var(--iso-bg); box-shadow: var(--iso-popup-shadow); font-size: 11px; }
-.isotone-root[data-tools='1'] .isotone-update-dialog { right: calc(0px - var(--iso-rail-size) - 10px); }
-.isotone-update-dialog .isotone-menu-title { padding: 0; background: none; }
-.isotone-update-versions { font-variant-numeric: tabular-nums; }
-.isotone-update-dialog > p { color: var(--iso-muted); }
-.isotone-root .isotone-update-ask { min-height: 28px; padding: 4px 10px; font-weight: 500; }
-.isotone-update-requested { min-height: 28px; display: flex; align-items: center; outline-offset: 2px; }
-.isotone-update-actions { display: flex; align-items: center; gap: 2px; margin: -4px 0 -4px -6px; }
-.isotone-root .isotone-update-quiet { padding: 4px 6px; border-radius: 5px; color: var(--iso-muted); font-size: 11px; background: none; box-shadow: none; }
-.isotone-update-quiet[aria-expanded='true'] { color: var(--iso-fg); }
-.isotone-update-actions [role='status'] { min-width: 0; margin-left: auto; color: var(--iso-muted); font-size: 10px; text-align: right; }
-.isotone-update-command { display: grid; gap: 4px; min-width: 0; }
-.isotone-update-path { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--iso-muted); font-size: 10px; }
-.isotone-root .isotone-update-dialog input { width: 100%; padding: 6px 8px; border-radius: 5px; background: var(--iso-well); box-shadow: var(--iso-well-shadow); font-size: 11px; }
-@media (pointer: coarse) { .isotone-root .isotone-update-quiet { padding: 9px 6px; } .isotone-update-actions { margin: -9px 0 -9px -6px; } }
-@media (hover: hover) and (pointer: fine) { .isotone-update-trigger:hover, .isotone-root .isotone-update-quiet:hover { color: var(--iso-fg); } }
-`;
