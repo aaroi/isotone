@@ -154,7 +154,8 @@ describe('the SSR sync', () => {
   });
 
   it('stays put without session storage, since it could not stop a loop', async () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+    // The page's own storage class: Node 26 has a global Storage of its own that jsdom's window does not use.
+    vi.spyOn(Object.getPrototypeOf(window.sessionStorage), 'getItem').mockImplementation(() => {
       throw new Error('blocked');
     });
     const send = vi.fn(async () => new Response('{}'));
