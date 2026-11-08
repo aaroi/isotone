@@ -1,0 +1,50 @@
+/** Where the variants tree and its state files live, and the lock every change takes. */
+
+import { mkdirSync } from 'node:fs';
+import { isAbsolute, join, resolve } from 'node:path';
+import { ensureFileIgnored } from '../fs/git-exclude';
+import { type FileLockOptions, withFileLock } from '../fs/lock';
+
+/** Default location of the variants tree, relative to the project root. */
+export const DEFAULT_VARIANTS_DIR = '.isotone/variants';
+
+/** Relative to root. Holds `{ "active": ["<id>", ...] }`, at most one id per
+ *  group. The Vite plugin keeps this out of git; nothing here assumes that. */
+export const ACTIVE_FILE = '.isotone/active.json';
+
+/** Relative to root. A JSON array of {@link KnobAxis}; committed, since the
+ *  defaults in it are part of the design. Missing or malformed reads as none. */
+export const KNOBS_FILE = '.isotone/knobs.json';
+
+export interface VariantsStoreOptions {
+  /** Project root: Vite's root or the CLI's cwd. Absolute. */
+  root: string;
+  /** Variants directory, relative to root or absolute. Default {@link DEFAULT_VARIANTS_DIR}. */
+  dir?: string;
+}
+
+export function variantsDir(opts: VariantsStoreOptions): string {
+  const dir = opts.dir ?? DEFAULT_VARIANTS_DIR;
+  return isAbsolute(dir) ? dir : resolve(opts.root, dir);
+}
+
+export interface ActiveFileShape {
+  active: string[];
+}
+
+/** Lock files already kept out of git by this process. */
+const excluded = new Set<string>();
+
+/** Agents in separate processes may edit the same manifest. Keep their
+ * read-modify-write operations together, including promotion and removal.
+ * The lock lives in the committed variants dir, so its files are excluded. */
+export function mutateVariants<T>(opts: VariantsStoreOptions, change: () => T, lock?: FileLockOptions): T {
+  const file = join(variantsDir(opts), '.mutation');
+  // Outside the lock: git runs a few processes, which other writers need not wait on.
+  if (!excluded.has(file)) {
+    excluded.add(file);
+    mkdirSync(variantsDir(opts), { recursive: true });
+    ensureFileIgnored(file);
+  }
+  return withFileLock(file, change, lock);
+}

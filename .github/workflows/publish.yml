@@ -17,13 +17,16 @@ jobs:
   prepare:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
       actions: write
     steps:
-      - uses: actions/checkout@v4
+      # This job pushes the version commit, so it keeps the checkout's token.
+      # It installs nothing and runs only the repository's two release scripts.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # zizmor: ignore[artipacked]
       - name: Check this is still main
         id: current
         run: |
@@ -31,16 +34,20 @@ jobs:
           if [ "$(git rev-parse origin/main)" = "$GITHUB_SHA" ]; then
             echo 'ready=true' >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: steps.current.outputs.ready == 'true'
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
       - name: Prepare the next version
         id: prepare
         if: steps.current.outputs.ready == 'true'
         run: |
           published=$(npm view isotone version)
+          # Features or breaking notes under Unreleased need a raised minor: stop
+          # here rather than publish them as a patch.
+          node scripts/check-release.mjs "$published"
           node scripts/prepare-release.mjs "$published"
           git add package.json CHANGELOG.md
           if ! git diff --cached --quiet; then
@@ -59,22 +66,27 @@ jobs:
   check:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     outputs:
       version: ${{ steps.version.outputs.version }}
       unpublished: ${{ steps.version.outputs.unpublished }}
+      sha256: ${{ steps.pack.outputs.sha256 }}
     steps:
-      - uses: actions/checkout@v4
+      # The public repository fetches without a token, so none is left on disk
+      # while dependencies install and tests run.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Check the dispatch still points to main
         run: |
           git fetch origin main
           test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.0
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
       - name: Check version
         id: version
         run: |
@@ -88,8 +100,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm check:package
-      - run: mkdir release && npm pack --ignore-scripts --pack-destination release
-      - uses: actions/upload-artifact@v4
+      # Pack before anything from outside the lockfile runs: the smoke job's
+      # Vite, React and jsdom never touch this tree, and the publish job checks
+      # it publishes exactly these bytes.
+      - name: Pack
+        id: pack
+        run: |
+          mkdir release && npm pack --ignore-scripts --pack-destination release
+          echo "sha256=$(sha256sum release/*.tgz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.version.outputs.unpublished == 'true'
         with:
           name: npm-package
@@ -97,21 +116,49 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  publish:
+  smoke:
     needs: check
     if: needs.check.outputs.unpublished == 'true'
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
+    timeout-minutes: 15
     steps:
-      - uses: actions/setup-node@v4
+      # Nothing publishes without the packed archive installing into fresh
+      # apps on Vite 5 to 8 with React 18 and 19. Only the smoke script
+      # comes from the checkout; nothing is installed into it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
-      - uses: actions/download-artifact@v4
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: npm-package
           path: release
+      - run: node scripts/smoke.mjs release/*.tgz
+
+  publish:
+    needs: [check, smoke]
+    if: needs.check.outputs.unpublished == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-package
+          path: release
+      - name: Check this is the archive the check job packed
+        env:
+          SHA256: ${{ needs.check.outputs.sha256 }}
+        run: echo "$SHA256  $(ls release/*.tgz)" | sha256sum --check
       - name: Check npm supports trusted publishing
         run: |
           node --input-type=module - <<'JS'
@@ -124,16 +171,18 @@ jobs:
       - run: npm publish ./release/*.tgz --ignore-scripts --provenance --access public
 
   release:
-    needs: [check, publish]
-    if: always() && needs.check.result == 'success' && (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+    needs: [check, smoke, publish]
+    if: always() && needs.check.result == 'success' && (needs.smoke.result == 'success' || needs.smoke.result == 'skipped') && (needs.publish.result == 'success' || needs.publish.result == 'skipped')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
       - name: Tag the published commit
         env:
           GH_TOKEN: ${{ github.token }}

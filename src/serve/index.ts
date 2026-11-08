@@ -21,24 +21,23 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { dirname, resolve } from 'node:path';
 
-import type { RouteGateOptions } from '../core/index';
-import type { IterationTheme } from '../react/theme';
-import { checkOrigin, HttpError, isLoopback, readNodeJson, sendFailure } from '../server/http';
-import { ensureFileIgnored, notesResponse, NOTES_ENDPOINT } from '../store';
+import type { RouteGateOptions } from '../core/routes';
+import type { IsotoneTheme } from '../core/types';
+import { checkRequest, isLoopback, nodeRequestFacts, readNodeJson, sendFailure, writeResponse } from '../node/http';
+import { ensureFileIgnored } from '../node/fs/git-exclude';
+import { notesResponse, NOTES_ENDPOINT } from '../node/notes/handler';
 import { VARIANTS_ENDPOINT } from '../core/variants';
-import { readKnobs } from '../variants-store';
+import { readKnobs } from '../node/variants';
 
-import { readBundle } from '../standalone/bundle';
+import { readBundle } from '../node/bundle';
 import { serveMountOptions } from './mount-config';
-import { guardedScriptTag } from './tag';
-import { startUpdateCheck, UPDATE_ENDPOINT } from '../update';
-import { autoUpdateNote, updateResponse } from '../update-note';
-export { readBundle } from '../standalone/bundle';
+import { DEFAULT_PORT, guardedScriptTag } from '../core/tag';
+import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
+import { autoUpdateNote, updateResponse } from '../node/update/note';
 
-export const DEFAULT_PORT = 4123;
 const BUNDLE_PATH = '/isotone.js';
 
-export interface ServeIterationOptions {
+export interface ServeIsotoneOptions {
   /** Background npm notice, at most once a day. false disables the check;
    *  'note' also files an update note for your agent once per new version. */
   checkForUpdates?: boolean | 'note';
@@ -46,7 +45,7 @@ export interface ServeIterationOptions {
    *  `.isotone/knobs.json`. Defaults to the notes directory. */
   projectRoot?: string;
   /** Defaults to auto (page background); system follows the OS preference. */
-  theme?: IterationTheme;
+  theme?: IsotoneTheme;
   /** Where notes persist. Git-ignored automatically via `.git/info/exclude`. */
   file: string;
   /** Defaults to 4123. */
@@ -59,7 +58,7 @@ export interface ServeIterationOptions {
   key?: string;
 }
 
-export interface ServedIteration {
+export interface ServedIsotone {
   port: number;
   url: string;
   bundleUrl: string;
@@ -78,12 +77,23 @@ function allowedOrigin(origin: string | undefined): string | null {
   if (!origin) return null;
   try {
     const { hostname, protocol } = new URL(origin);
-    const loopback =
-      hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1';
+    const loopback = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '::1';
     return loopback && (protocol === 'http:' || protocol === 'https:') ? origin : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Whether a page on another site is loading the bundle: a `<script>` tag
+ * sends no Origin, so the browser's `Sec-Fetch-Site` says where it came
+ * from, and a cross-site load must name a loopback page in its Origin or
+ * Referer (another localhost port is a different site to the browser).
+ */
+function isForeignLoad(req: IncomingMessage): boolean {
+  if (req.headers['sec-fetch-site'] !== 'cross-site') return false;
+  const page = req.headers.origin ?? req.headers.referer;
+  return allowedOrigin(typeof page === 'string' ? page : undefined) === null;
 }
 
 function cors(req: IncomingMessage, res: ServerResponse): void {
@@ -98,7 +108,7 @@ function cors(req: IncomingMessage, res: ServerResponse): void {
 }
 
 /** The bundle plus the mount call, with the config the server itself knows. */
-function bundleWithMount(origin: string, opts: ServeIterationOptions, projectRoot: string): string {
+function bundleWithMount(origin: string, opts: ServeIsotoneOptions, projectRoot: string): string {
   const config = JSON.stringify(serveMountOptions(origin, projectRoot, opts));
   return `${readBundle()}\n;window.__isotone&&window.__isotone.mount(${config});\n`;
 }
@@ -110,11 +120,7 @@ function bookmarklet(origin: string): string {
 }
 
 function escapeHtml(v: string): string {
-  return v
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function indexPage(origin: string, file: string): string {
@@ -185,7 +191,7 @@ function indexPage(origin: string, file: string): string {
   Behind a development flag, a plain <code>&lt;script src="${escapeHtml(origin + BUNDLE_PATH)}" defer&gt;</code> works too.</p>
 
   <h2>Bookmarklet — drag to your bookmarks bar</h2>
-  <a class="bm" href="${escapeHtml(mark)}">✎ Iteration</a>
+  <a class="bm" href="${escapeHtml(mark)}">✎ Isotone</a>
 
   <footer>
     notes → ${escapeHtml(file)}<br>
@@ -198,9 +204,7 @@ function indexPage(origin: string, file: string): string {
 }
 
 /** Start the server. Resolves once it is listening. */
-export function serveIteration(
-  opts: ServeIterationOptions,
-): Promise<ServedIteration> {
+export function serveIsotone(opts: ServeIsotoneOptions): Promise<ServedIsotone> {
   const file = resolve(opts.file);
   const projectRoot = resolve(opts.projectRoot ?? dirname(file));
   const port = opts.port ?? DEFAULT_PORT;
@@ -221,9 +225,11 @@ export function serveIteration(
     const method = req.method ?? 'GET';
     const origin = `http://${host.includes(':') && !host.startsWith('[') ? `[${host}]` : host}:${boundPort}`;
     try {
-      if (!isLoopback(new URL(`http://${req.headers.host ?? ''}`).hostname)) throw new HttpError(403, 'host not allowed');
-      checkOrigin(req.headers.origin, req.headers.host ?? '', true);
-    } catch (error) { sendFailure(res, error); return; }
+      checkRequest({ ...nodeRequestFacts(req), loopbackOrigins: true });
+    } catch (error) {
+      sendFailure(res, error);
+      return;
+    }
 
     if (method === 'OPTIONS') {
       res.statusCode = 204;
@@ -233,16 +239,21 @@ export function serveIteration(
 
     if (path === UPDATE_ENDPOINT) {
       // POST asks for the update note, built from this server's own check.
-      (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined)).then((body) => {
-        const out = updateResponse(file, updates.getSnapshot(), { method, body });
-        res.statusCode = out.status;
-        for (const [key, value] of Object.entries(out.headers)) res.setHeader(key, value);
-        res.end(JSON.stringify(out.body));
-      }).catch((error) => sendFailure(res, error));
+      (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined))
+        .then((body) => {
+          writeResponse(res, () => updateResponse(file, updates.getSnapshot(), { method, body }));
+        })
+        .catch((error) => sendFailure(res, error));
       return;
     }
 
     if (path === BUNDLE_PATH && method === 'GET') {
+      if (isForeignLoad(req)) {
+        res.statusCode = 403;
+        res.setHeader('content-type', 'text/plain; charset=utf-8');
+        res.end('isotone loads only into pages on this machine');
+        return;
+      }
       let body: string;
       try {
         body = bundleWithMount(origin, opts, projectRoot);
@@ -279,12 +290,11 @@ export function serveIteration(
         res.end(JSON.stringify({ error: 'method not allowed' }));
         return;
       }
-      (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined)).then((body) => {
-        const out = notesResponse(file, { method, url: req.url, body });
-        res.statusCode = out.status;
-        for (const [key, value] of Object.entries(out.headers)) res.setHeader(key, value);
-        res.end(JSON.stringify(out.body));
-      }).catch((error) => sendFailure(res, error));
+      (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined))
+        .then((body) => {
+          writeResponse(res, () => notesResponse(file, { method, url: req.url, body }));
+        })
+        .catch((error) => sendFailure(res, error));
       return;
     }
 
@@ -302,7 +312,10 @@ export function serveIteration(
 
   server.once('close', updates.dispose);
   return new Promise((ok, fail) => {
-    server.once('error', (error) => { updates.dispose(); fail(error); });
+    server.once('error', (error) => {
+      updates.dispose();
+      fail(error);
+    });
     server.listen(port, host, () => {
       const actual = server.address();
       boundPort = typeof actual === 'object' && actual ? actual.port : port;

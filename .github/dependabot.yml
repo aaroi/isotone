@@ -1,0 +1,26 @@
+# One weekly pull request per ecosystem. Merging one publishes a patch
+# release (see docs/releasing.md), so review it like any other change.
+# Versions younger than a week are not proposed, which leaves time for a
+# compromised or broken release to be pulled upstream.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ['*']
+
+  # Isotone has no runtime dependencies; this keeps the development tools current.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      development:
+        dependency-type: development

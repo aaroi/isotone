@@ -1,10 +1,10 @@
 /**
  * isotone — CLI helpers shared by the notes, variant and init command
- * groups. Kept free of `store`/`variants-store` imports so any group can
+ * groups. Kept free of notes and variants store imports so any group can
  * pull this in without dragging the others' dependencies along.
  */
 
-export interface CliWritable {
+interface CliWritable {
   write(chunk: string): void;
 }
 
@@ -33,45 +33,58 @@ export function errOut(io: CliIO, line: string): void {
   io.stderr.write(`${line}\n`);
 }
 
+/** The value after `flag`, looking only before a bare `--`. */
 export function valueFor(args: string[], flag: string): string | undefined {
-  const idx = args.indexOf(flag);
+  const idx = options(args).indexOf(flag);
   return idx >= 0 ? args[idx + 1] : undefined;
 }
 
+/** Whether `name` was given as an option, before a bare `--`. */
 export function has(args: string[], name: string): boolean {
-  return args.indexOf(name) >= 0;
+  return options(args).indexOf(name) >= 0;
 }
 
-/** Validate a command before it reads or writes files. Returns its positionals. */
+function options(args: string[]): string[] {
+  const end = args.indexOf('--');
+  return end < 0 ? args : args.slice(0, end);
+}
+
+/**
+ * Validate a command before it reads or writes files. Returns its
+ * positionals; everything after a bare `--` is one, even when it starts with
+ * a dash. `help` is the command an unknown option points to.
+ */
 export function parseArgs(
   args: string[],
   values: readonly string[],
   booleans: readonly string[] = [],
+  help = 'npx isotone --help',
 ): string[] {
   const positionals: string[] = [];
   const seen = new Set<string>();
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (!arg.startsWith('-')) {
+  const queue = [...args];
+  for (let arg = queue.shift(); arg !== undefined; arg = queue.shift()) {
+    if (arg === '--') {
+      positionals.push(...queue);
+      break;
+    }
+    if (!arg.startsWith('-') || arg === '-') {
       positionals.push(arg);
       continue;
     }
-    if (!values.includes(arg) && !booleans.includes(arg)) throw new Error(`Unknown option "${arg}".`);
+    if (!values.includes(arg) && !booleans.includes(arg)) throw new Error(`Unknown option "${arg}". Run \`${help}\`.`);
     if (seen.has(arg)) throw new Error(`Option "${arg}" was given more than once.`);
     seen.add(arg);
-    if (values.includes(arg) && (!args[++i] || args[i].startsWith('--'))) {
-      throw new Error(`Option "${arg}" requires a value.`);
-    }
+    if (!values.includes(arg)) continue;
+    const value = queue.shift();
+    if (!value || value.startsWith('--')) throw new Error(`Option "${arg}" requires a value.`);
   }
   return positionals;
 }
 
 /** Pulls a `--flag value` pair out of an argv slice, wherever it sits, so a
  *  subcommand's own positional parsing never has to skip over it by index. */
-export function extractFlag(
-  args: string[],
-  flag: string,
-): { value: string | undefined; rest: string[] } {
+export function extractFlag(args: string[], flag: string): { value: string | undefined; rest: string[] } {
   const idx = args.indexOf(flag);
   if (idx < 0) return { value: undefined, rest: args };
   const rest = args.filter((_, i) => i !== idx && i !== idx + 1);
@@ -79,26 +92,26 @@ export function extractFlag(
 }
 
 /** Same idea as {@link extractFlag}, for a flag with no value of its own. */
-export function extractBoolFlag(
-  args: string[],
-  flag: string,
-): { present: boolean; rest: string[] } {
+export function extractBoolFlag(args: string[], flag: string): { present: boolean; rest: string[] } {
   const idx = args.indexOf(flag);
   if (idx < 0) return { present: false, rest: args };
   return { present: true, rest: args.filter((_, i) => i !== idx) };
 }
 
 /** `--done`/`--undone` and `variant new --note` all resolve an id the same
- *  way: a unique prefix wins, an empty or ambiguous one is a user error. */
-export function findNoteByPrefix<T extends { id: string }>(notes: T[], prefix: string): T {
+ *  way: an exact id wins, then a unique prefix; an empty or ambiguous one is a
+ *  user error. */
+export function findNoteByPrefix<T extends { id: string }>(notes: T[], prefix: string | undefined): T {
+  if (!prefix) throw new Error('Give the note id (a prefix is enough).');
+  const exact = notes.find((n) => n.id === prefix);
+  if (exact) return exact;
   const matches = notes.filter((n) => n.id.startsWith(prefix));
-  if (matches.length === 0) throw new Error(`No feedback id starting with "${prefix}".`);
-  if (matches.length > 1) {
-    throw new Error(
-      `Ambiguous prefix "${prefix}" (${matches.length} matches) — use more characters.`,
-    );
+  const [match, ...others] = matches;
+  if (!match) throw new Error(`No note id starting with "${prefix}".`);
+  if (others.length) {
+    throw new Error(`Ambiguous prefix "${prefix}" (${matches.length} matches) — use more characters.`);
   }
-  return matches[0];
+  return match;
 }
 
 /** A plain, fixed-width table: two spaces between columns, no colour, no
@@ -106,7 +119,10 @@ export function findNoteByPrefix<T extends { id: string }>(notes: T[], prefix: s
 export function printTable(io: CliIO, header: string[], rows: string[][]): void {
   const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => (r[i] ?? '').length)));
   const line = (cells: string[]) =>
-    cells.map((c, i) => (c ?? '').padEnd(widths[i])).join('  ').trimEnd();
+    cells
+      .map((c, i) => (c ?? '').padEnd(widths[i] ?? 0))
+      .join('  ')
+      .trimEnd();
   out(io, line(header));
   for (const row of rows) out(io, line(row));
 }

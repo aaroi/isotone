@@ -1,0 +1,254 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { mkdir, open, rm, stat } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { MAX_REGISTRY_BYTES, MAX_UPDATE_CACHE_BYTES } from '../../core/limits';
+import type { PackageManager, UpdateInfo } from '../../core/update';
+import { readJsonBounded, writeJsonAtomic } from '../fs/atomic';
+import { name as packageName, version as currentVersion } from '../../../package.json';
+
+export const UPDATE_ENDPOINT = '/api/isotone/update';
+const REGISTRY_URL = `https://registry.npmjs.org/${packageName}/latest`;
+const CHECK_TIMEOUT = 5_000;
+const CACHE_TTL = 24 * 60 * 60 * 1000;
+/** Per-user state for the update check, out of the shared temporary
+ *  directory where another user could plant or hold it. */
+export const UPDATE_STATE_DIR = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'isotone');
+const CACHE_FILE = join(UPDATE_STATE_DIR, 'update-v1.json');
+
+import { compareVersions, parseVersion, upgradeCommand } from './request';
+
+function manifest(directory: string): Record<string, unknown> | null {
+  try {
+    const value = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8'));
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function findProject(cwd: string): { directory: string; json: Record<string, unknown> | null } {
+  let directory = resolve(cwd);
+  while (true) {
+    const json = manifest(directory);
+    if (json) return { directory, json };
+    if (dirname(directory) === directory || existsSync(join(directory, '.git'))) return { directory: resolve(cwd), json: null };
+    directory = dirname(directory);
+  }
+}
+
+function dependencyOwner(project: ReturnType<typeof findProject>): ReturnType<typeof findProject> {
+  let directory = project.directory;
+  while (true) {
+    const json = manifest(directory);
+    if (
+      ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'].some((key) => {
+        const dependencies = json?.[key];
+        return dependencies && typeof dependencies === 'object' && Object.hasOwn(dependencies, packageName);
+      })
+    )
+      return { directory, json };
+    if (dirname(directory) === directory || existsSync(join(directory, '.git'))) return project;
+    directory = dirname(directory);
+  }
+}
+
+export function upgradePlan(cwd: string, latest: string, override?: PackageManager): Pick<UpdateInfo, 'upgrade' | 'message'> {
+  parseVersion(latest); // Only a validated version can enter a copied command.
+  const project = dependencyOwner(findProject(cwd));
+  if (project.json?.name === packageName)
+    return { upgrade: null, message: 'This is the source checkout; update its source instead of adding itself as a dependency.' };
+  let manager = override;
+  let directory = project.directory;
+  const locks = new Set<PackageManager>();
+  while (!manager) {
+    const declared = manifest(directory)?.packageManager;
+    if (typeof declared === 'string') {
+      const match = /^(npm|pnpm|yarn)@/.exec(declared);
+      if (!match)
+        return {
+          upgrade: null,
+          message: 'The declared package manager is not supported by this command. Upgrade with your project’s package manager.',
+        };
+      manager = match[1] as PackageManager;
+      break;
+    }
+    if (['bun.lock', 'bun.lockb'].some((file) => existsSync(join(directory, file))))
+      return { upgrade: null, message: 'This project uses Bun. Upgrade with the project’s package manager.' };
+    if (existsSync(join(directory, 'pnpm-lock.yaml'))) locks.add('pnpm');
+    if (existsSync(join(directory, 'yarn.lock'))) locks.add('yarn');
+    if (['package-lock.json', 'npm-shrinkwrap.json'].some((file) => existsSync(join(directory, file)))) locks.add('npm');
+    if (locks.size || dirname(directory) === directory || existsSync(join(directory, '.git'))) break;
+    directory = dirname(directory);
+  }
+  if (!manager && locks.size > 1)
+    return { upgrade: null, message: 'Multiple package-manager lockfiles found. Pass --manager npm, pnpm or yarn.' };
+  manager ??= [...locks][0] ?? 'npm';
+  const production = project.json?.dependencies as Record<string, unknown> | undefined;
+  const optional = project.json?.optionalDependencies as Record<string, unknown> | undefined;
+  const peers = project.json?.peerDependencies as Record<string, unknown> | undefined;
+  if (optional?.[packageName] || peers?.[packageName])
+    return { upgrade: null, message: 'Review this optional/peer dependency manually with your package manager.' };
+  const dev = !production?.[packageName];
+  let workspace = manager === 'pnpm' && existsSync(join(project.directory, 'pnpm-workspace.yaml'));
+  if (manager === 'yarn' && project.json?.workspaces) {
+    const declared = project.json.packageManager;
+    if (typeof declared !== 'string' || !/^yarn@\d+\./.test(declared))
+      return {
+        upgrade: null,
+        message:
+          'Declare the Yarn version in packageManager before updating a workspace-root dependency; Yarn Classic and modern Yarn use different root flags.',
+      };
+    workspace = declared.startsWith('yarn@1.');
+  }
+  // One builder for the suggestion and for checking a stored update note.
+  let command: string;
+  try {
+    command = upgradeCommand(manager, latest, { dev, workspace });
+  } catch {
+    return {
+      upgrade: null,
+      message: 'This release has a version the upgrade command does not name. Upgrade with your project’s package manager.',
+    };
+  }
+  return { upgrade: { manager, command, cwd: project.directory } };
+}
+
+export async function fetchLatest(fetcher: typeof fetch = fetch, signal?: AbortSignal): Promise<string> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal?.aborted) abort();
+  else signal?.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(abort, CHECK_TIMEOUT);
+  try {
+    if (controller.signal.aborted) throw new Error('Update check cancelled.');
+    const response = await fetcher(REGISTRY_URL, { signal: controller.signal, redirect: 'error', headers: { accept: 'application/json' } });
+    if (!response.ok) throw new Error(`Registry returned HTTP ${response.status}.`);
+    if (!response.body) throw new Error('Registry returned an empty response.');
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        bytes += value.byteLength;
+        if (bytes > MAX_REGISTRY_BYTES) {
+          await reader.cancel();
+          throw new Error('Registry response was too large.');
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    const data = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    if (typeof data.version !== 'string') throw new Error('Registry returned no version.');
+    parseVersion(data.version);
+    return data.version;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
+  }
+}
+
+function updateInfo(latest: string, cwd: string, manager?: PackageManager): UpdateInfo {
+  const order = compareVersions(latest, currentVersion);
+  return {
+    currentVersion,
+    latestVersion: latest,
+    status: order > 0 ? 'available' : order < 0 ? 'ahead' : 'current',
+    ...(order > 0 ? upgradePlan(cwd, latest, manager) : { upgrade: null }),
+  };
+}
+
+export async function checkUpdate(
+  cwd: string,
+  manager?: PackageManager,
+  fetcher?: typeof fetch,
+  signal?: AbortSignal,
+): Promise<UpdateInfo> {
+  try {
+    return updateInfo(await fetchLatest(fetcher, signal), cwd, manager);
+  } catch {
+    return {
+      currentVersion,
+      latestVersion: null,
+      status: 'unavailable',
+      upgrade: null,
+      message: 'Could not check npm for updates. The installed version remains usable; try again when online.',
+    };
+  }
+}
+
+interface CachedCheck {
+  checkedAt: number;
+  latestVersion: string | null;
+}
+async function readCache(file: string): Promise<CachedCheck | null> {
+  const data = (await readJsonBounded(file, MAX_UPDATE_CACHE_BYTES)) as CachedCheck;
+  try {
+    if (!Number.isFinite(data.checkedAt) || data.checkedAt > Date.now() || Date.now() - data.checkedAt >= CACHE_TTL) return null;
+    if (data.latestVersion !== null) parseVersion(data.latestVersion);
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+async function saveCache(file: string, latestVersion: string | null): Promise<void> {
+  await writeJsonAtomic(file, { checkedAt: Date.now(), latestVersion });
+}
+
+/** One bounded request a day, including failed attempts, shared across dev servers. */
+export function startUpdateCheck(
+  cwd: string,
+  enabled = true,
+  options: { cacheFile?: string; fetcher?: typeof fetch; env?: NodeJS.ProcessEnv } = {},
+): { getSnapshot(): UpdateInfo; ready: Promise<void>; dispose(): void } {
+  const controller = new AbortController();
+  const env = options.env ?? process.env;
+  const off =
+    !enabled ||
+    env.ISOTONE_UPDATE_CHECK === '0' ||
+    (!!env.CI && env.CI !== 'false' && env.CI !== '0') ||
+    env.NODE_ENV === 'test' ||
+    !!env.VITEST;
+  let info: UpdateInfo = { currentVersion, latestVersion: null, status: off ? 'disabled' : 'checking', upgrade: null };
+  const ready = off
+    ? Promise.resolve()
+    : (async () => {
+        const file = options.cacheFile ?? CACHE_FILE;
+        let locked = false;
+        try {
+          const cache = await readCache(file);
+          if (cache) {
+            info = cache.latestVersion ? updateInfo(cache.latestVersion, cwd) : { ...info, status: 'unavailable' };
+            return;
+          }
+          await mkdir(dirname(file), { recursive: true, mode: 0o700 });
+          try {
+            await (await open(`${file}.lock`, 'wx', 0o600)).close();
+            locked = true;
+          } catch {
+            // A concurrent server owns the request. Recover an abandoned lease next time.
+            if (Date.now() - (await stat(`${file}.lock`)).mtimeMs > CHECK_TIMEOUT * 3) await rm(`${file}.lock`, { force: true });
+            info = { ...info, status: 'unavailable' };
+            return;
+          }
+          const refreshed = await readCache(file);
+          if (refreshed) {
+            info = refreshed.latestVersion ? updateInfo(refreshed.latestVersion, cwd) : { ...info, status: 'unavailable' };
+            return;
+          }
+          await saveCache(file, null);
+          info = await checkUpdate(cwd, undefined, options.fetcher, controller.signal);
+          if (info.latestVersion) await saveCache(file, info.latestVersion);
+        } catch {
+          info = { currentVersion, latestVersion: null, status: 'unavailable', upgrade: null };
+        } finally {
+          if (locked) await rm(`${file}.lock`, { force: true }).catch(() => {});
+        }
+      })();
+  return { getSnapshot: () => info, ready, dispose: () => controller.abort() };
+}

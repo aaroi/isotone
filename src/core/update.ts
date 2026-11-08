@@ -1,9 +1,12 @@
+/** The package managers an upgrade command can be built for. */
+export type PackageManager = 'npm' | 'pnpm' | 'yarn';
+
 /** Read-only snapshot from the local development server. */
 export interface UpdateInfo {
   currentVersion: string;
   latestVersion: string | null;
   status: 'checking' | 'available' | 'current' | 'ahead' | 'unavailable' | 'disabled';
-  upgrade: { manager: 'npm' | 'pnpm' | 'yarn'; command: string; cwd: string } | null;
+  upgrade: { manager: PackageManager; command: string; cwd: string } | null;
   message?: string;
 }
 
@@ -19,7 +22,7 @@ export interface UpdateRequest {
   command: string;
   /** The directory to run it in: the manifest that declares Isotone. */
   cwd: string;
-  manager: 'npm' | 'pnpm' | 'yarn';
+  manager: PackageManager;
   /** The release's changelog, to summarize for the user afterwards. */
   changelog?: string;
 }

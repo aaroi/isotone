@@ -1,23 +1,26 @@
 /**
  * isotone — `variant` CLI subcommands, over the node store in
- * `variants-store.ts`. Every subcommand is synchronous: the store does no
+ * `src/node/variants`. Every subcommand is synchronous: the store does no
  * I/O beyond the filesystem and `git`, so there is nothing here to await.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { knobsFor, overlayGroups, splitSectionLabel, variantAppliesTo } from '../core/variants';
-import { isRouteModule, scanExports } from '../vite/exports';
-import { readNotes } from '../store';
+import { isRouteModule, scanExports } from '../node/variants/exports';
+import { readNotes } from '../node/notes/store';
 import {
+  activeConflict,
   addVariantFile,
   createVariant,
   crossGroupOverlaps,
   dropVariant,
+  hasConflictMarkers,
   KNOBS_FILE,
   listVariants,
   promoteVariant,
   readActive,
+  knobProblem,
   readKnobs,
   readVariant,
   removeVariantFile,
@@ -27,16 +30,31 @@ import {
   variantDir,
   writeActive,
   type VariantsStoreOptions,
-} from '../variants-store';
-import {
-  type CliIO,
-  errOut,
-  extractBoolFlag,
-  extractFlag,
-  findNoteByPrefix,
-  out,
-  printTable,
-} from './util';
+} from '../node/variants';
+import { mutateVariants } from '../node/variants/options';
+import { repoRelativeKey } from '../node/variants/paths';
+import { docPath } from './docs';
+import { findNotesFile } from './notes';
+import { toJson } from './text';
+import { type CliIO, errOut, extractFlag, findNoteByPrefix, has, out, parseArgs, printTable, valueFor } from './util';
+
+/** Each subcommand's value flags, boolean flags and most positionals; anything else is refused. */
+const SPEC: Record<string, [values: string[], booleans: string[], positionals: number]> = {
+  list: [[], ['--all-routes', '--json'], 1],
+  new: [['--label', '--route', '--note', '--description', '--file', '--group', '--group-label', '--section'], [], 1],
+  add: [[], ['--new', '--force'], Number.POSITIVE_INFINITY],
+  rm: [[], [], 2],
+  use: [[], [], 2],
+  off: [[], [], 1],
+  group: [['--label'], [], 2],
+  section: [[], ['--none'], Number.POSITIVE_INFINITY],
+  sync: [[], [], 1],
+  promote: [[], ['--force'], 1],
+  drop: [[], [], 1],
+  path: [[], [], 2],
+};
+
+type Command = (pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions) => number;
 
 export function runVariant(args: string[], io: CliIO): number {
   // `--dir` applies to the whole command group, so it is stripped before the
@@ -51,39 +69,32 @@ export function runVariant(args: string[], io: CliIO): number {
     return sub === undefined ? 1 : 0;
   }
 
+  const commands: Record<string, Command> = {
+    list: cmdList,
+    new: cmdNew,
+    add: cmdAdd,
+    rm: cmdRm,
+    use: cmdUse,
+    off: cmdOff,
+    group: cmdGroup,
+    section: cmdSection,
+    sync: cmdSync,
+    promote: cmdPromote,
+    drop: cmdDrop,
+    path: cmdPath,
+  };
+  const spec = Object.hasOwn(SPEC, sub) ? SPEC[sub] : undefined;
+  const command = Object.hasOwn(commands, sub) ? commands[sub] : undefined;
+  if (!spec || !command) {
+    errOut(io, `Unknown "variant" subcommand "${sub}". Run \`isotone variant --help\` for the list.`);
+    return 1;
+  }
   try {
-    switch (sub) {
-      case 'list':
-        return cmdList(rest, io, opts);
-      case 'new':
-        return cmdNew(rest, io, opts);
-      case 'add':
-        return cmdAdd(rest, io, opts);
-      case 'rm':
-        return cmdRm(rest, io, opts);
-      case 'use':
-        return cmdUse(rest, io, opts);
-      case 'off':
-        return cmdOff(rest, io, opts);
-      case 'group':
-        return cmdGroup(rest, io, opts);
-      case 'section':
-        return cmdSection(rest, io, opts);
-      case 'sync':
-        return cmdSync(rest, io, opts);
-      case 'promote':
-        return cmdPromote(rest, io, opts);
-      case 'drop':
-        return cmdDrop(rest, io, opts);
-      case 'path':
-        return cmdPath(rest, io, opts);
-      default:
-        errOut(
-          io,
-          `Unknown "variant" subcommand "${sub}". Run \`isotone variant --help\` for the list.`,
-        );
-        return 1;
-    }
+    // Validate every flag before anything is read or written: a typo such as
+    // `drop x --dry-run` must fail, not delete.
+    const positionals = parseArgs(rest, spec[0], spec[1], 'npx isotone variant --help');
+    if (positionals.length > spec[2]) throw new Error(`Unexpected "${positionals[spec[2]]}". Run \`isotone variant --help\`.`);
+    return command(positionals, rest, io, opts);
   } catch (err) {
     // Every store function throws a plain Error with a one-line, already
     // user-facing message (invalid id, unknown variant, escaping path); this
@@ -96,15 +107,17 @@ export function runVariant(args: string[], io: CliIO): number {
 function printVariantHelp(io: CliIO): void {
   out(io, 'isotone variant — overlay variants under .isotone/variants/<id>/');
   out(io);
-  out(io, '  variant list [<route>] [--all-routes]    every variant; * marks the active ones');
+  out(io, '  variant list [<route>] [--all-routes]    every variant; * marks the active ones;');
+  out(io, '               [--json]                    --json: variants, knobs and skipped knobs as one object');
   out(io, '  variant new <id> [--note <prefix>] [--route <path>] [--label <text>]');
   out(io, '                   [--description <text>] [--group <id>] [--group-label <text>]');
   out(io, '                   [--section <text>]');
   out(io, '                                           start one; --note copies route and element from a note,');
   out(io, '                                           --group makes it one alternative of a shared selector,');
   out(io, '                                           --section names the part of the page it sits under');
-  out(io, '  variant add <id> [--new] <file...>       copy real files into it, then edit the copies;');
-  out(io, '                                           --new starts a file the project does not have');
+  out(io, '  variant add <id> [--new] [--force] <file...>  copy real files into it, then edit the copies;');
+  out(io, '                                           --new starts a file the project does not have,');
+  out(io, '                                           --force copies a git-ignored or secret-looking file');
   out(io, '  variant path <id> <file>                 where the copy of <file> lives');
   out(io, '  variant rm <id> <file>                   stop overriding one file');
   out(io, '  variant group <id> <groupId> [--label <text>]');
@@ -127,25 +140,13 @@ function printVariantHelp(io: CliIO): void {
   out(io, 'or a group label prefix such as --group-label "Header > Logo".');
 }
 
-function cmdList(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const { present: allRoutes, rest: r1 } = extractBoolFlag(rest, '--all-routes');
-  const route = r1[0];
+function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const allRoutes = has(args, '--all-routes');
+  const route = pos[0];
+  const scope = route && !allRoutes ? route : undefined;
   const variants = listVariants(opts);
   const active = readActive(opts);
-  const rows =
-    route && !allRoutes ? variants.filter((v) => variantAppliesTo(v.route, route)) : variants;
-
-  if (rows.length === 0) {
-    // A knobs-only project (any dev server without the Vite plugin) has no
-    // file variants by design; lead with what it does have.
-    if (!existsSync(join(resolve(opts.root), KNOBS_FILE))) {
-      out(io, route ? `No variants for "${route}".` : 'No variants.');
-      return 0;
-    }
-    out(io, route ? `No file variants for "${route}".` : 'No file variants.');
-    printKnobs(io, opts, route && !allRoutes ? route : undefined);
-    return 0;
-  }
+  const rows = scope ? variants.filter((v) => variantAppliesTo(v.route, scope)) : variants;
 
   // Grouped over every variant, not the filtered rows: a sibling on another
   // route still decides which selector this one belongs to.
@@ -160,9 +161,48 @@ function cmdList(rest: string[], io: CliIO, opts: VariantsStoreOptions): number 
       if (section) sectionOf.set(member.id, section);
     }
   }
+  const knobs = knobReport(io, opts, scope);
+
+  if (has(args, '--json')) {
+    out(
+      io,
+      toJson({
+        variants: rows.map((v) => ({
+          id: v.id,
+          label: v.label,
+          ...(v.description ? { description: v.description } : {}),
+          route: v.route ?? null,
+          group: groupOf.get(v.id) ?? null,
+          section: sectionOf.get(v.id) ?? null,
+          files: Object.keys(v.files),
+          stale: v.stale,
+          missing: v.missing,
+          conflicts: v.conflicts ?? [],
+          active: active.includes(v.id),
+        })),
+        knobs: knobs?.shown ?? [],
+        skippedKnobs: knobs?.skipped ?? [],
+        ...(knobs?.error ? { knobsError: knobs.error } : {}),
+      }),
+    );
+    return 0;
+  }
+
+  if (rows.length === 0) {
+    // A knobs-only project (any dev server without the Vite plugin) has no
+    // file variants by design; lead with what it does have.
+    if (!knobs) {
+      out(io, route ? `No variants for "${route}".` : 'No variants.');
+      return 0;
+    }
+    out(io, route ? `No file variants for "${route}".` : 'No file variants.');
+    printKnobs(io, knobs, scope);
+    return 0;
+  }
+
   printTable(
     io,
-    ['ID', 'LABEL', 'SECTION', 'GROUP', 'ROUTE', 'FILES', 'STALE', 'MISSING', 'ACTIVE'],
+    ['ID', 'LABEL', 'SECTION', 'GROUP', 'ROUTE', 'FILES', 'STALE', 'MISSING', 'CONFLICTS', 'ACTIVE'],
     rows.map((v) => [
       v.id,
       v.label,
@@ -172,79 +212,105 @@ function cmdList(rest: string[], io: CliIO, opts: VariantsStoreOptions): number 
       String(Object.keys(v.files).length),
       String(v.stale.length),
       String(v.missing.length),
+      String(v.conflicts?.length ?? 0),
       active.includes(v.id) ? '*' : '',
     ]),
   );
-  printKnobs(io, opts, route && !allRoutes ? route : undefined);
+  const stale = rows.filter((v) => v.stale.length);
+  if (stale.length) {
+    out(io);
+    out(
+      io,
+      `STALE: the real file changed since the copy was made. \`variant sync <id>\` merges the change in: ${stale.map((v) => v.id).join(', ')}`,
+    );
+  }
+  const conflicted = rows.filter((v) => v.conflicts?.length);
+  if (conflicted.length) {
+    out(io);
+    out(
+      io,
+      `CONFLICTS: these copies hold conflict markers from \`variant sync\` and cannot be shown until you resolve them: ${conflicted.map((v) => v.id).join(', ')}`,
+    );
+  }
+  if (knobs) printKnobs(io, knobs, scope);
   return 0;
 }
 
+interface KnobReport {
+  shown: ReturnType<typeof readKnobs>;
+  skipped: { index: number; id: string | null; reason: string }[];
+  /** Why the file gives no knobs at all. */
+  error?: string;
+}
+
 /**
- * The knobs in `.isotone/knobs.json`, and every entry the panel will skip.
- * An invalid knob simply never shows up in the panel, so this is the one
- * place an agent can see why.
+ * The knobs in `.isotone/knobs.json`, and every entry the panel will skip;
+ * null when there is no such file. An invalid knob simply never shows up in
+ * the panel, so this is the one place an agent can see why.
  */
-function printKnobs(io: CliIO, opts: VariantsStoreOptions, route: string | undefined): void {
+function knobReport(io: CliIO, opts: VariantsStoreOptions, route: string | undefined): KnobReport | null {
   const file = join(resolve(opts.root), KNOBS_FILE);
-  if (!existsSync(file)) return;
+  if (!existsSync(file)) return null;
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(file, 'utf8'));
   } catch (error) {
-    out(io);
-    out(io, `${KNOBS_FILE} is not valid JSON, so the panel shows no knobs: ${(error as Error).message}`);
-    return;
+    return { shown: [], skipped: [], error: `${KNOBS_FILE} is not valid JSON, so the panel shows no knobs: ${(error as Error).message}` };
   }
-  if (!Array.isArray(raw)) {
-    out(io);
-    out(io, `${KNOBS_FILE} must be a JSON array of knobs, so the panel shows none.`);
-    return;
-  }
-  const valid = readKnobs(opts);
-  // readKnobs keeps the parsed entries it accepts, in order, so a walk that
-  // matches them back up names every entry it dropped.
-  const skipped: string[] = [];
-  let next = 0;
+  if (!Array.isArray(raw))
+    return { shown: [], skipped: [], error: `${KNOBS_FILE} must be a JSON array of knobs, so the panel shows none.` };
+  const guide = docPath(io.cwd, 'docs/variants.md');
+  const skipped: KnobReport['skipped'] = [];
+  const ids = new Set<string>();
   raw.forEach((entry, index) => {
-    if (next < valid.length && JSON.stringify(entry) === JSON.stringify(valid[next])) {
-      next++;
-      return;
-    }
-    const id = entry && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string'
-      ? (entry as { id: string }).id : null;
-    const name = `knob ${index + 1}${id === null ? '' : ` "${id}"`}`;
+    const id =
+      entry && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string' ? (entry as { id: string }).id : null;
+    const problem = knobProblem(entry);
+    if (problem !== null) skipped.push({ index: index + 1, id, reason: `${problem} (see ${guide}, "Knobs").` });
     // An earlier knob already took this id; the panel keeps that one.
-    if (id !== null && valid.slice(0, next).some((knob) => knob.id === id)) {
-      skipped.push(`Skipped ${name}: another knob earlier in the file already has this id. Give each knob its own id.`);
-    } else {
-      skipped.push(`Skipped ${name}: not a valid range, color or select knob (see docs/variants.md#knobs).`);
-    }
+    else if (ids.has(id as string))
+      skipped.push({ index: index + 1, id, reason: 'another knob earlier in the file already has this id. Give each knob its own id.' });
+    else ids.add(id as string);
   });
-  const shown = route ? knobsFor(valid, route) : valid;
+  const valid = readKnobs(opts);
+  return { shown: route ? knobsFor(valid, route) : valid, skipped };
+}
+
+function printKnobs(io: CliIO, report: KnobReport, route: string | undefined): void {
   out(io);
-  if (shown.length) {
-    printTable(io, ['KNOB', 'KIND', 'LABEL', 'ROUTE'], shown.map((k) => [
-      k.id,
-      k.kind ?? 'select',
-      k.label,
-      k.route === undefined ? '-' : ([] as string[]).concat(k.route).join(', '),
-    ]));
+  if (report.error) {
+    out(io, report.error);
+    return;
+  }
+  if (report.shown.length) {
+    printTable(
+      io,
+      ['KNOB', 'KIND', 'LABEL', 'ROUTE'],
+      report.shown.map((k) => [
+        k.id,
+        k.kind ?? 'select',
+        k.label,
+        k.route === undefined ? '-' : ([] as string[]).concat(k.route).join(', '),
+      ]),
+    );
   } else {
     out(io, route ? `No knobs for "${route}".` : `No valid knobs in ${KNOBS_FILE}.`);
   }
-  for (const line of skipped) out(io, line);
+  for (const { index, id, reason } of report.skipped) out(io, `Skipped knob ${index}${id === null ? '' : ` "${id}"`}: ${reason}`);
 }
 
-function cmdNew(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const { value: label, rest: r1 } = extractFlag(rest, '--label');
-  const { value: route, rest: r2 } = extractFlag(r1, '--route');
-  const { value: notePrefix, rest: r3 } = extractFlag(r2, '--note');
-  const { value: description, rest: r4 } = extractFlag(r3, '--description');
-  const { value: notesFile, rest: r5 } = extractFlag(r4, '--file');
-  const { value: group, rest: r6 } = extractFlag(r5, '--group');
-  const { value: groupLabel, rest: r7 } = extractFlag(r6, '--group-label');
-  const { value: section, rest: r8 } = extractFlag(r7, '--section');
-  const id = r8[0];
+function cmdNew(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const [label, route, notePrefix, description, notesFile, group, groupLabel, section] = [
+    '--label',
+    '--route',
+    '--note',
+    '--description',
+    '--file',
+    '--group',
+    '--group-label',
+    '--section',
+  ].map((flag) => valueFor(args, flag));
+  const id = pos[0];
   if (!id) {
     errOut(io, 'Give a variant id: isotone variant new <id>');
     return 1;
@@ -257,10 +323,10 @@ function cmdNew(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
   let element: ReturnType<typeof readNotes>[number]['element'] | undefined;
   let note: string | undefined;
   if (notePrefix) {
-    const file = resolve(io.cwd, notesFile ?? '.iteration-feedback.json');
+    const { file } = findNotesFile(io, notesFile);
     const match = findNoteByPrefix(readNotes(file), notePrefix);
     seededRoute = seededRoute ?? match.route;
-    element = match.element;
+    element = match.elements?.[0] ?? match.element;
     note = match.id;
   }
 
@@ -284,17 +350,15 @@ function cmdNew(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
   return 0;
 }
 
-function cmdAdd(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const { present: create, rest: args } = extractBoolFlag(rest, '--new');
-  const [id, ...files] = args;
+function cmdAdd(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const create = has(args, '--new');
+  const [id, ...files] = pos;
   if (!id || files.length === 0) {
-    errOut(io, 'Usage: isotone variant add <id> [--new] <file...>');
+    errOut(io, 'Usage: isotone variant add <id> [--new] [--force] <file...>');
     return 1;
   }
-  for (const file of files) addVariantFile(opts, id, file, { create });
-  out(io, create
-    ? `created ${files.length} new file(s) in "${id}"`
-    : `added ${files.length} file(s) to "${id}"`);
+  for (const file of files) addVariantFile(opts, id, file, { create, force: has(args, '--force') });
+  out(io, create ? `created ${files.length} new file(s) in "${id}"` : `added ${files.length} file(s) to "${id}"`);
   if (!create) for (const file of files) warnNoHotSwap(io, file);
   warnOverlaps(io, opts, id);
   return 0;
@@ -305,23 +369,32 @@ function cmdAdd(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
 function warnNoHotSwap(io: CliIO, file: string): void {
   const names = scanExports(readFileSync(resolve(io.cwd, file), 'utf8'));
   if (!names || isRouteModule(names)) {
-    errOut(io, `warning: ${file} is served whole, so it follows .isotone/active.json in every tab instead of switching per tab. See "Live switching" in the variants guide.`);
+    errOut(
+      io,
+      `warning: ${file} is served whole, so it follows .isotone/active.json in every tab instead of switching per tab. See "Live switching" in the variants guide.`,
+    );
     return;
   }
   const fixed = names.filter((name) => name !== 'default' && !/^[A-Z]/.test(name));
   if (fixed.length) {
-    errOut(io, `warning: ${file} exports ${fixed.join(', ')}, so switching this variant reloads the page. Move ${fixed.length === 1 ? 'it' : 'them'} to a file the variant leaves alone to switch in place.`);
+    errOut(
+      io,
+      `warning: ${file} exports ${fixed.join(', ')}, so switching this variant reloads the page. Move ${fixed.length === 1 ? 'it' : 'them'} to a file the variant leaves alone to switch in place.`,
+    );
   }
 }
 
 function warnOverlaps(io: CliIO, opts: VariantsStoreOptions, id: string): void {
   for (const { file, other } of crossGroupOverlaps(opts, id)) {
-    errOut(io, `warning: ${file} is also overridden by "${other}" in another group, so picking both fails. Put them in one group with \`variant group\`, or have them override different files.`);
+    errOut(
+      io,
+      `warning: ${file} is also overridden by "${other}" in another group, so picking both fails. Put them in one group with \`variant group\`, or have them override different files.`,
+    );
   }
 }
 
-function cmdRm(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const [id, file] = rest;
+function cmdRm(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const [id, file] = pos;
   if (!id || !file) {
     errOut(io, 'Usage: isotone variant rm <id> <file>');
     return 1;
@@ -331,48 +404,57 @@ function cmdRm(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
   return 0;
 }
 
-function cmdUse(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const [id, groupId] = rest;
+function cmdUse(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const [id, groupId] = pos;
   if (!id) {
     errOut(io, 'Usage: isotone variant use <id> | variant use default [<groupId>]');
     return 1;
   }
-  const active = readActive(opts);
-  if (id === 'default') {
-    if (!groupId) {
-      writeActive(opts, []);
-      out(io, 'active: default');
-      return 0;
-    }
-    const group = overlayGroups(listVariants(opts)).find((g) => g.id === groupId);
-    if (!group) {
-      errOut(io, `No group "${groupId}". \`variant list\` shows the GROUP column.`);
-      return 1;
-    }
-    const members = new Set(group.members.map((m) => m.id));
-    writeActive(opts, active.filter((a) => !members.has(a)));
-    out(io, `active: default for ${groupId}${describeActive(readActive(opts))}`);
-    return 0;
-  }
-  if (!readVariant(opts, id)) {
-    errOut(io, `No variant "${id}"`);
+  if (groupId !== undefined && id !== 'default') {
+    errOut(io, `Unexpected "${groupId}": only \`variant use default <groupId>\` takes a group.`);
     return 1;
   }
-  // Only the siblings leave: the reviewer's other picks stay as they were,
-  // the same as choosing an option in one selector of the panel.
-  const siblings = new Set(
-    overlayGroups(listVariants(opts))
-      .find((g) => g.members.some((m) => m.id === id))
-      ?.members.map((m) => m.id) ?? [id],
-  );
-  const next = [...active.filter((a) => !siblings.has(a)), id];
-  writeActive(opts, next);
-  out(io, `active: "${id}"${describeActive(readActive(opts), id)}`);
+  // Under the same lock as every other variants change, and refused like the
+  // panel's request when another group already overrides one of its files.
+  const message = mutateVariants(opts, () => {
+    const active = readActive(opts);
+    const groups = overlayGroups(listVariants(opts));
+    if (id === 'default') {
+      if (!groupId) {
+        writeActive(opts, []);
+        return 'active: default';
+      }
+      const group = groups.find((g) => g.id === groupId);
+      if (!group) throw new Error(`No group "${groupId}". \`variant list\` shows the GROUP column.`);
+      const members = new Set(group.members.map((m) => m.id));
+      writeActive(
+        opts,
+        active.filter((a) => !members.has(a)),
+      );
+      return `active: default for ${groupId}${describeActive(readActive(opts))}`;
+    }
+    if (!readVariant(opts, id)) throw new Error(`No variant "${id}"`);
+    // Only the siblings leave: the reviewer's other picks stay as they were,
+    // the same as choosing an option in one selector of the panel.
+    const siblings = new Set(groups.find((g) => g.members.some((m) => m.id === id))?.members.map((m) => m.id) ?? [id]);
+    const next = [...active.filter((a) => !siblings.has(a)), id];
+    const conflict = activeConflict(opts, next);
+    if (conflict) {
+      const [a, b, file] = conflict;
+      const other = a === id ? b : a;
+      throw new Error(
+        `"${id}" and "${other}" both override ${file}, so only one can be active. Turn "${other}" off first (\`variant off ${other}\`), or put them in one group.`,
+      );
+    }
+    writeActive(opts, next);
+    return `active: "${id}"${describeActive(readActive(opts), id)}`;
+  });
+  out(io, message);
   return 0;
 }
 
-function cmdOff(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const id = rest[0];
+function cmdOff(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const id = pos[0];
   if (!id) {
     errOut(io, 'Usage: isotone variant off <id>');
     return 1;
@@ -381,8 +463,12 @@ function cmdOff(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
     errOut(io, `No variant "${id}"`);
     return 1;
   }
-  const active = readActive(opts);
-  writeActive(opts, active.filter((a) => a !== id));
+  mutateVariants(opts, () =>
+    writeActive(
+      opts,
+      readActive(opts).filter((a) => a !== id),
+    ),
+  );
   out(io, `off: "${id}"${describeActive(readActive(opts))}`);
   return 0;
 }
@@ -394,9 +480,9 @@ function describeActive(active: string[], except?: string): string {
   return others.length ? ` (also active: ${others.map((a) => `"${a}"`).join(', ')})` : '';
 }
 
-function cmdGroup(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const { value: label, rest: r1 } = extractFlag(rest, '--label');
-  const [id, groupId] = r1;
+function cmdGroup(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const label = valueFor(args, '--label');
+  const [id, groupId] = pos;
   if (!id || !groupId) {
     errOut(io, 'Usage: isotone variant group <id> <groupId> [--label <text>]');
     return 1;
@@ -408,9 +494,9 @@ function cmdGroup(rest: string[], io: CliIO, opts: VariantsStoreOptions): number
 }
 
 /** A section belongs to the selector, so every variant in the group gets it. */
-function cmdSection(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const { present: none, rest: r1 } = extractBoolFlag(rest, '--none');
-  const [id, ...words] = r1;
+function cmdSection(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const none = has(args, '--none');
+  const [id, ...words] = pos;
   if (!id || (none && words.length)) {
     errOut(io, 'Usage: isotone variant section <id> [<text> | --none]');
     return 1;
@@ -420,19 +506,32 @@ function cmdSection(rest: string[], io: CliIO, opts: VariantsStoreOptions): numb
     return 1;
   }
   const text = words.join(' ').replace(/\s+/g, ' ').trim();
-  const members = overlayGroups(listVariants(opts)).find((g) => g.members.some((m) => m.id === id))?.members
-    .map((m) => m.id) ?? [id];
+  const members = overlayGroups(listVariants(opts))
+    .find((g) => g.members.some((m) => m.id === id))
+    ?.members.map((m) => m.id) ?? [id];
   // No text hands the decision back to the label prefix; --none keeps the
   // selector out of every section even when its label has a " > ".
   for (const member of members) setVariantSection(opts, member, none ? '' : text || undefined);
-  const others = members.length > 1 ? ` (with ${members.filter((m) => m !== id).map((m) => `"${m}"`).join(', ')})` : '';
-  out(io, text ? `"${id}"${others} is now in section "${text}"`
-    : none ? `"${id}"${others} is in no section` : `"${id}"${others} takes its section from its label`);
+  const others =
+    members.length > 1
+      ? ` (with ${members
+          .filter((m) => m !== id)
+          .map((m) => `"${m}"`)
+          .join(', ')})`
+      : '';
+  out(
+    io,
+    text
+      ? `"${id}"${others} is now in section "${text}"`
+      : none
+        ? `"${id}"${others} is in no section`
+        : `"${id}"${others} takes its section from its label`,
+  );
   return 0;
 }
 
-function cmdSync(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const id = rest[0];
+function cmdSync(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const id = pos[0];
   if (!id) {
     errOut(io, 'Usage: isotone variant sync <id>');
     return 1;
@@ -442,22 +541,25 @@ function cmdSync(rest: string[], io: CliIO, opts: VariantsStoreOptions): number 
   out(io, `conflicts: ${conflicts.length ? conflicts.join(', ') : 'none'}`);
   out(io, `unchanged: ${unchanged.length ? unchanged.join(', ') : 'none'}`);
   for (const file of conflicts) out(io, syncAdvice(opts, id, file));
-  return 0;
+  if (!conflicts.length) return 0;
+  errOut(
+    io,
+    `Not synced: "${id}" has ${conflicts.length === 1 ? 'a conflict' : 'conflicts'}. Fix each file above, then check with \`npx isotone variant list\`.`,
+  );
+  return 1;
 }
 
 function syncAdvice(opts: VariantsStoreOptions, id: string, file: string): string {
   const copy = join(variantDir(opts, id), file);
-  if (existsSync(copy) && readFileSync(copy, 'utf8').includes('<<<<<<< variant')) {
-    return `${file}: resolve the conflict markers in ${copy}`;
+  if (hasConflictMarkers(copy)) {
+    return `${file}: resolve the conflict markers in ${copy}. Until then the reviewer cannot see "${id}".`;
   }
   return `${file}: there is no base version to merge from, so the copy was left as it is. Compare it with the real file by hand, then \`variant promote ${id} --force\` when it should win.`;
 }
 
-function cmdPromote(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  // Pulled out first so `promote --force <id>` and `promote <id> --force`
-  // both leave the id as the one positional.
-  const { present: force, rest: r1 } = extractBoolFlag(rest, '--force');
-  const id = r1[0];
+function cmdPromote(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const force = has(args, '--force');
+  const id = pos[0];
   if (!id) {
     errOut(io, 'Usage: isotone variant promote <id> [--force]');
     return 1;
@@ -468,8 +570,8 @@ function cmdPromote(rest: string[], io: CliIO, opts: VariantsStoreOptions): numb
   return 0;
 }
 
-function cmdDrop(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const id = rest[0];
+function cmdDrop(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const id = pos[0];
   if (!id) {
     errOut(io, 'Usage: isotone variant drop <id>');
     return 1;
@@ -483,8 +585,8 @@ function cmdDrop(rest: string[], io: CliIO, opts: VariantsStoreOptions): number 
   return 0;
 }
 
-function cmdPath(rest: string[], io: CliIO, opts: VariantsStoreOptions): number {
-  const [id, file] = rest;
+function cmdPath(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+  const [id, file] = pos;
   if (!id || !file) {
     errOut(io, 'Usage: isotone variant path <id> <file>');
     return 1;
@@ -493,19 +595,6 @@ function cmdPath(rest: string[], io: CliIO, opts: VariantsStoreOptions): number 
     errOut(io, `No variant "${id}"`);
     return 1;
   }
-  out(io, join(variantDir(opts, id), repoRelative(io.cwd, file)));
+  out(io, join(variantDir(opts, id), repoRelativeKey(io.cwd, file).key));
   return 0;
-}
-
-/** Same escape guard as the store's own (private) `repoRelativeKey`, just
- *  for turning a CLI-supplied file argument into the manifest's POSIX key —
- *  `path` never touches the store's own state, so it does not warrant an
- *  export from there. */
-function repoRelative(root: string, file: string): string {
-  const abs = isAbsolute(file) ? resolve(file) : resolve(root, file);
-  const rel = relative(root, abs);
-  if (!rel || rel.startsWith('..') || isAbsolute(rel)) {
-    throw new Error(`"${file}" escapes the project root`);
-  }
-  return rel.split(sep).join('/');
 }

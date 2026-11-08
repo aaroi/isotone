@@ -1,13 +1,12 @@
-import type { RouteGateOptions } from '../core/index';
+import type { RouteGateOptions } from '../core/routes';
 import { VARIANTS_ENDPOINT } from '../core/variants';
-import type { MountIterationOptions } from '../react/IterationMount';
-import type { IterationTheme } from '../react/theme';
-import { NOTES_ENDPOINT } from '../store';
-import { UPDATE_ENDPOINT } from '../update';
-import { readKnobs } from '../variants-store';
+import type { IsotoneTheme, MountIsotoneOptions } from '../core/types';
+import { NOTES_ENDPOINT } from '../node/notes/handler';
+import { UPDATE_ENDPOINT } from '../node/update/check';
+import { readKnobs } from '../node/variants';
 
 /**
- * What `isotone serve` hands `mountIteration` in its bundle.
+ * What `isotone serve` hands `mountIsotone` in its bundle.
  *
  * Knobs only: file variants need a bundler to swap modules, which a script tag
  * on another dev server does not have. So the panel gets a Variants tool only
@@ -18,8 +17,8 @@ import { readKnobs } from '../variants-store';
 export function serveMountOptions(
   origin: string,
   projectRoot: string,
-  opts: { key?: string; rule?: RouteGateOptions; theme?: IterationTheme },
-): MountIterationOptions {
+  opts: { key?: string; rule?: RouteGateOptions; theme?: IsotoneTheme },
+): MountIsotoneOptions {
   const knobs = readKnobs({ root: projectRoot }).length > 0;
   return {
     endpoint: `${origin}${NOTES_ENDPOINT}`,

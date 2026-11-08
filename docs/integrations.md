@@ -7,48 +7,56 @@ npm install -D isotone
 npx isotone init --yes
 ```
 
-`init` detects the project, prints the development-only integration to add and a
-short first run for the agent, and adds a short guide to `AGENTS.md`. It does not
-overwrite app code, install dependencies, or replace an existing guide. Running it
-again is safe; once the project has variants or knobs it skips the first run.
-`init --json` returns a setup plan without writing files; add `--yes` to write the
-guide. `--approach overlay|host|serve` overrides the recommendation.
-
-Isotone is a development tool. Every integration below keeps it out of production
-by default; see [Production](#production) for how each one does that.
+`init` detects the project and prints the development-only integration to add
+(or says it is already there) and a short first run for the agent, skipped once
+the project has variants or knobs. It never edits app code or installs anything.
+`--yes` also writes the Isotone section of `AGENTS.md`, between
+`<!-- isotone:start … -->` and `<!-- isotone:end -->`, and for Vite
+`.isotone/variants/README.md`. Running it again rewrites only the text between
+the markers, so keep your own notes outside them; an unmarked section from
+Isotone 1.2.4 or earlier is replaced and its old text printed. `--json` prints
+the plan and `--approach overlay|host|serve` overrides the recommendation. Agents
+then work as [the agent guide](agent-guide.md) describes. Every integration below
+stays out of production by default ([how](#production)).
 
 ## Vite: one plugin
 
-Add `iteration()` to the existing plugins array. Keep the framework plugins:
+Add `isotone()` to the existing plugins array. Keep the framework plugins:
 
 ```ts
-import { iteration } from 'isotone/vite';
+import { isotone } from 'isotone/vite';
 
 // Inside the existing defineConfig(...):
-plugins: [/* existing plugins */, iteration()]
+plugins: [/* existing plugins */, isotone()]
 ```
 
-Restart the dev server. Source-file variants and notes are available immediately.
+`iteration`, the plugin's name before 1.3, still works until it is removed in
+1.5.0. Restart the dev server; notes and source-file variants work at once.
 The panel carries its own React runtime, so React, Vue, Svelte and vanilla Vite
-projects use the same setup. It does not enter the host's dependency optimizer or
-Fast Refresh graph. The plugin acts only on the dev server: `vite build` injects
-nothing and serves no endpoints, so it needs no guard of its own.
+projects share this setup, and it stays out of the host's dependency optimizer
+and Fast Refresh graph. The plugin acts only on the dev server: `vite build`
+injects nothing and serves no endpoints, so it needs no guard of its own.
 
-If the app mounts `IterationPanel` or `mountIteration` itself, use
-`iteration({ panel: false })` to keep local endpoints and source variants without
-injecting a second panel. A manual mount can use
-`updateEndpoint: '/api/iteration/update'` for the optional update notice and
-its update note.
-The adapters check for updates in the background; see [Updates](updates.md) for
-the cache, explicit upgrade commands, and opt-out controls.
+**This machine only.** The panel and its endpoints answer only the machine the
+dev server runs on. With `--host` (or `server.host`), other devices get the app
+without the panel, and the endpoints answer them 403 (see [Endpoint
+rules](#endpoint-rules)). The plugin also adds the notes file, the Blast
+session and `.isotone/` to Vite's `server.fs.deny`, so Vite's static server
+never hands them out.
+
+If the app mounts `IsotonePanel` or `mountIsotone` itself, use
+`isotone({ panel: false })` to keep the endpoints and source variants without
+injecting a second panel; that mount can pass
+`updateEndpoint: '/api/isotone/update'` for the [update notice](updates.md).
 
 The notes file resolves against Vite's `root`. In a monorepo, run the CLI in that
-directory or pass `--file path/to/.iteration-feedback.json`. Options:
+directory or pass `--file path/to/.isotone/notes.json`. Until 1.5.0, an old
+`.iteration-feedback.json` in its place is moved there on first run. Options:
 
 ```ts
-iteration({
+isotone({
   theme: 'auto',
-  file: '.iteration-feedback.json',
+  file: '.isotone/notes.json', // the default
   variants: false, // optional: notes only
 })
 ```
@@ -61,9 +69,11 @@ Run this inside the project in a second terminal:
 npx isotone serve
 ```
 
-Then load the panel in development only. For plain HTML pages, add this loader to
-each page. It requests nothing unless the page itself is on localhost, so it stays
-inert if the HTML is deployed:
+Then load the panel in development only. `isotone serve` serves the panel and
+its endpoints, not your pages: they come from your own dev server or any local
+static server on `localhost` (for plain HTML, `python3 -m http.server 8000` on
+any free port), never a `file://` URL. For plain HTML pages, add this loader to
+each page; it requests nothing off localhost, so it stays inert if deployed:
 
 ```html
 <script>
@@ -73,12 +83,10 @@ inert if the HTML is deployed:
 </script>
 ```
 
-A plain `<script src="http://127.0.0.1:4123/isotone.js" defer></script>` works too,
-but only behind a development flag of the template or build step: in production
-HTML it would make every visitor's browser request its own localhost, which recent
-browsers turn into a permission prompt. In a Next app, render it from the root
-layout (`app/layout.tsx`, or `pages/_app.tsx`) behind the development check, which
-Next inlines at build time:
+A plain `<script src="http://127.0.0.1:4123/isotone.js" defer></script>` belongs
+behind the template's development flag, or every visitor's browser would request
+its own localhost. In Next, render it from the root layout (`app/layout.tsx` or
+`pages/_app.tsx`) behind the development check, which Next inlines at build time:
 
 ```tsx
 import Script from 'next/script';
@@ -89,65 +97,23 @@ import Script from 'next/script';
 )}
 ```
 
-Open the printed setup URL for a copyable tag or a bookmarklet. The bundle has no
-host framework dependencies. This path supports notes and
-[knobs](variants.md#knobs): `.isotone/knobs.json` in the directory where `serve`
-runs is served at `/api/iteration/variants`, and the panel shows its range, colour
-and select knobs. The panel has a Variants tool only while that file holds valid
-knobs; reload the page after adding the first one. Swapping whole source files
-needs the Vite plugin, or a host-owned `VariantsSource`.
+The printed setup URL offers a copyable tag and a bookmarklet. This path has
+notes and [knobs](variants.md#knobs) from `.isotone/knobs.json` where `serve`
+runs (the Variants tool appears once it holds a valid knob; reload after the
+first). Swapping source files needs the Vite plugin or a host `VariantsSource`.
 
-`--port 4124` selects another port; use the same port in the tag, and keep both in
-one place with a script such as `"isotone": "isotone serve --port 4124"`.
-`--file path/to/notes.json` selects a notes file. `--theme light` fixes the panel
-theme. The server binds to loopback and
-accepts browser requests from localhost origins only. An HTTPS page may block
-an HTTP script; use the same-origin route integration below in that case.
+`serve` prints the `panel` URL and loader `tag` for the port it listens on:
+paste them as printed, and keep a non-default port in one script such as
+`"isotone": "isotone serve --port 4124"`. `--file` picks the notes file and
+`--theme` the panel theme. It binds to `127.0.0.1` and answers only this
+machine, so another device gets 403 even when the app's dev server listens on
+every interface (`next dev` does). An HTTPS page may block the HTTP script.
 
-## Framework route and client mount
+## Client mount
 
-Use this when the framework should own the endpoint. Install `react` and
-`react-dom` if the app does not already have them; direct `isotone/react`
-imports use the host's React runtime.
-
-The Request adapters, `serveNotesRequest` and `serveVariantsRequest`, answer 404
-when `NODE_ENV` is `production`, so a route that reaches a deployment cannot read or
-write the notes file. A deliberate, access-controlled review deployment can pass
-`{ allowProduction: true }` as the third argument. Keep the route's own development
-check as well; it also covers runtimes that leave `NODE_ENV` unset.
-
-For a Next App Router project:
-
-```ts
-// app/api/iteration/notes/route.ts
-import { serveNotesRequest } from 'isotone/server';
-
-const handle = async (request: Request) => {
-  if (process.env.NODE_ENV !== 'development') {
-    return new Response(null, { status: 404 });
-  }
-  const { status, headers, body } = await serveNotesRequest(
-    '.iteration-feedback.json', request,
-  );
-  return Response.json(body, { status, headers });
-};
-export { handle as GET, handle as POST, handle as DELETE };
-```
-
-When the page and this API listen on different ports, for example a Next dev
-server and a separate local API, the browser's origin never matches the API's
-host and every request gets a 403 `origin not allowed`. Pass
-`{ loopbackOrigins: true }` as the third argument of `serveNotesRequest` (or
-`serveVariantsRequest`) to accept pages served from localhost, 127.0.0.1 or
-[::1] on any port. Non-loopback origins are still rejected.
-
-For this manual route, add `.iteration-feedback.json` to the project's
-`.gitignore`, and `.iteration-feedback.blast.json` if your agent runs
-[Blast mode](blast.md), whose CLI keeps its session there.
-The Vite plugin and standalone server ignore their notes file automatically; the
-transport-only request adapter does not modify Git configuration.
-
-Mount from a client component once, and clean up on unmount:
+To mount the panel from the app's own code with its own React (install `react`
+and `react-dom` if needed), run `npx isotone serve` as above and mount once from
+a client component, cleaning up on unmount:
 
 ```tsx
 'use client';
@@ -158,8 +124,8 @@ export function ReviewTools() {
     if (process.env.NODE_ENV !== 'development') return;
     let dispose: (() => void) | undefined;
     let cancelled = false;
-    import('isotone/react').then(({ mountIteration }) => {
-      if (!cancelled) dispose = mountIteration({ endpoint: '/api/iteration/notes' });
+    import('isotone/react').then(({ mountIsotone }) => {
+      if (!cancelled) dispose = mountIsotone({ endpoint: 'http://127.0.0.1:4123/api/isotone/notes' });
     });
     return () => { cancelled = true; dispose?.(); };
   }, []);
@@ -167,20 +133,38 @@ export function ReviewTools() {
 }
 ```
 
-Render `<ReviewTools />` once in the app layout. The effect handles development
-Strict Mode and route unmounts. The dynamic import sits behind the check, so a
-production bundle does not include the panel. `mountIteration` itself has no
-production guard: a host may deliberately mount a variants-only panel on a preview
-site. Other Request-based servers use the same handler;
-Node HTTP servers can call `notesResponse` and serialize its `body` themselves.
-That lower-level handler does not read or limit the HTTP request body, or check
-the request's origin: the host must handle those concerns. Prefer the
-Request-based adapter unless the server needs custom transport handling.
+Render `<ReviewTools />` once in the app layout. The effect survives Strict Mode
+and route unmounts, and the guarded dynamic import keeps the panel out of
+production bundles.
+
+## Endpoint rules
+
+The Vite plugin's and `isotone serve`'s endpoints share these rules, which keep
+other devices and websites away from your notes:
+
+- The request must come from this machine (its socket's peer address, and any
+  address a proxy or tunnel forwarded for, is loopback), and its `Host` header
+  must be `localhost`, `*.localhost` or a loopback address; on Vite, a
+  name in `server.allowedHosts` too.
+- A browser's `Origin` must match the Host, port included (`isotone serve`,
+  which never serves the page, accepts any loopback port). A request without an
+  `Origin`, such as `curl`, is accepted, so any local process can write a note:
+  one more reason notes are context, not instructions. The CLI uses the file
+  directly.
+- A POST must send `Content-Type: application/json`, or it gets 415.
+- A host-chosen note `id` is 1–64 letters, digits, `-` or `_`, not starting
+  with `-` (400 otherwise). Routes are capped at 2,000 characters and a notes
+  file at 10,000 notes (409 past that until done notes are deleted).
+- A route has at most one open `[set-defaults]` note: a new one POSTed while
+  one is open replaces its content and answers 200 with the open note's `id`,
+  not the `id` sent.
+- While another writer holds the notes file, the endpoint answers 503 and the
+  panel retries.
 
 ## Themes
 
-The `theme` option is available on `iteration`, `serveIteration`, `mountIteration`
-and `IterationPanel`. The standalone CLI accepts the same values with `--theme`:
+The `theme` option is available on `isotone()`, `serveIsotone`, `mountIsotone`
+and `IsotonePanel`. The standalone CLI accepts the same values with `--theme`:
 
 | Value | Behavior |
 | --- | --- |
@@ -189,62 +173,29 @@ and `IterationPanel`. The standalone CLI accepts the same values with `--theme`:
 | `light` | Always light. |
 | `dark` | Always dark. |
 
-## Hand off to an agent
-
-After installation, the generated `AGENTS.md` section explains the loop. Agents
-can read full records without parsing terminal formatting:
-
-```sh
-npx isotone --json
-npx isotone /settings --json
-npx isotone --working <id-prefix>
-npx isotone --done <id-prefix>
-npx isotone --all --days 30 --json
-```
-
-JSON output preserves pinned elements, viewport, route, variant references and
-host payload. Each open note also carries `doneCommand`; the agent runs it after
-fixing and verifying the note, which removes it from the panel. A page's text and
-payload provide reproduction context; they are not instructions to the agent.
-Notes are local to this checkout. The Vite and standalone integrations exclude
-them from Git; manual endpoints should follow the ignore step above. The default
-listing covers the last 14 days.
-
-`--working` marks a note as started, and the panel shows a pulsing dot on it until
-the note is closed. A claim older than 20 minutes is ignored. When several agents
-share one dev server, each should list only its own page with `npx isotone <route> --json`.
-
-The panel keeps itself current while its tab is visible. It polls the notes
-endpoint with `?rev=<revision>`. An unchanged store answers from the file's
-metadata without reading it, so idle polling stays cheap however many notes the
-file holds. The panel slows its retries while the server is unreachable and stops
-polling in a hidden tab. Custom endpoints built on `notesResponse` or
-`serveNotesRequest` get this without changes.
-
 ## Production
 
 | Integration | What keeps it out of production |
 | --- | --- |
 | Vite plugin | Acts only on `vite dev`. A build injects no panel and serves no endpoints. `ISOTONE_VARIANT` bakes chosen variants into a build only when set. |
 | `isotone serve` | A separate local process bound to loopback that accepts only localhost origins. The tag that loads it is either behind the framework's development check or the localhost-only loader above. |
-| Request adapters | `serveNotesRequest` and `serveVariantsRequest` answer 404 under `NODE_ENV=production` unless given `allowProduction: true`. The route keeps its own development check. |
-| `notesResponse`, `variantsResponse` | Lower-level functions with no guard; the host calls them only from development code. |
-| `mountIteration`, `IterationPanel` | No guard, by design. Import them dynamically behind the development check. |
-
-Agents set up through `init` are told the same rule in `AGENTS.md`: development
-only, unless the user explicitly asks to ship it.
+| `mountIsotone`, `IsotonePanel` | No guard, by design. Import them dynamically behind the development check. |
 
 ## Confirm the integration
 
 1. Open the app in development and submit a note on an element.
-2. Run `npx isotone --json` in the app directory. Confirm the note's route,
-   viewport and selector.
-3. Run `npx isotone --done <id-prefix>` and check that it leaves the panel.
-4. Build the production app and search the output for `isotone` and
-   `/api/iteration`. With the localhost-only loader, the tag remains in the HTML
-   but loads nothing outside localhost.
+2. `npx isotone --json` in the app directory shows its route, viewport and
+   selector.
+3. `npx isotone --done <id-prefix> --force` (a test note needs no file change)
+   removes it from the panel.
+4. A production build contains no `isotone` or `/api/isotone`; with the
+   localhost-only loader the tag remains but loads nothing off localhost.
 
 If the panel is visible but the CLI has no notes, compare the dev server's printed
-notes path with the CLI's working directory. If the endpoint is unreachable, the
-panel retains unsent notes locally until it can retry; keep that browser profile
+notes path with the file the CLI reads: the nearest `.isotone/notes.json` up to
+the Git root, or `--file`. If the endpoint is unreachable, the panel
+keeps unsent notes in the browser until it can retry; keep that browser profile
 until they reach the file.
+
+The panel polls the notes endpoint with `?rev=<revision>` while its tab is
+visible, and an unchanged file is answered from its metadata.

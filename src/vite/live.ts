@@ -91,7 +91,11 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
 
   // A malformed escape anywhere in the query must not stop the page.
   const decode = (text: string): string => {
-    try { return decodeURIComponent(text.replace(/\+/g, ' ')); } catch { return text; }
+    try {
+      return decodeURIComponent(text.replace(/\+/g, ' '));
+    } catch {
+      return text;
+    }
   };
   const readParam = (search: string): string | null => {
     for (const part of search.replace(/^\?/, '').split('&')) {
@@ -127,11 +131,14 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
       if (pick) mine.push(`${group.id}:${pick}`);
     }
     const value = [...foreign, ...mine].join(',');
-    const kept = win.location.search.replace(/^\?/, '').split('&').filter((part) => {
-      if (!part) return false;
-      const at = part.indexOf('=');
-      return decode(at < 0 ? part : part.slice(0, at)) !== PARAM;
-    });
+    const kept = win.location.search
+      .replace(/^\?/, '')
+      .split('&')
+      .filter((part) => {
+        if (!part) return false;
+        const at = part.indexOf('=');
+        return decode(at < 0 ? part : part.slice(0, at)) !== PARAM;
+      });
     if (value) kept.push(`${PARAM}=${encodeURIComponent(value).replace(/%3A/gi, ':').replace(/%2C/gi, ',')}`);
     return kept.length ? `?${kept.join('&')}` : '';
   };
@@ -160,8 +167,13 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
     }
     return false;
   };
-  const emit = () => { for (const listener of listeners) listener(); };
-  const reload = () => { reloading = true; win.location.reload(); };
+  const emit = () => {
+    for (const listener of listeners) listener();
+  };
+  const reload = () => {
+    reloading = true;
+    win.location.reload();
+  };
 
   // A server-rendered page rendered the server's set. When a link opens this
   // tab on another set and a fixed export differs, hydration would mix the
@@ -198,16 +210,22 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active }),
-    }).then((res) => { if (res.ok) reload(); }, () => {});
+    }).then(
+      (res) => {
+        if (res.ok) reload();
+      },
+      () => {},
+    );
   };
 
   // A client-side navigation pushes a URL without `?v=`. Keep the tab's pick
   // in its address bar so a copied link still shows what the tab shows.
-  const keep = (original: typeof push) => function (this: History, ...args: Parameters<typeof push>) {
-    const result = original.apply(this, args);
-    if (explicit && parse(win.location.search).picks === null) writeUrl(active);
-    return result;
-  };
+  const keep = (original: typeof push) =>
+    function (this: History, ...args: Parameters<typeof push>) {
+      const result = original.apply(this, args);
+      if (explicit && parse(win.location.search).picks === null) writeUrl(active);
+      return result;
+    };
   history.pushState = keep(push);
   history.replaceState = keep(replace);
   win.addEventListener('popstate', () => {
@@ -216,19 +234,26 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
 
   const store: LiveStore = {
     version: 1,
-    get active() { return active; },
-    get server() { return server; },
-    get explicit() { return explicit; },
+    get active() {
+      return active;
+    },
+    get server() {
+      return server;
+    },
+    get explicit() {
+      return explicit;
+    },
     subscribe(listener) {
       listeners.add(listener);
-      return () => { listeners.delete(listener); };
+      return () => {
+        listeners.delete(listener);
+      };
     },
     register(key, ids, pinned) {
       files.set(key, { ids, pinned });
       // Only while the page first loads: a module that runs again later (a
       // hot update) is past hydration, and the server has moved on since.
-      if (cfg.ssr && pinned && win.document.readyState !== 'complete' &&
-        versionOf(ids, active) !== versionOf(ids, server)) {
+      if (cfg.ssr && pinned && win.document.readyState !== 'complete' && versionOf(ids, active) !== versionOf(ids, server)) {
         queueMicrotask(syncServer);
       }
     },
@@ -282,11 +307,22 @@ export function liveBinder(
   const FORWARD = Symbol.for('react.forward_ref');
   const LAZY = Symbol.for('react.lazy');
   const refAsProp = Number.parseInt(React.version, 10) >= 19;
-  const BUILTIN = new Set(['length', 'name', 'prototype', 'caller', 'arguments', 'displayName',
-    '$$typeof', 'render', 'type', 'compare', '_payload', '_init']);
+  const BUILTIN = new Set([
+    'length',
+    'name',
+    'prototype',
+    'caller',
+    'arguments',
+    'displayName',
+    '$$typeof',
+    'render',
+    'type',
+    'compare',
+    '_payload',
+    '_init',
+  ]);
 
-  const isClass = (value: unknown): boolean =>
-    typeof value === 'function' && /^class[\s{]/.test(Function.prototype.toString.call(value));
+  const isClass = (value: unknown): boolean => typeof value === 'function' && /^class[\s{]/.test(Function.prototype.toString.call(value));
   const isComponent = (name: string, value: unknown, jsx: boolean): boolean => {
     if (typeof value === 'function') {
       const proto = (value as { prototype?: { isReactComponent?: unknown } }).prototype;
@@ -338,10 +374,13 @@ export function liveBinder(
             return React.createElement(component, ref == null ? props : { ...props, ref });
           };
           renders.set(name, render);
-          const wrapper = (refAsProp ? (props: Record<string, unknown>) => render(props) : React.forwardRef(render as (p: unknown, r: unknown) => unknown)) as Record<string, unknown>;
-          const label = name === 'default'
-            ? (defined[0] as { displayName?: string; name?: string }).displayName ?? (defined[0] as { name?: string }).name ?? 'Variant'
-            : name;
+          const wrapper = (
+            refAsProp ? (props: Record<string, unknown>) => render(props) : React.forwardRef(render as (p: unknown, r: unknown) => unknown)
+          ) as Record<string, unknown>;
+          const label =
+            name === 'default'
+              ? ((defined[0] as { displayName?: string; name?: string }).displayName ?? (defined[0] as { name?: string }).name ?? 'Variant')
+              : name;
           if (typeof wrapper === 'function') Object.defineProperty(wrapper, 'name', { value: label });
           wrapper.displayName = label;
           // Compound components (`Card.Header`) read from the active version.
@@ -403,12 +442,7 @@ export function liveRuntimeModule(fallback: LiveConfig): string {
  * real file (`null`) and each variant that has a copy, in a fixed order;
  * `names` is every export any version has.
  */
-export function dispatcherModule(
-  key: string,
-  basename: string,
-  versions: (string | null)[],
-  names: string[],
-): string {
+export function dispatcherModule(key: string, basename: string, versions: (string | null)[], names: string[]): string {
   const lines = [`import { live as __isotone } from ${JSON.stringify(LIVE_MODULE)};`];
   versions.forEach((id, i) => {
     const spec = `./${basename}?${VERSION_QUERY}=${id ?? BASE_VERSION}`;
@@ -440,5 +474,8 @@ export function dispatcherModule(
 }
 
 function safeJson(value: unknown): string {
-  return JSON.stringify(value).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }

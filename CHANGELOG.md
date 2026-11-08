@@ -2,6 +2,113 @@
 
 ## Unreleased
 
+### What you need to know
+
+- **Node.js 22 or later** is required (`engines.node` is `>=22`; Node 20 reached end of life in April 2026).
+- **The `Iteration` names are now `Isotone`.** The Vite plugin is `isotone()` (`import { isotone } from 'isotone/vite'`); `iteration()` still works as a deprecated alias; it will be removed in 1.5.0. `IterationPanel` → `IsotonePanel`, `mountIteration` → `mountIsotone`, `serveIteration` → `serveIsotone`, and every `Iteration*` type likewise (`IsotoneNote`, `MountIsotoneOptions`, …). Only import names change.
+- **Notes live in `.isotone/notes.json`** (Blast: `.isotone/notes.blast.json`). The CLI, the Vite dev server and `isotone serve` move an old `.iteration-feedback.json` there on first run and say so (until 1.5.0); if the old file reappears, its notes are merged in and it is removed. A `file` option or `--file` path is never moved. **The endpoints are now `/api/isotone/*`**, which matters only if you call them yourself or pass a full `endpoint` URL to `mountIsotone`.
+- **Isotone works only on the machine running the dev server.** A Vite server started with `--host` still serves the app to other devices, but without the panel, and Isotone's endpoints answer them 403.
+- **`isotone/server` is removed.** Apps that wired Isotone into their own routes run `npx isotone serve` and add the loader tag `init` prints.
+- **Fewer exports.** Each subpath exports only what the docs use, and `isotone/react` no longer repeats `isotone/core`. If a name goes missing, [Removed](#removed) gives its replacement.
+- **`--json` output changed.** It is one compact line; pinned elements are only under `elements` (read `elements[0]` where you read `element`); `null` fields are left out; `reply.about` is gone. `--done`, `--undone`, `--working` and `--reply` with `--json` print an array of the notes they changed. [docs/note.schema.json](docs/note.schema.json) is the schema.
+- **`--done` refuses while nothing changed** since the note was written or since `--working` on it, and closes nothing. Run `--working <id>` before each fix; add `--force` for a note that needed no change.
+- **Re-run `npx isotone init --yes` after upgrading.** The `AGENTS.md` section is now short, sits between `<!-- isotone:start -->` and `<!-- isotone:end -->`, and points to `node_modules/isotone/docs/agent-guide.md`. Later runs rewrite only the text between the markers; an unmarked 1.2.x section is replaced, and `init` prints what it removed.
+
+### Security
+
+- Live variant switching served `?isotone=` for any project file around Vite's `server.fs.deny`, so `/.env?isotone=_base` returned the file to other localhost pages. It now answers only for files a variant tracks. Isotone 1.2.x has the same hole; upgrade.
+- The notes file, the Blast session file and `.isotone/` are added to Vite's `server.fs.deny`.
+- A file tracked with `variant add --force`, such as `.env`, still obeys `server.fs.deny` when live switching asks for one of its versions.
+- `*.test` no longer counts as a local `Host`, as in Vite, because a hostile resolver can point it at `127.0.0.1` to read notes from `isotone serve`.
+- The notes endpoint refuses a route that does not start with `/`, and `npx isotone` labels the route heading and payload lines as browser input too.
+- Endpoints refuse a `Host` other than `localhost`, `*.localhost` or a loopback address, which stops DNS rebinding; on Vite, add other names to `server.allowedHosts`. A request a tunnel or proxy forwards for another machine counts as that machine.
+- `isotone serve` binds to `127.0.0.1`, and neither panel bundle loads into other websites' `<script>` tags.
+- Every POST needs a JSON content type (415 otherwise), which a cross-site form cannot send. Note IDs a host chooses must be 1–64 letters, digits, `-` or `_`, not starting with `-`.
+- `doneCommand` is shell-quoted, and `--json` passes on only the note fields Isotone knows, so a page or a hand edit cannot plant a command for the agent.
+- Routes are capped at 2,000 characters and a notes file at 10,000 notes.
+- `variant add` refuses Git-ignored files and files that look like secrets (`.env*`, keys, `.npmrc`, `.aws/`, `.ssh/`, …) unless the user approves `--force`.
+- Note output strips terminal control characters and quotes reviewer text as `> ` lines, so note content cannot pose as CLI output.
+
+### Fixed
+
+**Notes and the CLI**
+
+- Notes a still-running 1.2 dev server writes to `.iteration-feedback.json` during the upgrade are merged into `.isotone/notes.json` on the next CLI run or dev server start, and the moved file is kept out of Git right away.
+- Concurrent writers no longer lose notes, and a lock or temporary file left by a crashed process no longer leaves the store "busy"; lock and temporary files are kept out of Git.
+- Commands run from a subdirectory use the nearest `.isotone/notes.json` up to the Git root and name it on stderr.
+- `--done`, `--undone` and `--working` take several IDs (`a b` or `a,b`) and change all or none; `--done a b` used to close only `a`.
+- A full note ID wins over a prefix, `--all` wins over `--days`, and `--working` refuses a closed note.
+- `--reply` accepts text starting with a dash, "Unknown option" errors name the `--help` to read, and `| head` no longer prints an EPIPE stack trace.
+- `init` after an upgrade says "Already set up" instead of asking for the plugin again, and asks to rename `iteration()` if the config still uses it (`init --json` adds `integration`).
+- `init` prints the install command for your package manager and explains that a `file://` page never loads the panel.
+- On Windows, in a project whose path Node names with an 8.3 short name (`C:\Users\RUNNER~1\…`) while Git prints the long one, Isotone's files are kept out of Git again and `--done` no longer counts its own write to the notes file as the fix.
+- On Windows, saving notes while the CLI or another process is reading the file no longer fails with EPERM; the save waits a moment and retries.
+
+**Blast**
+
+- A busy notes file or a wall-clock change no longer makes a waiting run exit 1 or overrun `--every`.
+- `blast start 2024-recap` scopes to that route, and a closed then reopened note is handed out again.
+- Each batch now ends with the viewport rule and "run `--done` as its own command", like the loop `blast start` prints.
+
+**Variants**
+
+- `variant drop x --dry-run` deleted `x`; every `variant` subcommand now rejects unknown flags and extra arguments before changing anything.
+- `variant use` refuses a file another group's active variant overrides, and `promote` replaces all of a variant's files or none.
+- `variant add` records a file under its real spelling, so a case mismatch on macOS or Windows still overrides it.
+- On Windows, switching variants updates the page without a manual reload.
+- On Windows, overrides apply in a project reached through an 8.3 short name, as Vite names its modules by the long one.
+- `variant sync` exits 1 on a conflict, `variant list` (`conflicts` in `--json`) and `--done` name copies with conflict markers, and in live mode such a copy no longer breaks the real page.
+
+**The panel**
+
+- In the Variants panel, a section header after a closed section sits as close as one closed header to the next, whether its own section is open or not.
+- The note list keeps your place when a note is deleted or edited, or an agent marks one working or done.
+- The note list is one Tab stop: arrow keys, Home and End move between notes and their delete buttons.
+- Keys, focus, input and wheel events inside Isotone no longer reach the app's handlers, and Escape in the app's own fields no longer closes Isotone.
+- In select mode, clicking pins an element without pressing it, so menus that open on press stay closed.
+- Closing a panel returns keyboard focus to the launcher instead of the page.
+- Right-to-left pages and inherited page styles no longer leak into the panel.
+- On React 19, notes record the pinned element's source file and line again.
+- Outlines and the composer follow an element that moves without a scroll.
+- `/about/`, `/about` and `/about?tab=2` are one page, as in the CLI.
+- With many selectors, the first key after a click no longer stalls for 0.2–0.4 s.
+- Smaller fixes: long option labels, Windows high contrast, SVG selectors, screen-reader names, edits during a save, and phone Done.
+
+### Changed
+
+**Notes and the CLI**
+
+- `npx isotone` lists every open note however old; `--days <n>` and `--all` add closed ones.
+- One route pattern everywhere: `/items` is that page, `/items/*` also pages under it, `/items*` any route starting with `/items`. In the panel's `rule.visible` and `rule.hidden`, write `/items/*` where a bare `/items` used to cover sub-pages.
+- `--done`'s change check uses a Git snapshot taken by `--working`, so staged edits, reverts and commits count.
+- After `--done`, Isotone names variants that copy files changed since the note, with the `variant sync` command that brings the fix in.
+- Editing a note an agent already closed reopens it.
+- New: `npx isotone --version` and `variant list --json`. `--help` is regrouped and ends with the paths of the installed guides.
+- While another writer holds the notes file, the endpoint answers 503 at once and the panel retries.
+
+**Blast**
+
+- A waiting `npx isotone blast` checks in after 90 seconds instead of 5 minutes, to fit a two-minute command timeout. Use `--every off` in a background task.
+- A batch holds at most ten notes and ends with a one-line guardrail and the next command, so the rules survive context compaction.
+
+**Package and panel**
+
+- Every subpath has a `default` export condition and the binary is `dist/bin.js`; run `npx isotone`, not a `dist/` path.
+- The package is about 380 kB to download instead of 836 kB, and the `isotone/vite` and `isotone/serve` types no longer need React.
+- The docs are shorter, with each topic in one place; the package no longer ships the repository's `AGENTS.md`.
+- The panel opens and types fast with hundreds of selectors or notes (about 1–2 ms a keystroke on 500 selectors, from 100 ms).
+- Single-choice options are radio groups driven by arrow keys; an option's actions open with Shift+F10 or the context-menu key.
+
+### Removed
+
+- The `iso-iterate` migration guide and the panel's one-time move of `iso-iterate` browser storage.
+- `isotone/server` (`serveNotesRequest`, `serveVariantsRequest`, `notesResponse`, `variantsResponse`, `readNotes`). Use `npx isotone serve`, and `npx isotone --json` to read notes from a script.
+- From `isotone/react`: everything but `IsotonePanel`, `mountIsotone`, their option types, `IsotoneTheme`, `IsotoneShortcut`, `IsotoneStoreConfig`, `createVariantsSource`, `VariantsSource`, `VariantAxis` and `VariantSelections`. Mount the panel instead of `VariantsView`, `PANEL_CSS` or `ensurePanelStyles`; import note and axis types from `isotone/core`.
+- From `isotone/core`: the panel's internals (`createIterationStore`, `describeIterationElement`, `isRouteVisible`, selection, overlay and knob helpers). It keeps the note record types, `RouteGateOptions`, `createVariantsSource` and the axis types.
+- `DEFAULT_PORT` and `readBundle` from `isotone/serve`, `withNativeFetch` from `isotone/vite`, and the unused `title` of `VariantsSource` and `createVariantsSource`.
+- `reply.about` from the note record; read `reply.answered`.
+- `npx isotone blast --stream` (use `--every off`) and the 1.2.0 flags `--for`, `--new`, `--status`, `--stop` and `--extend` (use `blast start 45m`, `blast`, `blast status | stop | extend 15m`).
+
 ## 1.2.4
 
 - feat: drag the dock's left edge to change its width, and the top edge of the top open panel to change that panel's height. With both panels open, the gap between them moves the split. The arrow keys resize a focused edge, Shift takes bigger steps, and Home or a double-click restores the default. Sizes are remembered per browser; phones keep their one-panel layout
@@ -44,7 +151,7 @@
 - feat: larger touch hit areas around the composer controls, reference removal, note delete and panel close
 - fix: select-mode hints are never cut off. They read "Hold ⇧ to use the page" (touch: "Tap Done to use the page") and, beside a pinned element, "Click to pin more · ⇧ uses the page" (touch: "Tap to pin more · crosshair pauses"), each on one line at phone and desktop widths
 - chore: the demo works on phones: touch copy in the tour, the cards scroll into view, larger touch targets, and a list layout and top bar that fit a phone
-- change: `serveNotesRequest` and `serveVariantsRequest` answer 404 when `NODE_ENV` is `production`. This breaks any production use of them: a deliberate, access-controlled review deployment must now pass `{ allowProduction: true }` as the third argument to keep its endpoints working. See [the migration guide](docs/migration.md#request-handlers-are-off-in-production)
+- change: `serveNotesRequest` and `serveVariantsRequest` answer 404 when `NODE_ENV` is `production`. This breaks any production use of them: a deliberate, access-controlled review deployment must now pass `{ allowProduction: true }` as the third argument to keep its endpoints working (`isotone/server` was later removed)
 - fix: `init` and the serve setup page give static HTML a script loader that requests nothing outside localhost, and give Next a `next/script` tag behind `NODE_ENV === 'development'` in the root layout, instead of a plain tag that would make visitors' browsers request their own localhost if it shipped
 - fix: the generated AGENTS.md section states the development-only rule
 - feat: the README starts with a prompt for your coding agent, and says up front that Isotone is not an agent, an MCP server or an AI product

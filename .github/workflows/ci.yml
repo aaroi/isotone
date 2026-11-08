@@ -12,29 +12,89 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Actions are pinned to commit SHAs (version in the comment); Dependabot
+# proposes updates. pnpm's version comes from `packageManager` in package.json.
 jobs:
   check:
-    runs-on: ubuntu-latest
+    name: check (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    # The Windows leg has not run yet (POSIX-only tests skip there): its result
+    # is visible but does not fail the workflow until it has passed once. Then
+    # delete this line and require it (docs/releasing.md).
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
-        node: [22, 24]
+        include:
+          # Node 22 is the supported floor; the Node 24 leg also lints and
+          # enforces the coverage floors in vitest.config.ts.
+          - { os: ubuntu-latest, node: 22 }
+          - { os: ubuntu-latest, node: 24, full: true }
+          - { os: ubuntu-latest, node: 26 }
+          - { os: windows-latest, node: 24 }
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      # Keep LF line endings on Windows so formatting and fixtures match.
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          version: 10.33.0
-      - uses: actions/setup-node@v4
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm check
+      # Types, lint and unused code do not depend on the runtime: once is enough.
+      - if: matrix.full
+        run: pnpm typecheck && pnpm lint && pnpm knip
+      - run: pnpm build
+      - run: pnpm ${{ matrix.full && 'test:coverage' || 'test' }}
+      # On Node 22 this is also the packed runtime check at the supported floor.
       - run: pnpm check:package
-      # The development test tools require Node 22; the published package supports 20.
-      - uses: actions/setup-node@v4
-        if: matrix.node == 24
+
+  release:
+    name: release guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 20
-      - run: node scripts/check-package.mjs
-        if: matrix.node == 24
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      # Unreleased notes beyond fixes need package.json above the published minor.
+      - run: node scripts/check-release.mjs
+
+  workflows:
+    name: workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: pipx run actionlint-py==1.7.12.25
+      # The token lets zizmor check that each pinned SHA belongs to its tag.
+      - run: pipx run zizmor==1.32.0 --format=github .github
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  smoke:
+    name: packed smoke (oldest and newest Vite and React)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm smoke

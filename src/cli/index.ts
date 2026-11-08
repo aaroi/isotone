@@ -1,14 +1,6 @@
-#!/usr/bin/env node
-import { realpathSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { runCli } from './run';
-
+/**
+ * isotone/cli — run any `isotone` command in-process, with your own output
+ * sinks. Importing it runs nothing; the `isotone` binary is ./bin.ts.
+ */
 export { runCli } from './run';
 export type { CliIO } from './run';
-
-// Importing isotone/cli must not execute a command or terminate the host.
-let isMain = false;
-try {
-  isMain = !!process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
-} catch { /* Imported by a runtime without an on-disk entry point. */ }
-if (isMain) process.exitCode = await runCli(process.argv.slice(2));
