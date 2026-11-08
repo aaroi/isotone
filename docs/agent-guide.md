@@ -131,7 +131,7 @@ as it is and make variants:
 
 ```sh
 npx isotone variant new <id> --note <notePrefix>   # route and element from the note
-npx isotone variant add <id> <file...>             # copy files in; --new starts a missing one
+npx isotone variant add <id> <file...>             # copy files in; --new starts a missing one, --force copies a refused secret-looking or git-ignored file
 npx isotone variant path <id> <file>               # where the copy is: edit it
 npx isotone variant use <id>                       # preview it; `variant use default` goes back
 npx isotone variant list [<route>] [--json]        # check what the panel will show

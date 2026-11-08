@@ -113,8 +113,9 @@ function printVariantHelp(io: CliIO): void {
   out(io, '                                           start one; --note copies route and element from a note,');
   out(io, '                                           --group makes it one alternative of a shared selector,');
   out(io, '                                           --section names the part of the page it sits under');
-  out(io, '  variant add <id> [--new] <file...>       copy real files into it, then edit the copies;');
-  out(io, '                                           --new starts a file the project does not have');
+  out(io, '  variant add <id> [--new] [--force] <file...>  copy real files into it, then edit the copies;');
+  out(io, '                                           --new starts a file the project does not have,');
+  out(io, '                                           --force copies a git-ignored or secret-looking file');
   out(io, '  variant path <id> <file>                 where the copy of <file> lives');
   out(io, '  variant rm <id> <file>                   stop overriding one file');
   out(io, '  variant group <id> <groupId> [--label <text>]');
