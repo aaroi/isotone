@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.3.2
+
 ### Fixed
 
 - **The panel reads more clearly in both themes, with a softer, rounder look.** Panels are rounded cards with layered shadows, and buttons, chips and segmented choices are capsules. Send is the one coloured control, and the count on the pill shares its colour. Labels are lighter, sliders are round knobs on a clear groove, and the default option's dot sits beside the label so the hover chevron no longer hides it. Layout, behaviour and the light and dark themes are otherwise unchanged.
