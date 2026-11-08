@@ -230,8 +230,7 @@ async function wait(io: CliIO, notesFile: string, file: string, options: WaitOpt
   const more = outcome.more ? ` · ${outcome.more} more next run` : '';
   out(io, `${BLAST.name} · ${outcome.notes.length} new note${outcome.notes.length === 1 ? '' : 's'}${more} · ${left}`);
   printNotes(io, outcome.notes, root);
-  out(io, BLAST_REMINDER);
-  out(io, `Act on these one at a time, then run \`${options.next}\` again.`);
+  out(io, `${BLAST_REMINDER} Then run \`${options.next}\` again.`);
   return 0;
 }
 
@@ -321,10 +320,7 @@ function status(io: CliIO, file: string, json: boolean, fileFlag: string): numbe
     io,
     `${BLAST.name} · ${timeLeft(Date.parse(session.endsAt) - Date.now())} · ends ${clock(session.endsAt)} · ${session.route === null ? 'all routes' : oneLine(session.route)}`,
   );
-  out(
-    io,
-    `agent ${state.waiting ? 'waiting for notes' : state.live ? 'working' : 'not seen recently'} · last heartbeat ${beat} · ${Object.keys(session.seen).length} note(s) handed out`,
-  );
+  out(io, `agent ${state.waiting ? 'waiting for notes' : state.live ? 'working' : 'not seen recently'} · last heartbeat ${beat}`);
   return 0;
 }
 

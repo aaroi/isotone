@@ -172,7 +172,7 @@ describe(`isotone ${BLAST.command}`, () => {
     const output = p.take();
     expect(output).toContain('1 new note');
     expect(output).toContain('Note backlog1');
-    expect(output).toContain(`then run \`${BLAST_CLI} --every 2s\` again`);
+    expect(output).toContain(`Then run \`${BLAST_CLI} --every 2s\` again.`);
     expect(p.state()?.seen).toHaveProperty('backlog1');
     expect(p.state()?.waiting).toBe(false);
   });
@@ -482,8 +482,7 @@ describe(`isotone ${BLAST.command}`, () => {
     await start(p, '20s');
     expect(await runBlast(['--every', '2s'], p.io, FAST)).toBe(0);
     const lines = p.take().trim().split('\n');
-    expect(lines.at(-2)).toBe(BLAST_REMINDER);
-    expect(lines.at(-1)).toBe(`Act on these one at a time, then run \`${BLAST_CLI} --every 2s\` again.`);
+    expect(lines.at(-1)).toBe(`${BLAST_REMINDER} Then run \`${BLAST_CLI} --every 2s\` again.`);
   });
 
   it('hands out notes still settling when the check-in is due', async () => {
