@@ -26,6 +26,12 @@ npm; the archive's source maps contain source text. Keep the MIT notice and the
    needs user action). Routine fixes get the automatic patch. Preserve the
    lockfile's resolved versions unless the release intentionally changes
    dependencies.
+   `pnpm check:release` (the `release guard` check, and the first step of
+   `Publish main`) enforces the minor: only `### Fixed` and `### Security`
+   headings (or `- fix:` notes) under Unreleased may ship as a patch. Any other
+   heading, such as `### What you need to know`, `### Changed` or `### Removed`,
+   or a `- feat:` or `- change:` note, fails it until `package.json` is above
+   the published minor. Whether a break deserves the major stays your call.
 2. Run `pnpm install --frozen-lockfile`, `pnpm check`, `pnpm check:package` and
    `pnpm smoke` (which confirms a production Vite build contains no panel).
    Inspect both themes in the demo.
@@ -42,9 +48,11 @@ npm; the archive's source maps contain source text. Keep the MIT notice and the
 The release check job builds and tests the prepared main commit, runs
 `pnpm smoke`, then creates an archive. A separate job downloads that archive and publishes it with provenance.
 Only that job has OIDC permission; it does not install dependencies or run project
-scripts. CI runs the full development checks and the packed-package check on
-Node 22 and 24 (and on Windows, not yet required, where POSIX-only tests skip),
-and installs the packed package into fresh Vite 5 and Vite 8 apps (React 18 and 19) with `pnpm smoke`.
+scripts. CI builds and tests on Node 22, 24 and 26 (and on Windows, not yet
+required, where POSIX-only tests skip), runs types, lint, knip and the coverage
+floors once, runs the packed-package check (with its size budgets) on every leg,
+the release guard, actionlint and zizmor on the workflows, and installs the packed
+package into fresh Vite 5 and Vite 8 apps (React 18 and 19) with `pnpm smoke`.
 
 ## GitHub settings outside the repository
 
@@ -54,7 +62,8 @@ These are account-side settings no commit can make. Do them once.
    name `main`, Enforcement Active, target the default branch. Turn on Restrict
    deletions, Block force pushes, Require a pull request before merging (0
    approvals is fine for a solo maintainer), and Require status checks to pass
-   with `check (ubuntu-latest, Node 22)`, `check (ubuntu-latest, Node 24)` and
+   with `check (ubuntu-latest, Node 22)`, `check (ubuntu-latest, Node 24)`,
+   `check (ubuntu-latest, Node 26)`, `release guard`, `workflow lint` and
    `packed smoke (oldest and newest Vite and React)`; they appear in the picker
    after one run on a pull request. Add `check (windows-latest, Node 24)` once it
    is green and its `continue-on-error` line is removed from `ci.yml`. Tick
