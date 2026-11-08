@@ -923,7 +923,7 @@ describe('agent onboarding and machine-readable notes', () => {
     const text = makeIo(root);
     expect(await runCli([], text)).toBe(0);
     expect(text.text.out.trimEnd().split('\n').at(-1)).toBe(
-      'When you start a note: npx isotone --working <id>. After you fix and verify it, close it: npx isotone --done <id>',
+      'When you start a note: npx isotone --working <id>. Reproduce it at its route and viewport, keeping other breakpoints as they are. After you fix and verify it, close it with npx isotone --done <id>, run as its own command.',
     );
     const json = makeIo(root);
     expect(await runCli(['--json'], json)).toBe(0);
