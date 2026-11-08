@@ -30,8 +30,8 @@ import { isotone } from 'isotone/vite';
 plugins: [/* existing plugins */, isotone()]
 ```
 
-`iteration`, the plugin's name before 1.3, still works until a later minor
-release. Restart the dev server; notes and source-file variants work at once.
+`iteration`, the plugin's name before 1.3, still works until it is removed in
+1.5.0. Restart the dev server; notes and source-file variants work at once.
 The panel carries its own React runtime, so React, Vue, Svelte and vanilla Vite
 projects share this setup, and it stays out of the host's dependency optimizer
 and Fast Refresh graph. The plugin acts only on the dev server: `vite build`
@@ -50,7 +50,8 @@ injecting a second panel; that mount can pass
 `updateEndpoint: '/api/isotone/update'` for the [update notice](updates.md).
 
 The notes file resolves against Vite's `root`. In a monorepo, run the CLI in that
-directory or pass `--file path/to/.isotone/notes.json`. Options:
+directory or pass `--file path/to/.isotone/notes.json`. Until 1.5.0, an old
+`.iteration-feedback.json` in its place is moved there on first run. Options:
 
 ```ts
 isotone({

@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { expect, it } from 'vitest';
 import { describeIsotoneElement, elementAsNode } from '../../src/core/element';
 

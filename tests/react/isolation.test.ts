@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 /**
  * The panel inside a host page: its own events stay in the dock, the host's
  * stay with the host, and closing things puts focus somewhere sensible.

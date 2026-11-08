@@ -14,6 +14,7 @@ import { request } from '../../src/core/request';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -106,7 +107,7 @@ describe('offline recovery', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it('keeps old or rejected notes locally while syncing later valid notes', async () => {
+  it('keeps old notes locally, drops a note the server rejects as invalid, and syncs later valid notes', async () => {
     const values = storage();
     const old = {
       id: 'old-long',
@@ -119,6 +120,7 @@ describe('offline recovery', () => {
     const rejected = { ...old, id: 'rejected', feedback: 'Server rejects this', createdAt: '2026-01-01T00:00:01Z' };
     const later = { ...old, id: 'later', feedback: 'Sync this', createdAt: '2026-01-01T00:00:02Z' };
     values.set(FEEDBACK_STORAGE_KEY, JSON.stringify([old, rejected, later]));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const posted: string[] = [];
     const remote: IsotoneNote[] = [];
     vi.stubGlobal(
@@ -135,13 +137,37 @@ describe('offline recovery', () => {
       }),
     );
     const store = createIsotoneStore({ endpoint: '/notes' });
-    expect((await store.listNotes()).map((note) => note.id)).toEqual(['later', 'rejected', 'old-long']);
+    expect((await store.listNotes()).map((note) => note.id)).toEqual(['later', 'old-long']);
     expect(posted).toEqual(['rejected', 'later']);
     expect(remote.map((note) => note.id)).toEqual(['later']);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toContain('400: invalid');
+    expect(warn.mock.calls[0]?.[1]).toMatchObject({ id: 'rejected', feedback: 'Server rejects this' });
     expect(store.hasUnsyncedNotes).toBe(true);
-    expect((await createIsotoneStore().listNotes()).map((note) => note.id)).toEqual(['rejected', 'old-long']);
+    expect((await createIsotoneStore().listNotes()).map((note) => note.id)).toEqual(['old-long']);
+    // The next poll does not post the rejected note again.
+    await store.pollNotes(null);
+    expect(posted).toEqual(['rejected', 'later']);
+    expect(warn).toHaveBeenCalledTimes(1);
     await store.saveNote('/', 'New successful note', null, null);
     expect(store.lastSave).toBe('server');
+  });
+
+  it.each([403, 404, 409, 429])('keeps a backlog note queued when the server answers %i', async (status) => {
+    const values = storage();
+    const note = { id: 'queued', route: '/', feedback: 'Later', element: null, done: false, createdAt: '2026-01-01T00:00:00Z' };
+    values.set(FEEDBACK_STORAGE_KEY, JSON.stringify([note]));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, init?: RequestInit) =>
+        init?.method === 'POST' ? Response.json({ error: 'not now' }, { status }) : Response.json({ rev: '1', notes: [] }),
+      ),
+    );
+    const store = createIsotoneStore({ endpoint: '/notes' });
+    expect((await store.pollNotes(null)).notes?.map((n) => n.id)).toEqual(['queued']);
+    expect(store.hasUnsyncedNotes).toBe(true);
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it('keeps new notes and newer edits made while a backlog request is in flight', async () => {

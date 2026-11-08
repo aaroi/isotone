@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 /**
  * The self-mount against a host that puts its own React root on `document`.
  *

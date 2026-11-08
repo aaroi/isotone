@@ -221,7 +221,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
 }
 
 /**
- * @deprecated Renamed to {@link isotone}; this alias goes in a later minor release.
+ * @deprecated Renamed to {@link isotone}; this alias will be removed in 1.5.0.
  * @alias
  */
 export const iteration: typeof isotone = isotone;

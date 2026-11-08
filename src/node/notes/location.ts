@@ -22,6 +22,7 @@ export const LEGACY_NOTES_FILE = '.iteration-feedback.json';
  * are added to it and the old file is removed. Both run under the old file's
  * lock, which 1.2 takes at the same path, so no older Isotone writes it
  * mid-move. The new file is then kept out of Git, as the servers do.
+ * The move and merge will be removed in 1.5.0; after that the old file is ignored.
  */
 export function defaultNotesFile(dir: string, log: (line: string) => void): string {
   const file = join(dir, NOTES_FILE);
