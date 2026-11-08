@@ -6,7 +6,7 @@
 
 - **Node.js 22 or later** is required (`engines.node` is `>=22`; Node 20 reached end of life in April 2026).
 - **The `Iteration` names are now `Isotone`.** The Vite plugin is `isotone()` (`import { isotone } from 'isotone/vite'`); `iteration()` still works as a deprecated alias until a later minor release. `IterationPanel` → `IsotonePanel`, `mountIteration` → `mountIsotone`, `serveIteration` → `serveIsotone`, and every `Iteration*` type likewise (`IsotoneNote`, `MountIsotoneOptions`, …). Only import names change.
-- **Notes live in `.isotone/notes.json`** (Blast: `.isotone/notes.blast.json`). The CLI, the Vite dev server and `isotone serve` move an old `.iteration-feedback.json` there on first run and say so; if both exist the new one wins and nothing is merged. A `file` option or `--file` path is never moved. **The endpoints are now `/api/isotone/*`**, which matters only if you call them yourself or pass a full `endpoint` URL to `mountIsotone`.
+- **Notes live in `.isotone/notes.json`** (Blast: `.isotone/notes.blast.json`). The CLI, the Vite dev server and `isotone serve` move an old `.iteration-feedback.json` there on first run and say so; if the old file reappears, its notes are merged in and it is removed. A `file` option or `--file` path is never moved. **The endpoints are now `/api/isotone/*`**, which matters only if you call them yourself or pass a full `endpoint` URL to `mountIsotone`.
 - **Isotone works only on the machine running the dev server.** A Vite server started with `--host` still serves the app to other devices, but without the panel, and Isotone's endpoints answer them 403.
 - **`isotone/server` is removed.** Apps that wired Isotone into their own routes run `npx isotone serve` and add the loader tag `init` prints.
 - **Fewer exports.** Each subpath exports only what the docs use, and `isotone/react` no longer repeats `isotone/core`. If a name goes missing, [Removed](#removed) gives its replacement.
@@ -30,6 +30,7 @@
 
 **Notes and the CLI**
 
+- Notes a still-running 1.2 dev server writes to `.iteration-feedback.json` during the upgrade are merged into `.isotone/notes.json` on the next CLI run or dev server start, and the moved file is kept out of Git right away.
 - Concurrent writers no longer lose notes, and a lock or temporary file left by a crashed process no longer leaves the store "busy"; lock and temporary files are kept out of Git.
 - Commands run from a subdirectory use the nearest `.isotone/notes.json` up to the Git root and name it on stderr.
 - `--done`, `--undone` and `--working` take several IDs (`a b` or `a,b`) and change all or none; `--done a b` used to close only `a`.
