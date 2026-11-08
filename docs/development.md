@@ -3,37 +3,24 @@
 This guide is for changing Isotone itself. Agents using Isotone in another
 project follow [the agent guide](agent-guide.md).
 
-Read [the design language](design.md) before changing panel UI. Instrument is
-the accepted design; keep geometry and interaction rules shared across themes.
-Selection is raised, and Clean Highlight is the pill’s active state. Keep
-experimental alternatives separate until the reviewer chooses one.
+Panel UI follows [the design language](design.md), which also lists what to
+inspect for a UI change. [Onboarding](onboarding.md) covers the README prompt,
+`init`'s first run and the agent trial that re-runs them; re-run it when
+changing them. Merging into `main` publishes to npm, so follow [the release
+guide](releasing.md) and keep work on a branch until it is ready.
 
-Run `pnpm check` for types, lint, unused files and exports (knip), build, and
-tests. `pnpm test` rebuilds a stale `dist/isotone.global.js` itself. For
-package, adapter or shipped-doc changes, also run `pnpm check:package`, which
-installs the packed archive in a clean consumer.
-It also fails when `dist/isotone.global.js` or the tarball outgrows its budget
-in `scripts/check-package.mjs`; raise a budget only in the change that needs it.
-`pnpm smoke` (after `pnpm build`; it needs the network) installs it into fresh
-Vite 5 and Vite 8 apps with React 18 and 19 and checks that a production build
-has no panel. `pnpm test:coverage` enforces the per-layer coverage floors in
-`vitest.config.ts`; raise a floor when its layer improves. `pnpm mutate` runs
-Stryker over `src/core` and `src/node` (weekly in CI; `--mutate <glob>` narrows
-it) and writes `reports/mutation/index.html`. Tests focus on observable behaviour, transport and store failures,
-lifecycle cleanup and design boundaries; add a small regression case for each bug.
-Inspect both themes, keyboard use, reduced motion, scrolling, and long content
-when changing UI.
+## Checks
 
-[Onboarding](onboarding.md) explains how the README prompt, `init` and its first
-run fit together, and the agent trial (`scripts/trial/`) that re-runs a fresh
-agent through them. Re-run it when changing them.
+| Command | What it does |
+| --- | --- |
+| `pnpm check` | Types, lint, unused files and exports (knip), build and tests. `pnpm test` rebuilds a stale `dist/isotone.global.js` itself. |
+| `pnpm check:package` | Installs the packed archive in a clean consumer; fails when `dist/isotone.global.js` or the tarball outgrows its budget in `scripts/check-package.mjs` (raise one only in the change that needs it). Run it for package, adapter or shipped-doc changes. |
+| `pnpm smoke` | After `pnpm build`, with network: installs into fresh Vite 5 and Vite 8 apps with React 18 and 19 and checks a production build has no panel. |
+| `pnpm test:coverage` | The per-layer floors in `vitest.config.ts`; raise a floor when its layer improves. |
+| `pnpm mutate` | Stryker over `src/core` and `src/node` (weekly in CI; `--mutate <glob>` narrows it), into `reports/mutation/index.html`. |
 
-Merging into `main` publishes automatically. Follow [the release guide](releasing.md)
-before merging; use a development branch until the change is ready for npm.
-
-The runtime is TypeScript throughout. The expensive work is DOM traversal, disk
-access, and redundant updates; avoiding that work matters more here than adding
-a second language or runtime.
+Tests check observable behaviour, transport and store failures, lifecycle
+cleanup and design boundaries; add a small regression case for each bug.
 
 ## Documentation
 
@@ -92,7 +79,7 @@ same outline.
 included, keeps `node:*` out of core, react and standalone, and keeps React
 packages out of everything but react and standalone. Biome refuses import cycles.
 
-Public entry points are `react`, `core`, `server`, `serve`, `vite`, and `cli`,
+Public entry points are `react`, `core`, `serve`, `vite` and `cli`,
 built to `dist/<name>.js`; the `isotone` binary is `dist/bin.js`. Each barrel
 (`src/<name>/index.ts`) exports only names the docs or the demo use, listed in
 `tests/package/exports.test.ts`: add one there on purpose, and list a removal
@@ -108,15 +95,18 @@ explicit theme), a light and dark toggle for the page, and a Tour button. The
 tour (`examples/demo/tour.tsx`) starts by itself on a browser's first visit and
 remembers when it was closed; `/?tour=1` starts it regardless. Its last step
 hands visitors the README's "Start with your agent" prompt, kept in
-`examples/demo/agent-prompt.ts`; `tests/package/agent-prompt.test.ts` keeps the two the
-same, so change both together. A pretend agent marks each new note as being worked on a moment after it
-is sent and closes it a few seconds later, the way `--working` and `--done`
-would.
+`examples/demo/agent-prompt.ts`; `tests/package/agent-prompt.test.ts` keeps the
+two the same. A pretend agent marks each new note as worked on a moment after it
+is sent and closes it a few seconds later, as `--working` and `--done` would;
+reloading clears a claim it never finished.
 
-The sample app's selectors sit in two sections: Cards (layout, spacing, corner
-radius and padding) and Theme (accent colour). `/?stress=1` puts its 500 selectors
-in sections of a dozen, one of them with a long name. Clean Highlight is the product default; there is no
-active-pill design switcher.
+The sample app's selectors sit in two sections, Cards and Theme. Other demo URLs:
+
+| URL | Shows |
+| --- | --- |
+| `/?stress=1` | 500 selectors in sections of a dozen (one with a long name) and 500 notes, with long labels and large feedback |
+| `/?review=1` | Feedback stays open across variant reloads |
+| `/?review=1&update-preview=1` | A fictional update result; **Ask agent to update** files a demo update note (built by the same server code in the dev demo) that the pretend agent closes. Nothing contacts npm. |
 
 `/preview.html` frames the live demo for the README image. The README image is
 `?scene=both` (variants and feedback panels) captured at an 816 × 856 window
@@ -140,65 +130,29 @@ same hosted variant from the dev server. `vercel.json` holds the install and
 build commands.
 
 Every user-facing change updates the demo so it shows the change: new controls
-appear in the sample app, new copy in the tour, new behaviour somewhere a
-visitor will try it. Many visitors use a phone, so check the demo at a phone
-size (375 × 812 and landscape) as well.
+in the sample app, new copy in the tour, new behaviour where a visitor will try
+it. Many visitors use a phone, so check it at 375 × 812 and landscape too. The
+dev demo's notes are seeded files in a temporary directory, removed when the
+server closes.
 
-The Vercel project is connected to this repository, so Vercel deploys
-[isotone.vercel.app](https://isotone.vercel.app) on every push to `main` and
-posts a preview link on every pull request; try a change on a phone from that
-link before it merges. To open previews without signing in, turn off Vercel
-Authentication for previews in the project's Settings → Deployment Protection.
-Pull requests from forks need a project member to authorize their preview.
-`vercel deploy --prod` still works for an emergency.
-
-Demo feedback uses seeded files in a temporary
-directory, separate from project notes; the server removes them when it closes.
-Open `/?stress=1` for 500 selectors and 500 notes, including long labels and large
-feedback.
+Vercel deploys [isotone.vercel.app](https://isotone.vercel.app) on every push to
+`main` and posts a preview link on every pull request; try a change on a phone
+there before it merges. To open previews without signing in, turn off Vercel
+Authentication for previews (Settings → Deployment Protection). Pull requests
+from forks need a project member to authorize their preview. `vercel deploy
+--prod` works for an emergency.
 
 ## Performance
 
-Selector dependencies are walked iteratively in linear time; long chains do not
-consume the JavaScript call stack. DOM descriptors read sibling metadata only
-where a selector needs it. Variant status uses an in-process Git-compatible blob
-hash rather than launching a process per file.
+The runtime is TypeScript throughout; the expensive work is DOM traversal, disk
+access and redundant updates, so avoid that work rather than adding a language
+or runtime. Selector dependencies are walked iteratively in linear time, DOM
+descriptors read sibling metadata only where a selector needs it, and variant
+status hashes blobs in process (Git-compatible) rather than spawning per file.
+Theme events and picker geometry are coalesced per frame; panel motion and
+render budgets are in [the design language](design.md#motion).
 
-Theme events and picker geometry are coalesced per frame. Note and selector layout
-animation runs only when the collection changes; collections above 40 items skip
-per-item motion. Reads precede writes, interrupted animations start from the
-visible position, and reduced-motion or keyboard actions remove movement.
-
-Do not add virtualization or a new runtime without a measured bottleneck and a
-clear benefit. Preserve native scrolling and keyboard access. Before changing
-performance-sensitive code, include large collections and failure/retry paths in
-validation; a fast happy path is insufficient.
-
-## UI changes
-
-Follow [the design language](design.md). Use shared semantic materials and
-components rather than selector-specific theme overrides. Check both themes,
-selected/hover/focus/disabled states, long labels, empty and populated feedback,
-sticky fades, narrow viewports, and reduced motion. Context must remain accessible
-even when a label is visually truncated. On touch, copy names taps rather than
-keys or Shift, and nothing depends on hover; see "Phones and touch" in
-[the design language](design.md).
-
-`src/react/feedback-layout.ts` holds the accepted inline-reference layout.
-`src/react/pill-active.ts` holds the accepted Clean Highlight recipe. Future
-review alternatives belong under `.isotone/variants/`.
-Edit the copied recipe when developing an alternative; keep shared geometry,
-theme tokens and unrelated controls in the main stylesheet.
-
-The panel's auto theme samples rendered background colours, not pixels from
-images. A host can pass `light` or `dark` when those samples do not represent the
-page. `system` deliberately ignores the host theme.
-
-For notice layout checks, `/?review=1&update-preview=1` supplies a fictional
-update result, in the dev demo and the hosted one. **Ask agent to update** then
-files a demo update note, built by the same server code in the dev demo, which
-the pretend agent picks up and closes. It does not contact npm or install anything. `/?review=1` keeps
-feedback open across variant reloads.
-
-Reloading the demo clears any note the pretend agent had marked as being worked
-on, since it never finishes it.
+Add virtualization or a new runtime only for a measured bottleneck with a clear
+benefit, keeping native scrolling and keyboard access. Validate
+performance-sensitive changes with large collections and failure and retry
+paths, not only a fast happy path.
