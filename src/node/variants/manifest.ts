@@ -256,7 +256,8 @@ export function addVariantFile(
         : isGitIgnored(sourceAbs)
           ? `Git ignores "${file}"`
           : null;
-    if (refusal) throw new Error(`${refusal}; variants are meant to be committed, so it is not copied. Pass --force to copy it anyway.`);
+    if (refusal)
+      throw new Error(`${refusal}; variants are meant to be committed, so it is not copied. Ask the user before copying it with --force.`);
     mkdirSync(dirname(destAbs), { recursive: true });
     writeFileSync(destAbs, readFileSync(sourceAbs));
     manifest.files = { ...manifest.files, [key]: { base: blobOf(sourceAbs) } };

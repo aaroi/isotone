@@ -295,10 +295,6 @@ function printSetup(print: Print, setup: Setup): void {
     print('Tell the user the URL to open and that the pill in the corner is Isotone.');
   }
   print();
-  if (setup.approach === 'serve' && setup.host === 'next') {
-    printRouteAlternative(print);
-    print();
-  }
   print(`Themes, update checks, other hosts and endpoint rules: ${setup.integrations}`);
 }
 
@@ -391,22 +387,6 @@ function printServe(print: Print, setup: Setup): void {
   print(`Notes and knobs (${KNOBS_FILE}) work here; when \`isotone serve\` starts it excludes`);
   print('the notes file from Git (in .git/info/exclude). Swapping whole source files needs');
   print('the Vite plugin, or a host-owned VariantsSource (--approach host).');
-}
-
-function printRouteAlternative(print: Print): void {
-  print('Alternative, when the user does not want a second process: serve the endpoint from');
-  print('a Next route handler. isotone/server answers 404 when NODE_ENV is production unless');
-  print('you pass { allowProduction: true }:');
-  print();
-  for (const line of ROUTE_HANDLER_EXAMPLE) print(line ? `  ${line}` : '');
-  print();
-  print('Manual handlers do not change Git exclusions: add .iteration-feedback.json to');
-  print('.gitignore. Then mount the panel from a client module, in development only, and');
-  print('call the disposer it returns on unmount (direct imports need react and react-dom):');
-  print();
-  print("  if (process.env.NODE_ENV === 'development') {");
-  print("    import('isotone/react').then(({ mountIteration }) => mountIteration({ endpoint: '/api/iteration/notes' }));");
-  print('  }');
 }
 
 /**
@@ -515,20 +495,6 @@ const HOST_EXAMPLE = [
   '',
   'const dispose = mountIteration({ variants: source });',
   '// Call dispose() from the client lifecycle or HMR cleanup.',
-];
-
-/** A Request-based handler; `serveNotesRequest` reads the method, query and
- *  JSON body itself, so GET, POST and DELETE all go through the one export. */
-const ROUTE_HANDLER_EXAMPLE = [
-  '// app/api/iteration/notes/route.ts',
-  "import { serveNotesRequest } from 'isotone/server';",
-  '',
-  'const handle = async (req: Request) => {',
-  "  if (process.env.NODE_ENV !== 'development') return new Response(null, { status: 404 });",
-  "  const { status, headers, body } = await serveNotesRequest('.iteration-feedback.json', req);",
-  '  return Response.json(body, { status, headers });',
-  '};',
-  'export { handle as GET, handle as POST, handle as DELETE };',
 ];
 
 function applyApproach(cwd: string, approach: Approach, agents: AgentsState): void {

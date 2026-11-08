@@ -4,9 +4,8 @@
 //
 // Run it after the setup trial (Isotone must be installed in the fixture). It
 // first commits whatever the setup left, so the loop trial's diff shows only
-// the agent's answer to the notes, then writes the notes through the installed
-// package's own notes handler (`isotone/server`'s notesResponse), the same code
-// path the panel's POST takes. The base commit and note ids go to
+// the agent's answer to the notes, then POSTs the notes to the installed
+// package's own `isotone serve` endpoint, the same path the panel's save takes. The base commit and note ids go to
 // .git/isotone-trial.json for score.mjs.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -62,7 +61,7 @@ if (!fixtureArg) {
   process.exit(1);
 }
 const app = resolve(fixtureArg);
-const server = join(app, 'node_modules', 'isotone', 'dist', 'server.js');
+const server = join(app, 'node_modules', 'isotone', 'dist', 'serve.js');
 if (!existsSync(server)) {
   console.error(`Isotone is not installed in ${app}. Run the setup trial first, or: npm install -D "$(cat <outDir>/tarball.txt)"`);
   process.exit(1);
@@ -80,17 +79,29 @@ if (commit.status !== 0 && !/nothing to commit/.test(commit.stdout + commit.stde
 }
 const base = git(app, ['rev-parse', 'HEAD']).stdout.trim();
 
-const { notesResponse, NOTES_ENDPOINT } = await import(pathToFileURL(server).href);
+const { serveIteration } = await import(pathToFileURL(server).href);
 const file = join(app, '.iteration-feedback.json');
 const notes = [];
-for (const note of SEEDED) {
-  const response = notesResponse(file, {
-    method: 'POST',
-    url: NOTES_ENDPOINT,
-    body: { route: '/', feedback: note.feedback, element: note.element, elements: [note.element], viewport: note.viewport },
-  });
-  if (response.status !== 201) throw new Error(`The notes handler refused "${note.key}": ${JSON.stringify(response.body)}`);
-  notes.push({ key: note.key, id: response.body.id });
+const served = await serveIteration({ file, port: 0, checkForUpdates: false });
+try {
+  for (const note of SEEDED) {
+    const response = await fetch(`${served.url}/api/iteration/notes`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        route: '/',
+        feedback: note.feedback,
+        element: note.element,
+        elements: [note.element],
+        viewport: note.viewport,
+      }),
+    });
+    const body = await response.json();
+    if (response.status !== 201) throw new Error(`The notes endpoint refused "${note.key}": ${JSON.stringify(body)}`);
+    notes.push({ key: note.key, id: body.id });
+  }
+} finally {
+  await served.close();
 }
 
 const statePath = trialStateFile(app);

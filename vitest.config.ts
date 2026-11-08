@@ -21,7 +21,6 @@ export default defineConfig({
         'src/node/**': floor(95, 87, 96, 92),
         'src/react/**': floor(89, 82, 88, 87),
         'src/serve/**': floor(94, 86, 86, 92),
-        'src/server/**': floor(99, 94, 99, 99),
         'src/vite/**': floor(91, 80, 87, 89),
       },
     },

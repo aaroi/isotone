@@ -6,33 +6,22 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { UpdateInfo } from '../core/update';
-import { checkRequest, isFromThisMachine, nodeRequestFacts, readNodeJson, sendFailure, writeResponse } from '../node/http';
+import { checkRequest, nodeRequestFacts, readNodeJson, sendFailure, writeResponse } from '../node/http';
 import { notesResponse } from '../node/notes/handler';
 import { updateResponse } from '../node/update/note';
 import { type VariantsStoreOptions, variantsResponse } from '../node/variants';
-import type { HostPolicy, NetworkAccess } from './access';
 
 type Middleware = (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
 
-/** How each request is judged: the dev server's host settings, read per
- *  request since a restart can change them, and the network access key. */
-export interface Gate {
-  policy: () => HostPolicy;
-  access: NetworkAccess;
-}
+/** The names Vite's `server.allowedHosts` lets in, read per request since a
+ *  restart can change them. */
+export type Gate = () => readonly string[];
 
-/** Whether the request may use the endpoints; answers 403 when not. Only this
- *  machine may, and a device on the network let in with the access link. */
-function guard(req: IncomingMessage, res: ServerResponse, gate: Gate): boolean {
+/** Whether the request may use the endpoints; answers 403 when not. Only
+ *  this machine may, even when the dev server listens on the network. */
+function guard(req: IncomingMessage, res: ServerResponse, allowedHosts: Gate): boolean {
   try {
-    const facts = nodeRequestFacts(req);
-    if (!isFromThisMachine(facts) && !gate.access.admitted(req)) {
-      res.statusCode = 403;
-      res.setHeader('content-type', 'application/json; charset=utf-8');
-      res.end(JSON.stringify({ error: 'isotone answers other devices only after they open the access link the dev server printed' }));
-      return false;
-    }
-    checkRequest({ ...facts, allowedHosts: gate.policy().names, network: true });
+    checkRequest({ ...nodeRequestFacts(req), allowedHosts: allowedHosts() });
     return true;
   } catch (error) {
     sendFailure(res, error);

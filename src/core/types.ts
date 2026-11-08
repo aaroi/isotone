@@ -1,8 +1,7 @@
 /**
  * The note model, and the configuration types shared by the panel and the
- * server-side adapters. They live in core so the Vite plugin, `isotone/serve`
- * and `isotone/server` can describe notes and the panel's options without
- * importing React.
+ * servers. They live in core so the Vite plugin and `isotone/serve` can
+ * describe notes and the panel's options without importing React.
  */
 import type { RouteGateOptions } from './routes';
 import type { UpdateRequest } from './update';

@@ -10,7 +10,6 @@ export default defineConfig([
       // One file per package.json subpath, named after it, plus the binary.
       react: 'src/react/index.ts',
       core: 'src/core/index.ts',
-      server: 'src/server/index.ts',
       serve: 'src/serve/index.ts',
       vite: 'src/vite/index.ts',
       cli: 'src/cli/index.ts',

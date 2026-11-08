@@ -1,6 +1,6 @@
 /**
  * The notes endpoint: a transport-agnostic handler over the notes file that
- * the Vite plugin, `isotone serve` and `isotone/server` all render.
+ * the Vite plugin and `isotone serve` both render.
  */
 import { randomUUID } from 'node:crypto';
 

@@ -41,15 +41,14 @@ projects use the same setup, and it does not enter the host's dependency
 optimizer or Fast Refresh graph. The plugin acts only on the dev server: `vite
 build` injects nothing and serves no endpoints, so it needs no guard of its own.
 
-**Review from a phone.** The endpoints answer only this machine. Start the dev
-server with `--host` (or set `server.host`), then open the link isotone prints
-under Vite's banner, `http://<lan-ip>:<port>/?isotone-key=…`, on the phone
-instead of Vite's Network URL. The link lets that browser in with a cookie; a
-device without it gets the app but no panel, and every endpoint answers it 403.
-The key changes when the dev server process restarts. Pages served under a name
-other than an IP address, `localhost`, `*.localhost`, `*.test` or one in Vite's
-`server.allowedHosts` are refused, and so is a request a local tunnel forwards
-for another machine.
+**This machine only.** The panel and its endpoints answer only the machine the
+dev server runs on. Started with `--host` (or `server.host`), Vite still serves
+the app to other devices, but without the panel, and Isotone's endpoints answer
+them 403. Pages served under a name other than `localhost`, `*.localhost`,
+`*.test`, a loopback address or one in Vite's `server.allowedHosts` are refused,
+and so is a request a local tunnel forwards for another machine. The plugin also
+adds the notes file, the Blast session and `.isotone/` to Vite's
+`server.fs.deny`, so Vite's static server never hands them out.
 
 If the app mounts `IterationPanel` or `mountIteration` itself, use
 `isotone({ panel: false })` to keep local endpoints and source variants without
@@ -117,55 +116,16 @@ plugin, or a host-owned `VariantsSource`.
 loader `tag` for the port it listens on, so paste those as printed, and keep the
 port in one place with a script such as `"isotone": "isotone serve --port 4124"`.
 `--file` selects a notes file and `--theme` the panel theme. The server binds to
-loopback. An HTTPS page may block an HTTP script; use a same-origin route (below)
-then.
+`127.0.0.1` and answers only this machine; another device on the network gets
+403 even if your app's dev server listens on every interface (`next dev` does).
+An HTTPS page may block the HTTP script.
 
-## Framework route and client mount
+## Client mount
 
-Use this when the framework should own the endpoint. Install `react` and
-`react-dom` if the app does not already have them; direct `isotone/react`
-imports use the host's React runtime.
-
-For a Next App Router project, with the route's own development check (the
-adapters also answer 404 in production; see [Production](#production)):
-
-```ts
-// app/api/iteration/notes/route.ts
-import { serveNotesRequest } from 'isotone/server';
-
-const handle = async (request: Request) => {
-  if (process.env.NODE_ENV !== 'development') {
-    return new Response(null, { status: 404 });
-  }
-  const { status, headers, body } = await serveNotesRequest(
-    '.iteration-feedback.json', request,
-  );
-  return Response.json(body, { status, headers });
-};
-export { handle as GET, handle as POST, handle as DELETE };
-```
-
-When the page and this API listen on different ports, every request gets 403
-`origin not allowed`; pass `{ loopbackOrigins: true }` as the third argument to
-accept pages from any loopback port.
-
-The adapters accept only this machine's names (`localhost`, `127.0.0.1`,
-`[::1]`, `*.localhost`, `*.test`), so a browser on another device that opens
-the route at your LAN address gets 403. They see only the `Request`, though, so
-a non-browser client that sends a local `Host` gets through unless the runtime
-tells them who sent it: pass `{ remoteAddress }` where it can (Bun's
-`server.requestIP(request)?.address`, a Node socket's `remoteAddress`). `next
-dev` listens on every network interface and does not expose the peer, so start
-it with `next dev -H 127.0.0.1` to keep the route on this machine. To review
-from a phone on purpose, pass `{ allowNetwork: true }`: anyone on that network
-can then read and write your notes.
-
-A manual route does not touch Git configuration: add `.iteration-feedback.json`
-and `.iteration-feedback.blast.json` ([Blast](blast.md)'s session) to
-`.gitignore`. The Vite plugin and `isotone serve` add them to `.git/info/exclude`
-themselves.
-
-Mount from a client component once, and clean up on unmount:
+Use this when the app should mount the panel from its own code, with the
+host's React. Install `react` and `react-dom` if the app does not already have
+them. Run `npx isotone serve` as above, then mount from a client component once,
+and clean up on unmount:
 
 ```tsx
 'use client';
@@ -177,7 +137,7 @@ export function ReviewTools() {
     let dispose: (() => void) | undefined;
     let cancelled = false;
     import('isotone/react').then(({ mountIteration }) => {
-      if (!cancelled) dispose = mountIteration({ endpoint: '/api/iteration/notes' });
+      if (!cancelled) dispose = mountIteration({ endpoint: 'http://127.0.0.1:4123/api/iteration/notes' });
     });
     return () => { cancelled = true; dispose?.(); };
   }, []);
@@ -187,20 +147,19 @@ export function ReviewTools() {
 
 Render `<ReviewTools />` once in the app layout. The effect handles Strict Mode
 and route unmounts, and the dynamic import behind the check keeps the panel out
-of production bundles. Other Request-based servers use the same handler. Node
-HTTP servers can call `notesResponse` and serialize its `body`, but it neither
-reads nor limits the body nor checks the request, so prefer the Request adapter.
+of production bundles.
 
 ## Endpoint rules
 
-Every endpoint (the Vite plugin's, `isotone serve`'s and the Request adapters')
-applies the same rules, which keep other websites away from your notes:
+Every endpoint (the Vite plugin's and `isotone serve`'s) applies the same rules,
+which keep other devices and other websites away from your notes:
 
-- The `Host` header must be `localhost`, `*.localhost`, `*.test`, a loopback
-  address, or (on Vite, `serve`, or an adapter given `remoteAddress` or
-  `allowNetwork`) any IP address; on Vite, a name in `server.allowedHosts` too.
-  A browser's `Origin` must match it (any loopback port with
-  `loopbackOrigins`). A request without an `Origin`, such as `curl` or a
+- The request must come from this machine (its socket's peer address, and any
+  address a proxy or tunnel forwarded for, is loopback), and its `Host` header
+  must be `localhost`, `*.localhost`, `*.test` or a loopback address; on Vite, a
+  name in `server.allowedHosts` too.
+- A browser's `Origin` must match the Host, port included; `isotone serve`
+  accepts a page on any loopback port, since it never serves the page. A request without an `Origin`, such as `curl` or a
   script, is accepted, so any process on this machine can write a note: one
   more reason notes are context, not instructions. (The CLI reads and writes
   the notes file directly.)
@@ -229,8 +188,6 @@ and `IterationPanel`. The standalone CLI accepts the same values with `--theme`:
 | --- | --- |
 | Vite plugin | Acts only on `vite dev`. A build injects no panel and serves no endpoints. `ISOTONE_VARIANT` bakes chosen variants into a build only when set. |
 | `isotone serve` | A separate local process bound to loopback that accepts only localhost origins. The tag that loads it is either behind the framework's development check or the localhost-only loader above. |
-| Request adapters | `serveNotesRequest` and `serveVariantsRequest` answer 404 under `NODE_ENV=production` unless given `allowProduction: true`. The route keeps its own development check. |
-| `notesResponse`, `variantsResponse` | Lower-level functions with no guard; the host calls them only from development code. |
 | `mountIteration`, `IterationPanel` | No guard, by design. Import them dynamically behind the development check. |
 
 ## Confirm the integration
@@ -250,5 +207,4 @@ panel retains unsent notes locally until it can retry; keep that browser profile
 until they reach the file.
 
 The panel polls the notes endpoint with `?rev=<revision>` while its tab is
-visible. `notesResponse` and `serveNotesRequest` answer an unchanged file from
-its metadata, so a custom endpoint built on them needs nothing extra for that.
+visible; an unchanged file is answered from its metadata.

@@ -11,7 +11,7 @@ import { npm } from './npm.mjs';
 // 366 kB). Every host page loads the bundle, so growth should be a decision:
 // raise a budget in the same change that needs it, and say why.
 // Tarball raised to 405 kB (round 2 integration, 387 kB): the shipped note
-// schema, the LAN access key, the split Vite modules and the CLI's new guards.
+// schema, the split Vite modules and the CLI's new guards.
 const BUDGET = { bundle: 367_000, tarball: 405_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -54,7 +54,6 @@ import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { runCli } from 'isotone/cli';
 import * as core from 'isotone/core';
-import { readNotes } from 'isotone/server';
 import { serveIteration } from 'isotone/serve';
 import { createRequire } from 'node:module';
 
@@ -65,10 +64,10 @@ assert.equal(existsSync('node_modules/react'), false, 'standalone must not requi
 const require = createRequire(import.meta.url);
 assert.equal(require('isotone/package.json').name, 'isotone');
 assert.equal((await import('isotone/package.json', { with: { type: 'json' } })).default.name, 'isotone');
-for (const entry of ['react', 'core', 'server', 'serve', 'vite', 'cli']) {
+for (const entry of ['react', 'core', 'serve', 'vite', 'cli']) {
   assert.ok(require.resolve('isotone/' + entry).endsWith('.js'), entry);
 }
-for (const entry of ['core', 'server', 'serve', 'cli']) {
+for (const entry of ['core', 'serve', 'cli']) {
   try { require('isotone/' + entry); } catch (error) {
     assert.notEqual(error.code, 'ERR_PACKAGE_PATH_NOT_EXPORTED', entry);
     assert.match(error.code ?? '', /^ERR_REQUIRE_(ESM|ASYNC_MODULE)$/, entry + ': ' + error.message);
@@ -97,7 +96,7 @@ try {
   assert.ok(bundle.includes('"theme":"system"'));
   const note = await fetch(app.url + '/api/iteration/notes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ route: '/', feedback: 'Package smoke test' }) });
   assert.equal(note.status, 201);
-  assert.equal(readNotes('notes.json').length, 1);
+  assert.equal(JSON.parse(readFileSync('notes.json', 'utf8')).length, 1);
   // Blast is a CLI feature: no HTTP endpoint serves its session.
   assert.equal((await fetch(app.url + '/api/iteration/blast')).status, 404);
 } finally { await app.close(); }

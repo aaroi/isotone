@@ -7,9 +7,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { RouteGateOptions } from '../core/routes';
 import type { IterationShortcut, IterationTheme } from '../core/types';
 import { readBundle } from '../node/bundle';
+import { isFromThisMachine, nodeRequestFacts } from '../node/http';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
 import { UPDATE_ENDPOINT } from '../node/update/check';
-import type { NetworkAccess } from './access';
 
 const BUNDLE_PATH = '/@isotone/panel.js';
 const INJECTED = new WeakSet<ServerResponse>();
@@ -50,18 +50,17 @@ type Use = {
   (path: string, handler: (req: IncomingMessage, res: ServerResponse, next: () => void) => void): unknown;
 };
 
+/** Only this machine gets the panel; another device gets the app alone. */
+const local = (req: IncomingMessage): boolean => isFromThisMachine(nodeRequestFacts(req));
+
 /**
- * Serve the panel to the dev server's pages: the access link's redirect,
- * the bundle, and the scripts added to every HTML navigation. `mount` is
- * the mount module, or null when the host mounts the panel itself; `head`
- * is the live variant store, when there is one. A device on the network
- * gets the store, which the app's modules need, but not the panel until it
- * has been let in.
+ * Serve the panel to the dev server's pages: the bundle, and the scripts
+ * added to every HTML navigation. `mount` is the mount module, or null when
+ * the host mounts the panel itself; `head` is the live variant store, when
+ * there is one. A device on the network gets the store, which the app's
+ * modules need, but never the panel.
  */
-export function servePanel(use: Use, access: NetworkAccess, mount: string | null, head: (() => string) | null): void {
-  use((req, res, next) => {
-    if (!access.admit(req, res)) next();
-  });
+export function servePanel(use: Use, mount: string | null, head: (() => string) | null): void {
   if (mount === null && head === null) return;
   if (mount !== null) {
     // A self-contained bundle keeps the panel out of the host's dependency
@@ -69,7 +68,7 @@ export function servePanel(use: Use, access: NetworkAccess, mount: string | null
     // the page itself loads it: another site's <script> is cross-site.
     use(BUNDLE_PATH, (req, res) => {
       const site = req.headers['sec-fetch-site'];
-      const allowed = access.allows(req) && (site === undefined || site === 'same-origin' || site === 'none');
+      const allowed = local(req) && (site === undefined || site === 'same-origin' || site === 'none');
       res.statusCode = allowed ? 200 : 403;
       res.setHeader('content-type', allowed ? 'text/javascript; charset=utf-8' : 'text/plain; charset=utf-8');
       res.setHeader('cache-control', 'no-store');
@@ -89,7 +88,7 @@ export function servePanel(use: Use, access: NetworkAccess, mount: string | null
     // gets 304 and never sees the panel. Ask for the full document.
     delete req.headers['if-none-match'];
     delete req.headers['if-modified-since'];
-    injectHtmlResponse(res, access.allows(req) ? mount : null, head ?? undefined);
+    injectHtmlResponse(res, local(req) ? mount : null, head ?? undefined);
     next();
   });
 }

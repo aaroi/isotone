@@ -1,11 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { isIP } from 'node:net';
 
 import { MAX_BODY_BYTES } from '../core/limits';
 import { LockBusyError } from './fs/lock';
 
-/** The transport-agnostic result of a request — any runtime (Vite
- *  middleware, Next route handler, Bun serve, Vercel) can render it. */
+/** The result of a request, which the Vite middleware and `isotone serve`
+ *  both render. */
 export interface HandlerResponse {
   status: number;
   /** Response headers object (frameworks set them on their own res). */
@@ -14,7 +13,7 @@ export interface HandlerResponse {
   body: unknown;
 }
 
-/** A request the pure handlers understand (framework-neutral). */
+/** A request the pure handlers understand. */
 export interface HandlerRequest {
   method?: string;
   url?: string;
@@ -52,12 +51,11 @@ function isLoopbackName(name: string): boolean {
 
 /**
  * Whether a Host header names this machine the way a local browser would: a
- * loopback name ({@link isLoopbackName}), one the dev server was told to
- * allow (Vite's `server.allowedHosts`; a leading dot allows subdomains), or,
- * with `anyAddress`, any IP literal (a LAN address the server listens on). A
+ * loopback name ({@link isLoopbackName}) or one the dev server was told to
+ * allow (Vite's `server.allowedHosts`; a leading dot allows subdomains). A
  * DNS-rebinding page sends its own public domain, which fails.
  */
-function isLocalHostHeader(host: string | null | undefined, allowed: readonly string[], anyAddress: boolean): boolean {
+function isLocalHostHeader(host: string | null | undefined, allowed: readonly string[]): boolean {
   if (!host) return false;
   let name: string;
   try {
@@ -65,7 +63,7 @@ function isLocalHostHeader(host: string | null | undefined, allowed: readonly st
   } catch {
     return false;
   }
-  if (isLoopbackName(name) || (anyAddress && isIP(name))) return true;
+  if (isLoopbackName(name)) return true;
   return allowed.some((entry) => {
     const rule = entry.toLowerCase();
     return rule.startsWith('.') ? name === rule.slice(1) || name.endsWith(rule) : name === rule;
@@ -92,8 +90,8 @@ function forwardedAddresses(forwardedFor: string | null | undefined, forwarded: 
 export interface RequestFacts {
   origin?: string | null;
   host?: string | null;
-  /** The peer address; omitted where the runtime does not expose it. */
-  remoteAddress?: string | null;
+  /** The peer's socket address. */
+  remoteAddress: string | null;
   /** `X-Forwarded-For` and `Forwarded`, as received. */
   forwardedFor?: string | null;
   forwarded?: string | null;
@@ -115,31 +113,20 @@ export function nodeRequestFacts(req: IncomingMessage): RequestFacts {
 }
 
 /** Whether the request comes from this machine: every address it names (the
- *  peer, when known, and any a proxy forwarded for) is loopback. */
+ *  peer, and any a proxy forwarded for) is loopback. */
 export function isFromThisMachine(request: RequestFacts): boolean {
-  const addresses = forwardedAddresses(request.forwardedFor, request.forwarded);
-  if (request.remoteAddress !== undefined) addresses.push(request.remoteAddress ?? '');
-  return addresses.every(isLoopbackAddress);
+  return [...forwardedAddresses(request.forwardedFor, request.forwarded), request.remoteAddress].every(isLoopbackAddress);
 }
 
 /**
- * Every endpoint's gate. Unless `network` is set, the request must come from
- * this machine ({@link isFromThisMachine}). The Host must be local
- * ({@link isLocalHostHeader}; an IP literal counts only when the peer was
- * checked or `network` is set, since without a peer address a LAN client
- * shows up as nothing but the server's LAN IP), and a page's Origin must
- * match it (or be any loopback page with `loopbackOrigins`). `network` is for
- * a caller that has let the request in some other way: the Vite plugin's
- * access cookie, or a Request adapter's explicit `allowNetwork`.
+ * Every endpoint's gate. The request must come from this machine
+ * ({@link isFromThisMachine}), its Host must be local
+ * ({@link isLocalHostHeader}), and a page's Origin must match it (or be any
+ * loopback page with `loopbackOrigins`).
  */
-export function checkRequest(
-  request: RequestFacts & { allowedHosts?: readonly string[]; loopbackOrigins?: boolean; network?: boolean },
-): void {
-  if (!request.network && !isFromThisMachine(request)) {
-    throw new HttpError(403, 'isotone answers only requests from this machine');
-  }
-  const anyAddress = request.network === true || request.remoteAddress !== undefined;
-  if (!isLocalHostHeader(request.host, request.allowedHosts ?? [], anyAddress)) throw new HttpError(403, 'host not allowed');
+export function checkRequest(request: RequestFacts & { allowedHosts?: readonly string[]; loopbackOrigins?: boolean }): void {
+  if (!isFromThisMachine(request)) throw new HttpError(403, 'isotone answers only requests from this machine');
+  if (!isLocalHostHeader(request.host, request.allowedHosts ?? [])) throw new HttpError(403, 'host not allowed');
   checkOrigin(request.origin, request.host ?? '', request.loopbackOrigins);
 }
 
@@ -189,34 +176,7 @@ export async function readNodeJson(req: IncomingMessage): Promise<unknown> {
   });
 }
 
-export async function readWebJson(request: Request): Promise<unknown> {
-  requireJson(request.headers.get('content-type'));
-  const reader = request.body?.getReader();
-  if (!reader) return undefined;
-  const chunks: Uint8Array[] = [];
-  let bytes = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      bytes += value.byteLength;
-      if (bytes > MAX_BODY_BYTES) {
-        await reader.cancel();
-        throw new HttpError(413, 'request body too large');
-      }
-      chunks.push(value);
-    }
-    try {
-      return JSON.parse(Buffer.concat(chunks).toString('utf8'));
-    } catch {
-      return undefined;
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-export function httpFailure(error: unknown): HandlerResponse {
+function httpFailure(error: unknown): HandlerResponse {
   // A busy store is temporary: 503 tells the panel to keep the note and retry.
   const known = error instanceof HttpError ? error : error instanceof LockBusyError ? new HttpError(503, error.message) : null;
   return {

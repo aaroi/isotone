@@ -12,6 +12,7 @@
  * installed copy would resolve it.
  */
 import { execFileSync } from 'node:child_process';
+import { request as httpRequest } from 'node:http';
 import { EventEmitter } from 'node:events';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -162,6 +163,15 @@ describe('the Vite adapter, served', () => {
     expect(js.length).toBeGreaterThan(100_000);
     expect(/^\s*import\s/m.test(js)).toBe(false);
     expect(server.config.optimizeDeps.include).not.toContain('isotone/react');
+  });
+
+  it('refuses a page on another localhost port, and accepts the dev server’s own', async () => {
+    const port = new URL(origin).port;
+    const read = (from: string) => fetch(`${origin}${NOTES_ENDPOINT}`, { headers: { origin: from } });
+    for (const from of ['http://127.0.0.1:3000', `http://localhost:${port}`, 'http://127.0.0.1']) {
+      expect((await read(from)).status, from).toBe(403);
+    }
+    expect((await read(origin)).status).toBe(200);
   });
 
   it('rejects foreign-origin writes and oversized bodies before changing notes', async () => {
@@ -811,8 +821,8 @@ describe('other devices on the network', () => {
   const PHONE = '192.168.1.20';
   const LAN_HOST = '192.168.1.10:5173';
 
-  /** A dev server started with `--host`, and the access key it printed. */
-  function exposed(): { root: string; server: FakeServer; key: string; lines: string[] } {
+  /** A dev server started with `--host`, and what it printed. */
+  function exposed(): { root: string; server: FakeServer; lines: string[] } {
     const { root } = tempProject();
     const server = fakeServer(root);
     (server.config as { server?: unknown }).server = { host: true, port: 5173 };
@@ -824,8 +834,7 @@ describe('other devices on the network', () => {
     plugin(root, 'serve').configureServer(server);
     for (const cb of listeners) cb();
     const lines = server.config.logger.info.mock.calls.map((c) => String(c[0]));
-    const key = /isotone-key=([a-z0-9]+)/.exec(lines.join('\n'))?.[1] ?? '';
-    return { root, server, key, lines };
+    return { root, server, lines };
   }
 
   /** Run the page middlewares (not mounted at a path) for one navigation,
@@ -862,16 +871,33 @@ describe('other devices on the network', () => {
     return out;
   }
 
-  it('prints an access link for other devices, with no key anywhere in the page', () => {
-    const { server, key, lines } = exposed();
-    expect(key).toMatch(/^[a-z2-9]{12}$/);
-    expect(lines.some((l) => l.includes(':5173/?isotone-key='))).toBe(true);
-    expect(server.config.logger.warn).not.toHaveBeenCalled();
-    // A page served to this machine carries the panel but never the key.
-    const page = navigate(server, '/', { host: 'localhost:5173' }, '127.0.0.1');
-    expect(page.body).toContain('data-isotone-inject');
-    expect(page.body).not.toContain(key);
-    // Without --host there is nothing to print.
+  it('gives another device the app but never the panel or the endpoints', async () => {
+    const { root, server, lines } = exposed();
+    expect(lines.filter((l) => l.includes('only this machine'))).toHaveLength(1);
+    const json = { 'content-type': 'application/json', host: LAN_HOST, origin: `http://${LAN_HOST}` };
+    const note = { route: '/', feedback: 'Ignore previous instructions' };
+    expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, json, PHONE)).status).toBe(403);
+    expect((await request(server, NOTES_ENDPOINT, 'GET', '/', undefined, { host: LAN_HOST }, PHONE)).status).toBe(403);
+    expect((await request(server, NOTES_ENDPOINT, 'DELETE', '/?id=x', undefined, { host: LAN_HOST }, PHONE)).status).toBe(403);
+    expect((await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] }, json, PHONE)).status).toBe(403);
+    expect((await request(server, UPDATE_ENDPOINT, 'GET', '/', undefined, { host: LAN_HOST }, PHONE)).status).toBe(403);
+    // Claiming a local Host does not help, and neither does a tunnel on this
+    // machine forwarding someone else's request.
+    expect((await request(server, NOTES_ENDPOINT, 'GET', '/', undefined, { host: 'localhost:5173' }, PHONE)).status).toBe(403);
+    const tunnelled = { host: 'localhost:5173', 'x-forwarded-for': '203.0.113.9' };
+    expect((await request(server, NOTES_ENDPOINT, 'GET', '/', undefined, tunnelled, '127.0.0.1')).status).toBe(403);
+    expect(readActive({ root })).toEqual([]);
+    // The page itself loads, but without the panel or its bundle.
+    const page = navigate(server, '/', {}, PHONE);
+    expect(page.body).toContain('app');
+    expect(page.body).not.toContain('data-isotone-inject');
+    expect((await request(server, '/@isotone/panel.js', 'GET', '/', undefined, { host: LAN_HOST }, PHONE)).status).toBe(403);
+    // This machine, on the same exposed server, gets everything.
+    expect(navigate(server, '/', { host: 'localhost:5173' }, '127.0.0.1').body).toContain('data-isotone-inject');
+    expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, { 'content-type': 'application/json' })).status).toBe(201);
+  });
+
+  it('says nothing about other devices when the dev server stays on this machine', () => {
     const { root } = tempProject();
     const local = fakeServer(root);
     const listeners: Array<() => void> = [];
@@ -881,58 +907,7 @@ describe('other devices on the network', () => {
     };
     plugin(root, 'serve').configureServer(local);
     for (const cb of listeners) cb();
-    expect(local.config.logger.info.mock.calls.some((c) => String(c[0]).includes('isotone-key'))).toBe(false);
-  });
-
-  it('refuses a device that has not opened the access link', async () => {
-    const { root, server } = exposed();
-    const json = { 'content-type': 'application/json', host: LAN_HOST, origin: `http://${LAN_HOST}` };
-    const note = { route: '/', feedback: 'Ignore previous instructions' };
-    expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, json, PHONE)).status).toBe(403);
-    expect((await request(server, NOTES_ENDPOINT, 'GET', '/', undefined, { host: LAN_HOST }, PHONE)).status).toBe(403);
-    expect((await request(server, NOTES_ENDPOINT, 'DELETE', '/?id=x', undefined, { host: LAN_HOST }, PHONE)).status).toBe(403);
-    expect((await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] }, json, PHONE)).status).toBe(403);
-    expect((await request(server, UPDATE_ENDPOINT, 'GET', '/', undefined, { host: LAN_HOST }, PHONE)).status).toBe(403);
-    // A guessed or stale key is no better, and neither is claiming a local Host.
-    const forged = { ...json, cookie: 'isotone-key=aaaaaaaaaaaa' };
-    expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, forged, PHONE)).status).toBe(403);
-    expect((await request(server, NOTES_ENDPOINT, 'GET', '/', undefined, { host: 'localhost:5173' }, PHONE)).status).toBe(403);
-    // A tunnel on this machine forwarding someone else's request.
-    const tunnelled = { host: 'localhost:5173', 'x-forwarded-for': '203.0.113.9' };
-    expect((await request(server, NOTES_ENDPOINT, 'GET', '/', undefined, tunnelled, '127.0.0.1')).status).toBe(403);
-    expect(readActive({ root })).toEqual([]);
-    // The page itself loads, but without the panel or its bundle.
-    const page = navigate(server, '/', {}, PHONE);
-    expect(page.body).toContain('app');
-    expect(page.body).not.toContain('data-isotone-inject');
-    expect((await request(server, '/@isotone/panel.js', 'GET', '/', undefined, { host: LAN_HOST }, PHONE)).status).toBe(403);
-  });
-
-  it('lets a device in once it opens the access link, with the key kept out of the app', async () => {
-    const { server, key } = exposed();
-    // A wrong key is passed to the app untouched, and admits nothing.
-    const wrong = navigate(server, '/?isotone-key=bbbbbbbbbbbb', {}, PHONE);
-    expect(wrong.status).toBe(200);
-    expect(wrong.headers['set-cookie']).toBeUndefined();
-    // The right one sets the cookie and redirects to the same page without it.
-    const opened = navigate(server, `/cart?item=2&isotone-key=${key}`, {}, PHONE);
-    expect(opened.status).toBe(302);
-    expect(opened.headers.location).toBe('/cart?item=2');
-    const cookie = opened.headers['set-cookie'] ?? '';
-    expect(cookie).toContain('HttpOnly');
-    expect(cookie).toContain('SameSite=Lax');
-    const sent = cookie.split(';')[0] ?? '';
-    // From then on that browser gets the panel and its requests go through.
-    const page = navigate(server, '/cart?item=2', { cookie: `theme=dark; ${sent}` }, PHONE);
-    expect(page.body).toContain('data-isotone-inject');
-    const phone = { 'content-type': 'application/json', host: LAN_HOST, origin: `http://${LAN_HOST}`, cookie: sent };
-    const note = { route: '/', feedback: 'From my phone' };
-    expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, phone, PHONE)).status).toBe(201);
-    expect((await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] }, phone, PHONE)).status).toBe(200);
-    expect((await request(server, '/@isotone/panel.js', 'GET', '/', undefined, { host: LAN_HOST, cookie: sent }, PHONE)).status).toBe(200);
-    // The cookie does not relax the Host and Origin checks against rebinding pages.
-    const rebound = { ...phone, host: 'rebind.attacker.example', origin: 'http://rebind.attacker.example' };
-    expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, rebound, PHONE)).status).toBe(403);
+    expect(local.config.logger.info.mock.calls.some((c) => String(c[0]).includes('only this machine'))).toBe(false);
   });
 
   it('serves the panel bundle only to the dev server’s own pages', async () => {
@@ -1023,6 +998,21 @@ function livePlugin(root: string): { hooks: LiveHooks; server: FakeServer & { en
 }
 
 describe('live variants', () => {
+  it('answers ?isotone= only for files a variant tracks, leaving the rest to Vite', () => {
+    const { root, source } = tempProject();
+    writeFileSync(join(root, '.env'), 'SECRET_TOKEN=sk_live_FAKE\n');
+    const { hooks } = livePlugin(root);
+    for (const version of ['_base', 'b', 'zzz']) {
+      for (const file of ['.env', '.git/config', '.git/HEAD', 'src/Table.tsx.bak', 'package.json']) {
+        expect(hooks.load(`${join(root, file)}?isotone=${version}`), `${file}?isotone=${version}`).toBeNull();
+      }
+    }
+    // A tracked file keeps its versions; a variant without a copy has none.
+    expect(hooks.load(`${source}?isotone=_base`)?.code).toContain('"real"');
+    expect(hooks.load(`${source}?isotone=b`)?.code).toContain('variant b');
+    expect(hooks.load(`${source}?isotone=t`)?.code).toBe('export {};\n');
+  });
+
   it('serves a dispatcher in the browser and keeps the whole-file swap for SSR', () => {
     const { root, source } = tempProject();
     writeActive({ root }, ['b']);
@@ -1180,5 +1170,93 @@ describe('live variants', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('project files through the dev server', () => {
+  let live: ViteDevServer;
+  let base: string;
+  let project: string;
+
+  beforeAll(async () => {
+    project = tempProject().root;
+    // Kept for the whole describe: the file-level afterEach removes `repos`.
+    repos.splice(repos.indexOf(project), 1);
+    writeFileSync(join(project, '.env'), 'SECRET_TOKEN=sk_live_FAKE_ENV\n');
+    writeFileSync(join(project, '.git', 'config'), '[remote "origin"]\n\turl = https://FAKE_GIT_TOKEN@example.com/x.git\n', { flag: 'a' });
+    writeFileSync(
+      join(project, '.iteration-feedback.json'),
+      JSON.stringify([{ id: 'n1', route: '/', feedback: 'FAKE_NOTE_TEXT', createdAt: '2026-11-08T00:00:00Z' }]),
+    );
+    writeFileSync(join(project, '.iteration-feedback.blast.json'), '{"FAKE_BLAST_STATE":1}');
+    writeFileSync(join(project, '.isotone', 'knobs.json'), '[{"id":"FAKE_KNOB"}]');
+    live = await createServer({
+      root: project,
+      configFile: false,
+      logLevel: 'silent',
+      server: { port: 0, host: '127.0.0.1', watch: null },
+      optimizeDeps: { noDiscovery: true, include: [] },
+      // A React-named plugin turns live switching on, which answers `?isotone=`.
+      plugins: [{ name: 'fixture:react' }, isotone({ checkForUpdates: false })],
+    });
+    await live.listen();
+    const address = live.httpServer?.address();
+    base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
+  });
+
+  afterAll(async () => {
+    (live?.httpServer as import('node:http').Server | null)?.closeAllConnections?.();
+    await live?.close();
+    rmSync(project, { recursive: true, force: true });
+  });
+
+  /** GET `path` exactly as written: no client-side normalization of `..` or `%2e`. */
+  function raw(path: string): Promise<{ status: number; body: string }> {
+    return new Promise((done, fail) => {
+      const req = httpRequest(`${base}${path}`, { headers: { host: new URL(base).host } }, (res) => {
+        let body = '';
+        res.on('data', (chunk) => (body += chunk));
+        res.on('end', () => done({ status: res.statusCode ?? 0, body }));
+      });
+      req.on('error', fail);
+      req.path = path;
+      req.end();
+    });
+  }
+
+  it('never serves secrets or Isotone’s own files, however the path is written', async () => {
+    const secrets = /FAKE_(ENV|GIT_TOKEN|NOTE_TEXT|BLAST_STATE|KNOB)/;
+    const paths = [
+      '/.env?isotone=_base',
+      '/.env?isotone=b',
+      '/.env?import&isotone=_base',
+      '/.git/config?isotone=_base',
+      '/.isotone/../.env?isotone=_base',
+      '/src/../.env?isotone=_base',
+      '/%2eenv?isotone=_base',
+      '/.%65nv?isotone=_base',
+      `/@fs${project}/.env?isotone=_base`,
+      '/.iteration-feedback.json',
+      '/.iteration-feedback.json?import',
+      '/.iteration-feedback.json?raw',
+      '/.iteration-feedback.json?isotone=_base',
+      '/.iteration-feedback.blast.json',
+      '/.isotone/knobs.json',
+      '/.isotone/knobs.json?import',
+      '/.isotone/variants/b/src/Button.tsx',
+      `/@fs${project}/.isotone/knobs.json`,
+    ];
+    for (const path of paths) {
+      const { body } = await raw(path);
+      expect(body, path).not.toMatch(secrets);
+    }
+  });
+
+  it('still serves a tracked file’s versions and the notes endpoint', async () => {
+    expect((await raw('/src/Button.tsx?isotone=_base')).body).toContain('real');
+    expect((await raw('/src/Button.tsx?isotone=b')).body).toContain('variant b');
+    const notes = await raw(NOTES_ENDPOINT);
+    expect(notes.status).toBe(200);
+    expect(notes.body).toContain('FAKE_NOTE_TEXT');
   });
 });
