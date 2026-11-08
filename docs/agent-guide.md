@@ -1,10 +1,9 @@
 # Agent guide
 
-For a coding agent working in an app that uses Isotone. The reviewer pins notes
-to elements in the running app and switches variants in its panel; you read the
+For a coding agent in an app that uses Isotone. The reviewer pins notes to
+elements in the running app and switches variants in its panel; you read the
 notes with the CLI, act on them and close them. Run commands in the app's
-directory (the one holding `.isotone/notes.json`) or below it, or pass
-`--file <path>`.
+directory (holding `.isotone/notes.json`) or below it, or pass `--file <path>`.
 
 ## Set up
 
@@ -156,21 +155,18 @@ npx isotone variant list [<route>] [--json]        # check what the panel will s
 - `variant off <id>` turns one off, `variant rm <id> <file>` stops overriding a
   file, and `variant group <id> <groupId> [--label <text>]` moves a variant into
   a group. `--dir <path>` points every subcommand at another variants directory.
-- `npx isotone variant --help` lists every subcommand. [Variants](variants.md)
-  covers groups, live switching and what a host needs.
+- `npx isotone variant --help` lists every subcommand; [Variants](variants.md)
+  covers groups, live switching and host needs.
 
 ### Knobs and selectors
 
 A number, colour or named style is a [knob](variants.md#knobs) in
-`.isotone/knobs.json`, not a copied file; read its value in the source with
-today's value as the fallback, and connect every control to a visible change.
-Choose the control by the decision ([Choosing a selector](variants.md#choosing-a-selector)),
-and once a page has more than a few selectors, put each in a
-[section](variants.md#sections). `npx isotone variant list` names any knob the
-panel would skip, and why.
-
-A host with its own variant system hands the panel a `VariantsSource` instead;
-promoting a choice there means changing the app's own code.
+`.isotone/knobs.json`, not a copied file: read it in the source with today's
+value as fallback, and connect every control to a visible change. Choose the
+control by the decision ([Choosing a selector](variants.md#choosing-a-selector)),
+and past a few selectors on a page put each in a [section](variants.md#sections).
+`npx isotone variant list` names any knob the panel would skip, and why. With a
+host's own `VariantsSource`, promoting a choice means changing the app's code.
 
 ### Requests from the Variants panel
 
@@ -189,5 +185,5 @@ Remove a variant (`variant drop <id>`) only when asked to.
 ## Blast mode
 
 When the user asks for a Blast session, run `npx isotone blast start <duration>`
-and follow what it prints until a run says the session is over.
-[Blast mode](blast.md) has the details.
+and follow what it prints until a run says the session is over
+([details](blast.md)).
