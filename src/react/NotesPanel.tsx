@@ -1,4 +1,14 @@
-import { type HTMLAttributes, memo, type ReactNode, type RefObject, useDeferredValue, useEffect, useLayoutEffect, useRef } from 'react';
+import {
+  type HTMLAttributes,
+  memo,
+  useCallback,
+  type ReactNode,
+  type RefObject,
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from 'react';
 import { normalizeRoute } from '../core/routes';
 import type { IterationElement, IterationNote } from '../core/types';
 import { Icon } from './icons';
@@ -83,25 +93,37 @@ const NoteList = memo(function NoteList({
   const lingering = useDeferredValue(open);
   const count = useRenderLimit(open || lingering, notes.length, MAX_ANIMATED_ITEMS);
   const shown = count < notes.length ? notes.slice(notes.length - count) : notes;
+  // How far the reader is from the newest note; 0 keeps the list on it. Older notes arriving above, the panel
+  // resizing, or the list reappearing after select mode on a phone all keep that distance.
   const fromEnd = useRef(0);
+  const keepPlace = useCallback(() => {
+    const list = listRef.current;
+    if (list) list.scrollTop = list.scrollHeight - list.clientHeight - fromEnd.current;
+  }, []);
   useLayoutMotion(listRef, notes, open);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new note or opening the panel scrolls to the end.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new note or opening the panel goes to the newest.
+  useEffect(() => {
+    fromEnd.current = 0;
+    keepPlace();
+  }, [notes, open, keepPlace]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each chunk adds rows above the reader.
+  useLayoutEffect(keepPlace, [count, keepPlace]);
   useEffect(() => {
     const list = listRef.current;
-    if (list) list.scrollTop = list.scrollHeight;
-  }, [notes, open]);
-  // Older notes arriving above keep the reader where they were.
-  useLayoutEffect(() => {
-    const list = listRef.current;
-    if (list && count) list.scrollTop = list.scrollHeight - fromEnd.current;
-  }, [count]);
+    if (!list || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(keepPlace);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [keepPlace]);
   return (
     <ul
       ref={listRef}
       className="isotone-list"
       aria-label="Notes"
       onScroll={(e) => {
-        fromEnd.current = e.currentTarget.scrollHeight - e.currentTarget.scrollTop;
+        const list = e.currentTarget;
+        // A hidden list reads as all zeros; it keeps the place it had.
+        if (list.clientHeight) fromEnd.current = list.scrollHeight - list.clientHeight - list.scrollTop;
       }}
     >
       {shown.map((note) => (

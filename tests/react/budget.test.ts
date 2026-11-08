@@ -231,3 +231,47 @@ it('renders no notes while Feedback is closed, then the newest first in chunks',
   expect(noteNodes).toHaveLength(500);
   expect(noteNodes[0]?.textContent).toContain('Note 0');
 });
+
+it('goes back to the newest note when the list reappears, and keeps a reader scrolled up where they were', async () => {
+  const observers: ((entries: unknown[]) => void)[] = [];
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(callback: (entries: unknown[]) => void) {
+        observers.push(callback);
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
+  notes = manyNotes().slice(0, 10);
+  await render();
+  await click('.isotone-fab', 0);
+  await frame();
+  // Ten 20px rows in a 100px list; hidden (as during select mode on a phone), everything reads 0.
+  const list = $('.isotone-list');
+  let shown = true;
+  let top = 0;
+  Object.defineProperties(list, {
+    clientHeight: { get: () => (shown ? 100 : 0) },
+    scrollHeight: { get: () => (shown ? 200 : 0) },
+    scrollTop: { get: () => (shown ? top : 0), set: (value: number) => (top = Math.max(0, Math.min(value, 100))) },
+  });
+  const resized = () =>
+    act(async () => {
+      for (const run of observers) run([]);
+    });
+  await resized();
+  expect(list.scrollTop).toBe(100);
+  shown = false;
+  list.dispatchEvent(new Event('scroll'));
+  shown = true;
+  top = 0;
+  await resized();
+  expect(list.scrollTop).toBe(100);
+  // A reader 60px up from the newest note stays there when the panel changes size.
+  list.scrollTop = 40;
+  list.dispatchEvent(new Event('scroll'));
+  await resized();
+  expect(list.scrollTop).toBe(40);
+});
