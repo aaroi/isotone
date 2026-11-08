@@ -8,8 +8,8 @@ import {
   useEffect,
   useRef,
 } from 'react';
-import { Icon } from './icons';
-import { ringPulse } from './motion';
+import { Icon } from '../icons';
+import { ringPulse } from '../motion';
 
 const RAIL_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
 

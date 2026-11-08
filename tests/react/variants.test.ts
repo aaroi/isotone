@@ -9,8 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { VariantAction, VariantAxis } from '../../src/core/variants';
 import { createVariantsSource, IsotonePanel, mountIsotone } from '../../src/react/index';
-import { VariantsView } from '../../src/react/VariantsView';
-import { PANEL_CSS } from '../../src/react/styles';
+import { VariantsView } from '../../src/react/variants/VariantsView';
+import { PANEL_CSS } from '../../src/react/styles/panel';
 
 const AXES: VariantAxis[] = [
   {

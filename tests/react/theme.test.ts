@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { detectTheme, observeTheme } from '../../src/react/theme';
+import { detectTheme, observeTheme } from '../../src/react/styles/theme';
 
 let media: EventTarget & { matches: boolean };
 let elementsAtDock: Element[];

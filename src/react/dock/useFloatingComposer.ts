@@ -1,5 +1,5 @@
 import { type RefObject, useLayoutEffect, useRef } from 'react';
-import { MOTION, stillMotion } from './motion';
+import { MOTION, stillMotion } from '../motion';
 import type { Anchor } from './picking';
 import { visibleBand } from './viewport';
 

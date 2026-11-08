@@ -3,7 +3,7 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createVariantsSource, IsotonePanel } from '../../src/react/index';
-import { visibleBand } from '../../src/react/viewport';
+import { visibleBand } from '../../src/react/dock/viewport';
 
 let container: HTMLDivElement;
 let root: Root | null = null;

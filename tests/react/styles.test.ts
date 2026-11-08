@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { INSTRUMENT_MATERIAL, PALETTES, PALETTE_TOKEN_NAMES } from '../../src/react/appearance';
-import { PANEL_CSS } from '../../src/react/styles';
+import { INSTRUMENT_MATERIAL, PALETTES, PALETTE_TOKEN_NAMES } from '../../src/react/styles/appearance';
+import { PANEL_CSS } from '../../src/react/styles/panel';
 
 // Themes set root-level palette tokens only. Components and states cannot
 // fork, even through a media query or an indirect spacing-token override.

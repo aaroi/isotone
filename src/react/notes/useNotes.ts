@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createIsotoneStore, type IsotoneStoreConfig } from '../core/notes-client';
-import type { IsotoneNote } from '../core/types';
+import { createIsotoneStore, type IsotoneStoreConfig } from '../../core/notes-client';
+import type { IsotoneNote } from '../../core/types';
 
 /** How often an open page asks whether the notes changed. */
 const POLL_MS = 2500;

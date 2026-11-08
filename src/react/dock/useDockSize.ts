@@ -9,7 +9,7 @@ import {
   type PointerEvent,
   type RefObject,
 } from 'react';
-import { readBrowserStorage } from '../core/browser-storage';
+import { readBrowserStorage } from '../../core/browser-storage';
 
 type Panel = 'variants' | 'notes';
 type Handle = 'width' | Panel;

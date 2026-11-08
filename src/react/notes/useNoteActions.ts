@@ -1,9 +1,9 @@
 import { type Dispatch, type SetStateAction, useCallback, useMemo, useRef, useState } from 'react';
-import { createNoteId } from '../core/id';
-import { MAX_FEEDBACK_LENGTH } from '../core/limits';
-import type { IsotoneElement, IsotoneNote, VariantReference } from '../core/types';
-import type { VariantAction } from '../core/variants';
-import type { UpdateMode } from './useDockMode';
+import { createNoteId } from '../../core/id';
+import { MAX_FEEDBACK_LENGTH } from '../../core/limits';
+import type { IsotoneElement, IsotoneNote, VariantReference } from '../../core/types';
+import type { VariantAction } from '../../core/variants';
+import type { UpdateMode } from '../dock/useDockMode';
 import { createDraftText, type DraftText, useDraft } from './useDraft';
 import type { useNotes } from './useNotes';
 

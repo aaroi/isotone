@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { readBrowserStorage } from '../core/browser-storage';
-import type { IsotoneElement, IsotoneNote, VariantReference } from '../core/types';
+import { readBrowserStorage } from '../../core/browser-storage';
+import type { IsotoneElement, IsotoneNote, VariantReference } from '../../core/types';
 
 /**
  * The composer's text, outside React state: typing re-renders the composer

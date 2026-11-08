@@ -1,5 +1,5 @@
 /**
- * Paint only. Layout, typography, hit targets and state selectors live in styles.ts.
+ * Paint only. Layout, typography, hit targets and state selectors live in panel.ts.
  * Both themes implement the same palette contract and share one Instrument
  * material recipe. Layout and interaction never fork with the page theme.
  */

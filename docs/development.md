@@ -184,8 +184,8 @@ even when a label is visually truncated. On touch, copy names taps rather than
 keys or Shift, and nothing depends on hover; see "Phones and touch" in
 [the design language](design.md).
 
-`src/react/feedback-layout.ts` holds the accepted inline-reference layout.
-`src/react/pill-active.ts` holds the accepted Clean Highlight recipe. Future
+`src/react/styles/panel.ts` holds the accepted inline-reference layout and
+Clean Highlight recipe. Future
 review alternatives belong under `.isotone/variants/`.
 Edit the copied recipe when developing an alternative; keep shared geometry,
 theme tokens and unrelated controls in the main stylesheet.

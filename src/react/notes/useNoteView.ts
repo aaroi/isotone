@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { normalizeRoute } from '../core/routes';
-import type { IsotoneNote } from '../core/types';
+import { normalizeRoute } from '../../core/routes';
+import type { IsotoneNote } from '../../core/types';
 
 /** How long "an agent is working on this" is believed without a sign of life. */
 const WORKING_FRESH_MS = 20 * 60 * 1000;

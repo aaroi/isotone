@@ -3,7 +3,7 @@ import { act, createElement as h } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UpdateInfo } from '../../src/core/update';
-import { UpdateNotice, type UpdateNoticeProps } from '../../src/react/UpdateNotice';
+import { UpdateNotice, type UpdateNoticeProps } from '../../src/react/dock/UpdateNotice';
 
 const available: UpdateInfo = {
   status: 'available',

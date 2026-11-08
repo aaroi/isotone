@@ -1,5 +1,5 @@
 import { type CSSProperties, type KeyboardEvent, type PointerEvent, type Ref, useEffect, useRef, useState } from 'react';
-import { Icon } from './icons';
+import { Icon } from '../icons';
 
 /* ── Colour maths ─────────────────────────────────────────────────────── */
 

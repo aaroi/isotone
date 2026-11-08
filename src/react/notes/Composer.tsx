@@ -1,8 +1,8 @@
 import { memo, type RefObject, useLayoutEffect, useSyncExternalStore } from 'react';
 import { HINTS } from './hints';
-import { Icon } from './icons';
-import { fadeIn } from './motion';
-import { showOverflowTitle } from './tooltips';
+import { Icon } from '../icons';
+import { fadeIn } from '../motion';
+import { showOverflowTitle } from '../tooltips';
 import type { ComposerDraft } from './useNoteActions';
 
 interface ComposerProps {

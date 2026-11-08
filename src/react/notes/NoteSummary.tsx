@@ -1,6 +1,6 @@
-import { showOverflowTitle } from './tooltips';
-import type { IsotoneNote } from '../core/types';
-import { updateNoteText } from '../core/update';
+import { showOverflowTitle } from '../tooltips';
+import type { IsotoneNote } from '../../core/types';
+import { updateNoteText } from '../../core/update';
 
 /** Pinned references and saved defaults use the same compact tag. */
 function SummaryTag({ label }: { label: string }) {

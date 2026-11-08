@@ -1,6 +1,6 @@
 import { type RefObject, useLayoutEffect, useState } from 'react';
-import type { IsotoneTheme } from '../core/types';
-import { ensurePanelStyles } from './styles';
+import type { IsotoneTheme } from '../../core/types';
+import { ensurePanelStyles } from './panel';
 
 type ResolvedTheme = 'light' | 'dark';
 type Color = { r: number; g: number; b: number; a: number };

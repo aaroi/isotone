@@ -49,7 +49,7 @@ swatches and the colour picker keep their own colours.
 
 ## Geometry and content
 
-The layout constants live in `styles.ts`. Current anchors are:
+The layout constants live in `styles/panel.ts`. Current anchors are:
 
 | Measure | Value |
 | --- | --- |
@@ -207,7 +207,7 @@ Instructional and hint text is never truncated. Every hint, such as the
 select-mode cover and the floating composer's line, is fully visible on one
 line by default, in pointer and touch copy, at 375px and desktop widths, in
 both themes. Make it fit with a smaller size, shorter copy or more reserved
-space; never with an ellipsis or a clip. `src/react/hints.ts` holds the panel's
+space; never with an ellipsis or a clip. `src/react/notes/hints.ts` holds the panel's
 hints, and `tests/react/hints.test.ts` keeps them within the width a 375px
 viewport leaves. The demo tour follows the same rule: its copy wraps.
 
@@ -336,28 +336,27 @@ Two limits are accepted rather than worked around:
 
 | File | Responsibility |
 | --- | --- |
-| `src/react/appearance.ts` | Complete light/dark palettes and the shared material recipe |
-| `src/react/styles.ts` | Geometry, typography, shared control classes and state selectors |
-| `src/react/feedback-layout.ts`, `pill-active.ts` | Small material/layout recipes that can be independently previewed as overlays |
-| `src/react/UpdateNotice.tsx` | Quiet update line, and the dialog that hands the upgrade to the agent |
+| `src/react/styles/appearance.ts` | Complete light/dark palettes and the shared material recipe |
+| `src/react/styles/panel.ts` | Geometry, typography, shared control classes, state selectors and the accepted recipes (inline references, Clean Highlight) |
+| `src/react/dock/UpdateNotice.tsx` | Quiet update line, and the dialog that hands the upgrade to the agent |
 | `src/react/icons.tsx` | Icon choices, optical size and stroke |
-| `src/react/NoteSummary.tsx` | Saved feedback/defaults summaries and their shared tag rendering |
+| `src/react/notes/NoteSummary.tsx` | Saved feedback/defaults summaries and their shared tag rendering |
 | `src/react/IsotonePanel.tsx` | The dock: composes the hooks below and the rules that join them |
-| `src/react/useDockMode.ts`, `useDockFocus.ts`, `useDockEvents.ts` | Which surfaces are open; where focus goes; hover, modality, shortcut, Escape and the host event fence |
-| `src/react/Rail.tsx` | The launcher pill and the rail's tool buttons |
-| `src/react/Composer.tsx`, `NotesPanel.tsx` | The composer and its text, and the feedback panel with its saved notes |
-| `src/react/picking.tsx`, `useFloatingComposer.ts` | Select mode, hover and pin outlines, and the composer floating beside a pin |
-| `src/react/useNotes.ts`, `useNoteView.ts`, `useNoteActions.ts`, `useDraft.ts` | Loading and polling notes; what the list shows; saving, editing and deleting; each page's unsent draft |
-| `src/react/VariantsView.tsx` | The selector list, sections, colour popover and the defaults bar |
-| `src/react/AxisControl.tsx`, `AxisActionsDialog.tsx` | One selector's controls, and its action dialog |
-| `src/react/theme.ts` | Theme resolution, observation and cleanup |
+| `src/react/dock/useDockMode.ts`, `useDockFocus.ts`, `useDockEvents.ts` | Which surfaces are open; where focus goes; hover, modality, shortcut, Escape and the host event fence |
+| `src/react/dock/Rail.tsx` | The launcher pill and the rail's tool buttons |
+| `src/react/notes/Composer.tsx`, `NotesPanel.tsx` | The composer and its text, and the feedback panel with its saved notes |
+| `src/react/dock/picking.tsx`, `useFloatingComposer.ts` | Select mode, hover and pin outlines, and the composer floating beside a pin |
+| `src/react/notes/useNotes.ts`, `useNoteView.ts`, `useNoteActions.ts`, `useDraft.ts` | Loading and polling notes; what the list shows; saving, editing and deleting; each page's unsent draft |
+| `src/react/variants/VariantsView.tsx` | The selector list, sections, colour popover and the defaults bar |
+| `src/react/variants/AxisControl.tsx`, `AxisActionsDialog.tsx` | One selector's controls, and its action dialog |
+| `src/react/styles/theme.ts` | Theme resolution, observation and cleanup |
 | `src/react/motion.ts` | Motion timing and work limits |
-| `src/react/viewport.ts` | Small-screen, touch and on-screen keyboard rules |
-| `src/react/useDockMotion.ts`, `useLayoutMotion.ts` | Measured movement and interruption handling |
+| `src/react/dock/viewport.ts` | Small-screen, touch and on-screen keyboard rules |
+| `src/react/dock/useDockMotion.ts`, `src/react/useLayoutMotion.ts` | Measured movement and interruption handling |
 
 To add a control, choose its semantic role first: surface, well, raised action or
 selection. Reuse that recipe and an existing control class where possible.
-Add any new state selector once in `styles.ts`. A new paint token must exist in
+Add any new state selector once in `styles/panel.ts`. A new paint token must exist in
 both palettes; a spacing or behavior change never belongs in a theme branch.
 Extract repeated markup when it has shared behavior or content rules, as with
 summary tags, rather than copying a component for another theme.
@@ -380,7 +379,7 @@ or a real project's private interface.
 
 Inline references is the feedback layout. Clean Highlight is the active-pill
 material: a slightly lighter solid face, fine border and crisp 1px contact
-shadow. Both themes use the same recipe in `pill-active.ts`.
+shadow. Both themes use the same recipe in `styles/panel.ts`.
 
 Earlier list alternatives and the default, ring, dot, recessed and inset pill
 experiments have been removed. New alternatives should start from this baseline
