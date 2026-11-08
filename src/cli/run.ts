@@ -50,7 +50,7 @@ function isHelp(arg: string | undefined): boolean {
 function printHelp(io: CliIO): void {
   out(io, `isotone ${version} — notes and variants between a reviewer’s browser and a coding agent`);
   out(io);
-  out(io, `Notes (in ${NOTES_FILE} in the current directory)`);
+  out(io, `Notes (in the nearest ${NOTES_FILE}, up to the Git root)`);
   out(io, '  isotone [<route>]              open notes, of every route or one: /items is that page,');
   out(io, '                                 /items/* also every page under it');
   out(io, '  isotone --working <id...>      tell the panel you started on notes');
