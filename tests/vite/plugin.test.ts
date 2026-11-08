@@ -413,7 +413,12 @@ describe('withNativeFetch', () => {
  * the hooks through a cast rather than vite's `Plugin` type.
  */
 interface Hooks {
-  configResolved(config: { root: string; command: 'serve' | 'build'; assetsInclude: (file: string) => boolean }): void;
+  configResolved(config: {
+    root: string;
+    command: 'serve' | 'build';
+    assetsInclude: (file: string) => boolean;
+    server: { fs: { strict: boolean } };
+  }): void;
   load(id: string): { code: string } | null;
   configureServer(server: FakeServer): void;
   handleHotUpdate(ctx: { file: string; server: FakeServer }): unknown[] | undefined;
@@ -475,7 +480,8 @@ function tempProject(): { root: string; source: string; override: string; table:
 
 function plugin(root: string, command: 'serve' | 'build', options: IsotoneViteOptions = {}): Hooks {
   const hooks = isotone(options) as unknown as Hooks;
-  hooks.configResolved({ root, command, assetsInclude: () => false });
+  // Vite's own file access check, off: the served tests below cover it.
+  hooks.configResolved({ root, command, assetsInclude: () => false, server: { fs: { strict: false } } });
   return hooks;
 }
 
@@ -1017,6 +1023,7 @@ function livePlugin(root: string): { hooks: LiveHooks; server: FakeServer & { en
     assetsInclude: () => false,
     appType: 'spa',
     plugins: [{ name: 'vite:react-babel' }],
+    server: { fs: { strict: false } },
   });
   const server = Object.assign(fakeServer(root), {
     environments: { client: { moduleGraph: { getModulesByFile: vi.fn(), invalidateModule: vi.fn(), getModuleById: vi.fn() } } },
@@ -1231,6 +1238,9 @@ describe('project files through the dev server', () => {
     // Kept for the whole describe: the file-level afterEach removes `repos`.
     repos.splice(repos.indexOf(project), 1);
     writeFileSync(join(project, '.env'), 'SECRET_TOKEN=sk_live_FAKE_ENV\n');
+    // Tracked past the secret guard: its versions still obey `server.fs.deny`.
+    createVariant({ root: project }, { id: 'forced' });
+    addVariantFile({ root: project }, 'forced', '.env', { force: true });
     writeFileSync(join(project, '.git', 'config'), '[remote "origin"]\n\turl = https://FAKE_GIT_TOKEN@example.com/x.git\n', { flag: 'a' });
     writeFileSync(
       join(project, '.isotone', 'notes.json'),
@@ -1279,6 +1289,7 @@ describe('project files through the dev server', () => {
     const paths = [
       '/.env?isotone=_base',
       '/.env?isotone=b',
+      '/.env?isotone=forced',
       '/.env?import&isotone=_base',
       '/.git/config?isotone=_base',
       '/.isotone/../.env?isotone=_base',

@@ -22,6 +22,9 @@ import {
   type ResolvedConfig,
   type ViteDevServer,
 } from 'vite';
+// A namespace, not a named import: Vite 5 has no `isFileLoadingAllowed`, and
+// a missing named export would fail the whole module there.
+import * as vite from 'vite';
 
 import { VARIANTS_ENDPOINT } from '../core/variants';
 import { blastFile } from '../node/blast';
@@ -85,6 +88,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
   let isDev = false;
   let hasReact = false;
   let ssrHost = false;
+  let resolved: ResolvedConfig | null = null;
   const variantsOptions = options.variants === false ? null : (options.variants ?? {});
   const overrides = createOverrides(variantsOptions ?? {});
   const switching = createSwitching(overrides);
@@ -106,6 +110,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
     },
     configResolved(config: ResolvedConfig) {
       isDev = config.command === 'serve';
+      resolved = config;
       file = resolve(config.root, options.file ?? NOTES_FILE);
       overrides.configure(config);
       hasReact = (config.plugins ?? []).some((p) => /react/i.test(p.name));
@@ -139,6 +144,10 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       // to Vite, whose `server.fs.deny` keeps `.env` and `.git/` out of reach;
       // answering it here would read the file around that check.
       if (version !== null && overrides.versionsByFile().has(path)) {
+        // A file tracked past the secret guard (`variant add … --force`)
+        // still obeys `server.fs.deny`: left to Vite, the request gets 403.
+        // Live mode needs Vite 6, which has the check.
+        if (resolved && vite.isFileLoadingAllowed && !vite.isFileLoadingAllowed(resolved, path)) return null;
         const from = version === BASE_VERSION ? (existsSync(path) ? path : null) : overrides.copyOf(version, path);
         return { code: from ? readFileSync(from, 'utf8') : 'export {};\n', map: null };
       }
