@@ -42,10 +42,10 @@ Pick one of these ways to start.
 ### Start with your agent
 
 In your project, give this to Claude Code, Cursor, Codex or any agent that can
-run commands, naming the page you're working on:
+run commands:
 
 ```text
-Set up Isotone (https://github.com/aaroi/isotone) and show me how to try it on <the page I'm working on>.
+Set up Isotone (https://github.com/aaroi/isotone) and show me how to try it on the page I'm working on.
 ```
 
 The agent installs `isotone` as a dev dependency and runs `npx isotone init --yes`,
@@ -78,14 +78,15 @@ prompt. Isotone still never runs the agent; it only hands it the notes.
 
 ## Keys
 
-**Enter** sends a note and **Shift + Enter** adds a newline. Click a saved note
-to edit it. Opening Feedback with the mouse or **⌘/Ctrl + Shift + .** starts
-select mode. With Feedback open, the same shortcut starts select mode again, or
-finishes it if it's on. In select mode, click to pin or unpin, hold
-**Shift** to use the page normally, and press **Enter** to finish or **Escape**
-to clear what you pinned. After a pin, the note field opens next to the element
-you clicked, and you can start typing right away. Once you're done selecting,
-**Escape** moves the field back into the panel.
+- **⌘/Ctrl + Shift + .** opens Feedback in select mode. With Feedback open, it
+  starts select mode again, or finishes it if it's on. Opening Feedback with the
+  mouse also starts select mode.
+- In select mode: **click** pins or unpins an element, hold **Shift** to use the
+  page normally, **Enter** finishes, and **Escape** clears what you pinned.
+- After a pin, the note field opens next to the element, ready for typing.
+  Once you're done selecting, **Escape** moves it back into the panel.
+- **Enter** sends a note; **Shift + Enter** adds a newline.
+- Click a saved note to edit it.
 
 ## Updates
 
