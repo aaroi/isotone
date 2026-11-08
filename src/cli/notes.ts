@@ -177,7 +177,7 @@ function flip(io: CliIO, args: NotesArgs, action: Exclude<Action, '--reply'>, ro
   const changed: { note: StoredNote; already: boolean; since: number }[] = [];
   try {
     if (action === '--done' && !args.force) refuseUnfixed(args, root);
-    const started = action === '--working' ? snapshot(root, isBookkeeping(args.file)) : null;
+    const started = action === '--working' ? snapshot(root, isBookkeeping(args.file), managedFiles(args.file, root)) : null;
     updateNotes(args.file, (current) => {
       changed.length = 0;
       const now = new Date().toISOString();
@@ -261,6 +261,24 @@ function isBookkeeping(file: string): (path: string) => boolean {
 }
 
 /**
+ * The variant copies and knobs Isotone manages beside the notes file and at
+ * the project root: a fix can land only there, in files Git may ignore.
+ */
+function managedFiles(file: string, root: string): string[] {
+  // Canonical, so two runs through different symlinks fingerprint the same paths.
+  const real = (path: string) => {
+    try {
+      return realpathSync(path);
+    } catch {
+      return path;
+    }
+  };
+  const own = real(dirname(resolve(file)));
+  const dirs = new Set([real(join(root, '.isotone')), ...(basename(own) === '.isotone' ? [own] : [])]);
+  return [...dirs].flatMap((dir) => [join(dir, 'variants'), join(dir, 'knobs.json')]);
+}
+
+/**
  * Refuses `--done` on a note when no project file changed since `--working`
  * on it, or since it was written: the fix has not landed. That is what a
  * chained `edit && … ; npx isotone --done <id>` does when the edit fails.
@@ -270,14 +288,15 @@ function refuseUnfixed(args: NotesArgs, root: string): void {
   const targets = [...new Set(args.ids.map((id) => findNoteByPrefix(notes, id)))].filter((n) => !n.done);
   if (!targets.length) return;
   const ignore = isBookkeeping(args.file);
+  const own = managedFiles(args.file, root);
   let current: string | null | undefined;
   let latest: number | undefined;
   const unfixed = targets.filter((n: TrackedNote) => {
     if (n.workingAt && n.workingSnapshot) {
-      if (current === undefined) current = snapshot(root, ignore);
+      if (current === undefined) current = snapshot(root, ignore, own);
       if (current !== null) return current === n.workingSnapshot;
     }
-    latest ??= latestChange(root, ignore);
+    latest ??= latestChange(root, ignore, own);
     return latest <= since(n);
   });
   if (!unfixed.length) return;
