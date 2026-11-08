@@ -38,6 +38,7 @@
   "files": [
     "dist",
     "docs/agent-guide.md",
+    "docs/note.schema.json",
     "docs/integrations.md",
     "docs/migration.md",
     "docs/updates.md",

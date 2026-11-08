@@ -20,8 +20,8 @@ export const BLAST = {
   command: 'blast',
   /** Appended to the notes file's name, without `.json`, for the session file. */
   stateSuffix: '.blast.json',
-  /** The guide shipped in the package, as a path from the user's project. */
-  doc: 'node_modules/isotone/docs/blast.md',
+  /** The guide shipped in the package, as a path inside it. */
+  doc: 'docs/blast.md',
 } as const;
 
 /** The CLI invocation agents are told to run. */

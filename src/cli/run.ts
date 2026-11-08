@@ -6,8 +6,11 @@
  */
 import { resolve } from 'node:path';
 
+import { version } from '../../package.json';
 import { BLAST } from '../core/blast';
+import { guardedScriptTag } from '../serve/tag';
 import { runBlast } from './blast';
+import { docPath } from './docs';
 import { runInit } from './init';
 import { NOTES_FILE, runNotes } from './notes';
 import { runCheckUpdate } from './update';
@@ -28,6 +31,10 @@ export async function runCli(argv: string[], ioInput: Partial<CliIO> = {}): Prom
       printHelp(io);
       return 0;
     }
+    if (argv[0] === '--version' || argv[0] === '-v') {
+      out(io, version);
+      return 0;
+    }
     return runNotes(argv, io);
   } catch (error) {
     errOut(io, error instanceof Error ? error.message : String(error));
@@ -40,14 +47,15 @@ function isHelp(arg: string | undefined): boolean {
 }
 
 function printHelp(io: CliIO): void {
-  out(io, 'isotone — notes and variants between a reviewer’s browser and a coding agent');
-  out(io, 'Agent guide: node_modules/isotone/docs/agent-guide.md');
+  out(io, `isotone ${version} — notes and variants between a reviewer’s browser and a coding agent`);
   out(io);
   out(io, `Notes (in ${NOTES_FILE} in the current directory)`);
   out(io, '  isotone [<route>]              open notes, of every route or one: /items is that page,');
   out(io, '                                 /items/* also every page under it');
   out(io, '  isotone --working <id...>      tell the panel you started on notes');
-  out(io, '  isotone --done <id...>         close notes once fixed and verified');
+  out(io, '  isotone --done <id...>         close notes once fixed and verified; refused while no');
+  out(io, '                                 file changed since the note (or --working)');
+  out(io, '  --force                        with --done: close a note that needed no file change');
   out(io, '  isotone --undone <id...>       reopen notes');
   out(io, '  isotone --reply <id> "<text>"  ask the reviewer about a note; it stays open');
   out(io, '  --days <n>                     also list notes closed in the last n days');
@@ -56,7 +64,7 @@ function printHelp(io: CliIO): void {
   out(io, '  --file <path>                  another notes file');
   out(io, '  An id prefix is enough; give several ids as "a b" or "a,b".');
   out(io);
-  out(io, `${BLAST.name}: keep acting on notes for a set time (${BLAST.doc})`);
+  out(io, `${BLAST.name}: keep acting on notes for a set time`);
   out(io, `  isotone ${BLAST.command} start [30m] [<route>]   start a session and print how to run it`);
   out(io, `  isotone ${BLAST.command}                         wait for new notes, print each batch, exit`);
   out(io, `  isotone ${BLAST.command} --help`);
@@ -70,6 +78,11 @@ function printHelp(io: CliIO): void {
   out(io, 'Setup and updates');
   out(io, '  isotone init [--approach overlay|host|serve] [--yes] [--json]');
   out(io, '  isotone check-update [--json] [--manager npm|pnpm|yarn]');
+  out(io, '  isotone --version');
+  out(io);
+  out(io, `Agent guide (the loop, the note record, variants): ${docPath(io.cwd, 'docs/agent-guide.md')}`);
+  out(io, `Note record JSON Schema: ${docPath(io.cwd, 'docs/note.schema.json')}`);
+  out(io, `${BLAST.name}: ${docPath(io.cwd, BLAST.doc)}`);
 }
 
 /**
@@ -123,11 +136,7 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
     }
     throw err;
   }
-  out(io, `isotone serving on ${served.url}`);
-  out(io, `  notes  ${file}`);
-  out(io, `  knobs  ${served.url}/api/iteration/variants  (from .isotone/knobs.json)`);
-  out(io, `  panel  ${served.bundleUrl}  (load it on development pages only)`);
-  out(io, `  setup  ${served.url}  (a localhost-only script tag + bookmarklet)`);
+  for (const line of serveBanner(served, file)) out(io, line);
   return new Promise<number>((resolveExit) => {
     const stop = () => {
       process.off('SIGINT', stop);
@@ -137,4 +146,19 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
   });
+}
+
+/**
+ * What `serve` prints once it listens. The panel URL and loader tag carry the
+ * port it really got, so a busy default port never means editing a URL by hand.
+ */
+export function serveBanner(served: { url: string; bundleUrl: string }, file: string): string[] {
+  return [
+    `isotone serving on ${served.url}`,
+    `  notes  ${file}`,
+    `  knobs  ${served.url}/api/iteration/variants  (from .isotone/knobs.json)`,
+    `  panel  ${served.bundleUrl}  (load it on development pages only)`,
+    `  setup  ${served.url}  (a localhost-only script tag + bookmarklet)`,
+    `  tag    ${guardedScriptTag(served.bundleUrl)}`,
+  ];
 }

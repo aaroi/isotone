@@ -361,7 +361,7 @@ describe(`isotone ${BLAST.command}`, () => {
     await start(p, '10s');
     expect(await runBlast(['--every', '300ms', '--json'], p.io, FAST)).toBe(0);
     expect(JSON.parse(p.take()).type).toBe('batch');
-    await runCli(['--done', 'abcd'], p.io);
+    expect(await runCli(['--done', 'abcd', '--force'], p.io)).toBe(0);
     await runCli(['--undone', 'abcd'], p.io);
     p.take();
     expect(await runBlast(['--every', '300ms', '--json'], p.io, FAST)).toBe(0);

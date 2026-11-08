@@ -108,8 +108,9 @@ where `serve` runs; the panel shows a Variants tool once that file holds a valid
 knob (reload after adding the first). Swapping whole source files needs the Vite
 plugin, or a host-owned `VariantsSource`.
 
-`--port 4124` selects another port; use the same port in the tag, and keep both in
-one place with a script such as `"isotone": "isotone serve --port 4124"`.
+`--port 4124` selects another port. `serve` prints the `panel` URL and the
+loader `tag` for the port it listens on, so paste those as printed, and keep the
+port in one place with a script such as `"isotone": "isotone serve --port 4124"`.
 `--file` selects a notes file and `--theme` the panel theme. The server binds to
 loopback. An HTTPS page may block an HTTP script; use a same-origin route (below)
 then.

@@ -1,4 +1,5 @@
 import { checkUpdate } from '../node/update/check';
+import { toJson } from './text';
 import { type CliIO, out, parseArgs, valueFor } from './util';
 
 export async function runCheckUpdate(args: string[], io: CliIO): Promise<number> {
@@ -12,7 +13,7 @@ export async function runCheckUpdate(args: string[], io: CliIO): Promise<number>
   if (manager !== undefined && manager !== 'npm' && manager !== 'pnpm' && manager !== 'yarn')
     throw new Error('--manager must be npm, pnpm or yarn.');
   const result = await checkUpdate(io.cwd, manager);
-  if (args.includes('--json')) out(io, JSON.stringify(result, null, 2));
+  if (args.includes('--json')) out(io, toJson(result));
   else {
     out(io, `Running isotone ${result.currentVersion}${result.latestVersion ? ` · npm latest ${result.latestVersion}` : ''}`);
     if (result.status === 'available') {

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -36,6 +36,16 @@ function commit(root: string, file: string, contents: string): void {
 }
 
 const makeIo = captureIo;
+const repoRoot = join(import.meta.dirname, '../..');
+
+/** The agent's fix: a project file changed after the notes were written, which `--done` checks for. */
+function landFix(root: string, file = 'fix.txt'): void {
+  const abs = join(root, file);
+  mkdirSync(join(abs, '..'), { recursive: true });
+  writeFileSync(abs, 'fixed\n');
+  const later = new Date(Date.now() + 1000);
+  utimesSync(abs, later, later);
+}
 
 describe('notes (unchanged default behaviour)', () => {
   it('prints "No open notes" for an empty file', async () => {
@@ -60,7 +70,8 @@ describe('--help', () => {
     for (const argv of [['--help'], ['-h'], ['help']]) {
       const io = makeIo(root);
       expect(await runCli(argv, io)).toBe(0);
-      expect(io.text.out).toContain('Agent guide: node_modules/isotone/docs/agent-guide.md');
+      // Resolved from the package itself: this checkout, since the repo has no node_modules/isotone.
+      expect(io.text.out).toContain(`Agent guide (the loop, the note record, variants): ${join(repoRoot, 'docs/agent-guide.md')}`);
       expect(io.text.out).toContain('isotone serve');
       expect(io.text.out).toContain('isotone init');
     }
@@ -602,23 +613,67 @@ describe('init', () => {
     expect(readFileSync(join(root, 'AGENTS.md'), 'utf8')).toBe(before + stale + after);
   });
 
-  it('never edits an unmarked section from an older Isotone, and prints its replacement', async () => {
+  it('replaces an unmarked section from an older Isotone, keeps the text around it, and prints what it replaced', async () => {
     const root = tempRepo();
-    const legacy = '# Rules\n\n## isotone\n\nRead notes with `npx isotone --json`.\n\nMy own paragraph after it.\n';
+    // As 1.2.x wrote it: no headings of its own, ending with the update line.
+    const old = [
+      '## isotone',
+      '',
+      'Read open review notes with `npx isotone --json` at the start of a session.',
+      'the panel still loads, summarize notable changes from the new CHANGELOG, then `--done` it.',
+    ].join('\n');
+    const legacy = `# Rules\n\n${old}\n\nMy own paragraph after it.\n`;
     writeFileSync(join(root, 'AGENTS.md'), legacy);
+
+    // Without --yes: nothing written, and the part that would go is shown.
+    const dry = makeIo(root);
+    expect(await runCli(['init'], dry)).toBe(0);
+    expect(readFileSync(join(root, 'AGENTS.md'), 'utf8')).toBe(legacy);
+    expect(dry.text.out).toContain('`npx isotone init --yes` replaces this part of it:');
+    expect(dry.text.out).toContain('  > Read open review notes');
+    const plan = makeIo(root);
+    expect(await runCli(['init', '--json'], plan)).toBe(0);
+    expect(JSON.parse(plan.text.out)).toMatchObject({ agents: 'legacy', replaced: old, writes: [] });
+
     const io = makeIo(root);
     expect(await runCli(['init', '--yes'], io)).toBe(0);
-    expect(readFileSync(join(root, 'AGENTS.md'), 'utf8')).toBe(legacy);
-    expect(io.text.out).toContain('cannot safely replace');
-    expect(io.text.out).toContain('<!-- isotone:end -->');
-    // An agent reading JSON gets the replacement text too.
-    const legacyJson = makeIo(root);
-    expect(await runCli(['init', '--yes', '--json'], legacyJson)).toBe(0);
-    const plan = JSON.parse(legacyJson.text.out);
-    expect(plan).toMatchObject({ agents: 'legacy', writes: [] });
-    expect(plan.agentsSection).toMatch(/^<!-- isotone:start [\s\S]*<!-- isotone:end -->$/);
+    expect(io.text.out).toContain('replaced the unmarked Isotone section');
+    expect(io.text.out).toContain('  > ## isotone');
+    const text = readFileSync(join(root, 'AGENTS.md'), 'utf8');
+    expect(text.startsWith('# Rules\n\n<!-- isotone:start')).toBe(true);
+    expect(text).not.toContain('Read open review notes');
+    expect(text.endsWith('<!-- isotone:end -->\n\nMy own paragraph after it.\n')).toBe(true);
+    const again = makeIo(root);
+    expect(await runCli(['init', '--yes'], again)).toBe(0);
+    expect(again.text.out).toContain('AGENTS.md has the current Isotone section.');
 
-    // A start marker without its end is left alone too.
+    // A hand-edited one, without the last line Isotone wrote, ends at the next heading.
+    writeFileSync(join(root, 'AGENTS.md'), '## isotone\n\nmy edit of it\n\n### Deploys\n\nAsk first.\n');
+    const json = makeIo(root);
+    expect(await runCli(['init', '--yes', '--json'], json)).toBe(0);
+    expect(JSON.parse(json.text.out)).toMatchObject({ agents: 'legacy', replaced: '## isotone\n\nmy edit of it', writes: ['AGENTS.md'] });
+    const edited = readFileSync(join(root, 'AGENTS.md'), 'utf8');
+    expect(edited).toMatch(/^<!-- isotone:start [\s\S]*<!-- isotone:end -->\n\n### Deploys\n\nAsk first\.\n$/);
+  });
+
+  it('keeps the Isotone section next to an AGENTS.md block another tool owns, as Next 16 writes', async () => {
+    const root = tempRepo();
+    const next =
+      '<!-- BEGIN:nextjs-agent-rules -->\n# This is NOT the Next.js you know\n\nRead the docs in node_modules/next/dist/docs/.\n<!-- END:nextjs-agent-rules -->\n';
+    writeFileSync(join(root, 'AGENTS.md'), next);
+    expect(await runCli(['init', '--yes'], makeIo(root))).toBe(0);
+    const text = readFileSync(join(root, 'AGENTS.md'), 'utf8');
+    expect(text.startsWith(next)).toBe(true);
+    expect(text).toContain('<!-- isotone:end -->');
+    // The other tool rewrites its own block; the Isotone section is still current.
+    writeFileSync(join(root, 'AGENTS.md'), text.replace('Read the docs', 'Read the bundled docs'));
+    const again = makeIo(root);
+    expect(await runCli(['init', '--yes'], again)).toBe(0);
+    expect(again.text.out).toContain('AGENTS.md has the current Isotone section.');
+  });
+
+  it('leaves a start marker without its end alone', async () => {
+    const root = tempRepo();
     const broken = '<!-- isotone:start 1.0.0 -->\n## Isotone\n\nNo end marker.\n';
     writeFileSync(join(root, 'AGENTS.md'), broken);
     const json = makeIo(root);
@@ -769,6 +824,7 @@ describe('agent onboarding and machine-readable notes', () => {
     const listed = makeIo(root);
     await runCli([], listed);
     expect(listed.text.out).toContain('…working');
+    landFix(root);
     expect(await runCli(['--done', 'aaaa'], makeIo(root))).toBe(0);
     expect(stored().find((n) => n.id === 'aaaa1111')?.workingAt).toBeUndefined();
     expect(stored().find((n) => n.id === 'bbbb2222')?.workingAt).toBeDefined();
@@ -837,6 +893,7 @@ describe('output an agent can trust', () => {
     const record = JSON.parse(list.text.out).find((n: { id: string }) => n.id === 'note-1');
     expect(record.doneCommand).toBe('npx isotone --done note-1');
     const io = makeIo(root);
+    landFix(root);
     expect(await runCli(['--done', 'note-1'], io)).toBe(0);
     const stored = JSON.parse(readFileSync(join(root, '.iteration-feedback.json'), 'utf8'));
     expect(stored.map((n: { id: string; done: boolean }) => [n.id, n.done])).toEqual([
@@ -962,6 +1019,7 @@ describe('note listing and actions', () => {
     const notes = ['aaaa1', 'bbbb2', 'cccc3', 'dddd4'].map((id) => ({ id, route: '/', feedback: id, done: false, createdAt: at(0) }));
     writeFileSync(join(root, '.iteration-feedback.json'), JSON.stringify(notes));
     const io = makeIo(root);
+    landFix(root);
     expect(await runCli(['--done', 'aaaa', 'bbbb'], io)).toBe(0);
     expect(io.text.out).toContain('done: [aaaa1]');
     expect(io.text.out).toContain('done: [bbbb2]');
@@ -1050,6 +1108,17 @@ describe('variant flags', () => {
     expect(io.text.out).toContain('Skipped knob 1 "bad": min must be below max.');
     expect(io.text.out).toContain('Skipped knob 2 "menu": defaultOption must be one of the option ids.');
     expect(io.text.out).toContain('Skipped knob 3 "plain": kind must be "select", "range" or "color".');
-    expect(io.text.out).toContain('node_modules/isotone/docs/variants.md');
+    expect(io.text.out).toContain(`(see ${join(repoRoot, 'docs/variants.md')}, "Knobs")`);
+    const json = makeIo(root);
+    expect(await runCli(['variant', 'list', '--json'], json)).toBe(0);
+    const listed = JSON.parse(json.text.out);
+    expect(listed.variants).toEqual([]);
+    expect(listed.knobs).toEqual([]);
+    expect(listed.skippedKnobs.map((k: { index: number; id: string }) => [k.index, k.id])).toEqual([
+      [1, 'bad'],
+      [2, 'menu'],
+      [3, 'plain'],
+    ]);
+    expect(listed.skippedKnobs[0].reason).toContain('min must be below max.');
   });
 });
