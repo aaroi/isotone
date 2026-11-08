@@ -48,7 +48,7 @@ npm; the archive's source maps contain source text. Keep the MIT notice and the
 
 `Publish main` runs in four jobs. `check` builds and tests the prepared main
 commit, runs the packed-package check, then packs and uploads the archive.
-`smoke` downloads that archive and installs it into fresh Vite 5 and Vite 8
+`smoke` downloads that archive and installs it into fresh Vite 5, 6, 7 and 8
 apps (React 18 and 19); it runs after packing so the third-party code it
 installs cannot change what publishes, and `scripts/smoke.mjs` only installs
 versions published at least seven days earlier. `publish` checks the archive's
@@ -83,9 +83,11 @@ No commit can make these account-side settings. Do them once, in order.
 
    Add `check (windows-latest, Node 24)` once it has passed and its
    `continue-on-error` line is removed from `ci.yml`. Bypass list: Repository
-   admin, plus the github-actions app only if `Publish main` then fails at
-   `git push origin HEAD:main` with a rule violation (the `prepare` job pushes
-   the version commit directly).
+   admin and the github-actions app. The github-actions bypass is required:
+   the `prepare` job pushes the version commit straight to `main` with
+   `git push origin HEAD:main`, which "Require a pull request before merging"
+   otherwise rejects, so every release would stop there (safely, before
+   anything publishes).
 3. **Tag ruleset** named `release tags`, targeting `v*`: Restrict deletions,
    Restrict updates, Block force pushes. Bypass: github-actions (the `release`
    job creates the tag) and Repository admin.
