@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.3.1
+
+- Merge pull request #42 from aaroi/prompt-followup
+
 ## 1.3.0
 
 ### What you need to know
