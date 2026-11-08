@@ -17,7 +17,7 @@ Try it in your browser at [isotone.vercel.app](https://isotone.vercel.app). Noth
 Ask your agent for variants of anything on the page: a layout, a spacing scale,
 a colour, a component. They appear in the panel's Variants tab as thumbnails,
 segmented choices, colour swatches or sliders, and switching one updates the
-live page. Save your picks as defaults for the agent to apply, or leave feedback
+live page. **Make default** files your picks for the agent to apply, or leave feedback
 on a single option.
 
 ![The Variants panel with thumbnail, segmented, colour and range selectors above the feedback notes](https://raw.githubusercontent.com/aaroi/isotone/main/docs/assets/preview.png)

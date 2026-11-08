@@ -15,6 +15,7 @@ import {
   createVariant,
   crossGroupOverlaps,
   dropVariant,
+  hasConflictMarkers,
   KNOBS_FILE,
   listVariants,
   promoteVariant,
@@ -176,6 +177,7 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
           files: Object.keys(v.files),
           stale: v.stale,
           missing: v.missing,
+          conflicts: v.conflicts ?? [],
           active: active.includes(v.id),
         })),
         knobs: knobs?.shown ?? [],
@@ -200,7 +202,7 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
 
   printTable(
     io,
-    ['ID', 'LABEL', 'SECTION', 'GROUP', 'ROUTE', 'FILES', 'STALE', 'MISSING', 'ACTIVE'],
+    ['ID', 'LABEL', 'SECTION', 'GROUP', 'ROUTE', 'FILES', 'STALE', 'MISSING', 'CONFLICTS', 'ACTIVE'],
     rows.map((v) => [
       v.id,
       v.label,
@@ -210,6 +212,7 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
       String(Object.keys(v.files).length),
       String(v.stale.length),
       String(v.missing.length),
+      String(v.conflicts?.length ?? 0),
       active.includes(v.id) ? '*' : '',
     ]),
   );
@@ -219,6 +222,14 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
     out(
       io,
       `STALE: the real file changed since the copy was made. \`variant sync <id>\` merges the change in: ${stale.map((v) => v.id).join(', ')}`,
+    );
+  }
+  const conflicted = rows.filter((v) => v.conflicts?.length);
+  if (conflicted.length) {
+    out(io);
+    out(
+      io,
+      `CONFLICTS: these copies hold conflict markers from \`variant sync\` and cannot be shown until you resolve them: ${conflicted.map((v) => v.id).join(', ')}`,
     );
   }
   if (knobs) printKnobs(io, knobs, scope);
@@ -530,13 +541,18 @@ function cmdSync(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreO
   out(io, `conflicts: ${conflicts.length ? conflicts.join(', ') : 'none'}`);
   out(io, `unchanged: ${unchanged.length ? unchanged.join(', ') : 'none'}`);
   for (const file of conflicts) out(io, syncAdvice(opts, id, file));
-  return 0;
+  if (!conflicts.length) return 0;
+  errOut(
+    io,
+    `Not synced: "${id}" has ${conflicts.length === 1 ? 'a conflict' : 'conflicts'}. Fix each file above, then check with \`npx isotone variant list\`.`,
+  );
+  return 1;
 }
 
 function syncAdvice(opts: VariantsStoreOptions, id: string, file: string): string {
   const copy = join(variantDir(opts, id), file);
-  if (existsSync(copy) && readFileSync(copy, 'utf8').includes('<<<<<<< variant')) {
-    return `${file}: resolve the conflict markers in ${copy}`;
+  if (hasConflictMarkers(copy)) {
+    return `${file}: resolve the conflict markers in ${copy}. Until then the reviewer cannot see "${id}".`;
   }
   return `${file}: there is no base version to merge from, so the copy was left as it is. Compare it with the real file by hand, then \`variant promote ${id} --force\` when it should win.`;
 }

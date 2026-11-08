@@ -424,7 +424,8 @@ function printServe(print: Print, setup: Setup): void {
   }
   print('3. Reload the page: the panel is the small pill in the bottom-right corner. Pages');
   print('   must come from a dev server or any local static server on localhost; `isotone');
-  print('   serve` does not serve them, and a file:// page never loads the panel.');
+  print('   serve` does not serve them, and a file:// page never loads the panel. Without');
+  print("   a dev server, run one in the pages' directory: python3 -m http.server 8000");
   print();
   print(`Notes and knobs (${KNOBS_FILE}) work here; when \`isotone serve\` starts it excludes`);
   print('the notes file from Git (in .git/info/exclude). Swapping whole source files needs');

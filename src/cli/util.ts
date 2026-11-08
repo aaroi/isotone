@@ -107,7 +107,7 @@ export function findNoteByPrefix<T extends { id: string }>(notes: T[], prefix: s
   if (exact) return exact;
   const matches = notes.filter((n) => n.id.startsWith(prefix));
   const [match, ...others] = matches;
-  if (!match) throw new Error(`No feedback id starting with "${prefix}".`);
+  if (!match) throw new Error(`No note id starting with "${prefix}".`);
   if (others.length) {
     throw new Error(`Ambiguous prefix "${prefix}" (${matches.length} matches) — use more characters.`);
   }

@@ -60,8 +60,9 @@ variants into a `vite build` for a preview.
 **Keeping copies current.** A copy records the version of the real file it was
 made from and reads as stale once that file moves on. `variant sync <id>` merges
 the real file's changes in, untracked files included. Where both sides changed
-the same lines the copy gets conflict markers, and until they are resolved it is
-a syntax error, which in live mode also breaks pages importing the real file.
+the same lines the copy gets conflict markers: `sync` exits 1, `variant list`
+counts them under CONFLICTS, and the copy cannot be shown until they are
+resolved (in live mode, picking it shows the real file meanwhile).
 After `variant promote <id>`, the other variants in its group stay available and
 stop reading as stale: they are alternatives to what was promoted.
 

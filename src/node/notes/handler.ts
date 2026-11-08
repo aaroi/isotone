@@ -103,6 +103,8 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     if (typeof route !== 'string' || route === '') {
       return json(400, { error: 'route is required' });
     }
+    // A page path, so a route cannot pass for a line of instructions to the agent.
+    if (!route.startsWith('/')) return json(400, { error: 'route must start with /' });
     if (route.length > MAX_ROUTE) return json(400, { error: `route must be at most ${MAX_ROUTE} characters` });
     const cleanFeedback = typeof feedback === 'string' ? feedback.trim() : '';
     if (cleanFeedback === '') {

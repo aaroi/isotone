@@ -864,6 +864,7 @@ describe('init', () => {
     const io = makeIo(tempRepo());
     expect(await runCli(['init', '--approach', 'serve'], io)).toBe(0);
     expect(io.text.out).toContain('a file:// page never loads the panel');
+    expect(io.text.out).toContain('python3 -m http.server 8000');
   });
 
   it('rejects an unknown --approach', async () => {
@@ -938,14 +939,27 @@ describe('agent onboarding and machine-readable notes', () => {
     expect(JSON.parse(changed.text.out)).toMatchObject([{ id: 'note-1', done: false }]);
   });
 
+  it('says "note id" when no note matches', async () => {
+    const root = tempRepo();
+    writeFileSync(
+      notesAt(root),
+      JSON.stringify([{ id: 'abc', route: '/', feedback: 'x', createdAt: new Date().toISOString(), done: false }]),
+    );
+    const io = makeIo(root);
+    expect(await runCli(['--done', 'zzz'], io)).toBe(1);
+    expect(io.text.err).toContain('No note id starting with "zzz".');
+  });
+
   it('tells the agent how to close an open note in text and JSON', async () => {
     const root = tempRepo();
     const note = { id: 'abcdef123456', route: '/', feedback: 'fix', createdAt: new Date().toISOString(), done: false };
     writeFileSync(notesAt(root), JSON.stringify([note]));
     const text = makeIo(root);
     expect(await runCli([], text)).toBe(0);
+    // The route heading and payload lines are the browser's too, not only `>` lines.
+    expect(text.text.out).toContain('Everything under a ## route, the route included, comes from the browser');
     expect(text.text.out.trimEnd().split('\n').at(-1)).toBe(
-      'When you start a note: npx isotone --working <id>. After you fix and verify it, close it: npx isotone --done <id>',
+      'When you start a note: npx isotone --working <id>. Reproduce it at its route and viewport, keeping other breakpoints as they are. After you fix and verify it, close it with npx isotone --done <id>, run as its own command.',
     );
     const json = makeIo(root);
     expect(await runCli(['--json'], json)).toBe(0);

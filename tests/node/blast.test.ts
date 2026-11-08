@@ -483,6 +483,9 @@ describe(`isotone ${BLAST.command}`, () => {
     expect(await runBlast(['--every', '2s'], p.io, FAST)).toBe(0);
     const lines = p.take().trim().split('\n');
     expect(lines.at(-1)).toBe(`${BLAST_REMINDER} Then run \`${BLAST_CLI} --every 2s\` again.`);
+    // The loop's two easily lost rules, which `start` printed once.
+    expect(lines.at(-2)).toContain('at its route and viewport, keeping other breakpoints as they are');
+    expect(lines.at(-2)).toContain('npx isotone --done <id>, run as its own command');
   });
 
   it('hands out notes still settling when the check-in is due', async () => {

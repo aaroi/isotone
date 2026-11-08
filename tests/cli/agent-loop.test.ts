@@ -240,6 +240,19 @@ describe('--done and variants', () => {
     expect(other.text.out).not.toContain('variant sync');
   });
 
+  it('names copies on the route that still hold conflict markers', async () => {
+    const root = repo();
+    notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000) }]);
+    expect(await runCli(['variant', 'new', 'hero', '--route', '/'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'add', 'hero', 'src/App.jsx'], captureIo(root))).toBe(0);
+    writeFileSync(join(root, '.isotone/variants/hero/src/App.jsx'), '<<<<<<< variant\na\n=======\nb\n>>>>>>> real\n');
+    write(root, 'src/App.jsx', 'export default function App() { return <button>Join</button>; }\n', Date.now() + 2000);
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    expect(io.text.out).toContain('These copies still hold conflict markers');
+    expect(io.text.out).toContain('  hero: .isotone/variants/hero/src/App.jsx');
+  });
+
   it('names only copies of files changed since --working on the note', async () => {
     const root = repo();
     write(root, 'src/App.css', 'button { color: red; }\n');

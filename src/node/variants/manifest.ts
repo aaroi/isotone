@@ -84,6 +84,20 @@ export function writeVariant(opts: VariantsStoreOptions, v: OverlayVariant): voi
   writeJson(join(dir, 'variant.json'), v);
 }
 
+/** The marker `git merge-file` leaves at the top of a conflicted hunk, with
+ *  the label `syncVariant` gives the override side. */
+const CONFLICT_MARKER = '<<<<<<< variant';
+
+/** Whether a copy still holds conflict markers from `variant sync`. Such a
+ *  copy does not parse, so it can be neither shown nor promoted. */
+export function hasConflictMarkers(file: string): boolean {
+  try {
+    return readFileSync(file, 'utf8').includes(CONFLICT_MARKER);
+  } catch {
+    return false;
+  }
+}
+
 /** Whether a tracked file has drifted from what its override was derived
  *  from. `base: null` (never hashed, or the manifest was hand-edited to
  *  simulate an unreachable blob) counts as stale too: there's nothing to
@@ -119,12 +133,14 @@ export function listVariants(opts: VariantsStoreOptions): OverlayVariantStatus[]
     if (!manifest) continue; // no manifest, or invalid JSON: not a variant
     const stale: string[] = [];
     const missing: string[] = [];
+    const conflicts: string[] = [];
     for (const [file, entry] of Object.entries(manifest.files)) {
       const overrideAbs = join(dir, id, file);
       if (!existsSync(overrideAbs)) {
         missing.push(file);
         continue;
       }
+      if (hasConflictMarkers(overrideAbs)) conflicts.push(file);
       // A file the variant adds is current for as long as the project still
       // lacks it; once a real one appears, the two need a person.
       if (entry.added) {
@@ -135,7 +151,7 @@ export function listVariants(opts: VariantsStoreOptions): OverlayVariantStatus[]
       if (!hashes.has(hashKey)) hashes.set(hashKey, hashFile(join(root, file), entry.base));
       if (isStale(entry.base, hashes.get(hashKey) ?? null)) stale.push(file);
     }
-    statuses.push({ ...manifest, stale, missing });
+    statuses.push({ ...manifest, stale, missing, conflicts });
   }
   statuses.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   return statuses;

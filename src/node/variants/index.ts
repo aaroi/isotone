@@ -16,6 +16,7 @@ export { variantDir } from './paths';
 export {
   addVariantFile,
   createVariant,
+  hasConflictMarkers,
   listVariants,
   readVariant,
   readVariants,

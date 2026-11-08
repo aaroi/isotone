@@ -59,6 +59,8 @@ export interface OverlayVariantStatus extends OverlayVariant {
   stale: string[];
   /** Files the manifest names but the variant directory no longer holds. */
   missing: string[];
+  /** Copies still holding conflict markers from `variant sync`. */
+  conflicts?: string[];
 }
 
 /**
@@ -305,6 +307,7 @@ function overlayHint(v: OverlayVariantStatus): string {
   if (files.length) parts.push(files.join(', '));
   if (v.stale.length) parts.push(`stale: ${v.stale.join(', ')}`);
   if (v.missing.length) parts.push(`missing: ${v.missing.join(', ')}`);
+  if (v.conflicts?.length) parts.push(`conflicts: ${v.conflicts.join(', ')}`);
   return parts.join('\n');
 }
 

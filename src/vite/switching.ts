@@ -31,9 +31,10 @@ export function createSwitching(overrides: Overrides) {
   // Live mode: decided in configureServer, where the server's environments
   // show which Vite this is.
   let live = false;
-  // The export names each dispatcher was written with, by real path. A
-  // version whose names change needs a new dispatcher, which is a reload.
+  // The versions and export names each dispatcher was written with, by real
+  // path. When either changes it needs a new dispatcher, which is a reload.
   const dispatched = new Map<string, string>();
+  const planKey = (plan: { versions: (string | null)[]; names: string[] }) => `${plan.versions.join(',')}|${plan.names.join(',')}`;
   // Real source paths activate() is reporting as changed right now. Their
   // hot update must go through, where an ordinary edit of an overridden
   // real file is dropped (see hotModules). Each path keeps the
@@ -42,9 +43,9 @@ export function createSwitching(overrides: Overrides) {
   const swapping = new Map<string, Set<string>>();
   const swapWaiters = new Set<() => void>();
 
-  const namesChanged = (path: string): boolean => {
+  const planChanged = (path: string): boolean => {
     const plan = overrides.dispatchPlan(path);
-    return !plan || plan.names.join(',') !== dispatched.get(path);
+    return !plan || planKey(plan) !== dispatched.get(path);
   };
 
   /**
@@ -68,7 +69,7 @@ export function createSwitching(overrides: Overrides) {
       const source = normalizePath(join(overrides.opts.root, hit.file));
       // Live: the copy has a module of its own; update just that one.
       if (live && client && dispatched.has(source)) {
-        if (namesChanged(source)) {
+        if (planChanged(source)) {
           reloadPage();
           return [];
         }
@@ -97,7 +98,7 @@ export function createSwitching(overrides: Overrides) {
     if (live && client && dispatched.has(path)) {
       // The dispatcher already holds every version; the tab switched itself.
       if (swap) return [];
-      if (namesChanged(path)) {
+      if (planChanged(path)) {
         reloadPage();
         return [];
       }
@@ -289,9 +290,9 @@ export function createSwitching(overrides: Overrides) {
     get live(): boolean {
       return live;
     },
-    /** Record that `path` is served as a dispatcher exporting `names`. */
-    dispatching(path: string, names: string[]): void {
-      dispatched.set(path, names.join(','));
+    /** Record that `path` is served as the dispatcher `plan` describes. */
+    dispatching(path: string, plan: { versions: (string | null)[]; names: string[] }): void {
+      dispatched.set(path, planKey(plan));
     },
     hotModules,
     attach,

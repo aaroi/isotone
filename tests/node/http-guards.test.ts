@@ -30,14 +30,14 @@ describe('checkRequest, the gate isotone serve and the Vite plugin share', () =>
   it('refuses a local peer forwarding for another machine, or under a LAN or rebinding Host', () => {
     expect(() => checkRequest({ ...local, forwardedFor: '203.0.113.9' })).toThrow('only requests from this machine');
     expect(() => checkRequest({ ...local, forwarded: 'for="[2001:db8::1]";proto=https' })).toThrow('only requests from this machine');
-    for (const host of ['192.168.1.10:4123', 'rebind.attacker.example:4123', '']) {
+    for (const host of ['192.168.1.10:4123', 'rebind.attacker.example:4123', 'evil.test:4123', '']) {
       expect(() => checkRequest({ ...local, host }), host).toThrow('host not allowed');
     }
   });
 
   it('accepts this machine under its local names and loopback addresses', () => {
     for (const remoteAddress of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
-      for (const host of ['127.0.0.1:4123', 'localhost:4123', '[::1]:4123', 'app.localhost:4123', 'shop.test']) {
+      for (const host of ['127.0.0.1:4123', 'localhost:4123', '[::1]:4123', 'app.localhost:4123']) {
         expect(() => checkRequest({ host, remoteAddress, forwardedFor: '127.0.0.1, ::1' }), `${remoteAddress} ${host}`).not.toThrow();
       }
     }

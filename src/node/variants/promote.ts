@@ -10,10 +10,6 @@ import { readVariant, writeVariant, readVariants, listVariants } from './manifes
 import { type VariantsStoreOptions, mutateVariants } from './options';
 import { variantDir, isValidVariantId } from './paths';
 
-/** The marker `git merge-file` leaves at the top of a conflicted hunk, with
- *  the label `syncVariant` gives the override side. */
-const CONFLICT_MARKER = '<<<<<<< variant';
-
 /**
  * Land a variant: copy every override over its real file, then delete the
  * variant. Refuses when an override would silently discard work: a file
@@ -40,6 +36,11 @@ export function promoteVariant(
     if (missing.length) throw new Error(`"${id}" has missing overrides: ${missing.join(', ')}. Restore or remove them before promoting.`);
     if (!force) {
       const status = listVariants(opts).find((v) => v.id === id);
+      if (status?.conflicts?.length) {
+        throw new Error(
+          `"${id}" has unresolved conflict markers in ${status.conflicts.join(', ')}. Resolve them, or promote with --force.`,
+        );
+      }
       if (status?.stale.length) {
         // A null base is stale by definition, but the file did not necessarily
         // change: there was simply no git to record what it looked like.
@@ -49,13 +50,6 @@ export function promoteVariant(
             : `${file} changed since the override was made`,
         );
         throw new Error(`"${id}" is stale (${reasons.join('; ')}). Run \`variant sync ${id}\` first, or promote with --force.`);
-      }
-      const conflicted = Object.keys(manifest.files).filter((key) => {
-        const overrideAbs = join(vDir, key);
-        return existsSync(overrideAbs) && readFileSync(overrideAbs, 'utf8').includes(CONFLICT_MARKER);
-      });
-      if (conflicted.length) {
-        throw new Error(`"${id}" has unresolved conflict markers in ${conflicted.join(', ')}. Resolve them, or promote with --force.`);
       }
     }
     const siblings =
