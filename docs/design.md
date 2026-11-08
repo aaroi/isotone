@@ -75,7 +75,10 @@ Saved feedback is one row per note, inline references, no gap between rows.
 Note text sits 3px outside the composer's text inset; references take at most
 42% of the row and name the pinned element or selector, not a route and pin
 count. Delete floats over the top-right corner (24px hit target, no column),
-shown on hover, focus or selection and always on touch. Defaults and feedback
+shown on hover, focus or selection and always on touch. The list is one Tab
+stop: Up, Down, Home and End move between notes, Left and Right between a note
+and its delete, and a delete from the keyboard moves on to the next note's.
+Defaults and feedback
 references share one compact tag; a lone tag may take the full width, several
 get compact limits. Composer tags share a horizontal strip whose ends align with
 the field inset at rest and may reach its edges while scrolling, with no side

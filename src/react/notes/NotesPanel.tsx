@@ -1,5 +1,6 @@
 import {
   type HTMLAttributes,
+  type KeyboardEvent,
   memo,
   useCallback,
   type ReactNode,
@@ -8,6 +9,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
 } from 'react';
 import { normalizeRoute } from '../../core/routes';
 import type { IsotoneElement, IsotoneNote } from '../../core/types';
@@ -124,6 +126,9 @@ const NoteList = memo(function NoteList({
   }, [open, filter, sent, keepPlace]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: each chunk adds rows above the reader, and any other change keeps their place.
   useLayoutEffect(keepPlace, [count, notes, keepPlace]);
+  // One Tab stop for the whole list: the row last focused, else the newest.
+  const [focused, setFocused] = useState<string>();
+  const stop = focused && shown.some((note) => note.id === focused) ? focused : shown.at(-1)?.id;
   useEffect(() => {
     const list = listRef.current;
     if (!list || typeof ResizeObserver === 'undefined') return;
@@ -136,6 +141,8 @@ const NoteList = memo(function NoteList({
       ref={listRef}
       className="isotone-list"
       aria-label="Notes"
+      onFocus={(e) => setFocused((e.target as HTMLElement).closest('li')?.dataset.motionKey)}
+      onKeyDown={moveNoteFocus}
       onScroll={(e) => {
         const list = e.currentTarget;
         // A hidden list reads as all zeros; it keeps the place it had.
@@ -149,6 +156,7 @@ const NoteList = memo(function NoteList({
           page={normalizeRoute(note.route) !== route ? note.route : undefined}
           editing={editingId === note.id}
           working={working.has(note.id)}
+          tabbable={note.id === stop}
           onEdit={onEdit}
           onRemove={onRemove}
         />
@@ -156,6 +164,22 @@ const NoteList = memo(function NoteList({
     </ul>
   );
 });
+
+const NOTE_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+
+/** Up, Down, Home and End move between notes; Left and Right between a note and its delete button. */
+function moveNoteFocus(event: KeyboardEvent<HTMLUListElement>) {
+  const target = event.target as HTMLElement;
+  const row = target.closest('li');
+  if (!row || !NOTE_KEYS.includes(event.key)) return;
+  const rows = Array.from(event.currentTarget.children);
+  const at = rows.indexOf(row);
+  const next = { ArrowUp: rows[at - 1], ArrowDown: rows[at + 1], Home: rows[0], End: rows.at(-1) }[event.key] ?? row;
+  const removing = event.key === 'ArrowRight' || (event.key !== 'ArrowLeft' && target.classList.contains('isotone-x'));
+  const button = next.querySelector<HTMLElement>(removing ? '.isotone-x' : 'button');
+  event.preventDefault();
+  button?.focus();
+}
 
 const WorkingDot = () => (
   <span
@@ -173,6 +197,7 @@ const NoteRow = memo(function NoteRow({
   page,
   editing,
   working,
+  tabbable,
   onEdit,
   onRemove,
 }: {
@@ -180,6 +205,8 @@ const NoteRow = memo(function NoteRow({
   page: string | undefined;
   editing: boolean;
   working: boolean;
+  /** The list's one Tab stop; arrow keys reach the other rows. */
+  tabbable: boolean;
   onEdit: (note: IsotoneNote) => void;
   onRemove: (note: IsotoneNote) => void;
 }) {
@@ -194,7 +221,13 @@ const NoteRow = memo(function NoteRow({
           <NoteSummary note={note} />
         </div>
       ) : (
-        <button type="button" className="isotone-note-hit" aria-current={editing ? true : undefined} onClick={() => onEdit(note)}>
+        <button
+          type="button"
+          className="isotone-note-hit"
+          tabIndex={tabbable ? 0 : -1}
+          aria-current={editing ? true : undefined}
+          onClick={() => onEdit(note)}
+        >
           {working && <WorkingDot />}
           <NoteSummary note={note} page={page} />
         </button>
@@ -202,9 +235,17 @@ const NoteRow = memo(function NoteRow({
       <button
         type="button"
         className="isotone-x isotone-icon"
+        // An update note has no note button, so its delete button is the row's stop.
+        tabIndex={tabbable && note.update ? 0 : -1}
         aria-label={remove.name}
         title={remove.action}
-        onClick={() => onRemove(note)}
+        onClick={(event) => {
+          // From the keyboard, focus moves on to a neighbouring note rather than out of the list.
+          const row = event.currentTarget.closest('li');
+          if (event.detail === 0)
+            (row?.nextElementSibling ?? row?.previousElementSibling)?.querySelector<HTMLElement>('.isotone-x')?.focus();
+          onRemove(note);
+        }}
       >
         <Icon name="close" size={12} />
       </button>

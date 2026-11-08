@@ -320,3 +320,37 @@ it('keeps a reader scrolled up in place through a delete or an agent update, and
   expect(noteNodes[noteNodes.length - 1]?.textContent).toContain('A new note');
   expect(list.scrollTop).toBe(100);
 });
+
+it('makes the note list one Tab stop, with arrow keys between notes and their delete buttons', async () => {
+  notes = manyNotes().slice(0, 10);
+  await render();
+  await click('.isotone-fab', 0);
+  await frame();
+  const list = $('.isotone-list');
+  const stops = () => Array.from(list.querySelectorAll<HTMLButtonElement>('button')).filter((button) => button.tabIndex === 0);
+  expect(stops().map((button) => button.textContent)).toEqual([expect.stringContaining('Note 9')]);
+  const active = () => shadow.activeElement as HTMLElement | null;
+  const press = (key: string) =>
+    act(async () => {
+      active()?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    });
+  await act(async () => stops()[0]?.focus());
+  await press('ArrowUp');
+  expect(active()?.textContent).toContain('Note 8');
+  await press('ArrowRight');
+  expect(active()?.getAttribute('aria-label')).toContain('Note 8');
+  await press('ArrowUp');
+  expect(active()?.getAttribute('aria-label')).toContain('Note 7');
+  await press('Home');
+  expect(active()?.getAttribute('aria-label')).toContain('Note 0');
+  await press('ArrowLeft');
+  expect(active()?.textContent).toContain('Note 0');
+  // The note last focused is the stop Tab comes back to.
+  expect(stops().map((button) => button.textContent)).toEqual([expect.stringContaining('Note 0')]);
+  // Deleting from the keyboard moves on to the next note's delete button.
+  await press('ArrowRight');
+  await act(async () => active()?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 })));
+  expect(shadow.querySelector('.isotone-x[aria-label*="Note 0"]')).toBeNull();
+  expect(active()?.getAttribute('aria-label')).toContain('Note 1');
+  expect(stops()).toHaveLength(1);
+});
