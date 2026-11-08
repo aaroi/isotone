@@ -108,7 +108,8 @@ function projectChange(root: string, ignore: (file: string) => boolean): number 
 function walk(root: string, ignore: (file: string) => boolean): number {
   let latest = 0;
   let seen = 0;
-  const queue = [root];
+  // Walk the long path, as the ignore list holds it (Windows can name a folder both ways).
+  const queue = [realPath(root)];
   for (let dir = queue.pop(); dir !== undefined; dir = queue.pop()) {
     let entries: import('node:fs').Dirent[];
     try {

@@ -42,6 +42,7 @@
 - `init` after an upgrade says "Already set up" instead of asking for the plugin again, and asks to rename `iteration()` if the config still uses it (`init --json` adds `integration`).
 - `init` prints the install command for your package manager and explains that a `file://` page never loads the panel.
 - On Windows, in a project whose path Node names with an 8.3 short name (`C:\Users\RUNNER~1\…`) while Git prints the long one, Isotone's files are kept out of Git again and `--done` no longer counts its own write to the notes file as the fix.
+- On Windows, saving notes while the CLI or another process is reading the file no longer fails with EPERM; the save waits a moment and retries.
 
 **Blast**
 
