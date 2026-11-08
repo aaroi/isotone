@@ -86,9 +86,13 @@ export function networkAccess() {
       return true;
     },
 
-    /** The access links to print: one per LAN address, or a hint. */
-    links(listening: { protocol: string; host: string | boolean | undefined; port: number; base: string }): string[] {
+    /**
+     * The access links to print: Vite's own network URLs when it has
+     * resolved them (Vite 6 and later, by now), else one per LAN address.
+     */
+    links(resolved: string[] | undefined, listening: { protocol: string; host: unknown; port: number; base: string }): string[] {
       const query = `?${PARAM}=${key}`;
+      if (resolved?.length) return resolved.map((url) => `${url}${query}`);
       const hosts =
         typeof listening.host === 'string' && listening.host !== '0.0.0.0' && listening.host !== '::'
           ? [listening.host]

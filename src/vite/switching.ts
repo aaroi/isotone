@@ -43,7 +43,6 @@ export function createSwitching(overrides: Overrides) {
   // environment about one change, the browser first and the server after.
   const swapping = new Map<string, Set<string>>();
   const swapWaiters = new Set<() => void>();
-  let reloadPage: () => void = () => {};
 
   const namesChanged = (path: string): boolean => {
     const plan = overrides.dispatchPlan(path);
@@ -114,141 +113,129 @@ export function createSwitching(overrides: Overrides) {
     return undefined;
   };
 
-  /**
-   * Wire the dev server: prime the active set, exclude its file from git,
-   * and watch the active file and the variants dir. Returns the switch the
-   * variants endpoint calls.
-   */
-  const attach = (server: ViteDevServer, options: { live: boolean; ignored?: boolean }): Activate => {
-    // Read the pointer now, before anything can rewrite it: activate()
-    // diffs the previous set against the new one, and the endpoint has
-    // already written the file by the time it runs, so a lazy first read
-    // would see the new set twice and switch nothing.
-    overrides.setActive(overrides.readActive());
-    live = options.live;
+  // The dev server, once attached: the swap reports to its watcher and
+  // module graphs, and reloads go out over its socket.
+  let dev: ViteDevServer | null = null;
+  // Files a manifest named before it changed: one that left the variant
+  // has no entry to be found by afterwards.
+  const covered = new Set<string>();
+  let reloadTimer: ReturnType<typeof setTimeout> | null = null;
 
-    // A server render holds modules of its own, so a change to what a
-    // variant covers has to reach those too or the HTML goes stale.
-    const graphs = () =>
-      server.environments
-        ? Object.values(server.environments).map((env) => env.moduleGraph as unknown as typeof server.moduleGraph)
-        : [server.moduleGraph];
-    // Files a manifest named before it changed: one that left the variant
-    // has no entry to be found by afterwards.
-    const covered = new Set<string>();
+  /** Every module graph: a server render holds modules of its own, so a
+   *  change to what a variant covers has to reach those too. */
+  const graphs = (server: ViteDevServer) =>
+    server.environments
+      ? Object.values(server.environments).map((env) => env.moduleGraph as unknown as typeof server.moduleGraph)
+      : [server.moduleGraph];
+
+  // A dispatcher is written for one set of versions and names. When
+  // either changes, the browser needs new dispatchers, which a hot
+  // update cannot deliver: drop them and reload the page once.
+  const reloadPage = (): void => {
+    const server = dev;
+    if (!server) return;
+    if (reloadTimer) clearTimeout(reloadTimer);
+    reloadTimer = setTimeout(() => {
+      reloadTimer = null;
+      // Files that were dispatchers, and files that have just gained a
+      // variant and still hold their plain transform.
+      const paths = new Set([...dispatched.keys(), ...overrides.versionsByFile().keys(), ...covered]);
+      for (const graph of graphs(server)) {
+        for (const path of paths) {
+          for (const mod of graph.getModulesByFile(path) ?? []) graph.invalidateModule(mod as never);
+        }
+        const runtime = graph.getModuleById(RESOLVED_LIVE_MODULE);
+        if (runtime) graph.invalidateModule(runtime as never);
+      }
+      covered.clear();
+      dispatched.clear();
+      server.ws.send({ type: 'full-reload', path: '*' });
+    }, 50);
+  };
+
+  /**
+   * Resolves once every server environment (an SSR render) has taken
+   * the swap of `files`, or after a second. A tab that reloads right
+   * after its POST would otherwise be rendered from the old files and
+   * fail to hydrate.
+   */
+  const serverSawSwap = (server: ViteDevServer, files: string[]): Promise<void> => {
+    const envs = Object.keys(server.environments ?? {}).filter((name) => name !== 'client');
+    if (!live || files.length === 0 || envs.length === 0) return Promise.resolve();
+    return new Promise<void>((done) => {
+      const check = () => {
+        const seen = files.every((file) => {
+          const by = swapping.get(file);
+          return !by || envs.every((env) => by.has(env));
+        });
+        if (seen) finish();
+      };
+      const timer = setTimeout(() => finish(), 1000);
+      const finish = () => {
+        clearTimeout(timer);
+        swapWaiters.delete(check);
+        // The update itself goes out after the hook that marked it.
+        setTimeout(done, 30);
+      };
+      swapWaiters.add(check);
+      check();
+    });
+  };
+
+  /**
+   * Switch the browser to the set `next` without reloading the page.
+   * Every file overridden by a variant that entered or left the set
+   * is reported to Vite as if it had just been edited on disk: Vite
+   * invalidates it, runs load() again (which now answers with the
+   * other content) and sends the same hot update an editor save
+   * would, so React Fast Refresh swaps the component in place and the
+   * reviewer keeps their scroll, their form state and the open panel.
+   * Variants in both sets are untouched, so switching one group leaves
+   * the others' components alone. Files the browser has not loaded
+   * are skipped; Vite decides on its own when a module cannot be
+   * hot-swapped and falls back to a reload for that one, exactly as
+   * it would for a hand edit.
+   */
+  const activate: Activate = (next, removedFiles = []) => {
+    const server = dev;
+    const prev = overrides.active();
+    const changed = [...prev.filter((id) => !next.includes(id)), ...next.filter((id) => !prev.includes(id))];
+    if (!server || (changed.length === 0 && removedFiles.length === 0)) return Promise.resolve();
+    overrides.setActive(next);
+    const root = overrides.opts.root;
+    // Forward-slash paths throughout: the module graph and the hot
+    // update hooks key files that way on every platform.
+    const sources = new Set<string>(removedFiles.map((file) => normalizePath(join(root, file))));
+    for (const id of changed) {
+      for (const key of Object.keys(readVariant(overrides.opts, id)?.files ?? {})) {
+        sources.add(normalizePath(join(root, key)));
+      }
+    }
+    const emitted: string[] = [];
+    for (const source of sources) {
+      const loaded = server.moduleGraph.getModulesByFile(source);
+      if (!loaded || loaded.size === 0) continue;
+      swapping.set(source, new Set());
+      emitted.push(source);
+      server.watcher.emit('change', source);
+    }
+    // Live tabs switch themselves; this tells the ones still on the
+    // server's default to follow it, once a reload would render it.
+    const settled = serverSawSwap(server, emitted);
+    if (live) void settled.then(() => server.ws.send({ type: 'custom', event: ACTIVE_EVENT, data: { active: next } }));
+    return settled;
+  };
+
+  /**
+   * Bring changes made without this server to the browser: the CLI's
+   * `variant use` writes the active file, and an agent edits overrides in
+   * place. The active file may not exist yet, so its directory is watched;
+   * chokidar reports files that appear later.
+   */
+  const watch = (server: ViteDevServer): void => {
     const signature = () => JSON.stringify(overrides.readManifests().map((v) => [v.id, v.group ?? '', Object.keys(v.files).sort()]));
     let listed = signature();
-    let reloadTimer: ReturnType<typeof setTimeout> | null = null;
-    // A dispatcher is written for one set of versions and names. When
-    // either changes, the browser needs new dispatchers, which a hot
-    // update cannot deliver: drop them and reload the page once.
-    reloadPage = () => {
-      if (reloadTimer) clearTimeout(reloadTimer);
-      reloadTimer = setTimeout(() => {
-        reloadTimer = null;
-        // Files that were dispatchers, and files that have just gained a
-        // variant and still hold their plain transform.
-        const paths = new Set([...dispatched.keys(), ...overrides.versionsByFile().keys(), ...covered]);
-        for (const graph of graphs()) {
-          for (const path of paths) {
-            for (const mod of graph.getModulesByFile(path) ?? []) graph.invalidateModule(mod as never);
-          }
-          const runtime = graph.getModuleById(RESOLVED_LIVE_MODULE);
-          if (runtime) graph.invalidateModule(runtime as never);
-        }
-        covered.clear();
-        dispatched.clear();
-        server.ws.send({ type: 'full-reload', path: '*' });
-      }, 50);
-    };
-
-    /**
-     * Resolves once every server environment (an SSR render) has taken
-     * the swap of `files`, or after a second. A tab that reloads right
-     * after its POST would otherwise be rendered from the old files and
-     * fail to hydrate.
-     */
-    const serverSawSwap = (files: string[]): Promise<void> => {
-      const envs = Object.keys(server.environments ?? {}).filter((name) => name !== 'client');
-      if (!live || files.length === 0 || envs.length === 0) return Promise.resolve();
-      return new Promise<void>((done) => {
-        const check = () => {
-          const seen = files.every((file) => {
-            const by = swapping.get(file);
-            return !by || envs.every((env) => by.has(env));
-          });
-          if (seen) finish();
-        };
-        const timer = setTimeout(() => finish(), 1000);
-        const finish = () => {
-          clearTimeout(timer);
-          swapWaiters.delete(check);
-          // The update itself goes out after the hook that marked it.
-          setTimeout(done, 30);
-        };
-        swapWaiters.add(check);
-        check();
-      });
-    };
-
-    /**
-     * Switch the browser to the set `next` without reloading the page.
-     * Every file overridden by a variant that entered or left the set
-     * is reported to Vite as if it had just been edited on disk: Vite
-     * invalidates it, runs load() again (which now answers with the
-     * other content) and sends the same hot update an editor save
-     * would, so React Fast Refresh swaps the component in place and the
-     * reviewer keeps their scroll, their form state and the open panel.
-     * Variants in both sets are untouched, so switching one group leaves
-     * the others' components alone. Files the browser has not loaded
-     * are skipped; Vite decides on its own when a module cannot be
-     * hot-swapped and falls back to a reload for that one, exactly as
-     * it would for a hand edit.
-     */
-    const activate: Activate = (next, removedFiles = []) => {
-      const prev = overrides.active();
-      const changed = [...prev.filter((id) => !next.includes(id)), ...next.filter((id) => !prev.includes(id))];
-      if (changed.length === 0 && removedFiles.length === 0) return Promise.resolve();
-      overrides.setActive(next);
-      const root = overrides.opts.root;
-      // Forward-slash paths throughout: the module graph and the hot
-      // update hooks key files that way on every platform.
-      const sources = new Set<string>(removedFiles.map((file) => normalizePath(join(root, file))));
-      for (const id of changed) {
-        for (const key of Object.keys(readVariant(overrides.opts, id)?.files ?? {})) {
-          sources.add(normalizePath(join(root, key)));
-        }
-      }
-      const emitted: string[] = [];
-      for (const source of sources) {
-        const loaded = server.moduleGraph.getModulesByFile(source);
-        if (!loaded || loaded.size === 0) continue;
-        swapping.set(source, new Set());
-        emitted.push(source);
-        server.watcher.emit('change', source);
-      }
-      // Live tabs switch themselves; this tells the ones still on the
-      // server's default to follow it, once a reload would render it.
-      const settled = serverSawSwap(emitted);
-      if (live) void settled.then(() => server.ws.send({ type: 'custom', event: ACTIVE_EVENT, data: { active: next } }));
-      return settled;
-    };
-
-    // The exclude helpers canonicalize through the filesystem, so the
-    // active file's directory has to exist before its pattern can land;
-    // the panel's first POST would otherwise leave an untracked file.
     const activeFile = overrides.activeFile;
-    mkdirSync(dirname(activeFile), { recursive: true });
-    ensureFileIgnored(activeFile);
-    if (options.ignored) {
-      mkdirSync(overrides.dir, { recursive: true });
-      ensureDirIgnored(overrides.dir);
-    }
-
-    // The CLI's `variant use` writes the active file with no request to
-    // this server, and an agent edits overrides in place: both have to
-    // reach the browser. The active file may not exist yet, so watch its
-    // directory; chokidar reports files that appear later.
     server.watcher.add(dirname(activeFile));
     server.watcher.add(overrides.dir);
     server.watcher.on('all', (_event: string, changed: string) => {
@@ -273,6 +260,30 @@ export function createSwitching(overrides: Overrides) {
         }
       }
     });
+  };
+
+  /**
+   * Wire the dev server: prime the active set, exclude its file from git,
+   * and watch for changes. Returns the switch the variants endpoint calls.
+   */
+  const attach = (server: ViteDevServer, options: { live: boolean; ignored?: boolean }): Activate => {
+    // Read the pointer now, before anything can rewrite it: activate()
+    // diffs the previous set against the new one, and the endpoint has
+    // already written the file by the time it runs, so a lazy first read
+    // would see the new set twice and switch nothing.
+    overrides.setActive(overrides.readActive());
+    live = options.live;
+    dev = server;
+    // The exclude helpers canonicalize through the filesystem, so the
+    // active file's directory has to exist before its pattern can land;
+    // the panel's first POST would otherwise leave an untracked file.
+    mkdirSync(dirname(overrides.activeFile), { recursive: true });
+    ensureFileIgnored(overrides.activeFile);
+    if (options.ignored) {
+      mkdirSync(overrides.dir, { recursive: true });
+      ensureDirIgnored(overrides.dir);
+    }
+    watch(server);
     return activate;
   };
 

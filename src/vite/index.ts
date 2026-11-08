@@ -75,7 +75,7 @@ function announce(server: ViteDevServer, file: string, variantsDir: string | nul
     const address = server.httpServer?.address();
     const port = typeof address === 'object' && address ? address.port : (config?.port ?? 5173);
     const protocol = config?.https ? 'https' : 'http';
-    for (const link of access.links({ protocol, host: config?.host, port, base: base ?? '/' })) {
+    for (const link of access.links(server.resolvedUrls?.network, { protocol, host: config?.host, port, base: base ?? '/' })) {
       logger.info(`  isotone  other devices get the panel from ${link}`);
     }
   });
