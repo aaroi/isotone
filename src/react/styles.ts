@@ -48,6 +48,7 @@ ${APPEARANCE_CSS}
   /* Inherited text properties cross the shadow boundary: an RTL or styled host must not mirror or restyle the panel. */
   direction: ltr; writing-mode: horizontal-tb; word-spacing: normal; text-indent: 0; text-transform: none;
   text-shadow: none; white-space: normal; font-feature-settings: normal; font-variation-settings: normal; -webkit-text-fill-color: currentColor;
+  cursor: auto;
 }
 .isotone-root :where(button, input, textarea):focus-visible { outline: 2px solid var(--iso-focus); outline-offset: 3px; }
 .isotone-root button { transition: transform var(--iso-fast) var(--iso-ease-out), opacity var(--iso-fast) var(--iso-ease-out); }
@@ -114,10 +115,12 @@ ${APPEARANCE_CSS}
 .isotone-vars { min-height: min(var(--iso-menu-need, 0px), calc(var(--iso-view-height) - 76px)); }
 /* The panel no longer clips, so its corner close can overhang; the variants body clips itself. */
 .isotone-root .isotone-panel > .isotone-vars { overflow: hidden; border-radius: 11px; }
-.isotone-vars-body { flex: 1; overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: var(--iso-space); display: flex; flex-direction: column; gap: var(--iso-space); }
+.isotone-vars-body { flex: 1; overflow-x: hidden; overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: var(--iso-space); display: flex; flex-direction: column; gap: var(--iso-space); }
 /* The footer overlaps only the scroller's bottom padding: content fades beneath
    it while scrolling, but the last control remains fully visible at the end. */
-.isotone-axis { flex: none; }
+/* A selector out of view skips layout, so opening Feedback beside hundreds of them does not lay out every one.
+   The clip margin keeps focus rings and corner badges, which reach past the selector, unclipped. */
+.isotone-axis { flex: none; content-visibility: auto; contain-intrinsic-size: auto 72px; overflow-clip-margin: 12px; }
 /* Sections name the part of the page their selectors change. The header sticks to
    the top of the scroll area while its own selectors pass beneath and fade into the
    surface; the next section's header pushes it out. At rest its padding occupies
@@ -125,6 +128,11 @@ ${APPEARANCE_CSS}
 .isotone-section, .isotone-section-body { flex: none; display: flex; flex-direction: column; gap: var(--iso-space); }
 .isotone-section-body[hidden] { display: none; }
 .isotone-vars-body > * + .isotone-section { padding-top: 8px; }
+/* Collapsed sections in a row read as one list of headers, not separated blocks. */
+.isotone-section[data-collapsed='true'] + .isotone-section[data-collapsed='true'] { padding-top: 0; margin-top: -4px; }
+/* A collapsed section has nothing to stick over, so its header's backdrop only needs
+   to reach the smaller gap; a full inset would cover the header above it. */
+.isotone-section[data-collapsed='true'] + .isotone-section[data-collapsed='true'] > .isotone-section-head { margin-top: -4px; padding-top: 4px; }
 /* Sticky offsets start inside the scroller's padding; the negative top reaches its edge. */
 .isotone-section-head { position: sticky; top: calc(0px - var(--iso-space)); z-index: 1; margin: calc(0px - var(--iso-space)) calc(0px - var(--iso-space)) -4px; padding: var(--iso-space) var(--iso-space) 0; background: var(--iso-bg); font: inherit; }
 .isotone-section-head::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 8px; background: linear-gradient(var(--iso-bg), transparent); pointer-events: none; }
@@ -149,7 +157,8 @@ ${APPEARANCE_CSS}
 .isotone-seg[aria-checked='true'] { color: var(--iso-fg); }
 .isotone-opt { position: relative; display: flex; min-width: 0; }
 /* Never narrower than its label plus the chevron's corner on both sides, so a long label widens its own segment instead of running under the chevron. */
-.isotone-opt-seg { flex: 1 1 64px; min-width: fit-content; }
+/* A segment is at least its label wide, so labels wrap to a new row before they truncate, but never wider than the row. */
+.isotone-opt-seg { flex: 1 1 64px; min-width: auto; max-width: 100%; }
 .isotone-opt-seg > .isotone-seg { padding-inline: 18px; }
 .isotone-opt-swatch { flex: none; }
 .isotone-opt > .isotone-seg, .isotone-opt > .isotone-thumb { flex: 1 1 auto; }
@@ -394,9 +403,25 @@ ${FEEDBACK_LAYOUT_CSS}
   .isotone-root button { transition: opacity 125ms ease; }
   .isotone-root button:not(:disabled):active > svg { transform: none; }
 }
-.isotone-root[data-instant='true'] *, .isotone-root[data-instant='true'] *::before, .isotone-root[data-instant='true'] *::after { transition-duration: 0s !important; transition-delay: 0s !important; animation: none !important; }
-/* Instant mode follows any key press, but the corner close only ever appears under the pointer, so it keeps its fade. */
-.isotone-root[data-instant='true'] .isotone-panel > .isotone-panel-close { transition-duration: 220ms, 120ms !important; }
+/* Windows high contrast swaps the palette for system colours and drops every shadow, which drew the edges,
+   the selection and the slider. Selection becomes Highlight; colour choices keep their own colour. */
+@media (forced-colors: active) {
+  .isotone-seg, .isotone-thumb { outline: 1px solid ButtonBorder; outline-offset: -1px; }
+  .isotone-seg[aria-checked='true'], .isotone-thumb[aria-checked='true'], .isotone-note-editing .isotone-note-hit, .isotone-pick[aria-pressed='true'], .isotone-page[aria-pressed='true'] { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+  .isotone-rail-button[aria-expanded='true']::before { background: Highlight; }
+  .isotone-rail-button[aria-expanded='true'] { color: HighlightText; }
+  .isotone-swatch, .isotone-picker, .isotone-colour-field, .isotone-colour-handle, .isotone-hue { forced-color-adjust: none; }
+  .isotone-swatch, .isotone-picker { box-shadow: 0 0 0 1px CanvasText; }
+  .isotone-swatch[aria-checked='true'], .isotone-picker[aria-expanded='true'], .isotone-picker[data-custom='true'] { box-shadow: 0 0 0 2px Canvas, 0 0 0 4px Highlight; }
+  .isotone-range::-webkit-slider-runnable-track { background: GrayText; }
+  .isotone-range::-moz-range-track { background: GrayText; }
+  .isotone-range::-webkit-slider-thumb { background: ButtonText; }
+  .isotone-range::-moz-range-thumb { background: ButtonText; }
+  .isotone-range-tick { background: GrayText; }
+}
+/* Keyboard actions are immediate. The rule names only the surfaces a key opens: one over every descendant
+   would restyle the whole dock each time the reviewer moves between mouse and keyboard. */
+.isotone-root[data-instant='true'] .isotone-rail-track, .isotone-root[data-instant='true'] .isotone-axis-menu, .isotone-root[data-instant='true'] .isotone-colour { transition-duration: 0s !important; transition-delay: 0s !important; }
 ${UPDATE_NOTICE_CSS}
 `;
 /**

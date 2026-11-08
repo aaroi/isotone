@@ -10,6 +10,8 @@ import type { IterationElement } from './types';
  *  test array satisfy it; the builder materializes it with `Array.from`. */
 export interface NodeLike {
   tagName: string;
+  /** The tag as a selector matches it: lower case for HTML, as written for SVG (`linearGradient`). */
+  localName?: string;
   id?: string | null;
   parentElement?: NodeLike | null;
   children?: readonly NodeLike[];
@@ -49,7 +51,7 @@ export function describeIterationElement(el: NodeLike, maxDepth = 4): IterationE
         break;
       }
     }
-    let part = node.tagName.toLowerCase();
+    let part = node.localName ?? node.tagName.toLowerCase();
     const parent: NodeLike | null | undefined = node.parentElement;
     if (parent) {
       const index = node.indexInParent ?? Array.from(parent.children ?? []).indexOf(node) + 1;
@@ -69,7 +71,7 @@ export function describeIterationElement(el: NodeLike, maxDepth = 4): IterationE
   // down, as `div > button` does. Rooting it leaves one match.
   if (only && !settled && !only(parts)) parts.unshift('body');
   return {
-    tag: el.tagName.toLowerCase(),
+    tag: el.localName ?? el.tagName.toLowerCase(),
     text: (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 80),
     selector: parts.join(' > '),
     ...el.context?.(),
@@ -244,7 +246,7 @@ function elementContext(el: Element): Partial<IterationElement> {
       if (text) near = text.slice(0, 80);
     }
     if (within.length === 4) continue;
-    const tag = up.tagName.toLowerCase();
+    const tag = up.localName;
     const label = up.getAttribute('aria-label');
     const test = up.getAttribute('data-testid');
     // Only a heading above the element titles it; a later one names the next section.
@@ -309,6 +311,7 @@ export function elementAsNode(el: Element): NodeLike {
     if (cached) return cached;
     const created: NodeLike = {
       tagName: n.tagName,
+      localName: n.localName,
       id: n.id || null,
       get textContent() {
         return renderedText(n);

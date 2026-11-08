@@ -478,7 +478,7 @@ describe('IterationPanel with variants', () => {
     expect(tabs()).toHaveLength(0);
     expect(container.querySelector('.isotone-vars')).not.toBeNull();
     expect(container.querySelector('.isotone-textarea')).toBeNull();
-    expect(container.querySelector('[role=dialog]')?.getAttribute('aria-label')).toBe('Iteration variants');
+    expect(container.querySelector('[role=dialog]')?.getAttribute('aria-label')).toBe('Variants');
   });
 
   it('opens both surfaces independently and keeps the draft while switching variants', async () => {
@@ -1116,11 +1116,15 @@ describe('review dock interactions', () => {
       await act(async () => {
         document.body.style.backgroundColor = theme === 'dark' ? 'black' : 'white';
         root?.render(createElement(IterationPanel, props));
-        // Page mutations are sampled at most every 200ms.
-        await new Promise((resolve) => setTimeout(resolve, 250));
-        await new Promise((resolve) => requestAnimationFrame(resolve));
       });
-      expect(container.querySelector('.isotone-root')?.getAttribute('data-theme')).toBe(theme);
+      // Page mutations are sampled at most every 200ms: wait for the sample, not for a guess at its timing.
+      await vi.waitFor(
+        async () => {
+          await act(async () => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))));
+          expect(container.querySelector('.isotone-root')?.getAttribute('data-theme')).toBe(theme);
+        },
+        { timeout: 5000, interval: 20 },
+      );
       expect(container.querySelectorAll('.isotone-panel[data-open=true]')).toHaveLength(2);
       expect(container.querySelector('textarea')).toBe(input);
       expect(input?.value).toBe('Keep this draft while changing the theme');

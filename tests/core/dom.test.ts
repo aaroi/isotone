@@ -48,3 +48,12 @@ it('prefers the browser rendering of the text when it has one', () => {
   Object.defineProperty(div, 'innerText', { value: 'One\nTwo' });
   expect(describeIterationElement(elementAsNode(div)).text).toBe('One Two');
 });
+
+it('keeps the case of SVG tags, so the selector finds the element again', () => {
+  document.body.innerHTML =
+    '<svg><defs><linearGradient id="g"><stop offset="0"/></linearGradient></defs><foreignObject><p>Hi</p></foreignObject></svg>';
+  for (const target of [document.querySelector('stop'), document.querySelector('foreignObject p')] as Element[]) {
+    const { selector } = describeIterationElement(elementAsNode(target), 8);
+    expect(document.querySelector(selector)).toBe(target);
+  }
+});

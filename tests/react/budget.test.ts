@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 /**
  * Render budgets on long collections, as React commit counts rather than
- * wall-clock times, so they hold on any machine. The stress page
- * (`/?stress=1`) is where the same paths are timed by hand.
+ * wall-clock times, so they hold on any machine. Timers and frames are fake:
+ * a test moves the clock itself, so a loaded machine changes how long it
+ * takes, never what it sees. The stress page (`/?stress=1`) is where the same
+ * paths are timed by hand.
  */
 import { act, createElement, memo, Profiler } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -13,6 +15,9 @@ import { useNotes } from '../../src/react/useNotes';
 
 let host: HTMLDivElement;
 let shadow: ShadowRoot;
+/** Live, so counting them on every commit does not search the whole panel. */
+let axisNodes: HTMLCollection;
+let noteNodes: HTMLCollection;
 let root: Root;
 let commits = 0;
 /** How many selectors each commit left in the panel. */
@@ -38,8 +43,15 @@ const manyNotes = (): IterationNote[] =>
     createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
   }));
 
+const elementFromPoint = document.elementFromPoint;
+/** Rendering hundreds of rows in jsdom takes seconds of CPU, and more on a loaded machine; nothing here waits on time. */
+const HEAVY = { timeout: 60_000 };
+
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  vi.useFakeTimers({
+    toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame'],
+  });
   commits = 0;
   axesPerCommit = [];
   notes = [];
@@ -56,12 +68,16 @@ beforeEach(() => {
   shadow = host.attachShadow({ mode: 'open' });
   const target = document.createElement('div');
   shadow.append(target);
+  axisNodes = target.getElementsByClassName('isotone-axis');
+  noteNodes = target.getElementsByClassName('isotone-note');
   root = createRoot(target);
 });
 
 afterEach(async () => {
   await act(async () => root.unmount());
   document.body.innerHTML = '';
+  document.elementFromPoint = elementFromPoint;
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -80,7 +96,7 @@ async function render(withVariants = false) {
           id: 'dock',
           onRender: () => {
             commits++;
-            axesPerCommit.push(shadow.querySelectorAll('.isotone-axis').length);
+            axesPerCommit.push(axisNodes.length);
           },
         },
         panel,
@@ -98,22 +114,27 @@ const click = (selector: string, detail = 1) =>
   act(async () => {
     $(selector).dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, detail }));
   });
-/** Commits made by `run`, after its effects and pending tasks have settled. */
+/** Run one frame and the tasks it schedules. */
+const frame = (ms = 16) =>
+  act(async () => {
+    vi.advanceTimersByTime(ms);
+  });
+/** Commits made by `run`, after the panel has settled and until its frames have run. */
 async function commitsDuring(run: () => Promise<void>): Promise<number> {
-  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  await frame(1000);
   const before = commits;
   await run();
-  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  await frame();
   return commits - before;
 }
 
-/** Let the Variants list finish rendering its chunks. */
+/** Let the long lists finish rendering their chunks, a frame at a time. */
 async function settle() {
-  for (let i = 0; i < 30 && shadow.querySelectorAll('.isotone-axis').length < 500; i++)
-    await act(async () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0))));
+  const done = () => axisNodes.length >= 500 && noteNodes.length >= notes.length;
+  for (let i = 0; i < 40 && !done(); i++) await frame();
 }
 
-it('opens 500 selectors with a first screenful, then the rest in a few chunks, rendering each once', async () => {
+it('opens 500 selectors with a first screenful, then the rest in a few chunks, rendering each once', HEAVY, async () => {
   await render(true);
   await click('.isotone-fab');
   const before = axesPerCommit.length;
@@ -129,7 +150,7 @@ it('opens 500 selectors with a first screenful, then the rest in a few chunks, r
   expect(shadow.querySelector('.isotone-axis')).toBe(first);
 });
 
-it('commits once per keystroke with 500 notes and 500 selectors open', async () => {
+it('commits once per keystroke with 500 notes and 500 selectors open', HEAVY, async () => {
   notes = manyNotes();
   await render(true);
   await click('.isotone-fab', 0);
@@ -144,13 +165,13 @@ it('commits once per keystroke with 500 notes and 500 selectors open', async () 
         field.dispatchEvent(new Event('input', { bubbles: true }));
       });
   });
+
   expect(typed).toBe(5);
 });
 
 it('commits nothing for pointer moves in select mode', async () => {
   const page = document.createElement('main');
   document.body.prepend(page);
-  vi.stubGlobal('requestAnimationFrame', (run: FrameRequestCallback) => setTimeout(() => run(0), 0));
   document.elementFromPoint = () => page;
   await render();
   await click('.isotone-fab');
@@ -194,4 +215,63 @@ it('leaves 500 notes alone when a load returns them unchanged', async () => {
   expect(rowRenders).toBe(loaded + 1);
   // Only the changed note is a new object, so every other row skips its render.
   expect(shown.filter((note, i) => note !== before[i]).map((note) => note.id)).toEqual(['note-0']);
+});
+
+it('renders no notes while Feedback is closed, then the newest first in chunks', HEAVY, async () => {
+  notes = manyNotes();
+  await render();
+  await frame(1000);
+  expect(noteNodes).toHaveLength(0);
+  await click('.isotone-fab', 0);
+  // The opening commit renders a screenful of the newest notes; older ones follow above them.
+  expect(noteNodes.length).toBeGreaterThan(0);
+  expect(noteNodes.length).toBeLessThanOrEqual(40);
+  expect(noteNodes[noteNodes.length - 1]?.textContent).toContain('Note 499');
+  await settle();
+  expect(noteNodes).toHaveLength(500);
+  expect(noteNodes[0]?.textContent).toContain('Note 0');
+});
+
+it('goes back to the newest note when the list reappears, and keeps a reader scrolled up where they were', async () => {
+  const observers: ((entries: unknown[]) => void)[] = [];
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(callback: (entries: unknown[]) => void) {
+        observers.push(callback);
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
+  notes = manyNotes().slice(0, 10);
+  await render();
+  await click('.isotone-fab', 0);
+  await frame();
+  // Ten 20px rows in a 100px list; hidden (as during select mode on a phone), everything reads 0.
+  const list = $('.isotone-list');
+  let shown = true;
+  let top = 0;
+  Object.defineProperties(list, {
+    clientHeight: { get: () => (shown ? 100 : 0) },
+    scrollHeight: { get: () => (shown ? 200 : 0) },
+    scrollTop: { get: () => (shown ? top : 0), set: (value: number) => (top = Math.max(0, Math.min(value, 100))) },
+  });
+  const resized = () =>
+    act(async () => {
+      for (const run of observers) run([]);
+    });
+  await resized();
+  expect(list.scrollTop).toBe(100);
+  shown = false;
+  list.dispatchEvent(new Event('scroll'));
+  shown = true;
+  top = 0;
+  await resized();
+  expect(list.scrollTop).toBe(100);
+  // A reader 60px up from the newest note stays there when the panel changes size.
+  list.scrollTop = 40;
+  list.dispatchEvent(new Event('scroll'));
+  await resized();
+  expect(list.scrollTop).toBe(40);
 });

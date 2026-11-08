@@ -81,7 +81,7 @@ describe('theme boundary', () => {
 describe('host isolation', () => {
   it('does not inherit direction or text styling from an RTL, styled host page', () => {
     const style = document.createElement('style');
-    style.textContent = `body { direction: rtl; text-transform: uppercase; word-spacing: 4px; text-indent: 2em; }\n${PANEL_CSS}`;
+    style.textContent = `body { direction: rtl; text-transform: uppercase; word-spacing: 4px; text-indent: 2em; cursor: wait; }\n${PANEL_CSS}`;
     document.head.append(style);
     const root = document.createElement('div');
     root.className = 'isotone-root';
@@ -92,9 +92,78 @@ describe('host isolation', () => {
       expect(computed.textTransform).toBe('none');
       expect(computed.wordSpacing).toBe('normal');
       expect(computed.textIndent).toBe('0px');
+      expect(computed.cursor).toBe('auto');
     } finally {
       root.remove();
       style.remove();
     }
+  });
+});
+
+function selectors(css: string): string[] {
+  const style = document.createElement('style');
+  style.textContent = css;
+  document.head.append(style);
+  try {
+    const found: string[] = [];
+    const visit = (rules: CSSRuleList) => {
+      for (const rule of Array.from(rules)) {
+        if ('cssRules' in rule) visit(rule.cssRules as CSSRuleList);
+        if ('selectorText' in rule) found.push(...String(rule.selectorText).split(','));
+      }
+    };
+    if (style.sheet) visit(style.sheet.cssRules);
+    return found.map((selector) => selector.trim());
+  } finally {
+    style.remove();
+  }
+}
+
+describe('input modality', () => {
+  // The root flips data-instant on the first key after a click and back on the next press. A rule that reaches
+  // every descendant or tag restyles thousands of elements on the stress page and stalls the host's own inputs.
+  it('makes only named surfaces instant, never every descendant', () => {
+    const instant = selectors(PANEL_CSS).filter((selector) => selector.includes('data-instant'));
+    expect(instant.length).toBeGreaterThan(0);
+    for (const selector of instant) expect(selector).toMatch(/\[data-instant='true'\] \.isotone-[\w-]+$/);
+  });
+});
+
+describe('variants list', () => {
+  // A label of one long word used to make its segment as wide as the word, so the list scrolled sideways.
+  it('keeps an option no wider than its row and the list from scrolling sideways', () => {
+    const style = document.createElement('style');
+    style.textContent = PANEL_CSS;
+    document.head.append(style);
+    const root = document.createElement('div');
+    root.className = 'isotone-root';
+    root.innerHTML = '<div class="isotone-vars-body"><div class="isotone-segs"><div class="isotone-opt isotone-opt-seg"></div></div></div>';
+    document.body.append(root);
+    try {
+      const body = getComputedStyle(root.querySelector('.isotone-vars-body') as Element);
+      expect([body.overflowX, body.overflowY]).toEqual(['hidden', 'auto']);
+      const option = getComputedStyle(root.querySelector('.isotone-opt-seg') as Element);
+      expect([option.minWidth, option.maxWidth]).toEqual(['auto', '100%']);
+    } finally {
+      root.remove();
+      style.remove();
+    }
+  });
+});
+
+describe('forced colors', () => {
+  // High contrast drops shadows and author colours, which drew the selection and the slider.
+  it('marks selections, swatches and sliders with system colours', () => {
+    const block = PANEL_CSS.match(/@media \(forced-colors: active\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
+    const forced = selectors(block);
+    for (const selector of [
+      ".isotone-seg[aria-checked='true']",
+      ".isotone-thumb[aria-checked='true']",
+      ".isotone-swatch[aria-checked='true']",
+      '.isotone-range::-webkit-slider-thumb',
+      '.isotone-range::-webkit-slider-runnable-track',
+    ])
+      expect(forced).toContain(selector);
+    expect(block).toMatch(/Highlight/);
   });
 });
