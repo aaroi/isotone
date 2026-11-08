@@ -42,7 +42,8 @@ export function runInit(args: string[], io: CliIO): number {
   const help = args.some((arg) => ['--help', '-h', 'help'].includes(arg));
   if (!help) {
     try {
-      if (parseArgs(args, ['--approach'], ['--yes', '--json']).length) throw new Error('init does not take positional arguments.');
+      if (parseArgs(args, ['--approach'], ['--yes', '--json'], 'npx isotone init --help').length)
+        throw new Error('init does not take positional arguments.');
     } catch (error) {
       errOut(io, (error as Error).message);
       return 1;

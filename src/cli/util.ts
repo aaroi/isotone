@@ -52,9 +52,14 @@ function options(args: string[]): string[] {
 /**
  * Validate a command before it reads or writes files. Returns its
  * positionals; everything after a bare `--` is one, even when it starts with
- * a dash.
+ * a dash. `help` is the command an unknown option points to.
  */
-export function parseArgs(args: string[], values: readonly string[], booleans: readonly string[] = []): string[] {
+export function parseArgs(
+  args: string[],
+  values: readonly string[],
+  booleans: readonly string[] = [],
+  help = 'npx isotone --help',
+): string[] {
   const positionals: string[] = [];
   const seen = new Set<string>();
   const queue = [...args];
@@ -67,7 +72,7 @@ export function parseArgs(args: string[], values: readonly string[], booleans: r
       positionals.push(arg);
       continue;
     }
-    if (!values.includes(arg) && !booleans.includes(arg)) throw new Error(`Unknown option "${arg}".`);
+    if (!values.includes(arg) && !booleans.includes(arg)) throw new Error(`Unknown option "${arg}". Run \`${help}\`.`);
     if (seen.has(arg)) throw new Error(`Option "${arg}" was given more than once.`);
     seen.add(arg);
     if (!values.includes(arg)) continue;

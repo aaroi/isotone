@@ -71,7 +71,7 @@ describe('notes (unchanged default behaviour)', () => {
   it('rejects an unknown option instead of listing notes', async () => {
     const io = makeIo(tempRepo());
     expect(await runCli(['--bogus'], io)).toBe(1);
-    expect(io.text.err).toContain('Unknown option "--bogus"');
+    expect(io.text.err).toContain('Unknown option "--bogus". Run `npx isotone --help`.');
     expect(io.text.out).toBe('');
   });
 });
@@ -1081,7 +1081,7 @@ describe('variant flags', () => {
     await runCli(['variant', 'new', 'keep-me'], makeIo(root));
     const io = makeIo(root);
     expect(await runCli(['variant', 'drop', 'keep-me', '--dry-run'], io)).toBe(1);
-    expect(io.text.err).toContain('Unknown option "--dry-run"');
+    expect(io.text.err).toContain('Unknown option "--dry-run". Run `npx isotone variant --help`.');
     expect(readVariant(root, 'keep-me')).not.toBeNull();
     expect(await runCli(['variant', 'new', 'x', '--lable', 'Typo'], makeIo(root))).toBe(1);
     expect(await runCli(['variant', 'drop', 'keep-me', 'extra'], makeIo(root))).toBe(1);

@@ -118,7 +118,7 @@ export async function runBlast(argv: string[], io: CliIO, timingOverrides: Parti
   let everyArg = '';
   let notice = '';
   try {
-    const positionals = parseArgs(rest, ['--every', '--file'], ['--json', '--stream']);
+    const positionals = parseArgs(rest, ['--every', '--file'], ['--json', '--stream'], `${BLAST_CLI} --help`);
     const waits = command === 'wait' || thenWait;
     if (!waits && (has(rest, '--every') || has(rest, '--stream')))
       throw new Error('--every and --stream apply to the waiting run, `npx isotone blast`.');
