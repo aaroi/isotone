@@ -1,33 +1,20 @@
 # Variants
 
-A variant is an alternative of one specific element, chosen from the
-panel's Variants tab. Two host shapes:
+A variant is an alternative of one specific element, chosen from the panel's
+Variants tab. There are three kinds, and the first sections of this page say how
+to make each one well:
 
-**A Vite host with no variant system** gets overlay variants, on by default.
-A variant is a directory under `.isotone/variants/<id>/` holding copies
-of source files at their repo-relative paths plus a `variant.json`
-manifest. While the variant is active, the plugin serves the copy in place
-of the real file. In a React project on Vite 6 or later the browser loads
-every version up front and switches between them itself (see
-[live switching](#live-switching)). Variants that override the same files, or share a
-`--group`, are alternatives of one decision and appear as one selector with
-Default and each option; unrelated variants get their own selectors and can
-be active at the same time. A selector shows only on the variant's route:
-`/items` is that page, `/items/*` also every page under it, and `/items*` any
-route starting with `/items`. A variant made without a route shows everywhere.
+- **File variants**, on a Vite host: a copy of source files under
+  `.isotone/variants/<id>/` that the dev server serves in place of the real file
+  while the variant is active. The [agent guide](agent-guide.md#variants) lists
+  the commands.
+- **Knobs**, on Vite or `isotone serve`: a number, colour or named style declared
+  in `.isotone/knobs.json` that the page reads as a CSS custom property.
+- **A host source**, for an app with its own variant system: the app hands the
+  panel its axes and applies the selections itself.
 
-**A host with its own variant system** hands the panel a `VariantsSource`:
-
-```ts
-import { createVariantsSource, mountIteration } from 'isotone/react';
-
-const source = createVariantsSource({ axes, onChange: applySelections });
-mountIteration({ variants: source, defaultTab: 'variants' });
-```
-
-The panel renders select, range and colour axes, thumbnail grids,
-conditional axes and per-selector actions; the app keeps its own state and URL
-sync. `npx isotone init --approach host` prints a complete example.
+[How switching works](#how-switching-works), at the end, is reference for when a
+switch does not behave as expected.
 
 ## Choosing a selector
 
@@ -35,6 +22,7 @@ Choose the control for the decision being reviewed, not for variety in the panel
 
 | Decision | Definition | Example |
 | --- | --- | --- |
+| Structure or content alternatives | A file variant | Two hero layouts, a different card component |
 | A few distinct, named alternatives | `kind: 'select'`, or omit `kind` | Compact / Comfy / Spacious; two options for an on/off choice |
 | Alternatives best compared visually | A select with `image` on **every** option | Card arrangements or illustration treatments |
 | One numeric property across a useful interval | `kind: 'range'` | Card radius, padding, opacity or animation duration |
@@ -45,6 +33,142 @@ no separate checkbox, toggle, dropdown or free-text axis kinds. Use stable IDs,
 short descriptive labels, and independent axes for independent decisions.
 `showWhen` hides a dependent axis until its parent has the relevant selection.
 Keep the default among the available options or swatches.
+
+For a range, choose bounds that give a valid design at both extremes (padding
+8–32px in 2px steps, not 0–1000px), a positive `step` matching the decision's
+precision, and a default on a step within `min` and `max`. Use a unit such as
+`px`, `%` or `ms`; a bare 0–1 range displays as a percentage, and `unit: ''`
+keeps the raw number.
+
+Check that every control changes the intended property at its minimum, maximum
+and reset, and keep the source fallback and the default in sync.
+
+## File variants
+
+The real file stays as it is and is the selector's Default; each variant is an
+alternative to it. Variants that override the same files, or share a `--group`,
+are alternatives of one decision and appear as one selector; unrelated variants
+get their own selectors and can be active at the same time. Two groups that
+override the same file cannot both be active: the panel names them when you pick
+the second, and `variant add` warns when the overlap is created.
+
+A selector shows only on the variant's route: `/items` is that page, `/items/*`
+also every page under it, and `/items*` any route starting with `/items`. A
+variant made without a route shows everywhere.
+
+Copy only files that export components where you can. In a React project on
+Vite 6 or later, a copied file that also exports a hook, helper, context or
+constant object makes every switch reload the page; move shared helpers into
+files the variant leaves alone. A variant can add a file the project does not
+have: `variant add <id> --new <file>` starts an empty one. Import it relatively,
+or through an alias whose last path segments name it.
+
+Variant files are committed by default, since they are the change under review,
+so `variant add` refuses to copy a git-ignored file or one that looks like a
+secret (`.env`, private keys, `*credentials*.json`, `*.keystore`, anything under
+`.aws/` or `.ssh/`). `--force` copies it anyway. `variants: { ignored: true }`
+keeps the variants directory local. The active pointer, `.isotone/active.json`,
+is local and never committed. `ISOTONE_VARIANT=<id>` (a comma-separated list)
+bakes variants into a `vite build` for a preview.
+
+**Keeping copies current.** A copy records the version of the real file it was
+made from, and reads as stale once that file moves on. `variant sync <id>` merges
+the real file's changes into the copy and works on files git does not track yet.
+When both sides changed the same lines, the copy gets conflict markers to resolve,
+and while they are there the copy is a syntax error, which in live mode also breaks
+pages that import the real file. `variant promote <id>` lands a copy over the real
+file. The other variants in its group stay available and stop reading as stale,
+since they are alternatives to what was just promoted.
+
+### What the host needs
+
+- **Framework HMR support.** Keep the host's Vite framework plugin (React Fast
+  Refresh through `@vitejs/plugin-react` or its framework wrapper; Vue and
+  Svelte use their own). Without an HMR accept boundary, a switch reloads.
+- **Tailwind v4** scans only the sources it is pointed at. Add
+  `@source "../.isotone/variants/**/*.{ts,tsx}";` (relative to the CSS
+  file) or classes new to a variant render unstyled.
+- **A sibling dev server** that aliases into another package sets
+  `variants: { root: '../that-package' }` so both serve the same variants.
+- **Routes** come from `window.location.pathname`. An app on a memory
+  router sees `/` everywhere; leave `--route` off there.
+- **Linters** should ignore `.isotone` (Biome: `"!.isotone"` in
+  `files.includes`; ESLint: `{ ignores: ['.isotone/**'] }`).
+
+## Knobs
+
+Some decisions are a number, not an alternative file: how far a fade reaches,
+how dense a dot field is. Declare those in `.isotone/knobs.json`, a JSON array of
+range, colour or select axes with an optional `route` (a pattern as above, or a
+list of them):
+
+```json
+[
+  {
+    "kind": "range",
+    "id": "fade-from",
+    "label": "Hero > Fade starts",
+    "min": 0,
+    "max": 100,
+    "step": 1,
+    "defaultValue": 0,
+    "unit": "%",
+    "route": ["/computers/*", "/databases/*"]
+  }
+]
+```
+
+A colour knob takes a `defaultColor` and named `swatches`, all as hex values:
+
+```json
+{
+  "kind": "color",
+  "id": "accent",
+  "label": "Accent colour",
+  "defaultColor": "#2f6f4e",
+  "swatches": [
+    { "id": "forest", "label": "Forest", "value": "#2f6f4e" },
+    { "id": "clay", "label": "Clay", "value": "#b4532a" }
+  ]
+}
+```
+
+The panel renders range knobs as sliders and colour knobs as swatches with a
+custom picker, on their configured routes. An entry with a missing or invalid
+field is skipped; `npx isotone variant list` names each one. Knobs also work with
+`isotone serve`, so any dev server gets them, not only Vite. A value reaches the
+page as a custom property on `<html>`, `--knob-<id>`, with the unit appended, so
+the source reads it with the committed default as the fallback:
+
+```css
+mask-image: radial-gradient(ellipse, black var(--knob-fade-from, 0%), transparent 100%);
+```
+
+A select knob names a style rather than a number, for a choice that one line of
+CSS or a draw call can act on. Give it `options` of `{ "id", "label" }` and a
+`defaultOption`. CSS cannot branch on a custom property, so its value also lands
+as `data-knob-<id>` on `<html>`:
+
+```css
+html[data-knob-tick-style="dots"] .tick { border-radius: 50%; }
+```
+
+When the alternative changes structure, a file variant is still the right tool,
+because a select knob leaves both branches in the source until someone removes one.
+
+Code that draws for itself, such as a canvas chart, reads the custom property and
+redraws on the `isotone:knob` event, which bubbles from `<html>` with
+`{ id, value }` and a `null` value when the knob returns to its default:
+
+```js
+document.addEventListener('isotone:knob', ({ detail }) => {
+  if (detail.id === 'tick-style') chart.setTicks(detail.value ?? 'lines');
+});
+```
+
+The event only fires while the panel is mounted, so keep the committed default in
+the source. Knob values live in the reviewer's browser; **Make default** files the
+moved ones in its `[set-defaults]` note (`payload.knobs` as `fade-from:40`).
 
 ## Sections
 
@@ -86,16 +210,23 @@ group label (`variant new <id> --group-label "Header > Logo"`), or from
 selector, with every variant in its group; `variant section <id> --none` takes it out
 of every section. `variant list` shows a SECTION column.
 
-For a range, choose bounds that give a valid design at both extremes (padding
-8–32px in 2px steps, not 0–1000px), a positive `step` matching the decision's
-precision, and a default on a step within `min` and `max`. Use a unit such as
-`px`, `%` or `ms`; a bare 0–1 range displays as a percentage, and `unit: ''`
-keeps the raw number.
+## The Variants panel
 
-In a host source, ranges return numeric **strings** in `selections`; the host's
-`onChange` must apply them to its state or styles. For example:
+Each option's chevron (or a right click) opens its actions: feedback on it, keep
+only it, or remove it. Keep and remove actions, and **Make default**, file a
+request note for the agent ([what each asks](agent-guide.md#requests-from-the-variants-panel));
+the selector stays as it is until the agent changes the project, and deleting a
+pending request cancels it.
+
+## A host source
+
+A host with its own variant system hands the panel a `VariantsSource`. The panel
+renders the axes; the app keeps its own state and URL sync.
+`npx isotone init --approach host` prints a complete example.
 
 ```ts
+import { createVariantsSource, mountIteration } from 'isotone/react';
+
 const source = createVariantsSource({
   axes: [{
     id: 'card-radius', label: 'Card radius', kind: 'range',
@@ -105,22 +236,16 @@ const source = createVariantsSource({
     document.documentElement.style.setProperty('--card-radius', `${selections['card-radius']}px`);
   },
 });
+mountIteration({ variants: source, defaultTab: 'variants' });
 ```
 
 ```css
 .card { border-radius: var(--card-radius, 11px); }
 ```
 
-Use file variants for structural or content alternatives and [knobs](#knobs) for
-numbers, colours and named styles. Check that every control changes the intended
-property at its minimum, maximum and reset, and keep the source fallback and the
-axis default in sync.
-
-Each option's chevron (or a right click) opens its actions: feedback on it, keep
-only it, or remove it. Keep and remove actions, and **Make default**, file a
-request note for the agent ([what each asks](agent-guide.md#requests-from-the-variants-panel));
-the selector stays as it is until the agent changes the project, and deleting a
-pending request cancels it.
+`selections` maps each axis id to a string; a range's value is a numeric string,
+and `onChange` must apply it to the app's state or styles. The axis types
+(`VariantAxis` and the select, range and colour axes) come from `isotone/core`.
 
 A host that manages its own definitions can use the source's `manage(action)`
 API: its `onManage(axes, selections, action)` callback persists edited definitions
@@ -128,100 +253,11 @@ or rejects to leave them unchanged; the panel never calls it when filing a note.
 A custom source can expose `getError(): string | null` to show load or update
 failures in the panel, notifying subscribers when it changes.
 
-**Keeping copies current.** A copy records the version of the real file it was
-made from, and reads as stale once that file moves on. `variant sync <id>` merges
-the real file's changes into the copy and works on files git does not track yet.
-When both sides changed the same lines, the copy gets conflict markers to resolve,
-and while they are there the copy is a syntax error, which in live mode also breaks
-pages that import the real file. `variant promote <id>` lands a copy over the real
-file. The other variants in its group stay available and stop reading as stale,
-since they are alternatives to what was just promoted.
+## How switching works
 
-Two groups that override the same file cannot both be active. The panel names
-them when you pick the second, and `variant add` warns when the overlap is created.
+Reference for file variants: what the dev server does when the reviewer switches.
 
-Variant files are committed by default, since they are the change under
-review; `variants: { ignored: true }` keeps them local. The active pointer,
-`.isotone/active.json`, is local and never committed. `ISOTONE_VARIANT=<id>`
-(a comma-separated list) bakes variants into a `vite build` for a preview.
-
-### Knobs
-
-Some decisions are a number, not an alternative file: how far a fade
-reaches, how dense a dot field is. Declare those in
-`.isotone/knobs.json`, a JSON array of range, colour or select axes with an
-optional `route` (a pattern as above, or a list of them):
-
-```json
-[
-  {
-    "kind": "range",
-    "id": "fade-from",
-    "label": "Hero > Fade starts",
-    "min": 0,
-    "max": 100,
-    "step": 1,
-    "defaultValue": 0,
-    "unit": "%",
-    "route": ["/computers/*", "/databases/*"]
-  }
-]
-```
-
-A colour knob takes a `defaultColor` and named `swatches`, all as hex values:
-
-```json
-{
-  "kind": "color",
-  "id": "accent",
-  "label": "Accent colour",
-  "defaultColor": "#2f6f4e",
-  "swatches": [
-    { "id": "forest", "label": "Forest", "value": "#2f6f4e" },
-    { "id": "clay", "label": "Clay", "value": "#b4532a" }
-  ]
-}
-```
-
-The panel renders range knobs as sliders and colour knobs as swatches with a
-custom picker, on their configured routes. An entry with a missing or invalid
-field is skipped; `npx isotone variant list` names each one. Knobs also work with
-`isotone serve`, so any dev server gets them, not only Vite. A value reaches the
-page as a custom property on `<html>`, `--knob-<id>`, with the unit
-appended, so the source reads it with the committed default as the
-fallback:
-
-```css
-mask-image: radial-gradient(ellipse, black var(--knob-fade-from, 0%), transparent 100%);
-```
-
-A select knob names a style rather than a number, for a choice that one line of
-CSS or a draw call can act on. Give it `options` of `{ "id", "label" }` and a
-`defaultOption`. CSS cannot branch on a custom property, so its value also lands
-as `data-knob-<id>` on `<html>`:
-
-```css
-html[data-knob-tick-style="dots"] .tick { border-radius: 50%; }
-```
-
-When the alternative changes structure, a file variant is still the right tool,
-because a select knob leaves both branches in the source until someone removes one.
-
-Code that draws for itself, such as a canvas chart, reads the custom property and
-redraws on the `isotone:knob` event, which bubbles from `<html>` with
-`{ id, value }` and a `null` value when the knob returns to its default:
-
-```js
-document.addEventListener('isotone:knob', ({ detail }) => {
-  if (detail.id === 'tick-style') chart.setTicks(detail.value ?? 'lines');
-});
-```
-
-The event only fires while the panel is mounted, so keep the committed default in
-the source. Knob values live in the reviewer's browser; **Make default** files the
-moved ones in its `[set-defaults]` note (`payload.knobs` as `fade-from:40`).
-
-## Live switching
+### Live switching
 
 In a React project on Vite 6 or later, the plugin serves each overridden
 script as a small dispatcher module that imports every version of the file:
@@ -234,12 +270,8 @@ browser:
 - A value that is identical in every version passes through.
 - Anything else (a hook, a helper function, a constant object, a context) is
   fixed when the page loads, because React cannot swap a hook under a mounted
-  component. A switch that changes one reloads the page.
-
-Every copy defines its functions and objects afresh, so a copied file that
-exports a hook or helper reloads on every switch even when that export is
-unchanged: copy only files that export components, and move shared helpers
-into files the variant leaves alone.
+  component. A switch that changes one reloads the page. Every copy defines its
+  functions and objects afresh, so this happens even when that export is unchanged.
 
 The selection belongs to the tab: a pick is written to the URL as
 `?v=<group>:<variant>` (the grammar host variants use), kept through client-side
@@ -247,12 +279,14 @@ navigation, so a copied link opens the same variant and two tabs can compare
 side by side. The pick also goes to `.isotone/active.json`, which tabs without
 `?v=` and the agent follow.
 
-A variant can add a file the project does not have:
-`isotone variant add <id> --new <file>` starts an empty one. Import it
-relatively, or through an alias whose last path segments name it.
+The browser loads every version of a dispatched file, so a copy runs even while
+its variant is off: a global stylesheet it imports applies everywhere, and a
+syntax error in it breaks pages that import the real file.
 
-`variants: { live: false }` turns this off and switches by swapping whole
-files over HMR, which is also what non-React hosts, CSS files, Vite 5 and
+### Whole-file switching
+
+`variants: { live: false }` turns live switching off and switches by swapping
+whole files over HMR, which is also what non-React hosts, CSS files, Vite 5 and
 `vite build` use. In live mode the plugin still serves these files whole:
 
 - route modules (a default export beside `loader`, `action`, `meta` and
@@ -264,36 +298,17 @@ files over HMR, which is also what non-React hosts, CSS files, Vite 5 and
   declarators in one `export const`).
 
 A file served whole, and every CSS file, follows `.isotone/active.json` in every
-tab. The browser loads every version of a dispatched file, so a copy runs even
-while its variant is off: a global stylesheet it imports applies everywhere, and
-a syntax error in it breaks pages that import the real file.
+tab. Its switch is a Vite hot update, so it swaps in place exactly where an edit
+to that file would. A React file that also exports data or a hook cannot be
+swapped alone: the update climbs to its importer, and an entry with no accept
+handler reloads. Accept the import in the entry and re-render from the new
+module, or move the extra exports out.
 
-**Server rendering** follows `.isotone/active.json`, since the server cannot tell
+### Server rendering
+
+Server rendering follows `.isotone/active.json`, since the server cannot tell
 tabs apart. A tab whose components differ hydrates from the server's version and
 switches right after. When a link opens a tab whose `?v=` differs in a fixed
 export, the tab saves its set as the default and reloads once; a later reload
 hydrates with a recoverable mismatch instead, so two tabs never fight over the
 default.
-
-## What whole-file switching needs from the host
-
-Without live switching (or for a file it serves whole), a switch is
-delivered as a Vite hot update, so it swaps in place exactly where an edit to
-that file would.
-
-- **Framework HMR support.** Keep the host's Vite framework plugin. React uses
-  Fast Refresh through `@vitejs/plugin-react` or its framework wrapper; Vue and
-  Svelte use their own plugins. Without an HMR accept boundary, a change reloads.
-- **React component-only exports.** A file that also exports data or a hook
-  cannot be swapped alone; the update climbs to its importer, and an entry
-  with no accept handler reloads. Accept the import in the entry and
-  re-render from the new module, or move the extra exports out.
-- **Tailwind v4** scans only the sources it is pointed at. Add
-  `@source "../.isotone/variants/**/*.{ts,tsx}";` (relative to the CSS
-  file) or classes new to a variant render unstyled.
-- **A sibling dev server** that aliases into another package sets
-  `variants: { root: '../that-package' }` so both serve the same variants.
-- **Routes** come from `window.location.pathname`. An app on a memory
-  router sees `/` everywhere; leave `--route` off there.
-- **Linters** should ignore `.isotone` (Biome: `"!.isotone"` in
-  `files.includes`; ESLint: `{ ignores: ['.isotone/**'] }`).

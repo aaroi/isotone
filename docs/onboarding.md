@@ -2,7 +2,8 @@
 
 Maintainer notes on how a new user's first run is designed, and why. Most people
 set Isotone up through their coding agent, so the first run is designed as the
-conversation between the user and that agent. Re-run a simulation when changing it.
+conversation between the user and that agent. Re-run [the agent trial](#the-agent-trial)
+when changing it.
 
 ## The flow
 
@@ -41,9 +42,26 @@ list` naming skipped knobs, the Next `next/script` tag in the root layout, the
 static localhost-only loader, and the first run covering ports, Tailwind and
 checking without a browser.
 
+## The agent trial
+
+`scripts/trial/` makes the simulations repeatable: it packs the package,
+prepares Vite + React, Next.js and plain-HTML fixture apps, seeds three notes,
+and scores what a fresh agent did (setup and the notes loop, each with tool
+calls, failed `isotone` commands and reads of Isotone's internals).
+[Its README](../scripts/trial/README.md) has the prompts and steps. It never
+starts an agent: run one per fixture by hand, then score its transcript.
+
+The round-2 baseline passed every check on all three fixtures, in 5 to 17 tool
+calls. What it found shaped `--done`: agents chained an edit and `--done`, so a
+failed edit still closed the note (now refused while no file changed); fixes left
+file-variant copies stale (now named after `--done`); and a layout note's
+viewport was ignored (now called out as its breakpoint).
+
 ## Open follow-ups
 
 - A small first-run hint in the panel that points at the variants the agent built.
-- The `iteration()` export and `.iteration-feedback.json` name confused the
-  simulated first-time user, who expected names with `isotone` in them.
 - `isotone serve` needs a second process next to the app's dev server.
+- No trial agent checked its work visually; they had only `curl`.
+- The notes file is still `.iteration-feedback.json`. Manual routes, `file`
+  options and `--file` flags name it, so renaming it would split notes between
+  two files until every one of them changed. The Vite export is now `isotone()`.

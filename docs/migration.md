@@ -1,8 +1,8 @@
 # Move a project to Isotone
 
 For the few projects using `iso-iterate`, make the rename in each project with
-its coding agent. The package and CLI are now `isotone`; the exported API names,
-`.iteration-feedback.json`, and `/api/iteration/*` stay the same.
+its coding agent. The package and CLI are now `isotone`;
+`.iteration-feedback.json` and `/api/iteration/*` stay the same.
 
 1. Stop the development server. Save your current work and back up ignored
    `.iso-iterate/` data and the notes file.
@@ -11,7 +11,8 @@ its coding agent. The package and CLI are now `isotone`; the exported API names,
 3. Change package imports (for example, `iso-iterate/vite` to `isotone/vite`),
    CLI commands, standalone script URLs (`/isotone.js`), environment variables
    (`ISOTONE_UPDATE_CHECK` and `ISOTONE_VARIANT`), and agent instructions.
-   Keep API names such as `iteration`, `IterationPanel`, and `mountIteration`.
+   The Vite plugin is `isotone()` (`iteration()` still works for now);
+   `IterationPanel` and `mountIteration` keep their names.
 4. Move the entire `.iso-iterate/` directory to `.isotone/`, including
    `knobs.json`, `active.json`, and any local variants. Update ignore rules,
    including a `.git/info/exclude` entry for `.isotone/active.json` if the
