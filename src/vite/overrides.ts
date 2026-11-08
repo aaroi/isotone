@@ -12,6 +12,7 @@ import { type OverlayVariant, overlayGroups, VARIANTS_ENDPOINT } from '../core/v
 import { isWithin } from '../node/fs/paths';
 import {
   ACTIVE_FILE,
+  hasConflictMarkers,
   readActive,
   readVariants,
   resolveOverride,
@@ -221,9 +222,12 @@ export function createOverrides(setup: VariantsSetup) {
       const names = new Set<string>();
       const sources: [string | null, string][] = [];
       if (existsSync(path)) sources.push([null, path]);
+      // A copy with conflict markers from `variant sync` does not parse, and
+      // the dispatcher imports every version: left in, it would break the
+      // page for every tab. Left out, picking it shows the real file.
       for (const id of ids) {
         const file = copyOf(id, path);
-        if (file) sources.push([id, file]);
+        if (file && !hasConflictMarkers(file)) sources.push([id, file]);
       }
       for (const [id, file] of sources) {
         const code = readFileSync(file, 'utf8');

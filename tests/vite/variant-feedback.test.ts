@@ -210,8 +210,22 @@ describe('`variant sync` conflict advice', () => {
     writeFileSync(join(root, '.isotone/variants/v/src/a.ts'), 'copy\n');
     writeFileSync(join(root, 'src', 'a.ts'), 'real\n');
     const sync = sink(root);
-    await runCli(['variant', 'sync', 'v'], sync);
+    expect(await runCli(['variant', 'sync', 'v'], sync)).toBe(1);
     expect(sync.text.out).toMatch(/resolve the conflict markers in .*src\/a\.ts/);
+    expect(sync.text.err).toContain('Not synced: "v" has a conflict.');
+
+    // The list says so too, as text and as JSON, until the markers go.
+    const listed = sink(root);
+    await runCli(['variant', 'list'], listed);
+    expect(listed.text.out).toMatch(/CONFLICTS[\s\S]*\bv\b.*\b1\b/);
+    expect(listed.text.out).toContain('cannot be shown until you resolve them: v');
+    const json = sink(root);
+    await runCli(['variant', 'list', '--json'], json);
+    expect(JSON.parse(json.text.out).variants[0].conflicts).toEqual(['src/a.ts']);
+    writeFileSync(join(root, '.isotone/variants/v/src/a.ts'), 'resolved\n');
+    const after = sink(root);
+    await runCli(['variant', 'list', '--json'], after);
+    expect(JSON.parse(after.text.out).variants[0].conflicts).toEqual([]);
   });
 });
 

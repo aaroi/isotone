@@ -147,7 +147,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       if (switching.live && !opts?.ssr && query === '') {
         const plan = overrides.dispatchPlan(path);
         if (plan) {
-          switching.dispatching(path, plan.names);
+          switching.dispatching(path, plan);
           const name = path.slice(path.lastIndexOf('/') + 1);
           return { code: dispatcherModule(plan.key, name, plan.versions, plan.names), map: null };
         }

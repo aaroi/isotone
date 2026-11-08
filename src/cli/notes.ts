@@ -15,7 +15,7 @@ import { blastFile, touchSession } from '../node/blast';
 import { noteFingerprint, readNotes, replyView, type StoredNote, updateNotes } from '../node/notes/store';
 import { defaultNotesFile, NOTES_FILE } from '../node/notes/location';
 import { notesProjectRoot, updateRequestOf } from '../node/update/request';
-import { listVariants, readActive } from '../node/variants';
+import { listVariants, readActive, variantDir } from '../node/variants';
 import { latestChange, mtime, snapshot } from './changes';
 import { oneLine, quoted, shellCommand, toJson, utcStamp } from './text';
 import { type CliIO, errOut, findNoteByPrefix, has, out, parseArgs, valueFor } from './util';
@@ -325,6 +325,12 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
     lines.push('These variants copy files changed since the note (or --working), so their copies may lack the fix:');
     for (const v of stale) lines.push(`  ${v.id} (${v.files.join(', ')}): ${shellCommand('npx', 'isotone', 'variant', 'sync', v.id)}`);
     lines.push('Sync each one the fix belongs in too; leave a copy alone when it is the alternative itself.');
+  }
+  const conflicted = relevant.filter((v) => v.conflicts?.length);
+  if (conflicted.length) {
+    lines.push('These copies still hold conflict markers, so the reviewer cannot see them; resolve the markers in:');
+    for (const v of conflicted)
+      lines.push(`  ${v.id}: ${(v.conflicts ?? []).map((file) => relative(dir, join(variantDir({ root: dir }, v.id), file))).join(', ')}`);
   }
   const showing = relevant.filter((v) => active.includes(v.id));
   if (showing.length) {

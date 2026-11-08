@@ -1148,6 +1148,26 @@ describe('live variants', () => {
     }
   });
 
+  it('leaves a copy with conflict markers out of the dispatcher, and reloads once it is resolved', async () => {
+    vi.useFakeTimers();
+    try {
+      const { root, source, override } = tempProject();
+      writeFileSync(override, '<<<<<<< variant\nexport const label = "variant b";\n=======\nexport const label = "real";\n>>>>>>> real\n');
+      const { hooks, server } = livePlugin(root);
+      const dispatcher = hooks.load(source)?.code ?? '';
+      expect(dispatcher).toContain('"./Button.tsx?isotone=_base"');
+      expect(dispatcher).not.toContain('?isotone=b');
+      writeFileSync(override, 'export const label = "variant b";\n');
+      const client = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([{ id: source }]) } };
+      expect(hooks.hotUpdate.call({ environment: client }, { file: override })).toEqual([]);
+      vi.advanceTimersByTime(100);
+      expect(server.ws.send).toHaveBeenCalledWith({ type: 'full-reload', path: '*' });
+      expect(hooks.load(source)?.code).toContain('"./Button.tsx?isotone=b"');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('serves files whole that have no exports or compare element types', () => {
     const { root } = tempProject();
     const entry = join(root, 'src', 'main.tsx');
