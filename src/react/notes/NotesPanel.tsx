@@ -18,6 +18,7 @@ import type { Anchor } from '../dock/picking';
 import { showOverflowTitle } from '../tooltips';
 import { useLayoutMotion } from '../useLayoutMotion';
 import { useRenderLimit } from '../useRenderLimit';
+import { isUnsent } from './useNoteActions';
 import type { NoteView } from './useNoteView';
 
 interface NotesPanelProps {
@@ -68,7 +69,16 @@ export function NotesPanel({ id, open, route, view, editingId, resizeHandle, com
           ))}
         </fieldset>
       )}
-      <NoteList open={open} notes={notes} route={route} editingId={editingId} working={working} onEdit={onEdit} onRemove={onRemove} />
+      <NoteList
+        open={open}
+        notes={notes}
+        selectedPages={selectedPages}
+        route={route}
+        editingId={editingId}
+        working={working}
+        onEdit={onEdit}
+        onRemove={onRemove}
+      />
       <div className="isotone-compose">{compose}</div>
     </section>
   );
@@ -81,12 +91,13 @@ export function NotesPanel({ id, open, route, view, editingId, resizeHandle, com
 const NoteList = memo(function NoteList({
   open,
   notes,
+  selectedPages,
   route,
   editingId,
   working,
   onEdit,
   onRemove,
-}: Pick<NotesPanelProps, 'open' | 'route' | 'editingId' | 'onEdit' | 'onRemove'> & Pick<NoteView, 'notes' | 'working'>) {
+}: Pick<NotesPanelProps, 'open' | 'route' | 'editingId' | 'onEdit' | 'onRemove'> & Pick<NoteView, 'notes' | 'selectedPages' | 'working'>) {
   const listRef = useRef<HTMLUListElement>(null);
   // A closed panel renders no notes; the rows stay one more render after closing, for the dock's exit snapshot.
   // Opening renders the newest notes first and older ones above them in chunks, as the Variants list does.
@@ -94,20 +105,25 @@ const NoteList = memo(function NoteList({
   const count = useRenderLimit(open || lingering, notes.length, MAX_ANIMATED_ITEMS);
   const shown = count < notes.length ? notes.slice(notes.length - count) : notes;
   // How far the reader is from the newest note; 0 keeps the list on it. Older notes arriving above, the panel
-  // resizing, or the list reappearing after select mode on a phone all keep that distance.
+  // resizing, the list reappearing after select mode on a phone, a delete or an agent's progress all keep that
+  // distance. Only opening, another page filter, or a note this reviewer just sent goes back to the newest.
   const fromEnd = useRef(0);
   const keepPlace = useCallback(() => {
     const list = listRef.current;
     if (list) list.scrollTop = list.scrollHeight - list.clientHeight - fromEnd.current;
   }, []);
+  // A fresh set comes with every change to the notes; the pages it names are what matter.
+  const filter = [...selectedPages].join('\n');
+  const newest = notes.at(-1);
+  const sent = newest && isUnsent(newest) ? newest.id : undefined;
   useLayoutMotion(listRef, notes, open);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new note or opening the panel goes to the newest.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: these are the changes that go back to the newest note.
   useEffect(() => {
     fromEnd.current = 0;
     keepPlace();
-  }, [notes, open, keepPlace]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: each chunk adds rows above the reader.
-  useLayoutEffect(keepPlace, [count, keepPlace]);
+  }, [open, filter, sent, keepPlace]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each chunk adds rows above the reader, and any other change keeps their place.
+  useLayoutEffect(keepPlace, [count, notes, keepPlace]);
   useEffect(() => {
     const list = listRef.current;
     if (!list || typeof ResizeObserver === 'undefined') return;

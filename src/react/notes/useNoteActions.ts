@@ -38,6 +38,10 @@ function removalText(action: VariantAction, reference: VariantReference): string
   return `Remove ${reference.label}, its selector and all alternatives.`;
 }
 
+/** A note this reviewer just sent, shown before the server has saved it. */
+export const isUnsent = (note: IsotoneNote) => note.id.startsWith(UNSENT);
+const UNSENT = 'pending-';
+
 /**
  * The note being written and the requests that save, edit and remove notes.
  * Saves are optimistic: the list shows a note at once under a temporary id and
@@ -78,7 +82,7 @@ export function useNoteActions({ route, draftKey, store, write, setNotes, getPay
     };
     const noteRoute = previous?.route ?? route;
     const element = targets[0] ?? null;
-    const tempId = previous?.id ?? `pending-${createNoteId()}`;
+    const tempId = previous?.id ?? `${UNSENT}${createNoteId()}`;
     const entry: IsotoneNote = {
       ...(previous ?? {}),
       id: tempId,
