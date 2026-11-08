@@ -2,8 +2,9 @@
 
 For a coding agent working in an app that uses Isotone. The reviewer pins notes
 to elements in the running app and switches variants in its panel; you read the
-notes with the CLI, act on them and close them. Run every command in the app's
-directory (where `.iteration-feedback.json` lives), or pass `--file <path>`.
+notes with the CLI, act on them and close them. Run commands in the app's
+directory (where `.iteration-feedback.json` lives) or below it, or pass
+`--file <path>`.
 
 ## Set up
 
@@ -40,16 +41,15 @@ open in the reviewer's panel until you close it.
   about that width. Make the change there and keep other widths as they are,
   unless the note says otherwise.
 - Run `--done` as its own command, once the edit has landed. It refuses, and
-  closes nothing, while no project file has changed since the note was written
-  or since `--working` on it: the usual cause is an edit that failed earlier in
-  a chained command. `--force` closes a note that needed no change, such as a
-  question you answered. In a Git work tree only changed, untracked and newly
-  committed files count.
-- After closing, `--done` names the variants on the note's route whose copies
-  no longer match the real file (so they lack the fix), with the
+  closes nothing, while no project file has changed since `--working` on the
+  note (or, without it, since the note was written): the usual cause is an edit
+  that failed earlier in a chained command. In Git, staged edits, reverts,
+  commits and deleted files all count. `--force` closes a note that needed no
+  change, such as a question you answered.
+- After closing, `--done` names the variants on the note's route that copy a
+  file changed since `--working` (so the copy may lack the fix), with the
   `variant sync <id>` that merges it in, and any variant showing in place of the
   real file. With `--json` that goes to stderr; stdout stays one array.
-
 - An id prefix is enough when it is unique, and a full id always wins.
   `--working`, `--done` and `--undone` take several ids (`a1 b2` or `a1,b2`);
   either all change or none do.

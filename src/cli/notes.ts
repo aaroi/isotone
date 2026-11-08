@@ -4,17 +4,18 @@
  * in a browser, so text output goes through `./text` and every command printed
  * for an agent to run is shell-quoted.
  */
-import { resolve, sep } from 'node:path';
+import { existsSync, realpathSync } from 'node:fs';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 
 import { MAX_REPLY_LENGTH } from '../core/limits';
 import { matchRoute } from '../core/routes';
 import { updateNoteText } from '../core/update';
 import { variantAppliesTo } from '../core/variants';
-import { touchSession } from '../node/blast';
+import { blastFile, touchSession } from '../node/blast';
 import { noteFingerprint, readNotes, replyView, type StoredNote, updateNotes } from '../node/notes/store';
 import { notesProjectRoot, updateRequestOf } from '../node/update/request';
-import { ACTIVE_FILE, listVariants, readActive } from '../node/variants';
-import { latestChange } from './changes';
+import { listVariants, readActive } from '../node/variants';
+import { latestChange, mtime, snapshot } from './changes';
 import { oneLine, quoted, shellCommand, toJson, utcStamp } from './text';
 import { type CliIO, errOut, findNoteByPrefix, has, out, parseArgs, valueFor } from './util';
 
@@ -25,8 +26,19 @@ const BOOLEAN_FLAGS = ['--all', '--json', '--force'] as const;
 const ACTIONS = ['--done', '--undone', '--working', '--reply'] as const;
 type Action = (typeof ACTIONS)[number];
 
+/**
+ * `workingSnapshot` is the work tree's fingerprint when `--working` ran
+ * (`./changes`): the CLI's own field, read only while `workingAt` is set and
+ * never printed.
+ */
+type TrackedNote = StoredNote & { workingSnapshot?: string };
+
 interface NotesArgs {
   file: string;
+  /** The app's directory: where the notes file was found, or the current one with `--file`. */
+  dir: string;
+  /** The notes file is in a directory above the current one. */
+  foundAbove: boolean;
   json: boolean;
   /** `--done --force`: close even though no file changed. */
   force: boolean;
@@ -88,7 +100,7 @@ function parseNotesArgs(input: string[], cwd: string): NotesArgs {
   const days = Number(daysText);
   if (daysText !== undefined && (!Number.isFinite(days) || days <= 0)) throw new Error('--days must be a positive number.');
   return {
-    file: resolve(cwd, valueFor(argv, '--file') ?? NOTES_FILE),
+    ...findNotesFile(cwd, valueFor(argv, '--file')),
     json: has(argv, '--json'),
     force: has(argv, '--force'),
     action,
@@ -98,6 +110,21 @@ function parseNotesArgs(input: string[], cwd: string): NotesArgs {
     // `--all` already includes what `--days` would add.
     closed: has(argv, '--all') ? 'all' : daysText !== undefined ? days : 'none',
   };
+}
+
+/**
+ * The notes file: `--file` from the current directory, or else the nearest
+ * {@link NOTES_FILE} at or above it, up to the Git root, so a command run
+ * from `src/` still finds the app's notes.
+ */
+export function findNotesFile(cwd: string, file: string | undefined): { file: string; dir: string; foundAbove: boolean } {
+  const here = resolve(cwd);
+  if (file !== undefined) return { file: resolve(here, file), dir: here, foundAbove: false };
+  for (let dir = here; ; dir = dirname(dir)) {
+    const candidate = join(dir, NOTES_FILE);
+    if (existsSync(candidate)) return { file: candidate, dir, foundAbove: dir !== here };
+    if (existsSync(join(dir, '.git')) || dirname(dir) === dir) return { file: join(here, NOTES_FILE), dir: here, foundAbove: false };
+  }
 }
 
 export function runNotes(argv: string[], io: CliIO): number {
@@ -111,6 +138,8 @@ export function runNotes(argv: string[], io: CliIO): number {
   // An update request is checked against this notes file's project before its
   // command is printed: a hand edit cannot point an agent at another directory.
   const root = notesProjectRoot(args.file);
+  // On stderr, so `--json` output stays one array.
+  if (args.foundAbove) errOut(io, `Notes: ${relative(io.cwd, args.file)}`);
   if (args.action === '--reply') return reply(io, args, root);
   if (args.action) return flip(io, args, args.action, root);
   return list(io, args, root);
@@ -126,7 +155,7 @@ function reply(io: CliIO, args: NotesArgs, root: string): number {
       if (match.done) throw new Error(`[${shortId(match)}] is already done; reopen it with --undone first.`);
       match.reply = { text: args.replyText, at: new Date().toISOString(), about: noteFingerprint(match) };
       // A question means the agent is not working on it any more.
-      delete match.workingAt;
+      stopWorking(match);
       return current;
     });
   } catch (err) {
@@ -144,9 +173,11 @@ function reply(io: CliIO, args: NotesArgs, root: string): number {
 
 /** `--working`, `--done` and `--undone` over one or more notes: all of them change, or none. */
 function flip(io: CliIO, args: NotesArgs, action: Exclude<Action, '--reply'>, root: string): number {
-  const changed: { note: StoredNote; already: boolean }[] = [];
+  // `since` is read before `--done` clears `workingAt`, for the variant advice.
+  const changed: { note: StoredNote; already: boolean; since: number }[] = [];
   try {
     if (action === '--done' && !args.force) refuseUnfixed(args, root);
+    const started = action === '--working' ? snapshot(root, isBookkeeping(args.file)) : null;
     updateNotes(args.file, (current) => {
       changed.length = 0;
       const now = new Date().toISOString();
@@ -155,17 +186,19 @@ function flip(io: CliIO, args: NotesArgs, action: Exclude<Action, '--reply'>, ro
         if (changed.some((c) => c.note === note)) continue;
         if (action === '--working') {
           if (note.done) throw new Error(`[${shortId(note)}] is done; reopen it with --undone before working on it.`);
-          changed.push({ note, already: false });
+          changed.push({ note, already: false, since: 0 });
           note.workingAt = now;
+          if (started) (note as TrackedNote).workingSnapshot = started;
+          else delete (note as TrackedNote).workingSnapshot;
           continue;
         }
         const done = action === '--done';
-        changed.push({ note, already: note.done === done });
+        changed.push({ note, already: note.done === done, since: since(note) });
         if (note.done !== done) {
           note.done = done;
           note.doneAt = done ? now : null;
         }
-        delete note.workingAt;
+        stopWorking(note);
       }
       return current;
     });
@@ -178,8 +211,8 @@ function flip(io: CliIO, args: NotesArgs, action: Exclude<Action, '--reply'>, ro
   const advice =
     action === '--done'
       ? variantAdvice(
-          io.cwd,
-          changed.filter((c) => !c.already).map((c) => c.note),
+          args.dir,
+          changed.filter((c) => !c.already),
         )
       : [];
   if (args.json) {
@@ -198,24 +231,55 @@ function flip(io: CliIO, args: NotesArgs, action: Exclude<Action, '--reply'>, ro
   return 0;
 }
 
-const BOOKKEEPING = new RegExp(`/${ACTIVE_FILE.replace(/\./g, '\\.')}$|/\\.isotone/.*\\.lock$`);
+function stopWorking(note: StoredNote): void {
+  delete note.workingAt;
+  delete (note as TrackedNote).workingSnapshot;
+}
+
+/** When the agent started on a note: `--working`, or else when it was written. */
+function since(note: StoredNote): number {
+  return Math.max(Date.parse(note.createdAt) || 0, Date.parse(note.workingAt ?? '') || 0);
+}
+
+const ISOTONE_SIDE_FILE = /\/\.isotone\/(?:active\.json(?:\..*)?|.*\.(?:lock|steal|tmp|stale))$/;
 
 /**
- * Refuses `--done` on a note when no project file changed since it was
- * written, or since `--working` on it: the fix has not landed. That is what a
+ * Isotone's own bookkeeping, never a fix: the notes file, its Blast session,
+ * the lock and temporary files beside either, and which variant is showing.
+ */
+function isBookkeeping(file: string): (path: string) => boolean {
+  let notes = resolve(file);
+  try {
+    // Git reports canonical paths (macOS's /var is /private/var).
+    notes = join(realpathSync(dirname(notes)), basename(notes));
+  } catch {
+    /* No directory yet: nothing of ours to ignore. */
+  }
+  const blast = blastFile(notes);
+  return (path) =>
+    [notes, blast].some((own) => path === own || path.startsWith(`${own}.`)) || ISOTONE_SIDE_FILE.test(path.split(sep).join('/'));
+}
+
+/**
+ * Refuses `--done` on a note when no project file changed since `--working`
+ * on it, or since it was written: the fix has not landed. That is what a
  * chained `edit && … ; npx isotone --done <id>` does when the edit fails.
  */
 function refuseUnfixed(args: NotesArgs, root: string): void {
   const notes = readNotes(args.file);
   const targets = [...new Set(args.ids.map((id) => findNoteByPrefix(notes, id)))].filter((n) => !n.done);
   if (!targets.length) return;
-  const base = args.file.replace(/\.json$/i, '');
-  // The notes file, its Blast session and locks, and which variant is showing
-  // are Isotone's own bookkeeping, never a fix.
-  const ignore = (file: string) => file.startsWith(base) || BOOKKEEPING.test(file.split(sep).join('/'));
-  const latest = latestChange(root, ignore);
-  const since = (n: StoredNote) => Math.max(Date.parse(n.createdAt) || 0, Date.parse(n.workingAt ?? '') || 0);
-  const unfixed = targets.filter((n) => latest <= since(n));
+  const ignore = isBookkeeping(args.file);
+  let current: string | null | undefined;
+  let latest: number | undefined;
+  const unfixed = targets.filter((n: TrackedNote) => {
+    if (n.workingAt && n.workingSnapshot) {
+      if (current === undefined) current = snapshot(root, ignore);
+      if (current !== null) return current === n.workingSnapshot;
+    }
+    latest ??= latestChange(root, ignore);
+    return latest <= since(n);
+  });
   if (!unfixed.length) return;
   const lines = unfixed.map((n) => {
     const at =
@@ -235,26 +299,31 @@ function refuseUnfixed(args: NotesArgs, root: string): void {
 }
 
 /**
- * After a fix: the variants on the fixed notes' routes that no longer match
- * the real files they copy, or that are showing instead of them. Either way
- * the reviewer will not see the fix on the page.
+ * After a fix: the variants on the fixed notes' routes that copy a file this
+ * fix changed (it changed after `--working`, or after the note was written),
+ * and those showing instead of the real files. Either way the reviewer will
+ * not see the fix on the page.
  */
-function variantAdvice(cwd: string, notes: StoredNote[]): string[] {
+function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]): string[] {
   if (!notes.length) return [];
   let variants: ReturnType<typeof listVariants>;
   let active: string[];
   try {
-    variants = listVariants({ root: cwd });
-    active = readActive({ root: cwd });
+    variants = listVariants({ root: dir });
+    active = readActive({ root: dir });
   } catch {
     return [];
   }
-  const relevant = variants.filter((v) => notes.some((n) => variantAppliesTo(v.route, n.route)));
+  const relevant = variants.filter((v) => notes.some(({ note }) => variantAppliesTo(v.route, note.route)));
+  const changedFor = (v: (typeof variants)[number]) =>
+    v.stale.filter((file) =>
+      notes.some(({ note, since }) => variantAppliesTo(v.route, note.route) && (mtime(join(dir, file)) ?? 0) > since),
+    );
   const lines: string[] = [];
-  const stale = relevant.filter((v) => v.stale.length);
+  const stale = relevant.map((v) => ({ id: v.id, files: changedFor(v) })).filter((v) => v.files.length);
   if (stale.length) {
-    lines.push('These variants copy files that changed after they were made, so they do not have this fix:');
-    for (const v of stale) lines.push(`  ${v.id} (${v.stale.join(', ')}): ${shellCommand('npx', 'isotone', 'variant', 'sync', v.id)}`);
+    lines.push('These variants copy files changed since the note (or --working), so their copies may lack the fix:');
+    for (const v of stale) lines.push(`  ${v.id} (${v.files.join(', ')}): ${shellCommand('npx', 'isotone', 'variant', 'sync', v.id)}`);
     lines.push('Sync each one the fix belongs in too; leave a copy alone when it is the alternative itself.');
   }
   const showing = relevant.filter((v) => active.includes(v.id));
@@ -279,8 +348,15 @@ function list(io: CliIO, args: NotesArgs, root: string): number {
     .filter((n) => onRoute(n) && included(n))
     .sort((a, b) => a.route.localeCompare(b.route) || b.createdAt.localeCompare(a.createdAt));
 
+  // An empty listing must never hide a wrong directory.
+  const missing = `No notes file at ${args.file} yet: it appears with the first note. Run this in the app's directory, or pass --file.`;
   if (args.json) {
     out(io, toJson(rows.map((row) => noteRecord(row, root))));
+    if (!existsSync(args.file)) errOut(io, missing);
+    return 0;
+  }
+  if (!existsSync(args.file)) {
+    out(io, missing);
     return 0;
   }
   if (rows.length === 0) {

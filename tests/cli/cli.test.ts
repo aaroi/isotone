@@ -50,10 +50,22 @@ function landFix(root: string, file = 'fix.txt'): void {
 describe('notes (unchanged default behaviour)', () => {
   it('prints "No open notes" for an empty file', async () => {
     const root = tempRepo();
+    writeFileSync(join(root, '.iteration-feedback.json'), '[]');
     const io = makeIo(root);
     const code = await runCli([], io);
     expect(code).toBe(0);
     expect(io.text.out).toContain('No open notes.');
+  });
+
+  it('says where it looked when there is no notes file, on stderr with --json', async () => {
+    const root = tempRepo();
+    const text = makeIo(root);
+    expect(await runCli([], text)).toBe(0);
+    expect(text.text.out).toContain(`No notes file at ${join(root, '.iteration-feedback.json')} yet`);
+    const json = makeIo(root);
+    expect(await runCli(['--json'], json)).toBe(0);
+    expect(JSON.parse(json.text.out)).toEqual([]);
+    expect(json.text.err).toContain('No notes file at');
   });
 
   it('rejects an unknown option instead of listing notes', async () => {
