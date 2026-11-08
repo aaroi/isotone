@@ -75,9 +75,13 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-const settle = () =>
-  act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 20));
+/** Let the panel's requests land, until `check` passes. */
+const settle = (check: () => void) =>
+  vi.waitFor(async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    check();
   });
 function find(selector: string) {
   const found = container.querySelector<HTMLElement>(selector);
@@ -112,12 +116,11 @@ describe('asking the agent to update from the panel', () => {
     );
     await click(find('.isotone-fab'));
     if (find('.isotone-notes-panel').dataset.open !== 'true') await click(button('Feedback'));
-    await settle();
+    await settle(() => expect(find('.isotone-update-trigger').textContent).toBe('Isotone 1.2.0 is available'));
     expect(find('.isotone-notes-panel').dataset.open).toBe('true');
-    expect(find('.isotone-update-trigger').textContent).toBe('Isotone 1.2.0 is available');
     await click(find('.isotone-update-trigger'));
     await click(button('Ask agent to update'));
-    await settle();
+    await settle(() => expect(find('.isotone-update-trigger').textContent).toBe('Update requested'));
 
     // The note sits with this page's feedback, tagged rather than pinned to an element.
     const row = [...container.querySelectorAll('.isotone-note')].find((li) => li.textContent?.includes('Update Isotone 1.1.3 → 1.2.0'));
@@ -137,9 +140,8 @@ describe('asking the agent to update from the panel', () => {
     expect(container.querySelector('.isotone-note-editing')).toBeNull();
 
     await click(button('Cancel update request'));
-    await settle();
+    await settle(() => expect(find('.isotone-update-trigger').textContent).toBe('Isotone 1.2.0 is available'));
     expect(notes.some((note) => note.update)).toBe(false);
-    expect(find('.isotone-update-trigger').textContent).toBe('Isotone 1.2.0 is available');
     expect(container.querySelector('.isotone-update-ask')).not.toBeNull();
   });
 
@@ -167,8 +169,7 @@ describe('asking the agent to update from the panel', () => {
     );
     await click(find('.isotone-fab'));
     if (find('.isotone-notes-panel').dataset.open !== 'true') await click(button('Feedback'));
-    await settle();
-    expect(find('.isotone-list').textContent).toContain('Update Isotone 1.1.3 → 1.2.0');
+    await settle(() => expect(find('.isotone-list').textContent).toContain('Update Isotone 1.1.3 → 1.2.0'));
     expect(find('.isotone-list').textContent).not.toContain('/pricing');
     expect(find('.isotone-update-trigger').textContent).toBe('Update requested');
   });

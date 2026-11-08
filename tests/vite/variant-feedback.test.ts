@@ -250,6 +250,29 @@ describe('the dev server', () => {
 
   const load = async (server: ViteDevServer, file: string) => (await server.ssrLoadModule(file)) as { value: string };
 
+  /** Resolve once the dev server's file watcher reports changes: touch a
+   *  probe file until it sees one, instead of guessing how long its first
+   *  scan takes. */
+  async function watching(server: ViteDevServer, root: string) {
+    const probe = join(root, 'src', 'watch-probe.ts');
+    let seen = false;
+    const see = (_event: string, file: string) => {
+      if (file.endsWith('watch-probe.ts')) seen = true;
+    };
+    server.watcher.on('all', see);
+    try {
+      await vi.waitFor(
+        () => {
+          writeFileSync(probe, `export const probe = ${Date.now()};\n`);
+          expect(seen).toBe(true);
+        },
+        { timeout: 5000, interval: 50 },
+      );
+    } finally {
+      server.watcher.off('all', see);
+    }
+  }
+
   it.each([[true], [false]])('renders a copy added to an active variant, live=%s', async (live) => {
     const root = tempRepo();
     const real = join(root, 'src', 'b.ts');
@@ -261,7 +284,7 @@ describe('the dev server', () => {
     writeActive(opts, ['v']);
 
     const server = await serve(root, live);
-    await new Promise((done) => setTimeout(done, 200));
+    await watching(server, root);
     expect((await load(server, '/src/b.ts')).value).toBe('real');
 
     addVariantFile(opts, 'v', 'src/b.ts');
@@ -284,7 +307,7 @@ describe('the dev server', () => {
     writeActive(opts, ['gone']);
 
     const server = await serve(root, true);
-    await new Promise((done) => setTimeout(done, 200));
+    await watching(server, root);
     expect((await load(server, '/src/a.ts')).value).toBe('copy');
 
     rmSync(variantDir(opts, 'gone'), { recursive: true });

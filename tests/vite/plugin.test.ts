@@ -983,7 +983,9 @@ describe('live variants', () => {
       answered = true;
       return r;
     });
-    await new Promise((r) => setTimeout(r, 60));
+    // The switch has reached the server render and waits for it (up to a second).
+    await vi.waitFor(() => expect(server.watcher.emit).toHaveBeenCalledWith('change', source));
+    await new Promise((r) => setTimeout(r, 0));
     expect(answered).toBe(false);
     const ssr = { name: 'ssr', moduleGraph: { getModulesByFile: () => new Set([{ id: source }]) } };
     hooks.hotUpdate.call({ environment: ssr }, { file: source });
