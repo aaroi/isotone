@@ -3,12 +3,12 @@ import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from '
 import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { blastFile, readSession, touchSession } from '../../src/node/blast';
 import { runBlast, ENDED_EXIT } from '../../src/cli/blast';
 import { runCli } from '../../src/cli/run';
-import { BLAST, BLAST_CLI, formatDuration, parseDuration, timeLeft } from '../../src/core/blast';
+import { BLAST, BLAST_CLI, BLAST_REMINDER, formatDuration, parseDuration, timeLeft } from '../../src/core/blast';
 import { notesResponse } from '../../src/node/notes/handler';
 import { readNotes, type StoredNote, updateNotes, writeNotes } from '../../src/node/notes/store';
 import { captureIo } from '../helpers/cli';
@@ -94,7 +94,8 @@ describe('durations and copy', () => {
   });
 
   it('formats time left and durations', () => {
-    expect(timeLeft(31 * 60_000 + 5_000)).toBe('32 min left');
+    expect(timeLeft(31 * 60_000 + 5_000)).toBe('31 min left');
+    expect(timeLeft(2 * 60_000 + 50_000)).toBe('3 min left');
     expect(timeLeft(65 * 60_000)).toBe('1 h 5 min left');
     expect(timeLeft(20_000)).toBe('under a minute left');
     expect(formatDuration(45 * 60_000)).toBe('45m');
@@ -113,7 +114,8 @@ describe(`isotone ${BLAST.command} start`, () => {
     expect(await runBlast(['start', '45m'], p.io, FAST)).toBe(0);
     const output = p.take();
     expect(output).toContain(`${BLAST.name} session started: 45m, all routes`);
-    expect(output).toContain(`Now run \`${BLAST_CLI}\``);
+    expect(output).toContain(`Run \`${BLAST_CLI}\` now`);
+    expect(output).toContain('after 90 seconds');
     expect(output).toContain('--every off');
     expect(output).toContain('--working');
     expect(output).toContain('exit 3');
@@ -158,25 +160,6 @@ describe(`isotone ${BLAST.command} start`, () => {
     expect(await start(p, '10m')).toBe(0);
     expect(Date.parse(p.state()?.endsAt ?? '') - Date.now()).toBeGreaterThan(9 * 60_000);
   });
-
-  it('still accepts the 1.2.0 flags', async () => {
-    const p = project();
-    add(p.notes, note('legacy', { createdAt: old() }));
-    expect(await runBlast(['--for', '10m', '--new', '--every', '300ms', '--json'], p.io, FAST)).toBe(0);
-    const [started, batch] = p
-      .take()
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line));
-    expect(started.type).toBe('started');
-    expect(batch).toMatchObject({ type: 'batch', notes: [{ id: 'legacy' }] });
-    expect(await runBlast(['--status'], p.io, FAST)).toBe(0);
-    expect(p.take()).toContain('10 min left');
-    expect(await runBlast(['--extend', '5m'], p.io, FAST)).toBe(0);
-    expect(p.take()).toContain('15 min left');
-    expect(await runBlast(['--stop'], p.io, FAST)).toBe(0);
-    expect(p.take()).toContain('session stopped');
-  });
 });
 
 describe(`isotone ${BLAST.command}`, () => {
@@ -189,7 +172,7 @@ describe(`isotone ${BLAST.command}`, () => {
     const output = p.take();
     expect(output).toContain('1 new note');
     expect(output).toContain('Note backlog1');
-    expect(output).toContain(`then run \`${BLAST_CLI} --every 2s\` again`);
+    expect(output).toContain(`Then run \`${BLAST_CLI} --every 2s\` again.`);
     expect(p.state()?.seen).toHaveProperty('backlog1');
     expect(p.state()?.waiting).toBe(false);
   });
@@ -223,10 +206,9 @@ describe(`isotone ${BLAST.command}`, () => {
     // `one` is still open (not fixed yet) but was handed out: a check-in follows.
     expect(await runBlast(['--every', '400ms'], p.io, FAST)).toBe(0);
     const checkin = p.take();
-    expect(checkin).toMatch(/No new notes · (\d+ min|under a minute) left · run `npx isotone blast --every 400ms` again/);
-    expect(checkin).toContain('1 note you were given is still open');
+    expect(checkin.trim()).toMatch(/^No new notes · (\d+ min|under a minute) left · run `npx isotone blast --every 400ms` again$/);
     expect(await runBlast(['--every', '400ms', '--json'], p.io, FAST)).toBe(0);
-    expect(JSON.parse(p.take())).toMatchObject({ type: 'checkin', stillOpen: ['one'] });
+    expect(JSON.parse(p.take())).toMatchObject({ type: 'checkin', notes: [], next: `${BLAST_CLI} --every 400ms --json` });
     // Still visible to `--json`.
     await runCli(['--json'], p.io);
     expect(JSON.parse(p.take()).map((n: StoredNote) => n.id)).toEqual(['one']);
@@ -246,14 +228,13 @@ describe(`isotone ${BLAST.command}`, () => {
   it('keeps waiting through a busy lock instead of exiting 1', { timeout: 20_000 }, async () => {
     const p = project();
     await start(p, '30s');
-    const waiting = runBlast(['--every', 'off', '--json'], p.io, FAST);
     // Another writer holds the session's lock past the CLI's two-second wait,
-    // and lets go from its own process.
+    // from before the run starts, and lets go from its own process.
     const lock = `${blastFile(p.notes)}.lock`;
     writeFileSync(lock, JSON.stringify({ pid: process.pid, host: hostname(), token: 'other-writer' }));
-    spawn(process.execPath, ['-e', `setTimeout(() => require('node:fs').rmSync(${JSON.stringify(lock)}, { force: true }), 2500)`]);
+    spawn(process.execPath, ['-e', `setTimeout(() => require('node:fs').rmSync(${JSON.stringify(lock)}, { force: true }), 3500)`]);
     add(p.notes, note('busy'));
-    expect(await waiting).toBe(0);
+    expect(await runBlast(['--every', 'off', '--json'], p.io, FAST)).toBe(0);
     expect(JSON.parse(p.take())).toMatchObject({ type: 'batch', notes: [{ id: 'busy' }] });
   });
 
@@ -442,24 +423,6 @@ describe(`isotone ${BLAST.command}`, () => {
     expect(p.take()).toContain('No Blast session is running');
   });
 
-  it('--stream prints one JSON line per batch until the end', async () => {
-    const p = project();
-    await start(p, '1500ms');
-    const running = runBlast(['--stream'], p.io, FAST);
-    await later(150, () => add(p.notes, note('s1')));
-    await later(400, () => add(p.notes, note('s2'), note('s3')));
-    expect(await running).toBe(ENDED_EXIT);
-    const lines = p
-      .take()
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line));
-    expect(lines.map((line) => line.type)).toEqual(['batch', 'batch', 'ended']);
-    expect(lines[0].notes.map((n: StoredNote) => n.id)).toEqual(['s1']);
-    expect(lines[1].notes.map((n: StoredNote) => n.id)).toEqual(['s2', 's3']);
-    expect(lines[2]).toMatchObject({ reason: 'time', stillOpen: [{ id: 's1' }, { id: 's2' }, { id: 's3' }] });
-  });
-
   it('two waiting commands never get the same note', async () => {
     const p = project();
     await start(p, '10s');
@@ -476,6 +439,9 @@ describe(`isotone ${BLAST.command}`, () => {
     for (const args of [
       ['start', '30'],
       ['--every', 'soon'],
+      ['--every', '20m'],
+      ['--stream'],
+      ['--for', '10m', '--new'],
       ['pricing'],
       ['start', '9h'],
       ['start', '--every', '1m'],
@@ -487,14 +453,74 @@ describe(`isotone ${BLAST.command}`, () => {
     expect(p.state()).toBeNull();
   });
 
-  it('caps --every and says so', async () => {
+  it('says to use --every off rather than a long check-in', async () => {
     const p = project();
-    add(p.notes, note('x', { createdAt: old() }));
-    await start(p, '30m');
-    await runBlast(['--every', '20m'], p.io, FAST);
-    const output = p.take();
-    expect(output).toContain('--every is capped at 9m');
-    expect(output).toContain(`run \`${BLAST_CLI} --every 9m\` again`);
+    expect(await runBlast(['--every', '20m'], p.io, FAST)).toBe(1);
+    expect(p.text.err).toContain('--every is at most 9m');
+    expect(p.text.err).toContain('--every off');
+  });
+
+  it('hands out at most ten notes a run, and the rest at once on the next', async () => {
+    const p = project();
+    add(p.notes, ...Array.from({ length: 12 }, (_, i) => note(`n${String(i).padStart(2, '0')}`, { createdAt: old() })));
+    await start(p, '20s');
+    expect(await runBlast(['--json'], p.io, FAST)).toBe(0);
+    const first = JSON.parse(p.take());
+    expect(first.notes).toHaveLength(10);
+    expect(first.more).toBe(2);
+    const started = Date.now();
+    expect(await runBlast([], p.io, FAST)).toBe(0);
+    const second = p.take();
+    expect(second).toContain('2 new notes · ');
+    expect(second).not.toContain('more next run');
+    expect(Date.now() - started).toBeLessThan(FAST.debounceMs * 3);
+  });
+
+  it('repeats the guardrail and the next step under every batch', async () => {
+    const p = project();
+    add(p.notes, note('g', { createdAt: old() }));
+    await start(p, '20s');
+    expect(await runBlast(['--every', '2s'], p.io, FAST)).toBe(0);
+    const lines = p.take().trim().split('\n');
+    expect(lines.at(-1)).toBe(`${BLAST_REMINDER} Then run \`${BLAST_CLI} --every 2s\` again.`);
+  });
+
+  it('hands out notes still settling when the check-in is due', async () => {
+    const p = project();
+    await start(p, '20s');
+    const waiting = runBlast(['--every', '300ms', '--json'], p.io, { ...FAST, debounceMs: 5_000, maxDebounceMs: 5_000 });
+    await later(100, () => add(p.notes, note('late')));
+    expect(await waiting).toBe(0);
+    expect(JSON.parse(p.take())).toMatchObject({ type: 'batch', notes: [{ id: 'late' }] });
+  });
+
+  it('checks in on time when the wall clock jumps back', async () => {
+    const p = project();
+    await start(p, '10m');
+    const real = Date.now.bind(Date);
+    const started = performance.now();
+    const waiting = runBlast(['--every', '400ms', '--json'], p.io, FAST);
+    const clock = vi.spyOn(Date, 'now');
+    try {
+      await later(50, () => clock.mockImplementation(() => real() - 3_600_000));
+      expect(await waiting).toBe(0);
+    } finally {
+      clock.mockRestore();
+    }
+    expect(performance.now() - started).toBeLessThan(2_000);
+    expect(JSON.parse(p.take()).type).toBe('checkin');
+  });
+
+  it('Ctrl-C ends a waiting run with 130 and clears its waiting mark', async () => {
+    const p = project();
+    await start(p, '10m');
+    const waiting = runBlast(['--every', 'off'], p.io, FAST);
+    await later(100, () => {});
+    expect(p.state()?.waiting).toBe(true);
+    process.emit('SIGINT');
+    expect(await waiting).toBe(130);
+    expect(p.state()?.waiting).toBe(false);
+    expect(p.state()?.stoppedAt).toBeUndefined();
   });
 
   it('keeps a session live through note commands, and reads a malformed file as none', async () => {
