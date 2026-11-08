@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 // Shipped docs are read from node_modules/isotone, where only the files in
 // package.json "files" exist (plus README, which npm always packs). A link to
 // anything else, or to a heading that is gone, is broken for the agent there.
+// Images count too: npm renders the README from the tarball.
 const root = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { files: string[] };
 
@@ -43,9 +44,9 @@ describe('shipped docs', () => {
     }
   });
 
-  it.each(docs)('%s links only to shipped files and existing headings', (file) => {
+  it.each(docs)('%s links and images point only to shipped files and existing headings', (file) => {
     const text = readFileSync(join(root, file), 'utf8').replace(/```[\s\S]*?```/g, '');
-    for (const [, target = ''] of text.matchAll(/(?<!!)\[[^\]]*\]\(([^)\s]+)\)/g)) {
+    for (const [, target = ''] of text.matchAll(/\[[^\]]*\]\(([^)\s]+)\)/g)) {
       if (/^[a-z]+:/i.test(target)) continue; // absolute URLs
       const [path, hash] = target.split('#');
       const linked = path ? normalize(join(dirname(file), path)) : file;

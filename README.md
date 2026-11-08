@@ -3,7 +3,7 @@
 Ask your coding agent for design variants, switch between them in your running
 app, and pin feedback to the exact elements you want changed.
 
-![Switching layout, spacing and colour variants, pinning a card with a note, and an agent picking the note up and closing it](docs/assets/loop.gif)
+![Switching layout, spacing and colour variants, pinning a card with a note, and an agent picking the note up and closing it](https://raw.githubusercontent.com/aaroi/isotone/main/docs/assets/loop.gif)
 
 Isotone is not an agent, an MCP server or an AI product. It is a small review
 panel that runs inside your app during development, and it works with the coding
@@ -22,7 +22,7 @@ segmented choices, colour swatches or sliders, and switching one updates the
 live page. Save your picks as the defaults for the agent to apply, or leave
 feedback on a single option.
 
-![The Variants panel with thumbnail, segmented, colour and range selectors above the feedback notes](docs/assets/preview.png)
+![The Variants panel with thumbnail, segmented, colour and range selectors above the feedback notes](https://raw.githubusercontent.com/aaroi/isotone/main/docs/assets/preview.png)
 
 When something needs changing, open Feedback with **⌘/Ctrl + Shift + .**, click
 the elements you mean, write the change and send. Each note is saved to a JSON

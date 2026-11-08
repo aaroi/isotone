@@ -37,7 +37,6 @@
   },
   "files": [
     "dist",
-    "docs/assets/preview.png",
     "docs/agent-guide.md",
     "docs/integrations.md",
     "docs/migration.md",
