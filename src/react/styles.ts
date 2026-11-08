@@ -281,7 +281,8 @@ ${PILL_ACTIVE_CSS}
 .isotone-page[aria-pressed='true'] { color: var(--iso-fg); background: var(--iso-label-face); box-shadow: var(--iso-label-lift-shadow); }
 /* An agent has said it is working on a note: a soft pulse on the note, and a ring on the launcher.
    Both are driven by one shared clock (see syncPulse), so they beat together. */
-.isotone-note-hit { position: relative; }
+/* A long list lays out only the rows in view. The placeholder is one line of text; a row keeps its height once seen. */
+.isotone-note-hit { position: relative; content-visibility: auto; contain-intrinsic-size: auto 18px; }
 .isotone-working { position: absolute; left: 3px; top: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--iso-focus); }
 .isotone-ring { position: absolute; inset: 0; border-radius: 999px; pointer-events: none; }
 .isotone-list:empty { display: none; }

@@ -98,6 +98,14 @@ async function render(element: React.ReactElement) {
   await act(async () => r.render(element));
 }
 
+/** A long list renders a first screenful, then the rest a chunk per task: wait for every chunk. */
+async function renderRemaining() {
+  for (let count = -1; count !== container.querySelectorAll('.isotone-axis').length; ) {
+    count = container.querySelectorAll('.isotone-axis').length;
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  }
+}
+
 function click(el: Element | null | undefined) {
   if (!el) throw new Error('nothing to click');
   return act(async () => {
@@ -223,6 +231,7 @@ describe('VariantsView', () => {
     }));
     const source = createVariantsSource({ axes });
     await render(createElement(VariantsView, { source }));
+    await renderRemaining();
     expect(container.querySelectorAll('.isotone-axis')).toHaveLength(500);
     const last = container.querySelectorAll<HTMLButtonElement>('.isotone-seg')[999];
     await click(last);
@@ -1535,6 +1544,7 @@ describe('review dock interactions', () => {
       }));
       const source = createVariantsSource({ axes });
       await render(createElement(VariantsView, { source }));
+      await renderRemaining();
       expect(container.querySelectorAll('.isotone-axis')).toHaveLength(500);
       expect(container.querySelectorAll('.isotone-section')).toHaveLength(42);
       const last = container.querySelectorAll<HTMLButtonElement>('.isotone-seg')[999];

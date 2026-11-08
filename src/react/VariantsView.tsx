@@ -1,6 +1,7 @@
 import {
   memo,
   type ReactNode,
+  startTransition,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -27,6 +28,7 @@ import { AxisActionsDialog } from './AxisActionsDialog';
 import { AxisControl, type OpenMenu } from './AxisControl';
 import { ColorPicker } from './ColorPicker';
 import { Icon } from './icons';
+import { MAX_ANIMATED_ITEMS } from './motion';
 import { useLayoutMotion } from './useLayoutMotion';
 import { showOverflowTitle } from './tooltips';
 
@@ -53,6 +55,32 @@ export function useVariantsVersion(source: VariantsSource | undefined): number {
   );
   const read = () => (source ? (versions.get(source) ?? 0) : 0);
   return useSyncExternalStore(subscribe, read, read);
+}
+
+/** Selectors in the commit that opens the panel: more than a tall panel shows at once. */
+const FIRST_AXES = 16;
+/** Selectors added per task after that; each chunk stays well inside a frame on a slow machine. */
+const AXES_PER_CHUNK = 48;
+
+/**
+ * How many selectors to render. None while closed. Opening renders a first
+ * screenful and paints; the rest follow a chunk per task, so a page with
+ * hundreds of selectors opens at once and no single task holds up input.
+ */
+function useRenderLimit(open: boolean, total: number): number {
+  const [limit, setLimit] = useState(0);
+  const rendered = open ? Math.min(Math.max(limit, FIRST_AXES), total) : 0;
+  useEffect(() => {
+    if (!open) {
+      setLimit(0);
+      return;
+    }
+    if (rendered >= total) return;
+    // A transition renders in slices that yield to input, and a click or keystroke meanwhile goes first.
+    const timer = setTimeout(() => startTransition(() => setLimit(rendered + AXES_PER_CHUNK)));
+    return () => clearTimeout(timer);
+  }, [open, rendered, total]);
+  return rendered;
 }
 
 const NO_PENDING_ACTIONS: VariantAction[] = [];
@@ -86,7 +114,6 @@ export const VariantsView = memo(function VariantsView({
   // A closed panel renders no selectors. The body stays one more render after
   // closing, so the dock's exit snapshot still shows them.
   const lingering = useDeferredValue(active);
-  const bodyShown = active || lingering;
   // biome-ignore lint/correctness/useExhaustiveDependencies: version represents external source updates.
   const { selections, shown, sections, names, sourceError } = useMemo(() => {
     const selections = source.getSelections();
@@ -103,8 +130,15 @@ export const VariantsView = memo(function VariantsView({
   const value = (axis: VariantAxis) => selections[axis.id] ?? axisDefault(axis);
   // Collapsed sections, by case-insensitive name; kept while the panel closes.
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const expandedCount = sections.reduce(
+    (n, section) => n + (section.name !== null && collapsed.has(section.key) ? 0 : section.axes.length),
+    0,
+  );
+  let left = useRenderLimit(active || lingering, expandedCount);
+  let stopped = false;
   const bodyRef = useRef<HTMLDivElement | null>(null);
-  useLayoutMotion(bodyRef, shown, active);
+  // A long list arrives in chunks and is past the size that animates anyway.
+  useLayoutMotion(bodyRef, shown, active && shown.length <= MAX_ANIMATED_ITEMS);
 
   // The action dialog: which selector, which option, and each opening's own session.
   const [menu, setMenu] = useState<{ axisId: string; optionId: string | null; session: number } | null>(null);
@@ -224,29 +258,37 @@ export const VariantsView = memo(function VariantsView({
           </p>
         )}
         {shown.length === 0 && <p className="isotone-empty">{emptyText}</p>}
-        {bodyShown &&
-          sections.map((section) =>
-            section.name === null ? (
-              section.axes.map(renderAxis)
-            ) : (
-              <SectionBlock
-                key={`section:${section.key}`}
-                name={section.name}
-                sectionKey={section.key}
-                count={section.axes.length}
-                collapsed={collapsed.has(section.key)}
-                onToggle={() =>
-                  setCollapsed((previous) => {
-                    const next = new Set(previous);
-                    if (!next.delete(section.key)) next.add(section.key);
-                    return next;
-                  })
-                }
-              >
-                {section.axes.map(renderAxis)}
-              </SectionBlock>
-            ),
-          )}
+        {sections.map((section) => {
+          // A folded section costs nothing; the list stops at the first selector past the limit.
+          const folded = section.name !== null && collapsed.has(section.key);
+          if (stopped || (!folded && left === 0)) {
+            stopped = true;
+            return null;
+          }
+          const axes = folded ? [] : section.axes.slice(0, left);
+          left -= axes.length;
+          stopped = !folded && axes.length < section.axes.length;
+          return section.name === null ? (
+            axes.map(renderAxis)
+          ) : (
+            <SectionBlock
+              key={`section:${section.key}`}
+              name={section.name}
+              sectionKey={section.key}
+              count={section.axes.length}
+              collapsed={folded}
+              onToggle={() =>
+                setCollapsed((previous) => {
+                  const next = new Set(previous);
+                  if (!next.delete(section.key)) next.add(section.key);
+                  return next;
+                })
+              }
+            >
+              {axes.map(renderAxis)}
+            </SectionBlock>
+          );
+        })}
       </div>
       {colourAxis?.kind === 'color' && (
         <ColorPicker

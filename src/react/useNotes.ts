@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createIterationStore, type IterationStoreConfig } from '../core/notes-client';
 import type { IterationNote } from '../core/types';
 
@@ -7,14 +7,24 @@ const POLL_MS = 2500;
 /** The slowest retry while the server cannot be reached. */
 const POLL_MAX_MS = 30_000;
 
-/** Whether a poll changed anything the panel draws, without a deep diff. */
-function sameNotes(a: IterationNote[], b: IterationNote[]): boolean {
-  if (a.length !== b.length) return false;
-  const byId = new Map(a.map((note) => [note.id, note]));
-  return b.every((note) => {
+/**
+ * The fresh list, keeping each unchanged note's previous object, and the
+ * previous list itself when nothing changed: memoized rows skip the notes a
+ * load or poll did not touch.
+ */
+function mergeNotes(previous: IterationNote[], fresh: IterationNote[]): IterationNote[] {
+  const byId = new Map(previous.map((note) => [note.id, note]));
+  let changed = previous.length !== fresh.length;
+  const merged = fresh.map((note, index) => {
     const old = byId.get(note.id);
-    return old !== undefined && JSON.stringify(old) === JSON.stringify(note);
+    if (old !== undefined && JSON.stringify(old) === JSON.stringify(note)) {
+      if (previous[index] !== old) changed = true;
+      return old;
+    }
+    changed = true;
+    return note;
   });
+  return changed ? merged : previous;
 }
 
 const minute = () => Math.floor(Date.now() / 60_000) * 60_000;
@@ -25,7 +35,9 @@ const minute = () => Math.floor(Date.now() / 60_000) * 60_000;
  * or undoes an edit. `write` wraps one optimistic change and its request.
  */
 export function useNotes(config: IterationStoreConfig, visible: boolean) {
-  const [store] = useState(() => createIterationStore(config));
+  // A new endpoint or storage key is a new store; the same config spelled anew each render is not.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the store depends on these fields only.
+  const store = useMemo(() => createIterationStore(config), [config.endpoint, config.key]);
   const available = Boolean(config.endpoint);
   const [notes, setNotes] = useState<IterationNote[]>([]);
   // Coarse on purpose: the value only ages out stale claims, and an unchanged minute lets React skip the render.
@@ -48,7 +60,7 @@ export function useNotes(config: IterationStoreConfig, visible: boolean) {
         // An old refresh must not restore deleted notes or undo optimistic edits.
         if (asked !== request.current || at !== revision.current || pending.current) return;
         pollRev.current = rev;
-        setNotes(fresh);
+        setNotes((prev) => mergeNotes(prev, fresh));
       })
       .catch(() => {});
   }, [available, store]);
@@ -93,7 +105,7 @@ export function useNotes(config: IterationStoreConfig, visible: boolean) {
         if (stopped || asked !== request.current || at !== revision.current || pending.current) return;
         pollRev.current = result.rev;
         const fresh = result.notes;
-        if (fresh) setNotes((prev) => (sameNotes(prev, fresh) ? prev : fresh));
+        if (fresh) setNotes((prev) => mergeNotes(prev, fresh));
         setClock(minute());
       } catch {
         failures = Math.min(failures + 1, 8);

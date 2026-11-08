@@ -76,23 +76,38 @@ export function NotesPanel({
           ))}
         </fieldset>
       )}
-      <ul ref={listRef} className="isotone-list">
-        {notes.map((note) => (
-          <NoteRow
-            key={note.id}
-            note={note}
-            page={normalizeRoute(note.route) !== route ? note.route : undefined}
-            editing={editingId === note.id}
-            working={working.has(note.id)}
-            onEdit={onEdit}
-            onRemove={onRemove}
-          />
-        ))}
-      </ul>
+      <NoteList listRef={listRef} notes={notes} route={route} editingId={editingId} working={working} onEdit={onEdit} onRemove={onRemove} />
       <div className="isotone-compose">{compose}</div>
     </section>
   );
 }
+
+/** The saved notes. Memoized apart from the panel: the composer and the dock re-render it with props that change on every render. */
+const NoteList = memo(function NoteList({
+  listRef,
+  notes,
+  route,
+  editingId,
+  working,
+  onEdit,
+  onRemove,
+}: Pick<NotesPanelProps, 'listRef' | 'notes' | 'route' | 'editingId' | 'working' | 'onEdit' | 'onRemove'>) {
+  return (
+    <ul ref={listRef} className="isotone-list">
+      {notes.map((note) => (
+        <NoteRow
+          key={note.id}
+          note={note}
+          page={normalizeRoute(note.route) !== route ? note.route : undefined}
+          editing={editingId === note.id}
+          working={working.has(note.id)}
+          onEdit={onEdit}
+          onRemove={onRemove}
+        />
+      ))}
+    </ul>
+  );
+});
 
 const WorkingDot = () => (
   <span
