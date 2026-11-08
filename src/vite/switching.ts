@@ -18,7 +18,7 @@ import type { Overrides } from './overrides';
 const MANIFEST = 'variant.json';
 
 /** The version a module id names (`?isotone=<id>`), or null for any other module. */
-export function versionOfId(id: string | null): string | null {
+function versionOfId(id: string | null): string | null {
   const at = id?.indexOf('?') ?? -1;
   if (!id || at < 0) return null;
   return new URLSearchParams(id.slice(at + 1)).get(VERSION_QUERY);
@@ -26,8 +26,6 @@ export function versionOfId(id: string | null): string | null {
 
 /** Swaps the active set; resolves once the browser and any SSR render have it. */
 export type Activate = (next: string[], removedFiles?: string[]) => Promise<void>;
-
-export type Switching = ReturnType<typeof createSwitching>;
 
 export function createSwitching(overrides: Overrides) {
   // Live mode: decided in configureServer, where the server's environments

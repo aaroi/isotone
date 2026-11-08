@@ -11,7 +11,7 @@ import { NOTES_ENDPOINT } from '../node/notes/handler';
 import { UPDATE_ENDPOINT } from '../node/update/check';
 import type { NetworkAccess } from './access';
 
-export const BUNDLE_PATH = '/@isotone/panel.js';
+const BUNDLE_PATH = '/@isotone/panel.js';
 const INJECTED = new WeakSet<ServerResponse>();
 
 /** Load after the host has mounted, without importing its React or HMR runtime. */
@@ -94,7 +94,7 @@ export function servePanel(use: Use, access: NetworkAccess, mount: string | null
   });
 }
 
-export function injectHtmlResponse(res: ServerResponse, code: string | null, head: () => string | null = () => null): void {
+function injectHtmlResponse(res: ServerResponse, code: string | null, head: () => string | null = () => null): void {
   if (INJECTED.has(res)) return;
   INJECTED.add(res);
 
