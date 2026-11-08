@@ -22,9 +22,11 @@ jobs:
       contents: write
       actions: write
     steps:
+      # This job pushes the version commit, so it keeps the checkout's token.
+      # It installs nothing and runs only the repository's two release scripts.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # zizmor: ignore[artipacked]
       - name: Check this is still main
         id: current
         run: |
@@ -43,6 +45,9 @@ jobs:
         if: steps.current.outputs.ready == 'true'
         run: |
           published=$(npm view isotone version)
+          # Features or breaking notes under Unreleased need a raised minor: stop
+          # here rather than publish them as a patch.
+          node scripts/check-release.mjs "$published"
           node scripts/prepare-release.mjs "$published"
           git add package.json CHANGELOG.md
           if ! git diff --cached --quiet; then
