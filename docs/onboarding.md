@@ -7,7 +7,8 @@ Re-run [the agent trial](#the-agent-trial) when changing it.
 ## The flow
 
 1. The user pastes the README's **Start with your agent** prompt, naming a page.
-2. The agent installs `isotone` as a dev dependency and runs `npx isotone init --yes`.
+2. The agent learns from the README (or the installed package's README) to install
+   `isotone` as a dev dependency and run `npx isotone init --yes`.
 3. `init` prints the development-only setup, the `AGENTS.md` status and, until
    the project has variants or knobs, a **first run**: build two real, opt-in
    variants on the user's page (Vite: a file-variant selector and a knob;

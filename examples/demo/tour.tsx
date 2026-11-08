@@ -379,7 +379,6 @@ function stepContent(
           <>
             <p>{touch ? 'On your computer, paste' : 'Paste'} this into your coding agent (Claude Code, Cursor, Codex…) in your project:</p>
             <Prompt />
-            <p className="tour-hint">It works with Vite and other dev servers, and none of it ends up in your production build.</p>
             <details className="tour-manual">
               <summary>Or set it up yourself</summary>
               <Install />

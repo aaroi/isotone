@@ -85,10 +85,7 @@ prompt, naming the home page, plus one line saying where the package is,
 since this version is not on the registry yet:
 
 ```text
-Set up Isotone (https://github.com/aaroi/isotone) in this project, for development
-only. Install the `isotone` package as a dev dependency, run `npx isotone init --yes`,
-apply the setup it prints and do its first run on the home page (/). Then
-tell me what to open and try.
+Set up Isotone (https://github.com/aaroi/isotone) and show me how to try it on the home page (/).
 
 Install the isotone package from this file instead of the npm registry: <$OUT/isotone-x.y.z.tgz>
 ```

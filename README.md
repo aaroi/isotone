@@ -37,22 +37,21 @@ browser; Isotone works in yours, with any agent that can run a command.
 
 ## Get started
 
-Isotone needs Node.js 22 or later. Pick one of these ways to start.
+Pick one of these ways to start.
 
 ### Start with your agent
 
-The quickest way. In your project, give this to Claude Code, Cursor, Codex or any
-agent that can run commands. Name the page you're working on:
+In your project, give this to Claude Code, Cursor, Codex or any agent that can
+run commands, naming the page you're working on:
 
 ```text
-Set up Isotone (https://github.com/aaroi/isotone) in this project, for development
-only. Install the `isotone` package as a dev dependency, run `npx isotone init --yes`,
-apply the setup it prints and do its first run on <the page I'm working on>. Then
-tell me what to open and try.
+Set up Isotone (https://github.com/aaroi/isotone) and show me how to try it on <the page I'm working on>.
 ```
 
-The agent adds the panel behind your framework's development check, makes two
-real variants of something on that page, and tells you where to look. Switch them
+The agent installs `isotone` as a dev dependency and runs `npx isotone init --yes`,
+which prints the setup for your project and a first run: the panel behind your
+framework's development check and two real variants of something on that page.
+Then it tells you where to look. Switch them
 in the panel, pin a note on anything you want changed, then tell the agent to
 check your Isotone notes.
 
@@ -68,7 +67,8 @@ the dev server; elsewhere, a small local server and a script tag that loads only
 on localhost. `init --yes` also adds a short `AGENTS.md` section that teaches
 your agent the loop. Isotone works only on the machine running the dev server;
 the [integration guide](docs/integrations.md) covers every setup and how each
-stays out of production.
+stays out of production. The CLI needs Node.js 22 or later; your app can be
+built with anything that serves pages on localhost.
 
 ## Blast mode
 
