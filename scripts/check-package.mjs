@@ -10,7 +10,9 @@ import { npm } from './npm.mjs';
 // Size budgets, about 5% over the 1.3.0 build (panel bundle 349 kB, tarball
 // 366 kB). Every host page loads the bundle, so growth should be a decision:
 // raise a budget in the same change that needs it, and say why.
-const BUDGET = { bundle: 367_000, tarball: 384_000 };
+// Tarball raised to 405 kB (round 2 integration, 387 kB): the shipped note
+// schema, the LAN access key, the split Vite modules and the CLI's new guards.
+const BUDGET = { bundle: 367_000, tarball: 405_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));
