@@ -42,6 +42,11 @@ fill or bottom edge. Clicking any noninteractive area of the composer focuses
 the textarea. Its buttons retain their own actions. Disabled controls keep their
 shape and material, reduce opacity and do not receive hover treatment.
 
+In forced colors (Windows high contrast) shadows and palette colours disappear,
+so segments get a `ButtonBorder` edge, every persistent selection becomes
+`Highlight` with `HighlightText`, and sliders draw in system colours. Colour
+swatches and the colour picker keep their own colours.
+
 ## Geometry and content
 
 The layout constants live in `styles.ts`. Current anchors are:
@@ -282,7 +287,10 @@ component-level checks of page classes, media queries or background colour.
 ## Motion
 
 Motion explains opening, closing and layout changes. Keyboard-initiated actions
-are immediate. Reduced motion removes spatial movement. Pointer hover stays
+are immediate: the rail track, axis menus and colour popover drop their
+transition while the reviewer is using the keyboard. Name such surfaces one by
+one; a rule over every descendant restyles the whole dock on each change of
+input. Reduced motion removes spatial movement. Pointer hover stays
 brief. The launcher expands on mouse or hovering-pen entry, including on hybrid
 devices whose primary pointer reports as coarse. Touch still opens it by tap.
 The pill has a continuous hit surface across its rim and the gap between icons.

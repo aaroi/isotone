@@ -149,3 +149,20 @@ describe('variants list', () => {
     }
   });
 });
+
+describe('forced colors', () => {
+  // High contrast drops shadows and author colours, which drew the selection and the slider.
+  it('marks selections, swatches and sliders with system colours', () => {
+    const block = PANEL_CSS.match(/@media \(forced-colors: active\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
+    const forced = selectors(block);
+    for (const selector of [
+      ".isotone-seg[aria-checked='true']",
+      ".isotone-thumb[aria-checked='true']",
+      ".isotone-swatch[aria-checked='true']",
+      '.isotone-range::-webkit-slider-thumb',
+      '.isotone-range::-webkit-slider-runnable-track',
+    ])
+      expect(forced).toContain(selector);
+    expect(block).toMatch(/Highlight/);
+  });
+});

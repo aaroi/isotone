@@ -400,6 +400,22 @@ ${FEEDBACK_LAYOUT_CSS}
   .isotone-root button { transition: opacity 125ms ease; }
   .isotone-root button:not(:disabled):active > svg { transform: none; }
 }
+/* Windows high contrast swaps the palette for system colours and drops every shadow, which drew the edges,
+   the selection and the slider. Selection becomes Highlight; colour choices keep their own colour. */
+@media (forced-colors: active) {
+  .isotone-seg, .isotone-thumb { outline: 1px solid ButtonBorder; outline-offset: -1px; }
+  .isotone-seg[aria-checked='true'], .isotone-thumb[aria-checked='true'], .isotone-note-editing .isotone-note-hit, .isotone-pick[aria-pressed='true'], .isotone-page[aria-pressed='true'] { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+  .isotone-rail-button[aria-expanded='true']::before { background: Highlight; }
+  .isotone-rail-button[aria-expanded='true'] { color: HighlightText; }
+  .isotone-swatch, .isotone-picker, .isotone-colour-field, .isotone-colour-handle, .isotone-hue { forced-color-adjust: none; }
+  .isotone-swatch, .isotone-picker { box-shadow: 0 0 0 1px CanvasText; }
+  .isotone-swatch[aria-checked='true'], .isotone-picker[aria-expanded='true'], .isotone-picker[data-custom='true'] { box-shadow: 0 0 0 2px Canvas, 0 0 0 4px Highlight; }
+  .isotone-range::-webkit-slider-runnable-track { background: GrayText; }
+  .isotone-range::-moz-range-track { background: GrayText; }
+  .isotone-range::-webkit-slider-thumb { background: ButtonText; }
+  .isotone-range::-moz-range-thumb { background: ButtonText; }
+  .isotone-range-tick { background: GrayText; }
+}
 /* Keyboard actions are immediate. The rule names only the surfaces a key opens: one over every descendant
    would restyle the whole dock each time the reviewer moves between mouse and keyboard. */
 .isotone-root[data-instant='true'] .isotone-rail-track, .isotone-root[data-instant='true'] .isotone-axis-menu, .isotone-root[data-instant='true'] .isotone-colour { transition-duration: 0s !important; transition-delay: 0s !important; }
