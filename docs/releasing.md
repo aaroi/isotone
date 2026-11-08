@@ -22,16 +22,17 @@ npm; the archive's source maps contain source text. Keep the MIT notice and the
 
 1. Record notable changes under `Unreleased` in the changelog. If Unreleased
    adds a feature or changes what users or agents type, read or import, raise
-   the minor version in `package.json` in that PR (the major for a break that
-   needs user action). Routine fixes get the automatic patch. Preserve the
-   lockfile's resolved versions unless the release intentionally changes
-   dependencies.
+   the minor version in `package.json` in that PR. Breaking changes ship as a
+   minor too, with what users must do under `### What you need to know`; a
+   major version is a deliberate maintainer decision, never required by a
+   change set. Routine fixes get the automatic patch. Preserve the lockfile's
+   resolved versions unless the release intentionally changes dependencies.
    `pnpm check:release` (the `release guard` check, and the first step of
    `Publish main`) enforces the minor: only `### Fixed` and `### Security`
    headings (or `- fix:` notes) under Unreleased may ship as a patch. Any other
    heading, such as `### What you need to know`, `### Changed` or `### Removed`,
    or a `- feat:` or `- change:` note, fails it until `package.json` is above
-   the published minor. Whether a break deserves the major stays your call.
+   the published minor.
 2. Run `pnpm install --frozen-lockfile`, `pnpm check`, `pnpm check:package` and
    `pnpm smoke` (which confirms a production Vite build contains no panel).
    Inspect both themes in the demo.
@@ -45,46 +46,60 @@ npm; the archive's source maps contain source text. Keep the MIT notice and the
    Vercel then deploys [isotone.vercel.app](https://isotone.vercel.app) from
    `main`.
 
-The release check job builds and tests the prepared main commit, runs
-`pnpm smoke`, then creates an archive. A separate job downloads that archive and publishes it with provenance.
-Only that job has OIDC permission; it does not install dependencies or run project
-scripts. CI builds and tests on Node 22, 24 and 26 (and on Windows, not yet
-required, where POSIX-only tests skip), runs types, lint, knip and the coverage
-floors once, runs the packed-package check (with its size budgets) on every leg,
-the release guard, actionlint and zizmor on the workflows, and installs the packed
-package into fresh Vite 5 and Vite 8 apps (React 18 and 19) with `pnpm smoke`.
+`Publish main` runs in four jobs. `check` builds and tests the prepared main
+commit, runs the packed-package check, then packs and uploads the archive.
+`smoke` downloads that archive and installs it into fresh Vite 5 and Vite 8
+apps (React 18 and 19); it runs after packing so the third-party code it
+installs cannot change what publishes, and `scripts/smoke.mjs` only installs
+versions published at least seven days earlier. `publish` checks the archive's
+SHA-256 against the one `check` recorded and publishes it with provenance; it is
+the only job with OIDC permission, and it installs nothing and runs no project
+scripts. `release` tags the commit and creates the GitHub Release.
+
+CI builds and tests on Node 22, 24 and 26 (and on Windows, not yet required,
+where POSIX-only tests skip), runs types, lint, knip and the coverage floors
+once, runs the packed-package check (with its size budgets) on every leg, the
+release guard, actionlint and zizmor on the workflows, and the same packed
+smoke test. A weekly `Mutation testing` run fails when Stryker's score drops
+below the `break` threshold in `stryker.config.json`.
 
 ## GitHub settings outside the repository
 
-These are account-side settings no commit can make. Do them once.
+No commit can make these account-side settings. Do them once, in order.
 
-1. **Ruleset on `main`** (Settings → Rules → Rulesets → New branch ruleset):
-   name `main`, Enforcement Active, target the default branch. Turn on Restrict
-   deletions, Block force pushes, Require a pull request before merging (0
-   approvals is fine for a solo maintainer), and Require status checks to pass
-   with `check (ubuntu-latest, Node 22)`, `check (ubuntu-latest, Node 24)`,
-   `check (ubuntu-latest, Node 26)`, `release guard`, `workflow lint` and
-   `packed smoke (oldest and newest Vite and React)`; they appear in the picker
-   after one run on a pull request. Add `check (windows-latest, Node 24)` once it
-   is green and its `continue-on-error` line is removed from `ci.yml`. Tick
-   Require branches to be up to date. Add Repository admin to the bypass list,
-   and the github-actions app only if `Publish main` then fails at
+1. **Open a pull request and get it green** so the check names below exist
+   (they appear in the ruleset picker only after one run).
+2. **Ruleset on `main`** (Settings → Rules → Rulesets → New branch ruleset):
+   name `main`, Enforcement Active, target the default branch. Turn on
+   Restrict deletions, Block force pushes, Require a pull request before
+   merging (0 approvals is fine for a solo maintainer), Require branches to be
+   up to date, and Require status checks to pass with exactly:
+   - `check (ubuntu-latest, Node 22)`
+   - `check (ubuntu-latest, Node 24)`
+   - `check (ubuntu-latest, Node 26)`
+   - `packed smoke (oldest and newest Vite and React)`
+   - `release guard`
+   - `workflow lint`
+
+   Add `check (windows-latest, Node 24)` once it has passed and its
+   `continue-on-error` line is removed from `ci.yml`. Bypass list: Repository
+   admin, plus the github-actions app only if `Publish main` then fails at
    `git push origin HEAD:main` with a rule violation (the `prepare` job pushes
    the version commit directly).
-2. **Release tags**: a tag ruleset named `release tags`, targeting `v*`, with
-   Restrict deletions, Restrict updates and Block force pushes. Bypass:
-   github-actions (the `release` job creates the tag) and Repository admin.
-3. **`npm` environment** (Settings → Environments → New environment → `npm`):
-   deployment branches and tags → Selected branches → `main`. Optionally add
+3. **Tag ruleset** named `release tags`, targeting `v*`: Restrict deletions,
+   Restrict updates, Block force pushes. Bypass: github-actions (the `release`
+   job creates the tag) and Repository admin.
+4. **`npm` environment** (Settings → Environments → New environment → `npm`):
+   deployment branches and tags → Selected branches → `main`; optionally add
    yourself as a required reviewer to approve each publish. In the same change,
    set Environment to `npm` on the trusted publisher in npm (isotone → Settings
    → Trusted publishing) and add `environment: npm` under `runs-on` in the
-   `publish` job of `.github/workflows/publish.yml`. Do both together: a
-   mismatch makes `npm publish` fail with E404.
-4. Optionally, in Settings → Actions → General, make workflow permissions
-   read-only by default (the workflows declare what they need) and allow only
+   `publish` job of `.github/workflows/publish.yml`. A mismatch between the two
+   makes `npm publish` fail with E404.
+5. **Actions** (Settings → Actions → General), optional: workflow permissions
+   read-only by default (the workflows declare what they need), and allow only
    actions from GitHub, verified creators and `pnpm/action-setup`.
-5. In Settings → Code security, enable Dependabot alerts and security updates;
+6. **Code security**: enable Dependabot alerts and security updates;
    `.github/dependabot.yml` only covers version updates.
 
 ## Demo deployment outside the repository
@@ -100,7 +115,7 @@ In the package's npm settings, verify the trusted publisher names the intended
 GitHub owner, repository and **`publish.yml`**. Allow direct `npm publish`; new
 configurations can default to staged publishing only. The trusted publisher's
 environment must match the `publish` job's `environment:` (none until the `npm`
-environment below is set up). An existing working publisher does not need
+environment above is set up). An existing working publisher does not need
 replacing. A new configuration must complete its
 first publish within two days. The workflow uses GitHub-hosted runners, Node 24,
 and checks for npm 11.5.1 or newer. No long-lived publish token is needed.
