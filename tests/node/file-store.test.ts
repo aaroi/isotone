@@ -109,7 +109,16 @@ it('preserves every file when separate agents add to the same variant', async ()
                 `
         import { addVariantFile } from ${JSON.stringify(store)};
         for (const file of ${JSON.stringify(files.slice(writer * 5, writer * 5 + 5))}) {
-          addVariantFile({ root: ${JSON.stringify(root)} }, 'shared', file);
+          // "Busy" is the CLI's refusal after its 2 s wait, which a loaded
+          // machine can reach; it writes nothing, so the agent retries.
+          for (let attempt = 1; ; attempt++) {
+            try {
+              addVariantFile({ root: ${JSON.stringify(root)} }, 'shared', file);
+              break;
+            } catch (error) {
+              if (attempt >= 5 || !/busy/.test(error.message)) throw error;
+            }
+          }
         }
       `,
               ],
