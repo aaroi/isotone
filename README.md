@@ -34,9 +34,8 @@ closes each note when it's done. The panel marks the note the agent is working
 on and updates without a reload, so you can keep adding notes while it works.
 
 Comparing design directions one prompt at a time is slow, and so is describing
-UI to an agent in words. Element pickers built into agents such as Claude Code
-only work inside the agent's own browser. Isotone works in the browser you
-already use, with any agent that can run a command.
+UI in words. Element pickers built into agents work only in the agent's own
+browser; Isotone works in yours, with any agent that can run a command.
 
 ## Get started
 
@@ -93,11 +92,10 @@ you clicked, and you can start typing right away. Once you're done selecting,
 
 ## Updates
 
-The dev server checks npm for a newer version at most once a day. When one is out,
-the panel says so, and **Ask agent to update** files a feedback note your agent
-picks up with the others. The check sends no project content and stays quiet
-offline. Nothing installs by itself. Set `checkForUpdates: false` to turn it off.
-[Update details](docs/updates.md).
+The dev server checks npm for a newer version at most once a day, sending no
+project content. When one is out, **Ask agent to update** in the panel files a
+note your agent picks up with the others; nothing installs by itself.
+`checkForUpdates: false` turns it off ([details](docs/updates.md)).
 
 ## For agents and maintainers
 

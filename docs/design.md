@@ -56,49 +56,40 @@ proportions. Panels stay anchored above it; opening one never moves the pill or
 rescales text in another.
 
 The defaults bar sits at the bottom of the variants panel while a pick differs
-from its default. It counts the changed picks and offers Make default, which
-files a request and keeps every alternative; the count briefly reads “Default
-request saved”. Each option and swatch marks its source default with a small
-dot; a range draws a tick on its track while the thumb is elsewhere.
+from its default: a count and Make default, which files a request and keeps
+every alternative (the count briefly reads “Default request saved”). A small dot
+marks each source default; a range draws a tick there while the thumb is
+elsewhere. A slider's visible thumb edge sits 6px below its header like other
+controls, and range inputs use block layout.
 
-Slider spacing allows for the thumb's inset in its hit area, so the visible edge
-sits 6px below the header like other controls. Range inputs use block layout, so
-no inline baseline space.
+Labels, dialog titles, and selected and unselected options share one font
+weight; material and text colour show selection. The host's `--font-sans` may
+supply the typeface; weights and sizes stay in the shared stylesheet.
 
-Selector labels and their dialog titles share one font rule, so opening a dialog
-never makes a label heavier. Selected and unselected options share a weight;
-material and text colour show selection. The host's `--font-sans` may supply the
-typeface; weights and sizes stay in the shared stylesheet.
+A section header ([naming](variants.md#sections)) is a quiet disclosure, never
+raised: chevron, name in 11px muted text, count in faint tabular figures, the
+axis label's hover face. Unsectioned selectors come first. A sectioned selector
+and its dialog title show the short name; controls, accessible names and notes
+keep the full one. Folding is immediate and keeps selections.
 
-A section header ([how sections are named](variants.md#sections)) is a quiet
-disclosure, never raised: a chevron, the name in 11px muted text and the count
-in faint tabular figures, with the axis label's hover face. Selectors without a
-section come first, without a header. A sectioned selector shows its short name,
-as does its dialog title; its controls, its dialog's accessible name and its
-notes keep the full name. Folding is immediate and keeps selections.
-
-Saved feedback is one row per note with inline references and no gap between
-rows. Note text sits 3px outside the composer's text inset; references take at
-most 42% of the row. The delete action floats over the top-right corner with a
-24px hit target and reserves no column; it shows on hover, focus or selection,
-and always on touch. References name the pinned element or selector, not a route
-and pin count. Defaults and feedback references share one compact tag shape,
-typeface, border and shadow; a single tag may take the full width, several get
-compact limits, and clipped text keeps its full accessible text.
-
-Composer tags, including editing and selector references, share a horizontal
-strip whose ends align with the field inset at rest and may reach the field
-edges while scrolling. No permanent side padding or dark fade in front of them.
+Saved feedback is one row per note, inline references, no gap between rows.
+Note text sits 3px outside the composer's text inset; references take at most
+42% of the row and name the pinned element or selector, not a route and pin
+count. Delete floats over the top-right corner (24px hit target, no column),
+shown on hover, focus or selection and always on touch. Defaults and feedback
+references share one compact tag; a lone tag may take the full width, several
+get compact limits. Composer tags share a horizontal strip whose ends align with
+the field inset at rest and may reach its edges while scrolling, with no side
+padding or dark fade in front.
 
 ### Selector dialogs
 
-A selector's action dialog lists feedback first, then the choices (no “Options”
-heading), then Reset to default, Keep default only, and removal last. Each choice
-row has feedback, Keep only this (make it the default and remove the selector)
-and removal icons; on the Default row, Keep only this files the same
-`keep-default` request as Keep default only. Dialogs have a 260px minimum height
-and reserve 360px in their panel when space allows, even with one action; short
-screens scroll within the viewport.
+A selector's action dialog lists feedback, the choices (no “Options” heading),
+Reset to default, Keep default only, and removal last. Each choice row has
+feedback, Keep only this (make it the default, remove the selector) and removal;
+on the Default row Keep only this files `keep-default`. Dialogs are at least
+260px tall and reserve 360px in their panel when space allows; short screens
+scroll within the viewport.
 
 An action about one choice keeps the dialog open; one that settles the selector,
 or moves to another surface, closes it:
@@ -127,18 +118,16 @@ on this option, Keep only this, then Remove this option (disabled for the
 default). It never changes the selection, and opens below the option when it
 cannot fit above, never covering what opened it.
 
-The custom swatch opens Isotone's own colour picker, never the browser's: in the
-dialog's popup material, below the swatch when it fits and above otherwise, with
-the panel growing to hold it. It has a saturation and brightness field, a hue
-track, a hex field and, where the browser offers one, an eyedropper. Changes
-apply live; Escape or an outside press closes it. A custom pick raises the
-swatch and shows its colour in the hue ring.
+The custom swatch opens Isotone's own colour picker, never the browser's, in the
+popup material below the swatch (above when it does not fit), growing the panel
+to hold it: saturation and brightness field, hue track, hex field and, where
+offered, an eyedropper. Changes apply live; Escape or an outside press closes
+it. A custom pick raises the swatch and shows in the hue ring.
 
-Removal actions file readable, editable requests for the agent. They never hide
-or change selectors, options or dependent controls, and selectors get no status
-or Undo row. A pending action is disabled in the menu. Deleting its note cancels
-it and leaves the preview unchanged; once an agent has changed the source,
-deleting the request does not undo that.
+Removal actions file editable requests for the agent and never hide or change
+selectors, options or dependent controls; there is no status or Undo row. A
+pending action is disabled in the menu. Deleting its note cancels it without
+changing the preview, and cannot undo a source change already made.
 
 ### Update notice
 
@@ -158,13 +147,11 @@ labels keep the full text.
 
 ## Resizing the dock
 
-Open panels resize by dragging their edges: invisible 8px handles that exist
-only while a panel is open. The resize cursor is the only pointer cue; nothing
-lights up, and a drag never looks as if it resizes both panels. Width is one
-handle on the dock's left edge. Height belongs to each panel: the top edge of
-the top-most open panel resizes it, and with both open the strip between them is
-the split (up grows feedback and shrinks variants). A focused handle shows a 2px
-`--iso-focus` line, inset clear of the rounded corners.
+Open panels resize by dragging invisible 8px edge handles, cued only by the
+resize cursor (nothing lights up). Width is the dock's left edge. Height is the
+top edge of the top-most open panel, and with both open the strip between them
+is the split (up grows feedback). A focused handle shows a 2px `--iso-focus`
+line inset clear of the corners.
 
 Sizes are max-heights and a max-width in `localStorage` (`<namespace>::dock`,
 `{ width, variants, notes }`), applied as `--iso-width`, `--iso-variants-height`
@@ -172,11 +159,10 @@ and `--iso-notes-height`. A height is clamped to the panel's content (so
 `aria-valuenow` and `aria-valuemax` are reachable) and to the room left in
 `--iso-view-height` after the other open panel or, with both open, the upper
 one's minimum: its header and composer plus a little body, never clipping.
-Arrow keys move a focused handle 16px (Shift 64px), ArrowUp always up; Home or a
-double-click restores the default. Releasing the pointer, losing capture or
-closing a panel mid-drag ends the drag, so dock motion never stays off. An
-earlier single `height` is ignored. On phones, where the panels take turns, the
-handles are hidden and stored sizes ignored.
+Arrows move a focused handle 16px (Shift 64px), ArrowUp always upward; Home or a double-click restores
+the default. Releasing, losing capture or closing a panel ends a drag, so dock
+motion never stays off. On phones the handles are hidden and stored sizes
+ignored.
 
 ## Hints and instructions
 
@@ -202,13 +188,12 @@ it and limits its height to what is visible, and the floating composer stays in
 that visible area. Pinch zoom is left alone.
 
 Copy follows the last pointer used: a finger reads “Tap”, sees no ⌘, Ctrl, Shift
-or ↵, and is told that Done (or the crosshair, beside a pinned element) pauses
-selecting so the page can be used, the touch counterpart of holding Shift; pins
-stay. A tapped element gets the floating composer under or over the whole
-element, centred on the tap, because a finger hides the point. Selection
-previews follow hovering pointers only. Coarse pointers get larger hit areas
-around the composer controls, reference removal, note delete and panel close,
-with the same faces; the two-tool pill keeps its 76 × 44px geometry.
+or ↵, and learns that Done (or the crosshair beside a pin) pauses selecting, the
+counterpart of holding Shift; pins stay. A tapped element gets the floating
+composer under or over the whole element, centred on the tap, since a finger
+hides the point. Selection previews follow hovering pointers only. Coarse
+pointers get larger hit areas (composer controls, reference removal, note
+delete, panel close) with the same faces; the pill stays 76 × 44px.
 
 ## Scrolling
 
@@ -297,18 +282,18 @@ Two limits are accepted rather than worked around:
 | --- | --- |
 | `src/react/appearance.ts` | Complete light/dark palettes and the shared material recipe |
 | `src/react/styles.ts` | Geometry, typography, shared control classes and state selectors |
-| `src/react/feedback-layout.ts`, `pill-active.ts` | The accepted inline-reference layout and Clean Highlight recipe, small enough to preview alternatives as overlays |
-| `src/react/UpdateNotice.tsx` | Quiet update line, and the dialog that hands the upgrade to the agent |
+| `src/react/feedback-layout.ts`, `pill-active.ts` | The inline-reference layout and Clean Highlight recipes |
+| `src/react/UpdateNotice.tsx` | Update line and dialog |
 | `src/react/icons.tsx` | Icon choices, optical size and stroke |
-| `src/react/NoteSummary.tsx` | Saved feedback/defaults summaries and their shared tag rendering |
-| `src/react/IsotonePanel.tsx` | The dock: composes the hooks below and the rules that join them |
+| `src/react/NoteSummary.tsx` | Saved note summaries and their tags |
+| `src/react/IsotonePanel.tsx` | The dock, composing the hooks below |
 | `src/react/useDockMode.ts`, `useDockFocus.ts`, `useDockEvents.ts` | Open surfaces; focus; hover, modality, shortcut, Escape and the host event fence |
 | `src/react/Rail.tsx` | The launcher pill and the rail's tool buttons |
-| `src/react/Composer.tsx`, `NotesPanel.tsx` | The composer and its text, and the feedback panel with its saved notes |
-| `src/react/picking.tsx`, `useFloatingComposer.ts` | Select mode, hover and pin outlines, and the composer floating beside a pin |
+| `src/react/Composer.tsx`, `NotesPanel.tsx` | The composer; the feedback panel |
+| `src/react/picking.tsx`, `useFloatingComposer.ts` | Select mode and outlines; the composer beside a pin |
 | `src/react/useNotes.ts`, `useNoteView.ts`, `useNoteActions.ts`, `useDraft.ts` | Loading and polling; what the list shows; saving, editing, deleting; each page's draft |
 | `src/react/VariantsView.tsx` | The selector list, sections, colour popover and the defaults bar |
-| `src/react/AxisControl.tsx`, `AxisActionsDialog.tsx` | One selector's controls, and its action dialog |
+| `src/react/AxisControl.tsx`, `AxisActionsDialog.tsx` | A selector's controls; its action dialog |
 | `src/react/theme.ts` | Theme resolution, observation and cleanup |
 | `src/react/motion.ts` | Motion timing and work limits |
 | `src/react/viewport.ts` | Small-screen, touch and on-screen keyboard rules |
