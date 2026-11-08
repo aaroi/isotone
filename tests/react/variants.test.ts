@@ -376,6 +376,25 @@ describe('VariantsView', () => {
     expect(container.querySelector('.isotone-segs')).toBeNull();
   });
 
+  it('moves a row at a time with Up and Down in a thumbnail grid', async () => {
+    const options = ['One', 'Two', 'Three'].map((label, i) => ({ id: String(i), label, image: `data:,${i}` }));
+    const source = createVariantsSource({ axes: [{ id: 'hero', label: 'Hero', options, defaultOption: '0' }] });
+    await render(createElement(VariantsView, { source }));
+    const press = (key: string) =>
+      act(async () => {
+        const checked = container.querySelector<HTMLElement>('.isotone-thumb[aria-checked=true]');
+        checked?.focus();
+        checked?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      });
+    const picks: (string | undefined)[] = [];
+    for (const key of ['ArrowDown', 'ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowRight', 'ArrowRight']) {
+      await press(key);
+      picks.push(source.getSelections().hero);
+    }
+    // Down goes to the next row and stops at the last; Right goes along and wraps.
+    expect(picks).toEqual(['2', '2', '0', '1', '2', '0']);
+  });
+
   it('renders colour swatches and the custom picker', async () => {
     const source = createVariantsSource({
       axes: [

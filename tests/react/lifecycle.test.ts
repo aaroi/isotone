@@ -160,3 +160,45 @@ it('accepts only the newest refresh when requests finish out of order', async ()
   await act(async () => first.resolve(response([note])));
   expect(container.querySelector('.isotone-note-hit')?.textContent).toContain('Newer note');
 });
+
+it('deletes a note whose save is still in flight by the id the server gives it', async () => {
+  const save = deferred<ReturnType<typeof response>>();
+  const deleted: string[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: unknown, init?: RequestInit) => {
+      if (init?.method === 'POST') return save.promise;
+      if (init?.method === 'DELETE') {
+        deleted.push(String(url));
+        return Promise.resolve(response({ ok: true }));
+      }
+      return Promise.resolve(response([]));
+    }),
+  );
+  await render();
+  await click('.isotone-fab');
+  const textarea = container.querySelector('textarea');
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(textarea, 'Sent in a hurry');
+    textarea?.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await click('[aria-label="Send note"]');
+  await click('[aria-label="Delete note: Sent in a hurry"]');
+  expect(container.querySelectorAll('.isotone-note')).toHaveLength(0);
+  expect(deleted).toEqual([]);
+  await act(async () => save.resolve(response({ id: 'saved-1' })));
+  expect(deleted).toEqual(['/notes?id=saved-1']);
+  expect(container.querySelectorAll('.isotone-note')).toHaveLength(0);
+});
+
+it('follows a new notes endpoint on a mounted panel', async () => {
+  const fetchMock = vi.fn(async (_url: unknown) => response([]));
+  vi.stubGlobal('fetch', fetchMock);
+  await act(async () => root.render(createElement(IterationPanel, { route: '/', theme: 'light', store: { endpoint: '/a' } })));
+  await act(async () => root.render(createElement(IterationPanel, { route: '/', theme: 'light', store: { endpoint: '/b' } })));
+  fetchMock.mockClear();
+  await click('.isotone-fab');
+  const paths = fetchMock.mock.calls.map(([url]) => String(url).split('?')[0]);
+  expect(paths).toContain('/b');
+  expect(paths).not.toContain('/a');
+});

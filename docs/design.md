@@ -301,6 +301,29 @@ Lists above `MAX_ANIMATED_ITEMS` (40) update immediately. Large panels also skip
 cloned exit snapshots. Hidden lists do not measure every render, and typing in
 the composer must not remeasure unchanged selectors or notes.
 
+Opening a panel paints within a frame however long its list is. Variants
+renders a first screenful of selectors on open and the rest in chunks that
+yield to input; the saved-note list lays out only the rows in view
+(`content-visibility`). Neither task may run past 50 ms on the 500-selector,
+500-note stress page; `tests/react/budget.test.ts` holds the render counts.
+
+## Host isolation
+
+The dock lives in a shadow root and resets inherited text styles at its root.
+Its own key, pointer, focus, input and wheel events stop at the shadow root in
+the bubble phase, so the host's shortcuts, outside-press handlers and scroll
+hijackers do not react to them. Escape belongs to the dock when focus is in it
+or nowhere; an Escape in a host field or dialog is the host's.
+
+Two limits are accepted rather than worked around:
+
+- Host listeners in the capture phase on `window` or `document` run before the
+  dock's. A focus trap built that way (as focus-trap libraries do) can still
+  pull focus out of the composer while the host's trap is active.
+- A host modal opened with `showModal()` or the popover API sits in the top
+  layer, above any z-index, and makes the rest of the page inert; the dock is
+  covered and unreachable until the host closes it.
+
 ## Where changes belong
 
 | File | Responsibility |
@@ -311,10 +334,12 @@ the composer must not remeasure unchanged selectors or notes.
 | `src/react/UpdateNotice.tsx` | Quiet update line, and the dialog that hands the upgrade to the agent |
 | `src/react/icons.tsx` | Icon choices, optical size and stroke |
 | `src/react/NoteSummary.tsx` | Saved feedback/defaults summaries and their shared tag rendering |
-| `src/react/IterationPanel.tsx` | The dock: which surfaces are open, the rail, focus on close, host event fence and shortcut |
+| `src/react/IterationPanel.tsx` | The dock: composes the hooks below and the rules that join them |
+| `src/react/useDockMode.ts`, `useDockFocus.ts`, `useDockEvents.ts` | Which surfaces are open; where focus goes; hover, modality, shortcut, Escape and the host event fence |
+| `src/react/Rail.tsx` | The launcher pill and the rail's tool buttons |
 | `src/react/Composer.tsx`, `NotesPanel.tsx` | The composer and its text, and the feedback panel with its saved notes |
 | `src/react/picking.tsx`, `useFloatingComposer.ts` | Select mode, hover and pin outlines, and the composer floating beside a pin |
-| `src/react/useNotes.ts`, `useDraft.ts` | Loading, polling and optimistic writes of notes; each page's unsent draft |
+| `src/react/useNotes.ts`, `useNoteView.ts`, `useNoteActions.ts`, `useDraft.ts` | Loading and polling notes; what the list shows; saving, editing and deleting; each page's unsent draft |
 | `src/react/VariantsView.tsx` | The selector list, sections, colour popover and the defaults bar |
 | `src/react/AxisControl.tsx`, `AxisActionsDialog.tsx` | One selector's controls, and its action dialog |
 | `src/react/theme.ts` | Theme resolution, observation and cleanup |
