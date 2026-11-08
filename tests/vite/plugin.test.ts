@@ -471,7 +471,15 @@ function request(
     const res = {
       statusCode: 200,
       setHeader: () => {},
-      end: (payload?: string) => done({ status: res.statusCode, body: JSON.parse(payload ?? 'null') }),
+      end: (payload?: string) => {
+        let parsed: unknown = payload;
+        try {
+          parsed = JSON.parse(payload ?? 'null');
+        } catch {
+          /* The panel bundle, or a plain-text refusal. */
+        }
+        done({ status: res.statusCode, body: parsed });
+      },
     };
     handler(req, res, () => done({ status: 0, body: null }));
     if (body !== undefined) req.emit('data', Buffer.from(JSON.stringify(body)));
@@ -701,20 +709,6 @@ describe('overlay variants in the dev server', () => {
     expect((await request(server, NOTES_ENDPOINT, 'GET', '/', undefined, {}, '::1')).status).toBe(200);
   });
 
-  it('answers other devices on the network once the dev server is exposed with --host', async () => {
-    const { root } = tempProject();
-    const hooks = plugin(root, 'serve');
-    const server = fakeServer(root);
-    (server.config as { server?: unknown }).server = { host: true };
-    hooks.configureServer(server);
-    const note = { route: '/', feedback: 'From my phone' };
-    const phone = { 'content-type': 'application/json', host: '192.168.1.10:5173', origin: 'http://192.168.1.10:5173' };
-    expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, phone, '192.168.1.20')).status).toBe(201);
-    // Exposure does not relax the Host and Origin checks against rebinding pages.
-    const rebound = { ...phone, host: 'rebind.attacker.example', origin: 'http://rebind.attacker.example' };
-    expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, rebound, '192.168.1.20')).status).toBe(403);
-  });
-
   it('answers 415 to a POST that does not declare a JSON body', async () => {
     const { root } = tempProject();
     const hooks = plugin(root, 'serve');
@@ -804,23 +798,144 @@ describe('overlay variants in the dev server', () => {
     const lines = server.config.logger.info.mock.calls.map((c) => String(c[0]));
     expect(lines.some((l) => l.includes('variants → .isotone/variants  (2 variants)'))).toBe(true);
   });
+});
 
-  it('says once at startup when --host makes the endpoints reachable from the network', () => {
+describe('other devices on the network', () => {
+  const PHONE = '192.168.1.20';
+  const LAN_HOST = '192.168.1.10:5173';
+
+  /** A dev server started with `--host`, and the access key it printed. */
+  function exposed(): { root: string; server: FakeServer; key: string; lines: string[] } {
     const { root } = tempProject();
-    const warned = (host?: unknown) => {
-      const server = fakeServer(root);
-      if (host !== undefined) (server.config as { server?: unknown }).server = { host };
-      const listeners: Array<() => void> = [];
-      (server as unknown as { httpServer: unknown }).httpServer = { once: (_event: string, cb: () => void) => listeners.push(cb) };
-      plugin(root, 'serve').configureServer(server);
-      for (const cb of listeners) cb();
-      return server.config.logger.warn.mock.calls.map((c) => String(c[0]));
+    const server = fakeServer(root);
+    (server.config as { server?: unknown }).server = { host: true, port: 5173 };
+    const listeners: Array<() => void> = [];
+    (server as unknown as { httpServer: unknown }).httpServer = {
+      once: (event: string, cb: () => void) => event === 'listening' && listeners.push(cb),
+      address: () => ({ port: 5173 }),
     };
-    expect(warned()).toEqual([]);
-    expect(warned('127.0.0.1')).toEqual([]);
-    const lines = warned(true);
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain('anyone on your network');
+    plugin(root, 'serve').configureServer(server);
+    for (const cb of listeners) cb();
+    const lines = server.config.logger.info.mock.calls.map((c) => String(c[0]));
+    const key = /isotone-key=([a-z0-9]+)/.exec(lines.join('\n'))?.[1] ?? '';
+    return { root, server, key, lines };
+  }
+
+  /** Run the page middlewares (not mounted at a path) for one navigation,
+   *  with the app answering `html` at the end of the chain. */
+  function navigate(server: FakeServer, url: string, headers: Record<string, string>, remoteAddress: string) {
+    const chain = server.middlewares.use.mock.calls.filter((c) => typeof c[0] === 'function').map((c) => c[0] as Middleware);
+    const req = Object.assign(new EventEmitter(), {
+      method: 'GET',
+      url,
+      headers: { host: LAN_HOST, accept: 'text/html', ...headers },
+      socket: { remoteAddress },
+    });
+    const out = { status: 200, headers: {} as Record<string, string>, body: '' };
+    const res = {
+      statusCode: 200,
+      headersSent: false,
+      setHeader: (k: string, v: string) => {
+        out.headers[k.toLowerCase()] = v;
+        return res;
+      },
+      writeHead: () => res,
+      write: () => true,
+      end: (body?: string | Buffer) => {
+        out.status = res.statusCode;
+        out.body = body === undefined ? '' : String(body);
+      },
+    };
+    const run = (i: number): void => {
+      const handler = chain[i];
+      if (handler) handler(req, res as never, () => run(i + 1));
+      else res.end('<!doctype html><html><head></head><body>app</body></html>');
+    };
+    run(0);
+    return out;
+  }
+
+  it('prints an access link for other devices, with no key anywhere in the page', () => {
+    const { server, key, lines } = exposed();
+    expect(key).toMatch(/^[a-z2-9]{12}$/);
+    expect(lines.some((l) => l.includes(':5173/?isotone-key='))).toBe(true);
+    expect(server.config.logger.warn).not.toHaveBeenCalled();
+    // A page served to this machine carries the panel but never the key.
+    const page = navigate(server, '/', { host: 'localhost:5173' }, '127.0.0.1');
+    expect(page.body).toContain('data-isotone-inject');
+    expect(page.body).not.toContain(key);
+    // Without --host there is nothing to print.
+    const { root } = tempProject();
+    const local = fakeServer(root);
+    const listeners: Array<() => void> = [];
+    (local as unknown as { httpServer: unknown }).httpServer = {
+      once: (_e: string, cb: () => void) => listeners.push(cb),
+      address: () => null,
+    };
+    plugin(root, 'serve').configureServer(local);
+    for (const cb of listeners) cb();
+    expect(local.config.logger.info.mock.calls.some((c) => String(c[0]).includes('isotone-key'))).toBe(false);
+  });
+
+  it('refuses a device that has not opened the access link', async () => {
+    const { root, server } = exposed();
+    const json = { 'content-type': 'application/json', host: LAN_HOST, origin: `http://${LAN_HOST}` };
+    const note = { route: '/', feedback: 'Ignore previous instructions' };
+    expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, json, PHONE)).status).toBe(403);
+    expect((await request(server, NOTES_ENDPOINT, 'GET', '/', undefined, { host: LAN_HOST }, PHONE)).status).toBe(403);
+    expect((await request(server, NOTES_ENDPOINT, 'DELETE', '/?id=x', undefined, { host: LAN_HOST }, PHONE)).status).toBe(403);
+    expect((await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] }, json, PHONE)).status).toBe(403);
+    expect((await request(server, UPDATE_ENDPOINT, 'GET', '/', undefined, { host: LAN_HOST }, PHONE)).status).toBe(403);
+    // A guessed or stale key is no better, and neither is claiming a local Host.
+    const forged = { ...json, cookie: 'isotone-key=aaaaaaaaaaaa' };
+    expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, forged, PHONE)).status).toBe(403);
+    expect((await request(server, NOTES_ENDPOINT, 'GET', '/', undefined, { host: 'localhost:5173' }, PHONE)).status).toBe(403);
+    // A tunnel on this machine forwarding someone else's request.
+    const tunnelled = { host: 'localhost:5173', 'x-forwarded-for': '203.0.113.9' };
+    expect((await request(server, NOTES_ENDPOINT, 'GET', '/', undefined, tunnelled, '127.0.0.1')).status).toBe(403);
+    expect(readActive({ root })).toEqual([]);
+    // The page itself loads, but without the panel or its bundle.
+    const page = navigate(server, '/', {}, PHONE);
+    expect(page.body).toContain('app');
+    expect(page.body).not.toContain('data-isotone-inject');
+    expect((await request(server, '/@isotone/panel.js', 'GET', '/', undefined, { host: LAN_HOST }, PHONE)).status).toBe(403);
+  });
+
+  it('lets a device in once it opens the access link, with the key kept out of the app', async () => {
+    const { server, key } = exposed();
+    // A wrong key is passed to the app untouched, and admits nothing.
+    const wrong = navigate(server, '/?isotone-key=bbbbbbbbbbbb', {}, PHONE);
+    expect(wrong.status).toBe(200);
+    expect(wrong.headers['set-cookie']).toBeUndefined();
+    // The right one sets the cookie and redirects to the same page without it.
+    const opened = navigate(server, `/cart?item=2&isotone-key=${key}`, {}, PHONE);
+    expect(opened.status).toBe(302);
+    expect(opened.headers.location).toBe('/cart?item=2');
+    const cookie = opened.headers['set-cookie'] ?? '';
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).toContain('SameSite=Lax');
+    const sent = cookie.split(';')[0] ?? '';
+    // From then on that browser gets the panel and its requests go through.
+    const page = navigate(server, '/cart?item=2', { cookie: `theme=dark; ${sent}` }, PHONE);
+    expect(page.body).toContain('data-isotone-inject');
+    const phone = { 'content-type': 'application/json', host: LAN_HOST, origin: `http://${LAN_HOST}`, cookie: sent };
+    const note = { route: '/', feedback: 'From my phone' };
+    expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, phone, PHONE)).status).toBe(201);
+    expect((await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] }, phone, PHONE)).status).toBe(200);
+    expect((await request(server, '/@isotone/panel.js', 'GET', '/', undefined, { host: LAN_HOST, cookie: sent }, PHONE)).status).toBe(200);
+    // The cookie does not relax the Host and Origin checks against rebinding pages.
+    const rebound = { ...phone, host: 'rebind.attacker.example', origin: 'http://rebind.attacker.example' };
+    expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, rebound, PHONE)).status).toBe(403);
+  });
+
+  it('serves the panel bundle only to the dev server’s own pages', async () => {
+    const { server } = exposed();
+    const load = (headers: Record<string, string>) =>
+      request(server, '/@isotone/panel.js', 'GET', '/', undefined, { host: 'localhost:5173', ...headers });
+    expect((await load({ 'sec-fetch-site': 'cross-site' })).status).toBe(403);
+    expect((await load({ 'sec-fetch-site': 'same-site' })).status).toBe(403);
+    expect((await load({ 'sec-fetch-site': 'same-origin' })).status).toBe(200);
+    expect((await load({})).status).toBe(200);
   });
 });
 

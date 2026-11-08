@@ -40,7 +40,7 @@ import { type CliIO, errOut, extractFlag, findNoteByPrefix, has, out, parseArgs,
 const SPEC: Record<string, [values: string[], booleans: string[], positionals: number]> = {
   list: [[], ['--all-routes', '--json'], 1],
   new: [['--label', '--route', '--note', '--description', '--file', '--group', '--group-label', '--section'], [], 1],
-  add: [[], ['--new'], Number.POSITIVE_INFINITY],
+  add: [[], ['--new', '--force'], Number.POSITIVE_INFINITY],
   rm: [[], [], 2],
   use: [[], [], 2],
   off: [[], [], 1],
@@ -341,10 +341,10 @@ function cmdAdd(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
   const create = has(args, '--new');
   const [id, ...files] = pos;
   if (!id || files.length === 0) {
-    errOut(io, 'Usage: isotone variant add <id> [--new] <file...>');
+    errOut(io, 'Usage: isotone variant add <id> [--new] [--force] <file...>');
     return 1;
   }
-  for (const file of files) addVariantFile(opts, id, file, { create });
+  for (const file of files) addVariantFile(opts, id, file, { create, force: has(args, '--force') });
   out(io, create ? `created ${files.length} new file(s) in "${id}"` : `added ${files.length} file(s) to "${id}"`);
   if (!create) for (const file of files) warnNoHotSwap(io, file);
   warnOverlaps(io, opts, id);

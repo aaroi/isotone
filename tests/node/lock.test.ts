@@ -152,3 +152,47 @@ it('answers 503 from the handlers themselves, for servers that call them directl
   writeLock(join(variantsDir(opts), '.mutation'), owner(process.pid), 0);
   expect(variantsResponse(opts, { method: 'POST', url: '/active', body: { active: [] } }).status).toBe(503);
 });
+
+it('does not use a lock it created while another process was taking over a stale one', () => {
+  // The takeover renames the judged lock aside; a lock that appeared in its
+  // place meanwhile would be renamed too, so its writer must not proceed.
+  const file = join(root, 'notes.json');
+  const steal = `${file}.lock.steal`;
+  writeFileSync(steal, '1');
+  let ran = false;
+  expect(() =>
+    withFileLock(
+      file,
+      () => {
+        ran = true;
+      },
+      { waitMs: 50 },
+    ),
+  ).toThrow(LockBusyError);
+  expect(ran).toBe(false);
+  expect(existsSync(`${file}.lock`)).toBe(false);
+  // A takeover that died is not waited on forever.
+  const at = (Date.now() - 10_000) / 1000;
+  utimesSync(steal, at, at);
+  expect(withFileLock(file, () => 'ran', { waitMs: 50 })).toBe('ran');
+  expect(existsSync(steal)).toBe(false);
+});
+
+it('sweeps temporary files a killed writer left beside the store, once they are old', () => {
+  const file = join(root, 'notes.json');
+  const old = [`${file}.0f8c.tmp`, `${file}.lock.9a1b.tmp`, `${file}.lock.77aa.stale`];
+  for (const path of old) {
+    writeFileSync(path, '');
+    const at = (Date.now() - 120_000) / 1000;
+    utimesSync(path, at, at);
+  }
+  const fresh = `${file}.c0de.tmp`;
+  writeFileSync(fresh, '');
+  const unrelated = join(root, 'other.json.1234.tmp');
+  writeFileSync(unrelated, '');
+  utimesSync(unrelated, (Date.now() - 120_000) / 1000, (Date.now() - 120_000) / 1000);
+  withFileLock(file, () => {});
+  expect(old.filter((path) => existsSync(path))).toEqual([]);
+  expect(existsSync(fresh)).toBe(true);
+  expect(existsSync(unrelated)).toBe(true);
+});

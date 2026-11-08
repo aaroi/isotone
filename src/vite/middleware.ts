@@ -6,29 +6,33 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { UpdateInfo } from '../core/update';
-import { checkRequest, readNodeJson, sendFailure, writeResponse } from '../node/http';
+import { checkRequest, isFromThisMachine, nodeRequestFacts, readNodeJson, sendFailure, writeResponse } from '../node/http';
 import { notesResponse } from '../node/notes/handler';
 import { updateResponse } from '../node/update/note';
 import { type VariantsStoreOptions, variantsResponse } from '../node/variants';
+import type { HostPolicy, NetworkAccess } from './access';
 
 type Middleware = (req: IncomingMessage, res: ServerResponse, next: () => void) => void;
 
-/** What the dev server was told to accept: the names in `server.allowedHosts`,
- *  and whether it was exposed to the network (`server.host`, `vite --host`). */
-export type AllowedHosts = () => { names: readonly string[]; network: boolean };
+/** How each request is judged: the dev server's host settings, read per
+ *  request since a restart can change them, and the network access key. */
+export interface Gate {
+  policy: () => HostPolicy;
+  access: NetworkAccess;
+}
 
 /** Whether the request may use the endpoints; answers 403 when not. Only this
- *  machine may, unless the dev server was deliberately exposed with `--host`:
- *  then other devices on that network (a phone reviewing the app) may too. */
-function guard(req: IncomingMessage, res: ServerResponse, allowedHosts: AllowedHosts): boolean {
+ *  machine may, and a device on the network let in with the access link. */
+function guard(req: IncomingMessage, res: ServerResponse, gate: Gate): boolean {
   try {
-    const policy = allowedHosts();
-    checkRequest({
-      origin: req.headers.origin,
-      host: req.headers.host,
-      remoteAddress: policy.network ? undefined : (req.socket?.remoteAddress ?? null),
-      allowedHosts: policy.names,
-    });
+    const facts = nodeRequestFacts(req);
+    if (!isFromThisMachine(facts) && !gate.access.admitted(req)) {
+      res.statusCode = 403;
+      res.setHeader('content-type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify({ error: 'isotone answers other devices only after they open the access link the dev server printed' }));
+      return false;
+    }
+    checkRequest({ ...facts, allowedHosts: gate.policy().names, network: true });
     return true;
   } catch (error) {
     sendFailure(res, error);
@@ -38,9 +42,9 @@ function guard(req: IncomingMessage, res: ServerResponse, allowedHosts: AllowedH
 
 /** GET reads the cached check; POST asks for the update note, which the
  *  server builds from that check rather than from the request. */
-export function updateEndpoint(file: () => string, updates: { getSnapshot(): UpdateInfo }, allowedHosts: AllowedHosts): Middleware {
+export function updateEndpoint(file: () => string, updates: { getSnapshot(): UpdateInfo }, gate: Gate): Middleware {
   return (req, res) => {
-    if (!guard(req, res, allowedHosts)) return;
+    if (!guard(req, res, gate)) return;
     const method = req.method ?? '';
     (method === 'POST' ? readNodeJson(req) : Promise.resolve(undefined))
       .then((body) => {
@@ -51,9 +55,9 @@ export function updateEndpoint(file: () => string, updates: { getSnapshot(): Upd
 }
 
 /** Notes endpoint → local file. Other methods fall through to the next handler. */
-export function notesEndpoint(file: () => string, allowedHosts: AllowedHosts): Middleware {
+export function notesEndpoint(file: () => string, gate: Gate): Middleware {
   return (req, res, next) => {
-    if (!guard(req, res, allowedHosts)) return;
+    if (!guard(req, res, gate)) return;
     const method = req.method ?? '';
     if (method !== 'GET' && method !== 'POST' && method !== 'DELETE') {
       next();
@@ -72,10 +76,10 @@ export function notesEndpoint(file: () => string, allowedHosts: AllowedHosts): M
 export function variantsEndpoint(
   vopts: () => VariantsStoreOptions,
   activate: (active: string[], changedFiles?: string[]) => Promise<void>,
-  allowedHosts: AllowedHosts,
+  gate: Gate,
 ): Middleware {
   return (req, res, next) => {
-    if (!guard(req, res, allowedHosts)) return;
+    if (!guard(req, res, gate)) return;
     const method = req.method ?? '';
     if (method !== 'GET' && method !== 'POST') {
       next();

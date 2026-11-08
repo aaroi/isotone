@@ -35,12 +35,14 @@ plugins: [/* existing plugins */, iteration()]
 ```
 
 Restart the dev server. Source-file variants and notes are available immediately.
-The endpoints answer only this machine, unless you start the dev server with
-`--host` (or set `server.host`): then other devices on your network, such as a
-phone you review on, can use the panel too, and so can anyone else on that
-network; the dev server says so when it starts. Pages served under a name other than
-an IP address, `localhost`, `*.localhost`, `*.test` or one in Vite's
-`server.allowedHosts` are refused.
+The endpoints answer only this machine. To review from a phone or another
+device, start the dev server with `--host` (or set `server.host`) and open the
+link isotone prints under Vite's banner (`…/?isotone-key=…`) on that device.
+The link lets that browser in with a cookie; a device without it gets the app
+but no panel, and every endpoint answers it 403. The key changes when the dev
+server process restarts. Pages served under a name other than an IP address,
+`localhost`, `*.localhost`, `*.test` or one in Vite's `server.allowedHosts`
+are refused, and so is a request a local tunnel forwards for another machine.
 The panel carries its own React runtime, so React, Vue, Svelte and vanilla Vite
 projects use the same setup. It does not enter the host's dependency optimizer or
 Fast Refresh graph. The plugin acts only on the dev server: `vite build` injects
@@ -144,12 +146,16 @@ When the page and this API listen on different ports, every request gets 403
 `origin not allowed`; pass `{ loopbackOrigins: true }` as the third argument to
 accept pages from any loopback port.
 
-The adapters see only the `Request`, not who sent it, so unlike the Vite plugin
-they cannot refuse other machines: they rely on the `Host` and `Origin` checks
-below, which accept any IP address. `next dev` listens on every network
-interface by default, which puts this route, and your notes, within reach of
-anyone on your network. Start it with `next dev -H 127.0.0.1` to keep it on this
-machine.
+The adapters accept only this machine's names (`localhost`, `127.0.0.1`,
+`[::1]`, `*.localhost`, `*.test`), so a browser on another device that opens
+the route at your LAN address gets 403. They see only the `Request`, though, so
+a non-browser client that sends a local `Host` gets through unless the runtime
+tells them who sent it: pass `{ remoteAddress }` where it can (Bun's
+`server.requestIP(request)?.address`, a Node socket's `remoteAddress`). `next
+dev` listens on every network interface and does not expose the peer, so start
+it with `next dev -H 127.0.0.1` to keep the route on this machine. To review
+from a phone on purpose, pass `{ allowNetwork: true }`: anyone on that network
+can then read and write your notes.
 
 A manual route does not touch Git configuration: add `.iteration-feedback.json`
 and `.iteration-feedback.blast.json` ([Blast](blast.md)'s session) to
@@ -187,8 +193,10 @@ reads nor limits the body nor checks the request, so prefer the Request adapter.
 Every endpoint (the Vite plugin's, `isotone serve`'s and the Request adapters')
 applies the same rules, which keep other websites away from your notes:
 
-- The `Host` header must be an IP address, `localhost`, `*.localhost` or `*.test`
-  (or, on Vite, a name in `server.allowedHosts`), and a browser's `Origin` must
+- The `Host` header must be `localhost`, `*.localhost`, `*.test`, a loopback
+  address, or (on Vite, `serve`, or an adapter given `remoteAddress` or
+  `allowNetwork`) any IP address; on Vite, a name in `server.allowedHosts` too.
+  A browser's `Origin` must
   match it (any loopback port with `loopbackOrigins`). Requests without an
   `Origin`, such as the CLI's, are accepted, so any local process can write a
   note: one more reason notes are context, not instructions.

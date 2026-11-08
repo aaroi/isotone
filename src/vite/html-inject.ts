@@ -2,14 +2,16 @@
  * Getting the panel into the page: the mount module, and the response hook
  * that adds it (and the live variant store) to every HTML navigation.
  */
-import type { ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { RouteGateOptions } from '../core/routes';
 import type { IterationShortcut, IterationTheme } from '../core/types';
+import { readBundle } from '../node/bundle';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
 import { UPDATE_ENDPOINT } from '../node/update/check';
+import type { NetworkAccess } from './access';
 
-export const BUNDLE_PATH = '/@isotone/panel.js';
+const BUNDLE_PATH = '/@isotone/panel.js';
 const INJECTED = new WeakSet<ServerResponse>();
 
 /** Load after the host has mounted, without importing its React or HMR runtime. */
@@ -43,7 +45,56 @@ export function mountModuleSource(
   `;
 }
 
-export function injectHtmlResponse(res: ServerResponse, code: string | null, head: () => string | null = () => null): void {
+type Use = {
+  (handler: (req: IncomingMessage, res: ServerResponse, next: () => void) => void): unknown;
+  (path: string, handler: (req: IncomingMessage, res: ServerResponse, next: () => void) => void): unknown;
+};
+
+/**
+ * Serve the panel to the dev server's pages: the access link's redirect,
+ * the bundle, and the scripts added to every HTML navigation. `mount` is
+ * the mount module, or null when the host mounts the panel itself; `head`
+ * is the live variant store, when there is one. A device on the network
+ * gets the store, which the app's modules need, but not the panel until it
+ * has been let in.
+ */
+export function servePanel(use: Use, access: NetworkAccess, mount: string | null, head: (() => string) | null): void {
+  use((req, res, next) => {
+    if (!access.admit(req, res)) next();
+  });
+  if (mount === null && head === null) return;
+  if (mount !== null) {
+    // A self-contained bundle keeps the panel out of the host's dependency
+    // graph and works in React, Vue, Svelte and plain Vite apps alike. Only
+    // the page itself loads it: another site's <script> is cross-site.
+    use(BUNDLE_PATH, (req, res) => {
+      const site = req.headers['sec-fetch-site'];
+      const allowed = access.allows(req) && (site === undefined || site === 'same-origin' || site === 'none');
+      res.statusCode = allowed ? 200 : 403;
+      res.setHeader('content-type', allowed ? 'text/javascript; charset=utf-8' : 'text/plain; charset=utf-8');
+      res.setHeader('cache-control', 'no-store');
+      res.end(allowed ? readBundle() : 'isotone loads only into this dev server’s own pages');
+    });
+  }
+  use((req, res, next) => {
+    // Only navigations: buffering every response to look for </body>
+    // would tax each of the hundreds of module requests a dev page makes.
+    if (!(req.headers.accept ?? '').includes('text/html')) {
+      next();
+      return;
+    }
+    // Vite's ETag is computed from the document before the mount script
+    // is appended, so a conditional request validates against the wrong
+    // bytes: a browser holding a copy from before this plugin was added
+    // gets 304 and never sees the panel. Ask for the full document.
+    delete req.headers['if-none-match'];
+    delete req.headers['if-modified-since'];
+    injectHtmlResponse(res, access.allows(req) ? mount : null, head ?? undefined);
+    next();
+  });
+}
+
+function injectHtmlResponse(res: ServerResponse, code: string | null, head: () => string | null = () => null): void {
   if (INJECTED.has(res)) return;
   INJECTED.add(res);
 

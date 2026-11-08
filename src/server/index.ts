@@ -45,6 +45,31 @@ export interface ServeRequestOptions {
    * for a deliberate, access-controlled review deployment.
    */
   allowProduction?: boolean;
+  /**
+   * The client's address, where the runtime exposes it (Bun's
+   * `server.requestIP(request)`, a Node socket's `remoteAddress`). With it,
+   * other machines are refused whatever `Host` they send.
+   */
+  remoteAddress?: string;
+  /**
+   * Let other devices on the network in, such as a phone you review on. Off
+   * by default: only this machine's names and addresses are accepted. Anyone
+   * on that network can then read and write your notes.
+   */
+  allowNetwork?: boolean;
+}
+
+/** The gate for a `Request`, with what the adapter was told about its sender. */
+function checkWebRequest(request: Request, url: URL, options: ServeRequestOptions): void {
+  checkRequest({
+    origin: request.headers.get('origin'),
+    host: url.host,
+    forwardedFor: request.headers.get('x-forwarded-for'),
+    forwarded: request.headers.get('forwarded'),
+    ...(options.remoteAddress !== undefined ? { remoteAddress: options.remoteAddress } : {}),
+    loopbackOrigins: options.loopbackOrigins,
+    network: options.allowNetwork,
+  });
 }
 
 /** The answer a production runtime gets unless the host opted in. */
@@ -77,7 +102,7 @@ export async function serveNotesRequest(file: string, request: Request, options:
   if (refused) return refused;
   try {
     const url = new URL(request.url);
-    checkRequest({ origin: request.headers.get('origin'), host: url.host, loopbackOrigins: options.loopbackOrigins });
+    checkWebRequest(request, url, options);
     const body = request.method === 'POST' ? await readWebJson(request) : undefined;
     return notesResponse(file, {
       method: request.method,
@@ -104,7 +129,7 @@ export async function serveVariantsRequest(
   if (refused) return refused;
   try {
     const url = new URL(request.url);
-    checkRequest({ origin: request.headers.get('origin'), host: url.host, loopbackOrigins: options.loopbackOrigins });
+    checkWebRequest(request, url, options);
     const body = request.method === 'POST' ? await readWebJson(request) : undefined;
     const mounted = url.pathname.startsWith(VARIANTS_ENDPOINT) ? url.pathname.slice(VARIANTS_ENDPOINT.length) : url.pathname;
     return variantsResponse(opts, {

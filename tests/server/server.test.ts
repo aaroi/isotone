@@ -349,10 +349,45 @@ describe('Request adapter boundaries', () => {
     expect((await serveNotesRequest(file, new Request('http://rebind.attacker.example:3000/api/notes'))).status).toBe(403);
     expect((await post('http://localhost:3000/api/notes', { 'content-type': 'text/plain' })).status).toBe(415);
     expect(readNotes(file)).toEqual([]);
-    // Local names, IP literals and reserved test domains keep working.
-    for (const url of ['http://127.0.0.1:3000/x', 'http://app.localhost:3000/x', 'http://shop.test/x', 'http://192.168.1.20:3000/x']) {
+    // Local names, loopback addresses and reserved test domains keep working.
+    for (const url of ['http://127.0.0.1:3000/x', 'http://[::1]:3000/x', 'http://app.localhost:3000/x', 'http://shop.test/x']) {
       expect((await post(url, { 'content-type': 'application/json' })).status).toBe(201);
     }
+  });
+
+  it('keeps other devices on the network out unless the host opts in', async () => {
+    // `next dev` listens on every interface, so a phone or laptop on the same
+    // Wi-Fi reaches the route at the machine's LAN address.
+    const file = tempFile();
+    const json = { 'content-type': 'application/json' };
+    const note = (url: string, headers: Record<string, string> = json) =>
+      new Request(url, { method: 'POST', headers, body: '{"route":"/","feedback":"From the LAN"}' });
+    const lan = 'http://192.168.1.20:3000/api/notes';
+    expect((await serveNotesRequest(file, note(lan))).status).toBe(403);
+    expect((await serveNotesRequest(file, new Request(lan))).status).toBe(403);
+    // A tunnel or proxy on this machine says whom it forwards for.
+    const tunnelled = note('http://localhost:3000/api/notes', { ...json, 'x-forwarded-for': '203.0.113.9' });
+    expect((await serveNotesRequest(file, tunnelled)).status).toBe(403);
+    const rfc7239 = note('http://localhost:3000/api/notes', { ...json, forwarded: 'for="[2001:db8::1]";proto=https' });
+    expect((await serveNotesRequest(file, rfc7239)).status).toBe(403);
+    // Where the runtime knows the peer, a spoofed local Host does not help.
+    const spoofed = note('http://localhost:3000/api/notes');
+    expect((await serveNotesRequest(file, spoofed, { remoteAddress: '192.168.1.30' })).status).toBe(403);
+    expect(readNotes(file)).toEqual([]);
+
+    // This machine: directly, through a local proxy, or by its peer address.
+    const local = note('http://localhost:3000/api/notes', { ...json, 'x-forwarded-for': '127.0.0.1, ::1' });
+    expect((await serveNotesRequest(file, local)).status).toBe(201);
+    expect((await serveNotesRequest(file, note('http://192.168.1.20:3000/api/notes'), { remoteAddress: '::ffff:127.0.0.1' })).status).toBe(
+      201,
+    );
+    // A deliberate opt-in lets the phone in.
+    const phone = note(lan, { ...json, origin: 'http://192.168.1.20:3000' });
+    expect((await serveNotesRequest(file, phone, { allowNetwork: true, remoteAddress: '192.168.1.30' })).status).toBe(201);
+    // Opting in does not let other websites in.
+    const foreign = note(lan, { ...json, origin: 'https://outside.example' });
+    expect((await serveNotesRequest(file, foreign, { allowNetwork: true })).status).toBe(403);
+    expect(readNotes(file)).toHaveLength(3);
   });
 
   it('returns a JSON failure when the store cannot be read', async () => {

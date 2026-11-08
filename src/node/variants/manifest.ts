@@ -13,12 +13,15 @@ import { variantDir, isValidVariantId, isSafeManifestKey, repoRelativeKey } from
 /** Env files, private keys and credentials: a copy would sit in a directory
  *  that is committed by default. `.env.example` and the like are fine. */
 function looksSecret(key: string): boolean {
-  const name = key.slice(key.lastIndexOf('/') + 1).toLowerCase();
+  const segments = key.toLowerCase().split('/');
+  const name = segments[segments.length - 1] ?? '';
+  if (segments.includes('.aws') || segments.includes('.ssh')) return true;
   if (/^\.env(\..+)?$/.test(name)) return !/\.(example|sample|template)$/.test(name);
   return (
-    /\.(pem|key|p12|pfx)$/.test(name) ||
+    /\.(pem|key|p12|pfx|keystore|jks)$/.test(name) ||
     /^id_(rsa|dsa|ecdsa|ed25519)/.test(name) ||
-    ['.npmrc', '.netrc', '.envrc', '.dev.vars', 'credentials.json'].includes(name)
+    /credentials.*\.json$/.test(name) ||
+    ['.npmrc', '.netrc', '.envrc', '.dev.vars'].includes(name)
   );
 }
 
@@ -219,12 +222,13 @@ export function setVariantSection(opts: VariantsStoreOptions, id: string, sectio
  * Copy a real file into the variant. With `create`, the file is one the
  * project does not have yet: the variant gets an empty file at that path,
  * and the plugin resolves imports of it while the variant is loaded.
+ * A git-ignored or secret-looking file is refused unless `force` is set.
  */
 export function addVariantFile(
   opts: VariantsStoreOptions,
   id: string,
   file: string,
-  { create = false }: { create?: boolean } = {},
+  { create = false, force = false }: { create?: boolean; force?: boolean } = {},
 ): OverlayVariant {
   return mutateVariants(opts, () => {
     const manifest = readVariant(opts, id);
@@ -245,8 +249,14 @@ export function addVariantFile(
       return manifest;
     }
     if (!existsSync(sourceAbs)) throw new Error(`"${file}" does not exist. Use --new for a file the variant adds.`);
-    if (looksSecret(key)) throw new Error(`"${file}" looks like a secret; variants are meant to be committed, so it is not copied.`);
-    if (isGitIgnored(sourceAbs)) throw new Error(`Git ignores "${file}"; variants are meant to be committed, so it is not copied.`);
+    const refusal = force
+      ? null
+      : looksSecret(key)
+        ? `"${file}" looks like a secret`
+        : isGitIgnored(sourceAbs)
+          ? `Git ignores "${file}"`
+          : null;
+    if (refusal) throw new Error(`${refusal}; variants are meant to be committed, so it is not copied. Pass --force to copy it anyway.`);
     mkdirSync(dirname(destAbs), { recursive: true });
     writeFileSync(destAbs, readFileSync(sourceAbs));
     manifest.files = { ...manifest.files, [key]: { base: blobOf(sourceAbs) } };

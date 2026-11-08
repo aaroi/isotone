@@ -246,6 +246,25 @@ describe('bounded local requests', () => {
     expect(large.status).toBe(413);
     expect(await (await fetch(`${served.url}${NOTES_ENDPOINT}`)).json()).toEqual(before);
   });
+  it('refuses a tunnel that forwards requests from another machine', async () => {
+    const forwarded = await fetch(`${served.url}${NOTES_ENDPOINT}`, { headers: { 'x-forwarded-for': '203.0.113.9' } });
+    expect(forwarded.status).toBe(403);
+    const local = await fetch(`${served.url}${NOTES_ENDPOINT}`, { headers: { 'x-forwarded-for': '127.0.0.1' } });
+    expect(local.status).toBe(200);
+  });
+
+  it('hands the panel bundle only to pages on this machine', async () => {
+    const load = (headers: Record<string, string>) => fetch(served.bundleUrl, { headers });
+    // Another website's <script src> sends no Origin; the browser says cross-site.
+    expect((await load({ 'sec-fetch-site': 'cross-site' })).status).toBe(403);
+    expect((await load({ 'sec-fetch-site': 'cross-site', referer: 'https://outside.example/page' })).status).toBe(403);
+    // A dev page on another port, the bookmarklet on a local page, the CLI.
+    expect((await load({ 'sec-fetch-site': 'cross-site', referer: 'http://localhost:3000/' })).status).toBe(200);
+    expect((await load({ 'sec-fetch-site': 'cross-site', origin: 'http://127.0.0.1:5173' })).status).toBe(200);
+    expect((await load({ 'sec-fetch-site': 'same-site' })).status).toBe(200);
+    expect((await load({})).status).toBe(200);
+  });
+
   it('refuses to expose the local file server on every interface', () => {
     expect(() => serveIteration({ file, host: '0.0.0.0' })).toThrow('binds only');
   });
