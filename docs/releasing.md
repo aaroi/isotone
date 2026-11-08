@@ -69,28 +69,19 @@ No commit can make these account-side settings. Do them once, in order.
 
 1. **Open a pull request and get it green** so the check names below exist
    (they appear in the ruleset picker only after one run).
-2. **Ruleset on `main`** (Settings → Rules → Rulesets → New branch ruleset):
-   name `main`, Enforcement Active, target the default branch. Turn on
-   Restrict deletions, Block force pushes, Require a pull request before
-   merging (0 approvals is fine for a solo maintainer), Require branches to be
-   up to date, and Require status checks to pass with exactly:
-   - `check (ubuntu-latest, Node 22)`
-   - `check (ubuntu-latest, Node 24)`
-   - `check (ubuntu-latest, Node 26)`
-   - `packed smoke (oldest and newest Vite and React)`
-   - `release guard`
-   - `workflow lint`
-
-   Add `check (windows-latest, Node 24)` once it has passed and its
-   `continue-on-error` line is removed from `ci.yml`. Bypass list: Repository
-   admin and the github-actions app. The github-actions bypass is required:
-   the `prepare` job pushes the version commit straight to `main` with
-   `git push origin HEAD:main`, which "Require a pull request before merging"
-   otherwise rejects, so every release would stop there (safely, before
-   anything publishes).
-3. **Tag ruleset** named `release tags`, targeting `v*`: Restrict deletions,
-   Restrict updates, Block force pushes. Bypass: github-actions (the `release`
-   job creates the tag) and Repository admin.
+2. **Ruleset on `main`** (Settings → Rules → Rulesets): `main`, Active, the
+   default branch, with Restrict deletions and Block force pushes; bypass:
+   Repository admin. This is applied. Requiring pull requests or status checks
+   would also stop the `prepare` job's version commit (`git push origin
+   HEAD:main`), and a personal repository cannot list the github-actions app as
+   a bypass actor, so those wait until the release stops committing to `main`
+   or pushes with a deploy key that the ruleset can bypass. The checks to require
+   then are every `check (…)` leg (Ubuntu Node 22, 24 and 26, Windows Node 24),
+   `packed smoke (oldest and newest Vite and React)`, `release guard` and
+   `workflow lint`, with branches required to be up to date.
+3. **Tag ruleset** `release tags` on `v*`: Restrict deletions, Restrict updates,
+   Block force pushes; bypass: Repository admin. This is applied; creating a tag
+   is not restricted, so the `release` job still tags each version.
 4. **`npm` environment** (Settings → Environments → New environment → `npm`):
    deployment branches and tags → Selected branches → `main`; optionally add
    yourself as a required reviewer to approve each publish. In the same change,

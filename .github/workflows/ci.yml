@@ -19,10 +19,6 @@ jobs:
     name: check (${{ matrix.os }}, Node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
-    # The Windows leg has not run yet (POSIX-only tests skip there): its result
-    # is visible but does not fail the workflow until it has passed once. Then
-    # delete this line and require it (docs/releasing.md).
-    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
