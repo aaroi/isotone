@@ -81,7 +81,7 @@ describe('theme boundary', () => {
 describe('host isolation', () => {
   it('does not inherit direction or text styling from an RTL, styled host page', () => {
     const style = document.createElement('style');
-    style.textContent = `body { direction: rtl; text-transform: uppercase; word-spacing: 4px; text-indent: 2em; }\n${PANEL_CSS}`;
+    style.textContent = `body { direction: rtl; text-transform: uppercase; word-spacing: 4px; text-indent: 2em; cursor: wait; }\n${PANEL_CSS}`;
     document.head.append(style);
     const root = document.createElement('div');
     root.className = 'isotone-root';
@@ -92,6 +92,7 @@ describe('host isolation', () => {
       expect(computed.textTransform).toBe('none');
       expect(computed.wordSpacing).toBe('normal');
       expect(computed.textIndent).toBe('0px');
+      expect(computed.cursor).toBe('auto');
     } finally {
       root.remove();
       style.remove();

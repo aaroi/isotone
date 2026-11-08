@@ -342,7 +342,7 @@ export function VariantsPanel({
     <section
       id={id}
       role="dialog"
-      aria-label="Iteration variants"
+      aria-label="Variants"
       className="isotone-panel isotone-variants-panel"
       data-open={view.active}
       aria-hidden={!view.active}

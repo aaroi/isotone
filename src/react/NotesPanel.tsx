@@ -31,7 +31,7 @@ export function NotesPanel({ id, open, route, view, editingId, resizeHandle, com
     <section
       id={id}
       role="dialog"
-      aria-label="Iteration feedback"
+      aria-label="Feedback"
       className="isotone-panel isotone-notes-panel"
       data-open={open}
       aria-hidden={!open}

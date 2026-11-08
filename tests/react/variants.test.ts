@@ -478,7 +478,7 @@ describe('IterationPanel with variants', () => {
     expect(tabs()).toHaveLength(0);
     expect(container.querySelector('.isotone-vars')).not.toBeNull();
     expect(container.querySelector('.isotone-textarea')).toBeNull();
-    expect(container.querySelector('[role=dialog]')?.getAttribute('aria-label')).toBe('Iteration variants');
+    expect(container.querySelector('[role=dialog]')?.getAttribute('aria-label')).toBe('Variants');
   });
 
   it('opens both surfaces independently and keeps the draft while switching variants', async () => {

@@ -48,6 +48,7 @@ ${APPEARANCE_CSS}
   /* Inherited text properties cross the shadow boundary: an RTL or styled host must not mirror or restyle the panel. */
   direction: ltr; writing-mode: horizontal-tb; word-spacing: normal; text-indent: 0; text-transform: none;
   text-shadow: none; white-space: normal; font-feature-settings: normal; font-variation-settings: normal; -webkit-text-fill-color: currentColor;
+  cursor: auto;
 }
 .isotone-root :where(button, input, textarea):focus-visible { outline: 2px solid var(--iso-focus); outline-offset: 3px; }
 .isotone-root button { transition: transform var(--iso-fast) var(--iso-ease-out), opacity var(--iso-fast) var(--iso-ease-out); }
