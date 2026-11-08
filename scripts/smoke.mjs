@@ -9,14 +9,15 @@
 // at least a week ago, as Dependabot's cooldown does, so a just-published
 // compromised release never runs here. It checks what a user of the package
 // relies on:
-//   - a production `vite build` contains no panel and no endpoint;
+//   - a production `vite build` contains no panel and no endpoint, though the
+//     app imports `isotone/react` behind `import.meta.env.DEV` as documented;
 //   - the dev server injects the panel into an HTML navigation and serves its
 //     bundle;
 //   - a same-origin notes POST is stored and the CLI lists it, while a POST
 //     from a foreign Origin is refused;
 //   - `isotone/react` mounts the panel with the app's own React (in jsdom).
-// Run `pnpm build` first when packing this checkout. Without pairs it runs the
-// oldest and newest supported pairs.
+// Run `pnpm build` first when packing this checkout. Without pairs it runs
+// every supported Vite major, with the oldest and newest React on each end.
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -29,7 +30,7 @@ import { npm } from './npm.mjs';
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const args = process.argv.slice(2);
 const given = args[0]?.endsWith('.tgz') ? resolve(/** @type {string} */ (args.shift())) : undefined;
-const pairs = (args.length ? args : ['5:18', '8:19']).map((pair) => {
+const pairs = (args.length ? args : ['5:18', '6:18', '7:19', '8:19']).map((pair) => {
   const match = /^(\d+):(\d+)$/.exec(pair);
   if (!match) throw new Error(`Expected <vite major>:<react major>, received ${JSON.stringify(pair)}`);
   return { vite: match[1] ?? '', react: match[2] ?? '' };
@@ -145,7 +146,17 @@ try {
       join(app, 'index.html'),
       '<!doctype html>\n<html><head><title>Smoke</title></head><body><main id="app">Smoke app</main><script type="module" src="/main.js"></script></body></html>\n',
     );
-    writeFileSync(join(app, 'main.js'), "document.getElementById('app').dataset.ready = 'true';\n");
+    writeFileSync(
+      join(app, 'main.js'),
+      [
+        "document.getElementById('app').dataset.ready = 'true';",
+        // The documented React mount: a dynamic import behind the development check.
+        'if (import.meta.env.DEV) {',
+        "  import('isotone/react').then(({ mountIsotone }) => mountIsotone({}));",
+        '}',
+        '',
+      ].join('\n'),
+    );
     writeFileSync(
       join(app, 'vite.config.mjs'),
       "import { defineConfig } from 'vite';\nimport { isotone } from 'isotone/vite';\n\nexport default defineConfig({ plugins: [isotone()] });\n",
