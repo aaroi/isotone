@@ -1,5 +1,6 @@
 import {
   type HTMLAttributes,
+  type KeyboardEvent,
   memo,
   useCallback,
   type ReactNode,
@@ -8,6 +9,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
 } from 'react';
 import { normalizeRoute } from '../../core/routes';
 import type { IsotoneElement, IsotoneNote } from '../../core/types';
@@ -18,6 +20,7 @@ import type { Anchor } from '../dock/picking';
 import { showOverflowTitle } from '../tooltips';
 import { useLayoutMotion } from '../useLayoutMotion';
 import { useRenderLimit } from '../useRenderLimit';
+import { isUnsent } from './useNoteActions';
 import type { NoteView } from './useNoteView';
 
 interface NotesPanelProps {
@@ -68,7 +71,16 @@ export function NotesPanel({ id, open, route, view, editingId, resizeHandle, com
           ))}
         </fieldset>
       )}
-      <NoteList open={open} notes={notes} route={route} editingId={editingId} working={working} onEdit={onEdit} onRemove={onRemove} />
+      <NoteList
+        open={open}
+        notes={notes}
+        selectedPages={selectedPages}
+        route={route}
+        editingId={editingId}
+        working={working}
+        onEdit={onEdit}
+        onRemove={onRemove}
+      />
       <div className="isotone-compose">{compose}</div>
     </section>
   );
@@ -81,12 +93,13 @@ export function NotesPanel({ id, open, route, view, editingId, resizeHandle, com
 const NoteList = memo(function NoteList({
   open,
   notes,
+  selectedPages,
   route,
   editingId,
   working,
   onEdit,
   onRemove,
-}: Pick<NotesPanelProps, 'open' | 'route' | 'editingId' | 'onEdit' | 'onRemove'> & Pick<NoteView, 'notes' | 'working'>) {
+}: Pick<NotesPanelProps, 'open' | 'route' | 'editingId' | 'onEdit' | 'onRemove'> & Pick<NoteView, 'notes' | 'selectedPages' | 'working'>) {
   const listRef = useRef<HTMLUListElement>(null);
   // A closed panel renders no notes; the rows stay one more render after closing, for the dock's exit snapshot.
   // Opening renders the newest notes first and older ones above them in chunks, as the Variants list does.
@@ -94,20 +107,28 @@ const NoteList = memo(function NoteList({
   const count = useRenderLimit(open || lingering, notes.length, MAX_ANIMATED_ITEMS);
   const shown = count < notes.length ? notes.slice(notes.length - count) : notes;
   // How far the reader is from the newest note; 0 keeps the list on it. Older notes arriving above, the panel
-  // resizing, or the list reappearing after select mode on a phone all keep that distance.
+  // resizing, the list reappearing after select mode on a phone, a delete or an agent's progress all keep that
+  // distance. Only opening, another page filter, or a note this reviewer just sent goes back to the newest.
   const fromEnd = useRef(0);
   const keepPlace = useCallback(() => {
     const list = listRef.current;
     if (list) list.scrollTop = list.scrollHeight - list.clientHeight - fromEnd.current;
   }, []);
+  // A fresh set comes with every change to the notes; the pages it names are what matter.
+  const filter = [...selectedPages].join('\n');
+  const newest = notes.at(-1);
+  const sent = newest && isUnsent(newest) ? newest.id : undefined;
   useLayoutMotion(listRef, notes, open);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new note or opening the panel goes to the newest.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: these are the changes that go back to the newest note.
   useEffect(() => {
     fromEnd.current = 0;
     keepPlace();
-  }, [notes, open, keepPlace]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: each chunk adds rows above the reader.
-  useLayoutEffect(keepPlace, [count, keepPlace]);
+  }, [open, filter, sent, keepPlace]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each chunk adds rows above the reader, and any other change keeps their place.
+  useLayoutEffect(keepPlace, [count, notes, keepPlace]);
+  // One Tab stop for the whole list: the row last focused, else the newest.
+  const [focused, setFocused] = useState<string>();
+  const stop = focused && shown.some((note) => note.id === focused) ? focused : shown.at(-1)?.id;
   useEffect(() => {
     const list = listRef.current;
     if (!list || typeof ResizeObserver === 'undefined') return;
@@ -120,6 +141,8 @@ const NoteList = memo(function NoteList({
       ref={listRef}
       className="isotone-list"
       aria-label="Notes"
+      onFocus={(e) => setFocused((e.target as HTMLElement).closest('li')?.dataset.motionKey)}
+      onKeyDown={moveNoteFocus}
       onScroll={(e) => {
         const list = e.currentTarget;
         // A hidden list reads as all zeros; it keeps the place it had.
@@ -133,6 +156,7 @@ const NoteList = memo(function NoteList({
           page={normalizeRoute(note.route) !== route ? note.route : undefined}
           editing={editingId === note.id}
           working={working.has(note.id)}
+          tabbable={note.id === stop}
           onEdit={onEdit}
           onRemove={onRemove}
         />
@@ -140,6 +164,22 @@ const NoteList = memo(function NoteList({
     </ul>
   );
 });
+
+const NOTE_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+
+/** Up, Down, Home and End move between notes; Left and Right between a note and its delete button. */
+function moveNoteFocus(event: KeyboardEvent<HTMLUListElement>) {
+  const target = event.target as HTMLElement;
+  const row = target.closest('li');
+  if (!row || !NOTE_KEYS.includes(event.key)) return;
+  const rows = Array.from(event.currentTarget.children);
+  const at = rows.indexOf(row);
+  const next = { ArrowUp: rows[at - 1], ArrowDown: rows[at + 1], Home: rows[0], End: rows.at(-1) }[event.key] ?? row;
+  const removing = event.key === 'ArrowRight' || (event.key !== 'ArrowLeft' && target.classList.contains('isotone-x'));
+  const button = next.querySelector<HTMLElement>(removing ? '.isotone-x' : 'button');
+  event.preventDefault();
+  button?.focus();
+}
 
 const WorkingDot = () => (
   <span
@@ -157,6 +197,7 @@ const NoteRow = memo(function NoteRow({
   page,
   editing,
   working,
+  tabbable,
   onEdit,
   onRemove,
 }: {
@@ -164,6 +205,8 @@ const NoteRow = memo(function NoteRow({
   page: string | undefined;
   editing: boolean;
   working: boolean;
+  /** The list's one Tab stop; arrow keys reach the other rows. */
+  tabbable: boolean;
   onEdit: (note: IsotoneNote) => void;
   onRemove: (note: IsotoneNote) => void;
 }) {
@@ -178,7 +221,13 @@ const NoteRow = memo(function NoteRow({
           <NoteSummary note={note} />
         </div>
       ) : (
-        <button type="button" className="isotone-note-hit" aria-current={editing ? true : undefined} onClick={() => onEdit(note)}>
+        <button
+          type="button"
+          className="isotone-note-hit"
+          tabIndex={tabbable ? 0 : -1}
+          aria-current={editing ? true : undefined}
+          onClick={() => onEdit(note)}
+        >
           {working && <WorkingDot />}
           <NoteSummary note={note} page={page} />
         </button>
@@ -186,9 +235,17 @@ const NoteRow = memo(function NoteRow({
       <button
         type="button"
         className="isotone-x isotone-icon"
+        // An update note has no note button, so its delete button is the row's stop.
+        tabIndex={tabbable && note.update ? 0 : -1}
         aria-label={remove.name}
         title={remove.action}
-        onClick={() => onRemove(note)}
+        onClick={(event) => {
+          // From the keyboard, focus moves on to a neighbouring note rather than out of the list.
+          const row = event.currentTarget.closest('li');
+          if (event.detail === 0)
+            (row?.nextElementSibling ?? row?.previousElementSibling)?.querySelector<HTMLElement>('.isotone-x')?.focus();
+          onRemove(note);
+        }}
       >
         <Icon name="close" size={12} />
       </button>

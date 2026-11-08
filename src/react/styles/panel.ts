@@ -265,7 +265,7 @@ ${APPEARANCE_CSS}
    Cancelling margin/padding keeps the first row in place at scroll start; the
    expanded height preserves the content allowance and composer position.
    The side gutters contain the corner action and keyboard focus outlines. */
-.isotone-list { display: flex; flex-direction: column; gap: 0; flex: 0 1 auto; max-height: calc(var(--iso-list-height) + 2 * var(--iso-space) - 8px); min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: calc(0px - var(--iso-space)) calc(-8px - var(--iso-note-outset)) calc(-2px - var(--iso-space)); padding: var(--iso-space) 8px; scroll-padding-block: var(--iso-space); mask-image: linear-gradient(to bottom, transparent, #000 var(--iso-space), #000 calc(100% - var(--iso-space)), transparent); }
+.isotone-list { display: flex; flex-direction: column; gap: 0; flex: 0 1 auto; max-height: calc(var(--iso-list-height) + 2 * var(--iso-space) - 8px); min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; margin: calc(0px - var(--iso-space)) calc(-8px - var(--iso-note-outset)) calc(-2px - var(--iso-space)); padding: var(--iso-space) 8px; scroll-padding-block: var(--iso-space); mask-image: linear-gradient(to bottom, transparent, #000 var(--iso-space), #000 calc(100% - var(--iso-space)), transparent); }
 .isotone-empty { color: var(--iso-muted); font-size: 11px; line-height: 1.7; padding: 8px; }
 .isotone-note { position: relative; flex: none; }
 .isotone-request-more { flex: none; color: var(--iso-faint); font-size: 9px; }
