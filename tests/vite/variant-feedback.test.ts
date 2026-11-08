@@ -211,7 +211,8 @@ describe('`variant sync` conflict advice', () => {
     writeFileSync(join(root, 'src', 'a.ts'), 'real\n');
     const sync = sink(root);
     expect(await runCli(['variant', 'sync', 'v'], sync)).toBe(1);
-    expect(sync.text.out).toMatch(/resolve the conflict markers in .*src\/a\.ts/);
+    // An absolute path to open, in the platform's own separators.
+    expect(sync.text.out).toMatch(/resolve the conflict markers in .*src[\\/]a\.ts/);
     expect(sync.text.err).toContain('Not synced: "v" has a conflict.');
 
     // The list says so too, as text and as JSON, until the markers go.

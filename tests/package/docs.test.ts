@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join, normalize, relative } from 'node:path';
+import { dirname, join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -17,7 +17,8 @@ function walk(path: string): string[] {
 const shipped = new Set(
   ['README.md', ...pkg.files]
     .flatMap((entry) => (existsSync(join(root, entry)) ? walk(join(root, entry)) : []))
-    .map((file) => relative(root, file)),
+    // Package paths, as links and package.json name them: forward slashes on every OS.
+    .map((file) => relative(root, file).split(sep).join('/')),
 );
 
 /** GitHub's heading anchors: lowercase, punctuation dropped, spaces to hyphens. */
@@ -49,7 +50,7 @@ describe('shipped docs', () => {
     for (const [, target = ''] of text.matchAll(/\[[^\]]*\]\(([^)\s]+)\)/g)) {
       if (/^[a-z]+:/i.test(target)) continue; // absolute URLs
       const [path, hash] = target.split('#');
-      const linked = path ? normalize(join(dirname(file), path)) : file;
+      const linked = path ? posix.normalize(posix.join(posix.dirname(file), path)) : file;
       expect(shipped.has(linked), `${file} → ${target}`).toBe(true);
       if (hash && linked.endsWith('.md')) {
         expect(anchors(readFileSync(join(root, linked), 'utf8')).has(hash), `${file} → ${target}`).toBe(true);
