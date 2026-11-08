@@ -71,7 +71,9 @@ describe('public API', () => {
     );
   });
 
-  it('each subpath exports exactly its supported names', () => {
+  // Type-checking every entry is about 1.5 s of CPU alone and several times that
+  // on a loaded runner, so this one test gets a longer timeout.
+  it('each subpath exports exactly its supported names', { timeout: 60_000 }, () => {
     const files = Object.keys(SUPPORTED).map(entry);
     const program = ts.createProgram(files, {
       jsx: ts.JsxEmit.ReactJSX,
