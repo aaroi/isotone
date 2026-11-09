@@ -53,7 +53,7 @@ ${APPEARANCE_CSS}
 .isotone-root button { transition: transform var(--iso-fast) var(--iso-ease-out), opacity var(--iso-fast) var(--iso-ease-out); }
 .isotone-root button:not(:disabled):active > svg { transform: scale(.92); transition-duration: 100ms; }
 /* A key with words instead of an icon sinks a little under the press, so every button answers a click. */
-.isotone-root :where(.isotone-save, .isotone-secondary, .isotone-picking button, .isotone-away, .isotone-adjust-reset, .isotone-page, .isotone-seg):not(:disabled):active { transform: scale(.97); transition-duration: 100ms; }
+.isotone-root :where(.isotone-save, .isotone-secondary, .isotone-picking button, .isotone-away, .isotone-adjust-reset, .isotone-check-actions > button, .isotone-page, .isotone-seg):not(:disabled):active { transform: scale(.97); transition-duration: 100ms; }
 .isotone-root svg { display: block; flex-shrink: 0; pointer-events: none; transition: transform var(--iso-fast) var(--iso-ease-out); }
 /* Panels move independently; their content and corners retain their natural size. */
 .isotone-root[data-open='true'] { width: var(--iso-dock-width); }
