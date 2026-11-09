@@ -4,6 +4,8 @@ import type { IsotoneElement } from '../../core/types';
 import { ADJUST_FIELDS, type AdjustField, joinSides } from './fields';
 import { applyPreview, supportsValue, withoutPreview } from './preview';
 
+const EMPTY: StyleEdit[] = [];
+
 /** Each pinned element's values before any edit, by selector then property. */
 type Baselines = Record<string, Record<string, string>>;
 /** What the reviewer set, by selector then property. */
@@ -30,8 +32,8 @@ export interface Adjust {
   count: number;
   /** The edits to send with the note. */
   edits: StyleEdit[];
-  /** Forget the edits and take the preview off the page. */
-  clear(): void;
+  /** Take up edits made earlier: a saved note's, or those of a note that could not be sent. */
+  restore(edits: readonly StyleEdit[]): void;
 }
 
 function readBaseline(element: Element): Record<string, string> {
@@ -72,6 +74,8 @@ export function useAdjust(enabled: boolean, targets: IsotoneElement[], locate: (
         ? all
         : Object.fromEntries(Object.entries(all).filter(([selector]) => kept.has(selector)));
     setEdits(prune);
+    // Nothing pinned, nothing to adjust: the next pin starts with the editor closed.
+    if (!selectors.length) setOpen(false);
     const added: Baselines = {};
     if (enabled && open) {
       const missing = selectors.filter((selector) => !latest.current.baselines[selector]);
@@ -107,6 +111,7 @@ export function useAdjust(enabled: boolean, targets: IsotoneElement[], locate: (
   // The page shows exactly the edits held here, and nothing once this unmounts.
   // What it then computes is what the untouched fields show: a larger type size moves the line height with it.
   const [live, setLive] = useState<Baselines>({});
+  const [resized, setResized] = useState(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `key` stands for the selectors.
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -118,7 +123,21 @@ export function useAdjust(enabled: boolean, targets: IsotoneElement[], locate: (
       if (element) next[selector] = readBaseline(element);
     }
     setLive((current) => (JSON.stringify(current) === JSON.stringify(next) ? current : next));
-  }, [list, enabled, open, key, locate]);
+  }, [list, enabled, open, key, locate, resized]);
+  // A breakpoint can change every value shown; the starting values stay those read at the width the pin was made.
+  useEffect(() => {
+    if (!enabled || !open || typeof window === 'undefined') return;
+    let frame = 0;
+    const onResize = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setResized((n) => n + 1));
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [enabled, open]);
   useEffect(
     () => () => {
       if (typeof document !== 'undefined') applyPreview(document, []);
@@ -155,15 +174,26 @@ export function useAdjust(enabled: boolean, targets: IsotoneElement[], locate: (
           ),
     );
   }, []);
-  const clear = useCallback(() => {
-    setEdits({});
-    setBaselines({});
-    setOpen(false);
+  const restore = useCallback((saved: readonly StyleEdit[]) => {
+    if (!saved.length) return;
+    const byProperty = (pick: 'from' | 'to') =>
+      Object.fromEntries(
+        saved.map(({ selector, changes }) => [selector, Object.fromEntries(changes.map((change) => [change.property, change[pick]]))]),
+      );
+    setEdits((current) => ({ ...current, ...byProperty('to') }));
+    // Where each started is what the note recorded; the page may show the preview by the time it is read again.
+    setBaselines((current) => {
+      const next = { ...current };
+      for (const [selector, values] of Object.entries(byProperty('from'))) next[selector] = { ...next[selector], ...values };
+      return next;
+    });
   }, []);
 
   const fields = useMemo<FieldState[]>(() => {
     const first = targets[0];
     if (!first) return [];
+    // An element the page cannot be asked about (inside a shadow root or a frame) has no values to show or preview.
+    if (!targets.every((target) => baselines[target.selector])) return [];
     return ADJUST_FIELDS.filter((field) => targets.every((target) => applies(field, target, baselines[target.selector]))).map((field) => {
       const values = targets.map(
         ({ selector }) =>
@@ -186,8 +216,9 @@ export function useAdjust(enabled: boolean, targets: IsotoneElement[], locate: (
     fields,
     set,
     reset,
-    count: list.reduce((sum, edit) => sum + edit.changes.length, 0),
-    edits: list,
-    clear,
+    count: enabled ? list.reduce((sum, edit) => sum + edit.changes.length, 0) : 0,
+    // Turned off mid-session, the editor sends nothing it can no longer show.
+    edits: enabled ? list : EMPTY,
+    restore,
   };
 }

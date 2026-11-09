@@ -100,6 +100,7 @@ export function IsotonePanel({
   const focus = useDockFocus(rootRef, fieldRef, fabRef, id);
   // The style editor's edits, read when a note is sent; the editor itself needs select mode, set up below.
   const styleEdits = useRef<StyleEdit[]>([]);
+  const restoreEdits = useRef<(edits: readonly StyleEdit[]) => void>(() => {});
   const actions = useNoteActions({
     route,
     draftKey: `${nsKey}::draft::${route}`,
@@ -109,6 +110,7 @@ export function IsotonePanel({
     getPayload,
     getDiagnostics: () => diagnostics.current?.recent(),
     getStyleEdits: () => styleEdits.current,
+    restoreStyleEdits: (edits) => restoreEdits.current(edits),
     update,
     focusComposer: focus.composer,
   });
@@ -175,6 +177,7 @@ export function IsotonePanel({
 
   const adjust = useAdjust(experimental?.styleEditor === true && notesAvailable, draft.targets, select.locate);
   styleEdits.current = adjust.edits;
+  restoreEdits.current = adjust.restore;
   /** The editor sits above the docked composer, so opening it brings the composer home and ends selecting. */
   const toggleAdjust = () => {
     if (!adjust.open) update({ picking: false, anchor: null, notesOpen: true });

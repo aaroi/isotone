@@ -11,7 +11,8 @@ const MARK = 'data-isotone-adjust';
 /**
  * Two id-weight `:not()`s lift the rule over the page's own selectors, and
  * `!important` over its ordinary declarations. A page's own `!important` on a
- * stronger selector, or on the element's style attribute, still wins: the
+ * stronger selector, in any cascade layer, or on the element's style attribute
+ * still wins: the
  * field then shows a change the page does not, which the reviewer can see.
  */
 const BOOST = ':not(#\\:isotone):not(#\\:isotone)';

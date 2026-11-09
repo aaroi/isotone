@@ -110,6 +110,77 @@ describe('the style editor', () => {
     expect(container.querySelector('.isotone-adjust')).not.toBeNull();
   });
 
+  it('puts a field back on Escape, closes the editor on the next, and never closes the dock', async () => {
+    await pin({ styleEditor: true }, '#title');
+    await click(byText('Adjust styles'));
+    await type(input('Size'), '24');
+    await act(async () => input('Size')?.blur());
+    // A second visit to the field: Escape goes back to 24, the value it held on focus, not to the page's 20.
+    await act(async () => input('Size')?.focus());
+    await type(input('Size'), '40');
+    await key(input('Size'), 'Escape');
+    expect(sheet()).toContain('font-size:24px');
+    expect(container.querySelector('.isotone-adjust')).not.toBeNull();
+    await key(input('Size'), 'Escape');
+    expect(container.querySelector('.isotone-adjust')).toBeNull();
+    // The changes stay on the note, and the feedback panel stays open.
+    expect(sheet()).toContain('font-size:24px');
+    expect(container.querySelector('.isotone-notes-panel')?.getAttribute('data-open')).toBe('true');
+    expect(container.querySelector('.isotone-context')?.textContent).toContain('1 style change');
+  });
+
+  it('does not step a value that has nothing to step from', async () => {
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<p id="odd" style="padding: 4px 8px 12px; border-radius: 50%; line-height: normal">Odd</p>',
+    );
+    await pin({ styleEditor: true }, '#odd');
+    await click(byText('Adjust styles'));
+    for (const label of ['Pad ↕', 'Radius', 'Line']) {
+      expect(input(label)?.value).toBe('');
+      await key(input(label), 'ArrowUp');
+    }
+    expect(sheet()).toBeNull();
+    // Typing still sets it.
+    await type(input('Radius'), '8');
+    expect(sheet()).toContain('border-radius:8px');
+    document.getElementById('odd')?.remove();
+  });
+
+  it('starts closed for the next pin after a note is sent', async () => {
+    await pin({ styleEditor: true }, '#title');
+    await click(byText('Adjust styles'));
+    await type(input('Size'), '24');
+    await click(byText('Send note'));
+    await act(async () => {});
+    expect(container.querySelector('.isotone-adjust')).toBeNull();
+    await click(byText('Select elements'));
+    await pinMore('#row');
+    expect(container.querySelector('.isotone-adjust')).toBeNull();
+    expect(byText('Adjust styles')?.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('gives the changes back when the note cannot be saved, and no text the reviewer did not write', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) =>
+        init?.method === 'POST'
+          ? { ok: false, status: 400, json: async () => ({ error: 'no' }) }
+          : { ok: true, status: 200, json: async () => [] },
+      ),
+    );
+    await pin({ styleEditor: true }, '#title');
+    await click(byText('Adjust styles'));
+    await type(input('Size'), '24');
+    await click(byText('Send note'));
+    await act(async () => {});
+    await act(async () => {});
+    expect(container.querySelector('.isotone-notice')?.textContent).toContain('Could not save');
+    expect(container.querySelector('textarea')?.value).toBe('');
+    expect(sheet()).toBe('#title:not(#\\:isotone):not(#\\:isotone){font-size:24px !important}');
+    expect(container.querySelector('.isotone-context')?.textContent).toContain('1 style change');
+  });
+
   it('sends the changes with the note, needing no words, and takes the preview off the page', async () => {
     const posted: Record<string, unknown>[] = [];
     vi.stubGlobal(

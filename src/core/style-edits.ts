@@ -24,12 +24,37 @@ const MAX_STYLE_EDITS = 50;
 const MAX_STYLE_CHANGES = 24;
 const MAX_VALUE = 160;
 
-/** A CSS property name, and a value that cannot end its declaration or open another rule. */
-const PROPERTY = /^[a-z][a-z-]{0,39}$/;
-const VALUE = /^[^;{}<>!\\\n\r]{1,160}$/;
+/**
+ * The properties the editor changes. A note may arrive from any page, so
+ * nothing else is kept: a `change:` line can only ever name one of these.
+ */
+export const STYLE_PROPERTIES: readonly string[] = [
+  'padding-block',
+  'padding-inline',
+  'gap',
+  'margin-block',
+  'margin-inline',
+  'font-size',
+  'font-weight',
+  'line-height',
+  'color',
+  'background-color',
+  'border-radius',
+  'opacity',
+];
 
-export const isStyleProperty = (name: unknown): name is string => typeof name === 'string' && PROPERTY.test(name);
-export const isStyleValue = (value: unknown): value is string => typeof value === 'string' && VALUE.test(value) && value.trim() !== '';
+// One CSS value token: a number with a unit, a hex colour, or a colour function.
+const TOKEN = String.raw`(?:-?\d*\.?\d+(?:px|%|em|rem)?|#[0-9a-f]{3,8}|(?:rgba?|hsla?|oklch|oklab|lab|lch|color)\([\w\s.,%/+-]{1,80}\))`;
+/**
+ * Up to four of them (`24px`, `16px 8px`, `#ff0080`, `rgba(0, 0, 0, 0.5)`), or
+ * one keyword (`normal`, `transparent`). Never several words: nothing that
+ * reads as prose or code gets through.
+ */
+const VALUE = new RegExp(`^(?:[a-z][a-z-]{0,23}|${TOKEN}(?:\\s+${TOKEN}){0,3})$`, 'i');
+
+export const isStyleProperty = (name: unknown): name is string => typeof name === 'string' && STYLE_PROPERTIES.includes(name);
+export const isStyleValue = (value: unknown): value is string =>
+  typeof value === 'string' && value.length <= MAX_VALUE && VALUE.test(value.trim());
 
 /**
  * Style edits from anything a browser or a notes file may hold: bounded, with
@@ -44,8 +69,9 @@ export function styleEditsOf(value: unknown): StyleEdit[] | undefined {
     if (typeof selector !== 'string' || !selector || selector.length > 2000 || !Array.isArray(changes)) continue;
     const kept = changes.slice(0, MAX_STYLE_CHANGES).flatMap((change): StyleChange[] => {
       const { property, from, to } = (change ?? {}) as Partial<StyleChange>;
-      if (!isStyleProperty(property) || !isStyleValue(to) || typeof from !== 'string') return [];
-      return [{ property, from: from.replace(/[;{}<>\n\r]/g, ' ').slice(0, MAX_VALUE), to: to.trim() }];
+      if (!isStyleProperty(property) || !isStyleValue(to)) return [];
+      // A starting value the editor could not have read is left blank rather than passed on.
+      return [{ property, from: isStyleValue(from) ? from.trim() : '', to: to.trim() }];
     });
     if (kept.length) edits.push({ selector, changes: kept });
   }

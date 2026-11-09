@@ -18,6 +18,8 @@ function NumberField({ state, onSet, onReset }: { state: FieldState; onSet: Adju
   const [draft, setDraft] = useState<string | null>(null);
   const [invalid, setInvalid] = useState(false);
   const scrub = useRef<{ x: number; from: number } | null>(null);
+  // What the field held when it took focus, for Escape: the edit then in place, or none.
+  const atFocus = useRef<{ value: string | null; changed: boolean } | null>(null);
   const step = field.step ?? 1;
 
   const apply = (n: number) => {
@@ -27,23 +29,31 @@ function NumberField({ state, onSet, onReset }: { state: FieldState; onSet: Adju
     const direction = event.key === 'ArrowUp' ? 1 : event.key === 'ArrowDown' ? -1 : 0;
     if (direction) {
       event.preventDefault();
+      // Nothing to step from: sides or elements that differ, or a keyword. A typed value sets them all.
+      if (current === null) return;
       const size = step * (event.shiftKey ? 10 : event.altKey && field.kind === 'px' ? 0.1 : 1);
       setDraft(null);
       apply((current ?? 0) + direction * size);
     } else if (event.key === 'Enter') {
       event.currentTarget.blur();
-    } else if (event.key === 'Escape' && draft !== null) {
-      // The field's own Escape: put back what the element has, and keep the panel open.
+    } else if (event.key === 'Escape') {
+      const before = atFocus.current;
+      const touched = draft !== null || (before !== null && (before.value !== value || before.changed !== changed));
+      if (!touched) return;
+      // The field's own Escape: back to what it held when it took focus. The editor stays; a second Escape closes it.
+      event.preventDefault();
       event.stopPropagation();
       setDraft(null);
       setInvalid(false);
+      if (before?.changed && before.value !== null) onSet(field.property, before.value);
+      else onReset(field.property);
     }
   };
   const onScrubStart = (event: PointerEvent<HTMLSpanElement>) => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || current === null) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    scrub.current = { x: event.clientX, from: current ?? 0 };
+    scrub.current = { x: event.clientX, from: current };
     setDraft(null);
   };
   const onScrub = (event: PointerEvent<HTMLSpanElement>) => {
@@ -61,7 +71,8 @@ function NumberField({ state, onSet, onReset }: { state: FieldState; onSet: Adju
       <span
         className="isotone-num-label"
         aria-hidden="true"
-        title="Drag to change"
+        title={current === null ? undefined : 'Drag to change'}
+        data-still={current === null || undefined}
         onPointerDown={onScrubStart}
         onPointerMove={onScrub}
         onPointerUp={endScrub}
@@ -80,13 +91,17 @@ function NumberField({ state, onSet, onReset }: { state: FieldState; onSet: Adju
         value={draft ?? (current === null ? '' : String(current))}
         // Several elements that differ, or sides that do; else a value that is no number (`normal`, `auto`).
         placeholder={value === null || /\s/.test(value.trim()) ? 'Mixed' : 'Auto'}
-        onFocus={(event) => event.currentTarget.select()}
+        onFocus={(event) => {
+          atFocus.current = { value, changed };
+          event.currentTarget.select();
+        }}
         onChange={(event) => {
           const text = event.target.value;
           setDraft(text);
           const n = Number.parseFloat(text);
           if (Number.isFinite(n)) apply(n);
-          else setInvalid(text.trim() !== '');
+          // A lone minus or point is a number being typed, not a mistake.
+          else setInvalid(!/^\s*-?\.?\s*$/.test(text));
         }}
         onBlur={() => {
           setDraft(null);
@@ -159,7 +174,17 @@ export const AdjustPanel = memo(function AdjustPanel({ adjust }: { adjust: Adjus
   // The colour field whose picker is open, by property.
   const [picking, setPicking] = useState<string | null>(null);
   return (
-    <section className="isotone-adjust" aria-label="Style editor">
+    <section
+      className="isotone-adjust"
+      aria-label="Style editor"
+      onKeyDown={(event) => {
+        // Escape that no field or picker took closes the editor, not the whole dock; the changes stay on the note.
+        if (event.key !== 'Escape' || event.defaultPrevented) return;
+        event.preventDefault();
+        event.stopPropagation();
+        adjust.close();
+      }}
+    >
       <header className="isotone-adjust-head">
         <strong>Adjust</strong>
         <small>Experimental</small>

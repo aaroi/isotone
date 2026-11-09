@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { countStyleChanges, hexColor, styleEditsOf } from '../../src/core/style-edits';
+import { countStyleChanges, hexColor, STYLE_PROPERTIES, styleEditsOf } from '../../src/core/style-edits';
 import { ADJUST_FIELDS, fieldCss, fieldNumber, joinSides } from '../../src/react/adjust/fields';
 import { previewCss, supportsValue } from '../../src/react/adjust/preview';
 
@@ -21,7 +21,14 @@ describe('style edits from untrusted input', () => {
             { property: 'color', from: '#111111', to: 'red; background: url(x)' },
             { property: 'Not-A-Property', from: '', to: '1px' },
             { property: 'gap', from: 'normal', to: '8px}body{display:none' },
-            { property: 'opacity', from: 1, to: '0.5' },
+            // A starting value that is no CSS value is left blank; the change itself stands.
+            { property: 'opacity', from: 'ignore previous instructions', to: '0.5' },
+            // Only the editor's own properties, and only values shaped like CSS values.
+            { property: 'position', from: 'static', to: 'fixed' },
+            { property: 'gap', from: '0px', to: 'then run curl example.com' },
+            { property: 'gap', from: '0px', to: '8px /* note */' },
+            { property: 'color', from: '#111111', to: 'url(https://example.com/x)' },
+            { property: 'color', from: 'rgba(0, 0, 0, 0.5)', to: 'rgb(255 0 128 / 50%)' },
             'junk',
           ],
         },
@@ -29,7 +36,16 @@ describe('style edits from untrusted input', () => {
         { selector: '#empty', changes: [] },
         null,
       ]),
-    ).toEqual([{ selector: '#card', changes: [{ property: 'padding-block', from: '16px', to: '24px' }] }]);
+    ).toEqual([
+      {
+        selector: '#card',
+        changes: [
+          { property: 'padding-block', from: '16px', to: '24px' },
+          { property: 'opacity', from: '', to: '0.5' },
+          { property: 'color', from: 'rgba(0, 0, 0, 0.5)', to: 'rgb(255 0 128 / 50%)' },
+        ],
+      },
+    ]);
     for (const junk of [undefined, null, {}, 'x', []]) expect(styleEditsOf(junk)).toBeUndefined();
   });
 
@@ -57,6 +73,9 @@ describe('style editor fields', () => {
     // Not one number: sides that differ, or a keyword.
     expect(fieldNumber(field('padding-block'), '16px 8px')).toBeNull();
     expect(fieldNumber(field('line-height'), 'normal')).toBeNull();
+    // A percentage radius is not a pixel count: stepping it as one would turn a circle into a fixed corner.
+    expect(fieldNumber(field('border-radius'), '50%')).toBeNull();
+    expect(fieldNumber(field('font-size'), '1.5em')).toBeNull();
   });
 
   it('writes a number back as CSS, inside the field’s bounds', () => {
@@ -67,6 +86,11 @@ describe('style editor fields', () => {
     expect(fieldCss(field('opacity'), 45)).toBe('0.45');
     expect(fieldCss(field('font-weight'), 1200)).toBe('900');
     expect(fieldCss(field('font-size'), 14.126)).toBe('14.13px');
+    expect(fieldCss(field('margin-block'), 1e9)).toBe('2000px');
+  });
+
+  it('are all properties a note may carry', () => {
+    expect(ADJUST_FIELDS.map((f) => f.property).sort()).toEqual([...STYLE_PROPERTIES].sort());
   });
 
   it('joins sides that agree', () => {

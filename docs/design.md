@@ -153,8 +153,11 @@ elements the values belong to.
 
 Each value is a 26px capsule well: a muted label on the left, which is also
 the scrub handle (3px of travel per step, Shift ×10), and a right-aligned
-tabular value. Arrow keys step (Shift ×10, Alt ×0.1), Escape puts back what was
-there. A changed field turns to the foreground colour and gains a small reset
+tabular value. Arrow keys step (Shift ×10, Alt ×0.1). Escape in a field puts
+back what it held when it took focus; Escape again closes the editor, never the
+dock, and the changes stay on the note. A value with nothing to step from
+("Mixed", "Auto", a percentage radius) takes a typed number but no arrows or
+scrubbing. A changed field turns to the foreground colour and gains a small reset
 face; nothing is coloured. A colour field opens the panel's own picker inline
 under its group. Fields that do not apply (gap without flex or grid, type
 without text) are left out rather than disabled. Several pins that differ read

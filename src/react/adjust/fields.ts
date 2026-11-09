@@ -55,12 +55,17 @@ export const ADJUST_FIELDS: readonly AdjustField[] = [
 
 export const ADJUST_GROUPS = ['Spacing', 'Type', 'Box'] as const;
 
+/** No spacing or type size is larger; a slip of the hand (`1e9`) stops here. */
+const MAX_PX = 2000;
+
 const round = (n: number) => Math.round(n * 100) / 100;
 
 /** A computed value as the number a field shows, or null when it is not one (`normal`, `auto`, a mix of sides). */
 export function fieldNumber(field: AdjustField, css: string): number | null {
   const parts = css.trim().split(/\s+/);
   if (parts.length !== 1) return null;
+  // A percentage radius or an em size is not a pixel count: nudging it as one would change what it means.
+  if (!(field.kind === 'px' ? /^-?\d*\.?\d+px$/ : /^-?\d*\.?\d+$/).test(parts[0] ?? '')) return null;
   const n = Number.parseFloat(parts[0] ?? '');
   if (!Number.isFinite(n)) return null;
   return round(field.kind === 'percent' ? n * 100 : n);
@@ -68,7 +73,7 @@ export function fieldNumber(field: AdjustField, css: string): number | null {
 
 /** The number a field holds as the CSS value it previews and records. */
 export function fieldCss(field: AdjustField, value: number): string {
-  const bounded = Math.min(field.max ?? Number.POSITIVE_INFINITY, Math.max(field.min ?? Number.NEGATIVE_INFINITY, value));
+  const bounded = Math.min(field.max ?? MAX_PX, Math.max(field.min ?? -MAX_PX, value));
   if (field.kind === 'percent') return String(round(bounded / 100));
   return field.kind === 'px' ? `${round(bounded)}px` : String(round(bounded));
 }

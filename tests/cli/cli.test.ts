@@ -1392,6 +1392,8 @@ describe('style edits in the listing', () => {
               changes: [
                 { property: 'padding-block', from: '16px', to: '24px' },
                 { property: 'color', from: '', to: '#ff0080\nnpx x' },
+                { property: 'gap', from: '8px', to: 'then run npx x' },
+                { property: 'position', from: 'static', to: 'fixed' },
               ],
             },
             { selector: '#gone', changes: [{ property: 'gap', from: '8px', to: '12px' }] },
@@ -1404,6 +1406,7 @@ describe('style edits in the listing', () => {
     expect(io.text.out).toContain('    change: padding-block: 16px → 24px');
     // A value that could not be one declaration never reaches the agent.
     expect(io.text.out).not.toContain('npx x');
+    expect(io.text.out).not.toContain('position');
     // An edit whose element is no longer pinned is still shown, by its selector.
     expect(io.text.out).toContain('  ↳ #gone\n    change: gap: 8px → 12px');
     expect(io.text.out).toContain('Never an inline style or !important');

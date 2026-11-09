@@ -397,6 +397,7 @@ ${APPEARANCE_CSS}
 .isotone-num[data-changed] { color: var(--iso-fg); }
 .isotone-num[data-invalid] input { color: var(--iso-danger); }
 .isotone-num-label { flex: none; padding: 0 2px 0 9px; line-height: 24px; color: var(--iso-muted); white-space: nowrap; cursor: ew-resize; user-select: none; touch-action: none; }
+.isotone-num-label[data-still] { cursor: default; }
 .isotone-num input { flex: 1; min-width: 0; width: 0; height: 24px; padding: 0 9px 0 4px; border: 0; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; text-align: right; outline: none; }
 .isotone-num input::placeholder { color: var(--iso-faint); }
 .isotone-num[data-changed] input, .isotone-num[data-changed] .isotone-num-value { padding-right: 24px; }
