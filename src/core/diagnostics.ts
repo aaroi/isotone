@@ -51,13 +51,15 @@ function remember<T extends Seen>(list: T[], entry: T, same: (a: T) => boolean):
 
 /**
  * A message as a note may carry it: on one line, cut, and with the query and
- * fragment taken off anything URL-shaped in it, since that is where tokens
- * ride. Not a scrubber: a secret a page puts in the words of its own error
+ * fragment taken off anything URL-shaped in it (up to the next space), since
+ * that is where tokens ride. Not a scrubber: a secret a page puts in the words of its own error
  * stays there.
  */
 function plainMessage(message: string): string {
+  // Cut first: an error can embed a whole response body, and this runs inside the page's own error dispatch.
   return message
-    .replace(/((?:[a-z][a-z0-9+.-]*:\/\/|\/)[^\s?#"'<>()]*)[?#][^\s"'<>()]*/gi, '$1')
+    .slice(0, MAX_MESSAGE * 4)
+    .replace(/((?:[a-z][a-z0-9+.-]*:\/\/|\/)[^\s?#]*)[?#]\S*/gi, '$1')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, MAX_MESSAGE);
@@ -82,7 +84,7 @@ export function recordDiagnostics(view: Window, own: readonly (string | undefine
   const errors: ErrorEntry[] = [];
   const requests: RequestEntry[] = [];
   const origin = view.location.origin;
-  const ours = ['/api/isotone/', ...own.flatMap((endpoint) => (endpoint ? [plainUrl(endpoint, origin)] : []))].filter(Boolean);
+  const ours = own.flatMap((endpoint) => (endpoint ? [plainUrl(endpoint, origin).replace(/\/$/, '')] : [])).filter(Boolean);
 
   const addError = (message: string, source?: string) => {
     const text = plainMessage(message);
@@ -92,11 +94,12 @@ export function recordDiagnostics(view: Window, own: readonly (string | undefine
   const addRequest = (raw: string, status?: number) => {
     const url = plainUrl(raw, origin);
     // The panel's own polling is not the page's trouble.
-    if (!url || ours.some((endpoint) => url.includes(endpoint))) return;
+    if (!url || url.includes('/api/isotone/') || ours.some((endpoint) => url === endpoint || url.startsWith(`${endpoint}/`))) return;
     // A failed image raises an error at itself and shows up as a 404 too: one entry, with the status.
     const known = requests.find((r) => r.url === url);
     if (known && Date.now() - known.at < 2000 && (known.status === undefined) !== (status === undefined)) {
       known.status ??= status;
+      known.at = Date.now();
       return;
     }
     remember(requests, { url, status, at: Date.now(), count: 1 }, (r) => r.url === url && r.status === status);

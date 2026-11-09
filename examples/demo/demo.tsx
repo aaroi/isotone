@@ -789,7 +789,7 @@ function Demo() {
               >
                 Throw a page error
               </button>
-              , then send a note: it is tagged “1 error”, and your agent reads the message with it.
+              , then send a note: it is tagged “1 issue”, and your agent reads the message with it.
             </p>
           )}
           {!screenshot && !hosted && (

@@ -29,7 +29,7 @@ function Reply({ note }: { note: IsotoneNote }) {
  */
 function troubleTags(note: IsotoneNote): { key: string; label: string; whole: true }[] {
   const count = (note.diagnostics?.errors?.length ?? 0) + (note.diagnostics?.requests?.length ?? 0);
-  return count ? [{ key: 'diagnostics', label: `${count} error${count === 1 ? '' : 's'}`, whole: true }] : [];
+  return count ? [{ key: 'diagnostics', label: `${count} issue${count === 1 ? '' : 's'}`, whole: true }] : [];
 }
 
 /** Keep machine-directed requests readable without changing the agent's original text. */

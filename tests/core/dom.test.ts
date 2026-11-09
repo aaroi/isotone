@@ -130,6 +130,11 @@ describe('page diagnostics', () => {
         lineno: 4,
       }),
     );
+    // A whole response body in an error must not stall the page's error dispatch.
+    const started = performance.now();
+    window.dispatchEvent(new ErrorEvent('error', { message: `Body: ${'/'.repeat(400_000)}` }));
+    expect(performance.now() - started).toBeLessThan(200);
+    window.dispatchEvent(new ErrorEvent('error', { message: "GET /u?name=O'Brien&token=S (1)&x failed" }));
     window.dispatchEvent(new ErrorEvent('error', { message: 'Script error.' }));
     window.dispatchEvent(new ErrorEvent('error', { message: 'ResizeObserver loop completed with undelivered notifications.' }));
     expect(recorder.recent()?.errors).toEqual([
@@ -138,6 +143,8 @@ describe('page diagnostics', () => {
         source: 'webpack-internal:/src/a.tsx:4',
         at: expect.any(String),
       },
+      { message: expect.stringMatching(/^Body: \/+$/), at: expect.any(String) },
+      { message: 'GET /u (1)&x failed', at: expect.any(String) },
     ]);
     recorder.stop();
   });
@@ -166,8 +173,9 @@ describe('page diagnostics', () => {
     document.body.append(panel);
     fail('/inside-panel.png', panel);
     expect(recorder.recent()).toBeUndefined();
-    fail('/real.png');
-    expect(recorder.recent()?.requests).toEqual([{ url: '/real.png', at: expect.any(String) }]);
+    // Only the endpoint itself and what is under it: a path that merely starts the same is the page's.
+    fail('http://localhost:4123/custom/notes-export');
+    expect(recorder.recent()?.requests).toEqual([{ url: 'http://localhost:4123/custom/notes-export', at: expect.any(String) }]);
     recorder.stop();
   });
 
