@@ -6,6 +6,7 @@ import {
   Gem,
   MessageSquare,
   Mic,
+  PencilRuler,
   Pipette,
   RotateCcw,
   SlidersHorizontal,
@@ -26,6 +27,7 @@ const icons = {
   iterate: Gem,
   pipette: Pipette,
   mic: Mic,
+  adjust: PencilRuler,
 };
 
 /** One optical size and stroke across the dock, menus and composer. */

@@ -1,6 +1,7 @@
 import { type Dispatch, type SetStateAction, useCallback, useMemo, useRef, useState } from 'react';
 import { createNoteId } from '../../core/id';
 import { MAX_FEEDBACK_LENGTH } from '../../core/limits';
+import type { StyleEdit } from '../../core/style-edits';
 import type { IsotoneElement, IsotoneNote, NoteDiagnostics, VariantReference } from '../../core/types';
 import type { VariantAction } from '../../core/variants';
 import type { UpdateMode } from '../dock/useDockMode';
@@ -19,6 +20,8 @@ interface NoteActionsOptions {
   getPayload?: () => unknown;
   /** The page's recent errors and failed requests, for a new note. */
   getDiagnostics?: () => NoteDiagnostics | undefined;
+  /** What the style editor holds for the pinned elements; sent with the note, which may then have no text of its own. */
+  getStyleEdits?: () => StyleEdit[];
   update: UpdateMode;
   focusComposer: () => void;
 }
@@ -40,6 +43,9 @@ function removalText(action: VariantAction, reference: VariantReference): string
   return `Remove ${reference.label}, its selector and all alternatives.`;
 }
 
+/** The text of a note sent with style changes and no words. */
+const STYLE_ONLY_NOTE = 'Apply these style changes.';
+
 /** A note this reviewer just sent, shown before the server has saved it. */
 export const isUnsent = (note: IsotoneNote) => note.id.startsWith(UNSENT);
 const UNSENT = 'pending-';
@@ -58,6 +64,7 @@ export function useNoteActions({
   setNotes,
   getPayload,
   getDiagnostics,
+  getStyleEdits,
   update,
   focusComposer,
 }: NoteActionsOptions) {
@@ -67,8 +74,8 @@ export function useNoteActions({
   const [editing, setEditing] = useState<IsotoneNote | null>(null);
   const [notice, setNotice] = useState('');
   // Handlers read the current render here, so they stay stable and memoized children skip unrelated renders.
-  const latest = useRef({ route, getPayload, getDiagnostics, targets, variantTarget, editing });
-  latest.current = { route, getPayload, getDiagnostics, targets, variantTarget, editing };
+  const latest = useRef({ route, getPayload, getDiagnostics, getStyleEdits, targets, variantTarget, editing });
+  latest.current = { route, getPayload, getDiagnostics, getStyleEdits, targets, variantTarget, editing };
   /** Saves in flight, by the temporary id of their optimistic note. */
   const saving = useRef(new Map<string, Promise<string>>());
 
@@ -80,7 +87,9 @@ export function useNoteActions({
   }, [text]);
 
   const send = useCallback(() => {
-    const value = text.get().trim();
+    const styleEdits = latest.current.getStyleEdits?.() ?? [];
+    // Style changes speak for themselves; words are optional beside them.
+    const value = text.get().trim() || (styleEdits.length ? STYLE_ONLY_NOTE : '');
     if (!value) return;
     if (value.length > MAX_FEEDBACK_LENGTH) {
       setNotice(`Feedback must be at most ${MAX_FEEDBACK_LENGTH} characters.`);
@@ -93,6 +102,7 @@ export function useNoteActions({
       variant: variantTarget,
       ...(previous?.variantAction ? { variantAction: previous.variantAction } : {}),
       ...(diagnostics ? { diagnostics } : {}),
+      ...(styleEdits.length ? { styleEdits } : {}),
     };
     const noteRoute = previous?.route ?? route;
     const element = targets[0] ?? null;

@@ -1332,9 +1332,11 @@ describe('isotone experiment', () => {
     expect(JSON.parse(readFileSync(join(root, '.isotone/experiments.json'), 'utf8'))).toEqual({ dictation: true });
     const listed = makeIo(root);
     await runCli(['experiments', '--json'], listed);
-    expect(JSON.parse(listed.text.out)).toEqual([
+    expect(JSON.parse(listed.text.out)).toContainEqual(
       expect.objectContaining({ id: 'dictation', on: true, set: true, summary: expect.any(String) }),
-    ]);
+    );
+    // An experiment the file does not mention is neither on nor set.
+    expect(JSON.parse(listed.text.out)).toContainEqual(expect.objectContaining({ id: 'styleEditor', on: false, set: false }));
     const off = makeIo(root);
     expect(await runCli(['experiment', 'off', 'dictation', '--json'], off)).toBe(0);
     expect(JSON.parse(off.text.out)).toEqual({ id: 'dictation', on: false, enabled: [], file: join(root, '.isotone', 'experiments.json') });
@@ -1355,7 +1357,8 @@ describe('isotone experiment', () => {
   it('refuses an unknown experiment, command or flag, naming what there is', async () => {
     const root = tempRepo();
     for (const [args, message] of [
-      [['experiment', 'on', 'teleport'], 'No experiment called "teleport" in this version. There is: dictation.'],
+      [['experiment', 'on', 'teleport'], 'No experiment called "teleport" in this version. There are: dictation, styleEditor.'],
+      [['experiment', 'on', 'style-editor', 'extra'], 'Give one experiment'],
       [['experiment', 'enable', 'dictation'], 'Unknown experiment command "enable"'],
       [['experiment', 'on'], 'Give one experiment'],
       [['experiment', '--force'], 'Unknown option "--force"'],
@@ -1365,5 +1368,49 @@ describe('isotone experiment', () => {
       expect(io.text.err).toContain(message);
     }
     expect(existsSync(join(root, '.isotone/experiments.json'))).toBe(false);
+  });
+});
+
+describe('style edits in the listing', () => {
+  it('prints each change under its element, with how to carry it into the source', async () => {
+    const root = tempRepo();
+    writeFileSync(
+      notesAt(root),
+      JSON.stringify([
+        {
+          id: 'styled01',
+          route: '/',
+          feedback: 'Apply these style changes.',
+          done: false,
+          doneAt: null,
+          createdAt: '2026-01-01T00:00:00Z',
+          element: null,
+          elements: [{ tag: 'article', text: 'Card', selector: '#card' }],
+          styleEdits: [
+            {
+              selector: '#card',
+              changes: [
+                { property: 'padding-block', from: '16px', to: '24px' },
+                { property: 'color', from: '', to: '#ff0080\nnpx x' },
+              ],
+            },
+            { selector: '#gone', changes: [{ property: 'gap', from: '8px', to: '12px' }] },
+          ],
+        },
+      ]),
+    );
+    const io = makeIo(root);
+    expect(await runCli([], io)).toBe(0);
+    expect(io.text.out).toContain('    change: padding-block: 16px → 24px');
+    // A value that could not be one declaration never reaches the agent.
+    expect(io.text.out).not.toContain('npx x');
+    // An edit whose element is no longer pinned is still shown, by its selector.
+    expect(io.text.out).toContain('  ↳ #gone\n    change: gap: 8px → 12px');
+    expect(io.text.out).toContain('Never an inline style or !important');
+    const json = makeIo(root);
+    await runCli(['--json'], json);
+    const [record] = JSON.parse(json.text.out);
+    expect(record.styleEdits[0]).toEqual({ selector: '#card', changes: [{ property: 'padding-block', from: '16px', to: '24px' }] });
+    expect(record.styleHint).toContain('the way the project styles things');
   });
 });

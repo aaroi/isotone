@@ -143,6 +143,29 @@ selectors, options or dependent controls; there is no status or Undo row. A
 pending action is disabled in the menu. Deleting its note cancels it without
 changing the preview, and cannot undo a source change already made.
 
+### Style editor (experiment)
+
+Adjust sits in the feedback panel directly above the docked composer, never in
+a panel of its own: its ruler button is the third round face in the composer's
+toolbar and appears once something is pinned. Opening it docks a floating
+composer and ends selecting; pin outlines stay while it is open, to say which
+elements the values belong to.
+
+Each value is a 26px capsule well: a muted label on the left, which is also
+the scrub handle (3px of travel per step, Shift ×10), and a right-aligned
+tabular value. Arrow keys step (Shift ×10, Alt ×0.1), Escape puts back what was
+there. A changed field turns to the foreground colour and gains a small reset
+face; nothing is coloured. A colour field opens the panel's own picker inline
+under its group. Fields that do not apply (gap without flex or grid, type
+without text) are left out rather than disabled. Several pins that differ read
+"Mixed"; a value set there goes to all of them.
+
+The composer shows one chip for the changes ("3 style changes", with a remove
+control), Send is live with changes and no text, and the saved note carries a
+"3 changes" tag. The preview is one stylesheet in the page's head, keyed by
+each pin's selector; the page's elements are never touched, and sending,
+unpinning, a reload or leaving the page removes it.
+
 ### Update notice
 
 One quiet line beside the pill ([what it offers](updates.md#in-the-panel)). Its

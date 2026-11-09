@@ -1,4 +1,5 @@
 import { showOverflowTitle } from '../tooltips';
+import { countStyleChanges } from '../../core/style-edits';
 import type { IsotoneNote } from '../../core/types';
 import { updateNoteText } from '../../core/update';
 
@@ -32,6 +33,12 @@ function troubleTags(note: IsotoneNote): { key: string; label: string; whole: tr
   return count ? [{ key: 'diagnostics', label: `${count} issue${count === 1 ? '' : 's'}`, whole: true }] : [];
 }
 
+/** The style editor's changes on the note, as one short count. */
+function changeTags(note: IsotoneNote): { key: string; label: string; whole: true }[] {
+  const count = countStyleChanges(note.styleEdits);
+  return count ? [{ key: 'style-edits', label: `${count} change${count === 1 ? '' : 's'}`, whole: true }] : [];
+}
+
 /** Keep machine-directed requests readable without changing the agent's original text. */
 export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }) {
   // The update request names no element: one compact tag says what it is.
@@ -58,6 +65,7 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
           ]
         : []),
       ...elements.map((element) => ({ key: element.selector, label: element.text || element.tag })),
+      ...changeTags(note),
       ...troubleTags(note),
     ];
     return (

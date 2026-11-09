@@ -5,6 +5,7 @@
  */
 import type { ExperimentFlags } from './experiments';
 import type { RouteGateOptions } from './routes';
+import type { StyleEdit } from './style-edits';
 import type { UpdateRequest } from './update';
 import type { VariantsSource } from './variants';
 
@@ -57,6 +58,9 @@ export interface NoteDiagnostics {
 }
 
 export interface NoteContext {
+  /** What the reviewer changed with the style editor, per pinned element:
+   *  exact property values to make in the source. */
+  styleEdits?: StyleEdit[];
   /** Recorded by the panel when the note was first sent; never edited. */
   diagnostics?: NoteDiagnostics;
   /** Pending instruction: deleting its note cancels it before the agent acts. */

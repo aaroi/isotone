@@ -10,6 +10,7 @@ stable feature gets, so nothing else in Isotone depends on one.
 | Flag | What it adds | Know first |
 | --- | --- | --- |
 | `dictation` | A microphone button in the feedback composer. Press it and speak; the words land in the note as you say them, and you can keep typing. Press it again, or send the note, to stop. | Needs a browser with speech recognition: Chrome, Edge and Safari have it (Safari with Dictation turned on in system settings); in a browser without it the button is not shown, and a few Chromium builds show it but cannot reach a speech service. The browser does the recognising and may send the audio to its vendor's service. The page needs microphone permission. |
+| `styleEditor` | A ruler button in the composer once an element is pinned. It opens **Adjust**: spacing, type and box values for the pinned elements, as numbers you type, step with the arrow keys or change by dragging their label, and colours you pick. Every change shows on the page at once and is sent with the note as an exact value (`padding-block: 16px → 24px`), so you can send the note without writing a word. | The preview is in your browser only and ends when you send the note, reload or unpin: the page goes back to how it was until your agent has made the change in the source. A page's own `!important` rules can beat the preview. |
 
 `npx isotone experiment` prints this list for the installed version, with what
 the project's file says about each: `on`, `off`, or `-` when it says nothing.

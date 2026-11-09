@@ -6,6 +6,9 @@ import { isRouteVisible, normalizeRoute, type RouteGateOptions } from '../core/r
 import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
 import type { VariantsSource } from '../core/variants';
 import { type ReactElement, useEffect, useId, useRef } from 'react';
+import { AdjustPanel } from './adjust/AdjustPanel';
+import { useAdjust } from './adjust/useAdjust';
+import type { StyleEdit } from '../core/style-edits';
 import { Composer } from './notes/Composer';
 import { AwayButton, NotesPanel } from './notes/NotesPanel';
 import { PickOverlay, useSelectMode } from './dock/picking';
@@ -95,6 +98,8 @@ export function IsotonePanel({
   }, [visible, notesAvailable, storeCfg.endpoint, updateEndpoint]);
   const dockSize = useDockSize(rootRef, `${nsKey}::dock`, { variants: variantsOpen, notes: notesOpen });
   const focus = useDockFocus(rootRef, fieldRef, fabRef, id);
+  // The style editor's edits, read when a note is sent; the editor itself needs select mode, set up below.
+  const styleEdits = useRef<StyleEdit[]>([]);
   const actions = useNoteActions({
     route,
     draftKey: `${nsKey}::draft::${route}`,
@@ -103,6 +108,7 @@ export function IsotonePanel({
     setNotes,
     getPayload,
     getDiagnostics: () => diagnostics.current?.recent(),
+    getStyleEdits: () => styleEdits.current,
     update,
     focusComposer: focus.composer,
   });
@@ -167,6 +173,14 @@ export function IsotonePanel({
 
   const select = useSelectMode({ mode, update, focus, rootRef, fieldRef, floatRef, targets: draft.targets, setTargets, touch });
 
+  const adjust = useAdjust(experimental?.styleEditor === true && notesAvailable, draft.targets, select.locate);
+  styleEdits.current = adjust.edits;
+  /** The editor sits above the docked composer, so opening it brings the composer home and ends selecting. */
+  const toggleAdjust = () => {
+    if (!adjust.open) update({ picking: false, anchor: null, notesOpen: true });
+    adjust.toggle();
+  };
+
   // Opening a surface or changing route loads at once; the poll in useNotes keeps it current.
   // biome-ignore lint/correctness/useExhaustiveDependencies: open-time refresh.
   useEffect(() => {
@@ -191,6 +205,9 @@ export function IsotonePanel({
       touch={touch}
       shortcutLabel={shortcutLabel}
       dictation={experimental?.dictation === true}
+      adjust={
+        adjust.available ? { open: adjust.open, count: adjust.count, onToggle: toggleAdjust, onReset: () => adjust.reset() } : undefined
+      }
       {...actions.composer}
       {...select.controls}
     />
@@ -215,7 +232,8 @@ export function IsotonePanel({
     >
       {open && <div {...dockSize.handle('width')} />}
       <div className="isotone-rail-track" aria-hidden="true" />
-      {(picking || floating) && <PickOverlay picking={picking} targets={draft.targets} locate={select.locate} />}
+      {/* While adjusting, the outlines say which elements the values belong to. */}
+      {(picking || floating || adjust.open) && <PickOverlay picking={picking} targets={draft.targets} locate={select.locate} />}
       {floating && notesOpen && (
         <div ref={floatRef} className="isotone-float" role="dialog" aria-label="Feedback on the selection">
           {composer}
@@ -291,7 +309,14 @@ export function IsotonePanel({
             onEdit={actions.beginEdit}
             onRemove={actions.removeNote}
             compose={
-              floating ? <AwayButton targets={draft.targets} anchor={anchor} slot={select.slotHeight} onReturn={dockComposer} /> : composer
+              <>
+                {adjust.open && <AdjustPanel adjust={adjust} />}
+                {floating ? (
+                  <AwayButton targets={draft.targets} anchor={anchor} slot={select.slotHeight} onReturn={dockComposer} />
+                ) : (
+                  composer
+                )}
+              </>
             }
           />
         )}

@@ -275,7 +275,7 @@ function serveNotesInPage(path: string) {
     const feedback = String(body.feedback ?? '').trim();
     if (!body.route || !feedback) return reply(400, { error: 'route and feedback are required' });
     const fields = Object.fromEntries(
-      ['element', 'elements', 'variant', 'variantAction', 'payload', 'viewport', 'diagnostics']
+      ['element', 'elements', 'variant', 'variantAction', 'payload', 'viewport', 'diagnostics', 'styleEdits']
         .filter((key) => body[key] !== undefined)
         .map((key) => [key, body[key]]),
     );
@@ -698,21 +698,7 @@ function Demo() {
                 </a>
               </>
             )}
-            <fieldset className="demo-experiments" aria-label="Experiments">
-              <FlaskConical size={13} aria-hidden="true" />
-              {EXPERIMENTS.map((experiment) => (
-                <button
-                  key={experiment.id}
-                  type="button"
-                  className="button button-ghost"
-                  aria-pressed={experiments[experiment.id] === true}
-                  title={`Experiment: ${experiment.summary}`}
-                  onClick={() => setExperiments((flags) => ({ ...flags, [experiment.id]: flags[experiment.id] !== true }))}
-                >
-                  {experiment.label}
-                </button>
-              ))}
-            </fieldset>
+            <ExperimentsMenu flags={experiments} onChange={setExperiments} />
             <button type="button" className="button button-ghost" onClick={() => setTouring(true)} disabled={touring}>
               <Play size={13} />
               Tour
@@ -840,6 +826,61 @@ function Demo() {
     </>
   );
 }
+/**
+ * The demo's stand-in for `npx isotone experiment on <id>`: one button in the
+ * bar, however many experiments there are, opening the list with what each adds.
+ */
+function ExperimentsMenu({
+  flags,
+  onChange,
+}: {
+  flags: ExperimentFlags;
+  onChange: (update: (flags: ExperimentFlags) => ExperimentFlags) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const menu = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: Event) => {
+      if (event instanceof KeyboardEvent ? event.key === 'Escape' : !menu.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', close);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      document.removeEventListener('keydown', close);
+    };
+  }, [open]);
+  const on = EXPERIMENTS.filter((experiment) => flags[experiment.id] === true).length;
+  return (
+    <div className="demo-experiments" ref={menu}>
+      <button type="button" className="button button-ghost" aria-expanded={open} aria-haspopup="true" onClick={() => setOpen(!open)}>
+        <FlaskConical size={13} aria-hidden="true" />
+        <span>Experiments</span>
+        {on > 0 && <small>{on}</small>}
+      </button>
+      {open && (
+        <fieldset className="demo-experiments-menu" aria-label="Experiments">
+          <p>Features that ship off. In a project: npx isotone experiment on &lt;id&gt;</p>
+          {EXPERIMENTS.map((experiment) => (
+            <label key={experiment.id}>
+              <input
+                type="checkbox"
+                checked={flags[experiment.id] === true}
+                onChange={() => onChange((current) => ({ ...current, [experiment.id]: current[experiment.id] !== true }))}
+              />
+              <span>
+                <strong>{experiment.label}</strong>
+                {experiment.summary}
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+    </div>
+  );
+}
+
 /** Calls back when a selection changes, which is what the tour waits for. */
 function subscribeVariants(listener: () => void) {
   let last = JSON.stringify(source.getSelections());

@@ -94,6 +94,7 @@ function notes(root: string): [Required<StoredNote>, StoredNote] {
         errors: [{ message: 'TypeError: x is undefined', source: '/src/App.jsx:12', at: '2026-01-08T08:59:00.000Z', count: 2 }],
         requests: [{ url: '/api/trails', status: 500, at: '2026-01-08T08:59:30.000Z' }],
       },
+      styleEdits: [{ selector: '#app > button', changes: [{ property: 'padding-block', from: '8px', to: '12px' }] }],
       variant,
       variantAction,
       // Answered: the note changed since this fingerprint.

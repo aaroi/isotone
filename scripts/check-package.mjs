@@ -18,7 +18,9 @@ import { npm } from './npm.mjs';
 // dictation experiment's recogniser and icon.
 // Tarball raised to 416 kB (experiments, 411 kB): the experiment command,
 // its shipped guide, and the bundle growth above in both panel builds.
-const BUDGET = { bundle: 377_000, tarball: 416_000 };
+// Bundle raised to 393 kB and tarball to 432 kB (style editor experiment,
+// 390 kB): its fields, live preview and the editor's own controls.
+const BUDGET = { bundle: 393_000, tarball: 432_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

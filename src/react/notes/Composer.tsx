@@ -20,6 +20,8 @@ interface ComposerProps {
   shortcutLabel: string;
   /** The dictation experiment is on. */
   dictation?: boolean;
+  /** The style editor, when its experiment is on and something is pinned. */
+  adjust?: { open: boolean; count: number; onToggle: () => void; onReset: () => void };
   onSend: () => void;
   onCancelEdit: () => void;
   onClearVariant: () => void;
@@ -41,6 +43,7 @@ export const Composer = memo(function Composer({
   touch,
   shortcutLabel,
   dictation = false,
+  adjust,
   onSend,
   onCancelEdit,
   onClearVariant,
@@ -55,7 +58,8 @@ export const Composer = memo(function Composer({
   const voice = useDictation(draft, dictation && active);
   const stopVoice = voice.stop;
   const said = voice.problem || notice;
-  const hasContext = Boolean(editing || variantTarget || targets.length || said);
+  const changes = adjust?.count ?? 0;
+  const hasContext = Boolean(editing || variantTarget || targets.length || said || changes);
   // A sent note takes the microphone with it; clearing the field by hand does not.
   const send = () => {
     stopVoice();
@@ -144,6 +148,17 @@ export const Composer = memo(function Composer({
             </button>
           </span>
         ))}
+        {changes > 0 && (
+          <span className="isotone-chip">
+            <Icon name="adjust" size={12} />
+            <span>
+              {changes} style change{changes === 1 ? '' : 's'}
+            </span>
+            <button type="button" aria-label="Remove style changes" title="Remove style changes" onClick={() => adjust?.onReset()}>
+              <Icon name="close" size={12} />
+            </button>
+          </span>
+        )}
         {/* The context strip is already a polite live region; a nested status would announce twice. */}
         {said && <p className="isotone-notice">{said}</p>}
       </div>
@@ -165,7 +180,13 @@ export const Composer = memo(function Composer({
             }
           }}
           placeholder={
-            voice.listening ? 'Listening…' : targets.length || variantTarget ? 'Feedback on your selection…' : 'What would you change?'
+            voice.listening
+              ? 'Listening…'
+              : changes
+                ? 'Add a note, or just send…'
+                : targets.length || variantTarget
+                  ? 'Feedback on your selection…'
+                  : 'What would you change?'
           }
           rows={1}
           className="isotone-textarea"
@@ -183,6 +204,19 @@ export const Composer = memo(function Composer({
           >
             <Icon name="pin" size={14} />
           </button>
+          {adjust && (
+            <button
+              type="button"
+              title="Adjust styles · experimental"
+              aria-label="Adjust styles"
+              aria-pressed={adjust.open}
+              className="isotone-pick isotone-mic isotone-adjust-toggle isotone-icon"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={adjust.onToggle}
+            >
+              <Icon name="adjust" size={14} />
+            </button>
+          )}
           {/* Beside a pin the hint needs the room, unless the microphone is on and needs its off switch. */}
           {voice.supported && (voice.listening || !(floating && picking)) && (
             <button
@@ -205,7 +239,7 @@ export const Composer = memo(function Composer({
           <button
             type="button"
             aria-label={editing ? 'Save edit' : 'Send note'}
-            disabled={!text.trim()}
+            disabled={!text.trim() && !changes}
             className="isotone-send"
             title={editing ? 'Save edit (Enter)' : 'Send note (Enter)'}
             onClick={send}

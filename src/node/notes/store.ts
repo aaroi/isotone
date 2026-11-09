@@ -102,6 +102,8 @@ export function noteFingerprint(note: StoredNote): string {
     note.variant ?? null,
     note.variantAction ?? null,
     update?.to ?? null,
+    // Appended only when present, so notes without edits keep the fingerprint they had.
+    ...(note.styleEdits?.length ? [note.styleEdits] : []),
   ]);
   return createHash('sha256').update(content).digest('base64url').slice(0, 16);
 }
