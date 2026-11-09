@@ -3,6 +3,7 @@ import { formatRangeValue, type VariantAxis, type VariantsSource } from '../../c
 import { Icon } from '../icons';
 import { GRID_COLUMNS } from '../styles/panel';
 import { showOverflowTitle } from '../tooltips';
+import { useSegmentLayout } from './segmentLayout';
 
 export type OpenMenu = (axis: VariantAxis, opener: HTMLButtonElement | null, optionId?: string | null) => void;
 
@@ -39,6 +40,9 @@ export const AxisControl = memo(function AxisControl({
   onColour,
 }: AxisControlProps) {
   const thumbnails = axis.kind !== 'range' && axis.kind !== 'color' && axis.options.length > 0 && axis.options.every((o) => o.image);
+  const segments = useSegmentLayout<HTMLDivElement>(
+    axis.kind === 'range' || axis.kind === 'color' || thumbnails ? '' : axis.options.map((o) => o.label).join('\n'),
+  );
   const optionFrame = (id: string, optionLabel: string, className: string, child: ReactNode) => (
     <OptionFrame key={id} className={className} label={optionLabel} open={menuFor === id} onOpen={(opener) => onOpenMenu(axis, opener, id)}>
       {child}
@@ -117,7 +121,13 @@ export const AxisControl = memo(function AxisControl({
           />
         </div>
       ) : (
-        <div role="radiogroup" aria-label={fullLabel} className={thumbnails ? 'isotone-grid' : 'isotone-segs'} onKeyDown={moveChoice}>
+        <div
+          ref={segments}
+          role="radiogroup"
+          aria-label={fullLabel}
+          className={thumbnails ? 'isotone-grid' : 'isotone-segs'}
+          onKeyDown={moveChoice}
+        >
           {axis.options.map((o, index) => {
             const checked = value === o.id;
             const tabbable = checked || (index === 0 && !axis.options.some((x) => x.id === value));

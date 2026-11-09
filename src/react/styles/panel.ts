@@ -156,8 +156,15 @@ ${APPEARANCE_CSS}
 .isotone-axis-label svg { color: color-mix(in oklch, var(--iso-muted) 50%, var(--iso-faint)); transition: color var(--iso-fast) var(--iso-ease-out), transform var(--iso-fast) var(--iso-ease-out); }
 .isotone-axis-label[aria-expanded='true'] svg, .isotone-axis-label:focus-visible svg { color: var(--iso-muted); }
 .isotone-axis-value { min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--iso-muted); font: 11px var(--iso-sans); font-variant-numeric: tabular-nums; }
-.isotone-segs { display: flex; flex-wrap: wrap; gap: 3px; padding: 3px; border-radius: 999px; background: var(--iso-well); box-shadow: var(--iso-segment-track-shadow); }
-.isotone-seg { width: 100%; flex: 1 1 64px; min-width: 0; padding: 6px 8px; line-height: 16px; border-radius: 999px; color: var(--iso-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The track's corner is a segment's half height plus the track's padding, so it stays concentric with the capsules inside:
+   a full capsule on one row, a rounded card around wrapped rows. useSegmentLayout picks the layout from the labels. */
+.isotone-segs { --iso-seg-h: 28px; --iso-seg-pad: 3px; display: flex; flex-wrap: wrap; gap: 3px; padding: var(--iso-seg-pad); border-radius: calc(var(--iso-seg-h) / 2 + var(--iso-seg-pad)); background: var(--iso-well); box-shadow: var(--iso-segment-track-shadow); }
+/* Measured to fit, so a row never wraps: options share the room evenly but never shrink past their labels. */
+.isotone-segs[data-layout='row'] { flex-wrap: nowrap; }
+.isotone-segs[data-layout='row'] > .isotone-opt-seg { flex-basis: 0; }
+/* Wrapped rows keep one column width, so options line up; a short last row stretches to fill, and labels truncate before they stack. */
+.isotone-segs[data-layout='wrap'] > .isotone-opt-seg { flex: 1 1 calc((100% - (var(--iso-seg-cols) - 1) * 3px) / var(--iso-seg-cols)); min-width: 0; }
+.isotone-seg { width: 100%; flex: 1 1 64px; min-width: 0; height: var(--iso-seg-h, 28px); padding: 6px 8px; line-height: 16px; border-radius: 999px; color: var(--iso-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isotone-seg > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isotone-seg[aria-checked='true'] { color: var(--iso-fg); }
 .isotone-opt { position: relative; display: flex; min-width: 0; }
