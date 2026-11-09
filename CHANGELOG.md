@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.3.3
+
 ### Fixed
 
 - **Segmented selectors that need more than one row look right again.** When the options fit side by side they stay one capsule. When they don't, they wrap into balanced rows with aligned columns, a short last row stretches to fill, and labels truncate rather than stack. The track's corners follow the capsules inside instead of ballooning into a stadium.
