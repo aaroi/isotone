@@ -82,13 +82,13 @@ export function IsotonePanel({
   const diagnostics = useRef<DiagnosticsRecorder | null>(null);
   useEffect(() => {
     if (!visible || !notesAvailable) return;
-    const recorder = recordDiagnostics(window);
+    const recorder = recordDiagnostics(window, [storeCfg.endpoint ?? undefined, updateEndpoint]);
     diagnostics.current = recorder;
     return () => {
       recorder.stop();
       diagnostics.current = null;
     };
-  }, [visible, notesAvailable]);
+  }, [visible, notesAvailable, storeCfg.endpoint, updateEndpoint]);
   const dockSize = useDockSize(rootRef, `${nsKey}::dock`, { variants: variantsOpen, notes: notesOpen });
   const focus = useDockFocus(rootRef, fieldRef, fabRef, id);
   const actions = useNoteActions({

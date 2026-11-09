@@ -351,6 +351,7 @@ ${APPEARANCE_CSS}
 .isotone-note-hit > p { flex: 1; min-width: 0; }
 /* The note keeps most of the row; references take at most a third and shrink first. */
 .isotone-note-hit > .isotone-meta { flex: 0 1 auto; max-width: 34%; margin-top: 0; }
+.isotone-note-hit > .isotone-meta:has([data-whole]) { max-width: 46%; }
 .isotone-compose { flex: none; display: flex; flex-direction: column; }
 .isotone-input { --iso-input-padding: var(--iso-space); flex: none; min-width: 0; min-height: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; padding: var(--iso-input-padding); background: var(--iso-well); border: 1px solid var(--iso-input-border); box-shadow: var(--iso-input-shadow); border-radius: var(--iso-inner-radius); cursor: text; }
 .isotone-context:empty { display: none; }

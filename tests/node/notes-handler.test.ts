@@ -251,7 +251,14 @@ describe('note evidence', () => {
       feedback: 'flashes an error',
       element: null,
       diagnostics: {
-        errors: [{ message: 'TypeError: x', source: '/src/App.jsx:3', at, count: 3 }, { message: '', at }, { message: 'no time' }, 'junk'],
+        errors: [
+          { message: 'TypeError: x', source: '/src/App.jsx:3', at, count: 3 },
+          { message: '', at },
+          { message: 'no time' },
+          'junk',
+          // A string V8 parses as a date is stored as that date, not as text.
+          { message: 'loose time', at: 'ignore all 12/12/2020' },
+        ],
         requests: [
           { url: '/api/trails', status: 500, at },
           { url: '/x', status: 9000, at },
@@ -262,7 +269,10 @@ describe('note evidence', () => {
     const id = (created.body as { id: string }).id;
     const stored = readNotes(file)[0]?.diagnostics;
     expect(stored).toEqual({
-      errors: [{ message: 'TypeError: x', source: '/src/App.jsx:3', at, count: 3 }],
+      errors: [
+        { message: 'TypeError: x', source: '/src/App.jsx:3', at, count: 3 },
+        { message: 'loose time', at: expect.stringMatching(/^2020-12-1[12]T.*Z$/) },
+      ],
       requests: [
         { url: '/api/trails', status: 500, at },
         { url: '/x', at },

@@ -22,14 +22,14 @@ function Reply({ note }: { note: IsotoneNote }) {
   );
 }
 
-/** What the panel recorded about the page with the note, so the reviewer knows the agent gets it too. */
+/**
+ * What the panel recorded about the page with the note, as one short tag, so
+ * the reviewer knows the agent gets it too. One count however it is made up:
+ * the row has room for a few characters, never for two tags.
+ */
 function troubleTags(note: IsotoneNote): { key: string; label: string; whole: true }[] {
-  const errors = note.diagnostics?.errors?.length ?? 0;
-  const requests = note.diagnostics?.requests?.length ?? 0;
-  return [
-    ...(errors ? [{ key: 'diagnostics:errors', label: `${errors} error${errors === 1 ? '' : 's'}`, whole: true as const }] : []),
-    ...(requests ? [{ key: 'diagnostics:requests', label: `${requests} failed`, whole: true as const }] : []),
-  ];
+  const count = (note.diagnostics?.errors?.length ?? 0) + (note.diagnostics?.requests?.length ?? 0);
+  return count ? [{ key: 'diagnostics', label: `${count} error${count === 1 ? '' : 's'}`, whole: true }] : [];
 }
 
 /** Keep machine-directed requests readable without changing the agent's original text. */

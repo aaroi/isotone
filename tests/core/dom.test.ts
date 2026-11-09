@@ -103,6 +103,8 @@ describe('page diagnostics', () => {
       { message: 'TypeError: trail is undefined', source: '/src/App.jsx:12', at: expect.any(String), count: 2 },
       { message: 'Unhandled rejection: RangeError: too far', at: expect.any(String) },
     ]);
+    // The same image, seen a moment later as a 404 by the resource timings: still one entry.
+    expect(found?.requests).toHaveLength(1);
     // No query or fragment: that is where tokens live.
     expect(found?.requests).toEqual([{ url: 'https://cdn.example.com/hero.png', at: expect.any(String) }]);
     // Old trouble belongs to something else.
@@ -116,6 +118,73 @@ describe('page diagnostics', () => {
     const recorder = recordDiagnostics(window);
     for (let i = 0; i < 9; i++) window.dispatchEvent(new ErrorEvent('error', { message: `Error ${i}` }));
     expect(recorder.recent()?.errors?.map((e) => e.message)).toEqual(['Error 4', 'Error 5', 'Error 6', 'Error 7', 'Error 8']);
+    recorder.stop();
+  });
+
+  it('takes queries out of messages, names odd schemes plainly and skips browser noise', () => {
+    const recorder = recordDiagnostics(window);
+    window.dispatchEvent(
+      new ErrorEvent('error', {
+        message: 'GET https://api.example.com/me?access_token=SECRET#frag failed\nthen /local/path?key=SECRET2 too',
+        filename: 'webpack-internal:///./src/a.tsx',
+        lineno: 4,
+      }),
+    );
+    window.dispatchEvent(new ErrorEvent('error', { message: 'Script error.' }));
+    window.dispatchEvent(new ErrorEvent('error', { message: 'ResizeObserver loop completed with undelivered notifications.' }));
+    expect(recorder.recent()?.errors).toEqual([
+      {
+        message: 'GET https://api.example.com/me failed then /local/path too',
+        source: 'webpack-internal:/src/a.tsx:4',
+        at: expect.any(String),
+      },
+    ]);
+    recorder.stop();
+  });
+
+  it('never throws into the page, whatever was thrown or rejected', () => {
+    const recorder = recordDiagnostics(window);
+    const rejection = new Event('unhandledrejection') as Event & { reason?: unknown };
+    rejection.reason = Object.create(null);
+    expect(() => window.dispatchEvent(rejection)).not.toThrow();
+    expect(recorder.recent()?.errors?.[0]?.message).toBe('Unhandled rejection: Error');
+    recorder.stop();
+  });
+
+  it("leaves out the panel's own endpoints and what fails to load inside the panel", () => {
+    const recorder = recordDiagnostics(window, ['http://localhost:4123/custom/notes', undefined]);
+    const fail = (src: string, parent: Element = document.body) => {
+      const image = document.createElement('img');
+      image.src = src;
+      parent.append(image);
+      image.dispatchEvent(new Event('error'));
+    };
+    fail('http://localhost:4123/custom/notes?rev=1');
+    fail('/api/isotone/notes');
+    const panel = document.createElement('div');
+    panel.setAttribute('data-isotone', 'root');
+    document.body.append(panel);
+    fail('/inside-panel.png', panel);
+    expect(recorder.recent()).toBeUndefined();
+    fail('/real.png');
+    expect(recorder.recent()?.requests).toEqual([{ url: '/real.png', at: expect.any(String) }]);
+    recorder.stop();
+  });
+
+  it('keeps a repeating error as the newest, with its count', () => {
+    const recorder = recordDiagnostics(window);
+    const raise = (message: string) => window.dispatchEvent(new ErrorEvent('error', { message }));
+    raise('Repeats');
+    for (let i = 0; i < 4; i++) raise(`Other ${i}`);
+    raise('Repeats');
+    raise('Newest');
+    expect(recorder.recent()?.errors?.map((e) => [e.message, e.count])).toEqual([
+      ['Other 1', undefined],
+      ['Other 2', undefined],
+      ['Other 3', undefined],
+      ['Repeats', 2],
+      ['Newest', undefined],
+    ]);
     recorder.stop();
   });
 });

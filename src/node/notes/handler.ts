@@ -229,6 +229,7 @@ function readNotesAt(file: string, rev: string): StoredNote[] {
 
 function toItem(n: StoredNote, root: string) {
   const update = updateRequestOf(n.update, { root });
+  const diagnostics = diagnosticsOf(n.diagnostics);
   const item: {
     id: string;
     route: string;
@@ -258,7 +259,7 @@ function toItem(n: StoredNote, root: string) {
     ...(n.elements !== undefined ? { elements: n.elements } : {}),
     ...(n.variant !== undefined ? { variant: n.variant } : {}),
     ...(n.variantAction !== undefined ? { variantAction: n.variantAction } : {}),
-    ...(diagnosticsOf(n.diagnostics) ? { diagnostics: diagnosticsOf(n.diagnostics) } : {}),
+    ...(diagnostics ? { diagnostics } : {}),
     // Only the server writes an update request; a malformed one, or one whose
     // directory is outside the project, is not shown.
     ...(update ? { update } : {}),

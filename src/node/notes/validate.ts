@@ -127,8 +127,11 @@ export function removalOf(value: unknown): VariantRemoval | undefined {
   };
 }
 
-const isoTime = (value: unknown): string | null =>
-  typeof value === 'string' && value.length <= 40 && Number.isFinite(Date.parse(value)) ? value : null;
+/** A time rewritten as ISO, so nothing but a time passes through the field. */
+const isoTime = (value: unknown): string | null => {
+  const time = typeof value === 'string' && value.length <= 40 ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(time) ? new Date(time).toISOString() : null;
+};
 const repeat = (value: unknown) =>
   typeof value === 'number' && Number.isInteger(value) && value > 1 && value < 1e6 ? { count: value } : {};
 
