@@ -1,5 +1,6 @@
 import { type KeyboardEvent, memo, type PointerEvent, useRef, useState } from 'react';
 import { Icon } from '../icons';
+import { fadeIn } from '../motion';
 import { ColorPicker, normalizeHex } from '../variants/ColorPicker';
 import { ADJUST_GROUPS, type AdjustField, fieldCss, fieldNumber } from './fields';
 import type { Adjust, FieldState } from './useAdjust';
@@ -184,6 +185,7 @@ export const AdjustPanel = memo(function AdjustPanel({ adjust }: { adjust: Adjus
   const [picking, setPicking] = useState<string | null>(null);
   return (
     <section
+      ref={fadeIn}
       className="isotone-adjust"
       aria-label="Style editor"
       onKeyDown={(event) => {
