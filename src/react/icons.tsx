@@ -1,4 +1,17 @@
-import { ArrowUp, Check, ChevronDown, Crosshair, Gem, MessageSquare, Pipette, RotateCcw, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import {
+  ArrowUp,
+  Check,
+  ChevronDown,
+  Crosshair,
+  Gem,
+  MessageSquare,
+  Mic,
+  Pipette,
+  RotateCcw,
+  SlidersHorizontal,
+  Trash2,
+  X,
+} from 'lucide-react';
 
 const icons = {
   close: X,
@@ -12,6 +25,7 @@ const icons = {
   check: Check,
   iterate: Gem,
   pipette: Pipette,
+  mic: Mic,
 };
 
 /** One optical size and stroke across the dock, menus and composer. */

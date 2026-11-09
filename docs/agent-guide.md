@@ -167,6 +167,13 @@ them. Deleting a pending request cancels it.
 
 Remove a variant (`variant drop <id>`) only when asked to.
 
+## Experiments
+
+`npx isotone experiment` lists features that are off by default, and
+`npx isotone experiment on <id>` turns one on for the project; the user reloads
+the page to see it. Turn one on only when the user asks
+([details](experiments.md)).
+
 ## Blast mode
 
 When the user asks for a Blast session, run `npx isotone blast start <duration>`

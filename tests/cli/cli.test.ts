@@ -1311,3 +1311,52 @@ describe('note evidence in the listing', () => {
     expect(record.diagnostics.requests).toEqual([{ url: '/api/trails', status: 500, at: '2026-01-01T00:00:00.000Z' }]);
   });
 });
+
+describe('isotone experiment', () => {
+  it('lists what there is, off until turned on, with what to know first', async () => {
+    const root = tempRepo();
+    const io = makeIo(root);
+    expect(await runCli(['experiment'], io)).toBe(0);
+    expect(io.text.out).toMatch(/^off {2}dictation — A microphone button/m);
+    expect(io.text.out).toContain('may send audio');
+    expect(io.text.out).toContain('npx isotone experiment on <id>');
+  });
+
+  it('turns one on and off in the project’s file, in either spelling', async () => {
+    const root = tempRepo();
+    const on = makeIo(root);
+    expect(await runCli(['experiment', 'on', 'Dictation'], on)).toBe(0);
+    expect(on.text.out).toContain('dictation: on. Reload the page to see it.');
+    expect(JSON.parse(readFileSync(join(root, '.isotone/experiments.json'), 'utf8'))).toEqual({ dictation: true });
+    const listed = makeIo(root);
+    await runCli(['experiments', '--json'], listed);
+    expect(JSON.parse(listed.text.out)).toEqual([expect.objectContaining({ id: 'dictation', on: true, summary: expect.any(String) })]);
+    const off = makeIo(root);
+    expect(await runCli(['experiment', 'off', 'dictation', '--json'], off)).toBe(0);
+    expect(JSON.parse(off.text.out)).toEqual({ id: 'dictation', on: false, enabled: [] });
+  });
+
+  it('writes beside the notes file when run from a subdirectory', async () => {
+    const root = tempRepo();
+    writeFileSync(notesAt(root), '[]');
+    mkdirSync(join(root, 'src'));
+    expect(await runCli(['experiment', 'on', 'dictation'], makeIo(join(root, 'src')))).toBe(0);
+    expect(existsSync(join(root, '.isotone/experiments.json'))).toBe(true);
+    expect(existsSync(join(root, 'src/.isotone'))).toBe(false);
+  });
+
+  it('refuses an unknown experiment, command or flag, naming what there is', async () => {
+    const root = tempRepo();
+    for (const [args, message] of [
+      [['experiment', 'on', 'teleport'], 'No experiment called "teleport" in this version. There is: dictation.'],
+      [['experiment', 'enable', 'dictation'], 'Unknown experiment command "enable"'],
+      [['experiment', 'on'], 'Give one experiment'],
+      [['experiment', '--force'], 'Unknown option "--force"'],
+    ] as const) {
+      const io = makeIo(root);
+      expect(await runCli([...args], io)).toBe(1);
+      expect(io.text.err).toContain(message);
+    }
+    expect(existsSync(join(root, '.isotone/experiments.json'))).toBe(false);
+  });
+});

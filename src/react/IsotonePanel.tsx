@@ -1,5 +1,6 @@
 import { FEEDBACK_STORAGE_KEY } from '../core/browser-storage';
 import { type DiagnosticsRecorder, recordDiagnostics } from '../core/diagnostics';
+import type { ExperimentFlags } from '../core/experiments';
 import type { IsotoneStoreConfig } from '../core/types';
 import { isRouteVisible, normalizeRoute, type RouteGateOptions } from '../core/routes';
 import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
@@ -38,6 +39,8 @@ export interface IsotonePanelProps {
   defaultTab?: 'variants' | 'notes';
   /** Default: Cmd/Ctrl+Shift+Period. false disables the shortcut. */
   shortcut?: IsotoneShortcut | false;
+  /** Experiments to turn on: off by default, and free to change or go away in any release. */
+  experimental?: ExperimentFlags;
 }
 
 /**
@@ -56,6 +59,7 @@ export function IsotonePanel({
   variantsEmptyText,
   defaultTab = 'notes',
   shortcut = DEFAULT_SHORTCUT,
+  experimental,
 }: IsotonePanelProps): ReactElement | null {
   // One page, however the URL spells it: `/about/` and `/about?tab=2` are `/about`, as for the CLI.
   const route = normalizeRoute(pageRoute);
@@ -186,6 +190,7 @@ export function IsotonePanel({
       floating={floating}
       touch={touch}
       shortcutLabel={shortcutLabel}
+      dictation={experimental?.dictation === true}
       {...actions.composer}
       {...select.controls}
     />

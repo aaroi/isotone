@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Gem, Moon, Play, Plus, Search, Sun } from 'lucide-react';
+import { FlaskConical, Gem, Moon, Play, Plus, Search, Sun } from 'lucide-react';
+import { EXPERIMENTS, type ExperimentFlags, experimentFlags } from '../../src/core/experiments';
 import { createVariantsSource, IsotonePanel, type IsotoneTheme, type VariantAxis } from '../../src/react/index';
 import { Tour, tourSeen } from './tour';
 
@@ -423,7 +424,7 @@ function savedTheme<T extends string>(key: string, choices: readonly T[], fallba
   }
 }
 
-function Panel({ theme }: { theme: IsotoneTheme }) {
+function Panel({ theme, experimental }: { theme: IsotoneTheme; experimental: ExperimentFlags }) {
   const host = useRef<HTMLDivElement>(null);
   const panel = useRef<ReturnType<typeof createRoot> | null>(null);
   useEffect(() => {
@@ -454,9 +455,10 @@ function Panel({ theme }: { theme: IsotoneTheme }) {
         variants={source}
         defaultTab="variants"
         shortcut={screenshot ? false : undefined}
+        experimental={experimental}
       />,
     );
-  }, [theme]);
+  }, [theme, experimental]);
   useEffect(() => {
     if (!screenshot && !review) return;
     // Wait for the secondary root, then open the feedback panel alone.
@@ -640,6 +642,23 @@ function Demo() {
     document.documentElement.dataset.spacing = source.getSelections().spacing;
     document.documentElement.dataset.layout = source.getSelections().layout;
   }, [pageTheme]);
+  // Experiments are off until someone turns them on; here that is a button, in a project a flag.
+  const [experiments, setExperiments] = useState<ExperimentFlags>(() => {
+    if (screenshot) return {};
+    try {
+      return experimentFlags(JSON.parse(localStorage.getItem('iso-demo-experiments') ?? '{}'));
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    if (screenshot) return;
+    try {
+      localStorage.setItem('iso-demo-experiments', JSON.stringify(experiments));
+    } catch {
+      /* The buttons still work without storage. */
+    }
+  }, [experiments]);
   useEffect(() => {
     if (screenshot) return;
     try {
@@ -679,6 +698,21 @@ function Demo() {
                 </a>
               </>
             )}
+            <fieldset className="demo-experiments" aria-label="Experiments">
+              <FlaskConical size={13} aria-hidden="true" />
+              {EXPERIMENTS.map((experiment) => (
+                <button
+                  key={experiment.id}
+                  type="button"
+                  className="button button-ghost"
+                  aria-pressed={experiments[experiment.id] === true}
+                  title={`Experiment: ${experiment.summary}`}
+                  onClick={() => setExperiments((flags) => ({ ...flags, [experiment.id]: flags[experiment.id] !== true }))}
+                >
+                  {experiment.label}
+                </button>
+              ))}
+            </fieldset>
             <button type="button" className="button button-ghost" onClick={() => setTouring(true)} disabled={touring}>
               <Play size={13} />
               Tour
@@ -801,7 +835,7 @@ function Demo() {
           )}
         </main>
       </div>
-      <Panel theme={panelTheme} />
+      <Panel theme={panelTheme} experimental={experiments} />
       {touring && <Tour onClose={() => setTouring(false)} subscribeVariants={subscribeVariants} />}
     </>
   );

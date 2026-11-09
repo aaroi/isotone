@@ -4,6 +4,9 @@
 
 ### Added
 
+- **Experiments: try a feature before it is on for everyone.** `npx isotone experiment` lists features that ship off by default, and `npx isotone experiment on <id>` turns one on for the project; reload the page to see it, with no dev server restart. A host can also pass `experimental: { <id>: true }` to `isotone()`, `serveIsotone`, `mountIsotone` or `<IsotonePanel>`, and `isotone serve` takes `--experimental <id>`. An experiment may change or go away in any release ([details](docs/experiments.md)).
+- **Dictation (experiment).** With `dictation` on, the composer has a microphone button: speak a note instead of typing it. It uses the browser's own speech recognition, so it appears in Chrome, Edge and Safari, and the browser may send the audio to its vendor's service.
+
 - **A pinned element now tells your agent how it looks.** Each pin records the computed styles that matter (spacing, type size and weight, colours as hex, layout, radius, shadow), so a note like "too tight" or "make this bigger" comes with the values to start from. `npx isotone` prints them on a `styles:` line and `--json` has them under `elements[].styles`.
 - **A note carries what went wrong on the page just before it.** The panel keeps the uncaught errors, unhandled promise rejections and failed requests of the last five minutes and attaches them to a new note, which is tagged "1 issue" in the panel. Your agent reads them as `⚠` lines and under `diagnostics` in `--json`. URLs are stored without their query string, those inside error messages included (anything else a page puts in its own error text is kept as written), and `console` is never wrapped. Requests answered with an error status are seen in Chromium and recent Firefox; other browsers report failed images, scripts and stylesheets.
 

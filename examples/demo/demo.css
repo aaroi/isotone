@@ -253,3 +253,6 @@ h1 { margin: 0; font-size: 26px; font-weight: 650; letter-spacing: -.025em; line
 
 .demo-link { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .demo-link:hover { color: var(--fg); }
+
+.demo-experiments { display: flex; align-items: center; gap: 2px; margin: 0 4px 0 0; padding: 0 0 0 8px; border: 0; color: var(--muted); }
+.demo-experiments .button[aria-pressed='true'] { background: var(--hover); color: var(--fg); }

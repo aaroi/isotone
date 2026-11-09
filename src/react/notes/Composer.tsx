@@ -1,8 +1,9 @@
-import { memo, type RefObject, useLayoutEffect, useSyncExternalStore } from 'react';
+import { memo, type RefObject, useEffect, useLayoutEffect, useSyncExternalStore } from 'react';
 import { HINTS } from './hints';
 import { Icon } from '../icons';
 import { fadeIn } from '../motion';
 import { showOverflowTitle } from '../tooltips';
+import { useDictation } from './useDictation';
 import type { ComposerDraft } from './useNoteActions';
 
 interface ComposerProps {
@@ -17,6 +18,8 @@ interface ComposerProps {
   floating: boolean;
   touch: boolean;
   shortcutLabel: string;
+  /** The dictation experiment is on. */
+  dictation?: boolean;
   onSend: () => void;
   onCancelEdit: () => void;
   onClearVariant: () => void;
@@ -37,6 +40,7 @@ export const Composer = memo(function Composer({
   floating,
   touch,
   shortcutLabel,
+  dictation = false,
   onSend,
   onCancelEdit,
   onClearVariant,
@@ -47,7 +51,19 @@ export const Composer = memo(function Composer({
   onDonePicking,
 }: ComposerProps) {
   const text = useSyncExternalStore(draft.subscribe, draft.get, draft.get);
-  const hasContext = Boolean(editing || variantTarget || targets.length || notice);
+  // Only while the panel is open: a closed composer never holds the microphone.
+  const voice = useDictation(draft, dictation && active);
+  const stopVoice = voice.stop;
+  const said = voice.problem || notice;
+  const hasContext = Boolean(editing || variantTarget || targets.length || said);
+  // A sent or cancelled note empties the field; the microphone stops with it.
+  useEffect(() => {
+    if (!text) stopVoice();
+  }, [text, stopVoice]);
+  const send = () => {
+    stopVoice();
+    onSend();
+  };
   // Context changes the scroll-through inset; measure again when that changes
   // or a route restores the composer after its DOM was removed.
   // biome-ignore lint/correctness/useExhaustiveDependencies: hasContext changes the CSS inset used by scrollHeight.
@@ -132,7 +148,7 @@ export const Composer = memo(function Composer({
           </span>
         ))}
         {/* The context strip is already a polite live region; a nested status would announce twice. */}
-        {notice && <p className="isotone-notice">{notice}</p>}
+        {said && <p className="isotone-notice">{said}</p>}
       </div>
       <div className="isotone-entry">
         <textarea
@@ -148,10 +164,12 @@ export const Composer = memo(function Composer({
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
-              onSend();
+              send();
             }
           }}
-          placeholder={targets.length || variantTarget ? 'Feedback on your selection…' : 'What would you change?'}
+          placeholder={
+            voice.listening ? 'Listening…' : targets.length || variantTarget ? 'Feedback on your selection…' : 'What would you change?'
+          }
           rows={1}
           className="isotone-textarea"
         />
@@ -168,6 +186,20 @@ export const Composer = memo(function Composer({
           >
             <Icon name="pin" size={14} />
           </button>
+          {/* Beside a pin the hint needs the room. */}
+          {voice.supported && !(floating && picking) && (
+            <button
+              type="button"
+              title={voice.listening ? 'Stop dictating' : 'Dictate · experimental'}
+              aria-label={voice.listening ? 'Stop dictating' : 'Dictate'}
+              aria-pressed={voice.listening}
+              className="isotone-pick isotone-mic isotone-icon"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={voice.toggle}
+            >
+              <Icon name="mic" size={14} />
+            </button>
+          )}
           {floating && picking && (
             <span ref={fadeIn} className="isotone-float-hint">
               {HINTS.floating[hints]}
@@ -179,7 +211,7 @@ export const Composer = memo(function Composer({
             disabled={!text.trim()}
             className="isotone-send"
             title={editing ? 'Save edit (Enter)' : 'Send note (Enter)'}
-            onClick={onSend}
+            onClick={send}
           >
             <Icon name="send" size={14} />
           </button>

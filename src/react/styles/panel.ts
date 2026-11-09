@@ -372,6 +372,8 @@ ${APPEARANCE_CSS}
 .isotone-pick[aria-pressed='true'] { color: var(--iso-fg); }
 .isotone-pick, .isotone-send { position: relative; }
 .isotone-pick { width: 30px; height: 30px; border-radius: 999px; }
+/* The microphone sits against the select toggle; listening is the same raised key. */
+.isotone-mic { margin-left: -3px; }
 .isotone-send { width: 44px; height: 30px; }
 .isotone-send svg { width: 16px; height: 16px; }
 /* Keep a 28px hit area around the quieter composer faces. */

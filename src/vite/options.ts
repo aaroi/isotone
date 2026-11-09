@@ -1,4 +1,5 @@
 /** The Vite plugin's options and the structural plugin type it returns. */
+import type { ExperimentFlags } from '../core/experiments';
 import type { RouteGateOptions } from '../core/routes';
 import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
 
@@ -24,6 +25,10 @@ export interface IsotoneViteOptions {
   rule?: RouteGateOptions;
   /** localStorage namespace override. */
   key?: string;
+  /** Experiments to turn on: features that are off by default and may change
+   *  or go away in any release. `.isotone/experiments.json`, which
+   *  `isotone experiment on <id>` writes, wins over this. */
+  experimental?: ExperimentFlags;
   /**
    * Overlay variants: alternative source files under `.isotone/variants/
    * <id>/<repo-relative path>` that `load` swaps in for the real ones while

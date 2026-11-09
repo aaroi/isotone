@@ -3,6 +3,7 @@
  * servers. They live in core so the Vite plugin and `isotone/serve` can
  * describe notes and the panel's options without importing React.
  */
+import type { ExperimentFlags } from './experiments';
 import type { RouteGateOptions } from './routes';
 import type { UpdateRequest } from './update';
 import type { VariantsSource } from './variants';
@@ -162,4 +163,7 @@ export interface MountIsotoneOptions {
   /** Host context attached to each new note as its opaque payload — see
    *  IsotonePanelProps.getPayload. */
   getPayload?: () => unknown;
+  /** Experiments to turn on: features that are off by default and may change
+   *  or go away in any release. `isotone experiment` lists them. */
+  experimental?: ExperimentFlags;
 }
