@@ -14,6 +14,9 @@ export const PAYLOAD_MAX = 65_536;
 /** Longest agent reply `isotone --reply` stores. */
 export const MAX_REPLY_LENGTH = 2000;
 
+/** Longest summary `isotone --done -m` stores: one line for the reviewer. */
+export const MAX_RESOLUTION_LENGTH = 500;
+
 /** A path that climbs to the body in a deep tree runs long, and a cut one
  *  points at some other element. */
 export const MAX_SELECTOR = 2000;

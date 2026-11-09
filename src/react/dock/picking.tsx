@@ -3,6 +3,7 @@ import { describeIsotoneElement, elementAsNode, resolveElementSource } from '../
 import type { IsotoneElement } from '../../core/types';
 import type { DockFocus } from './useDockFocus';
 import type { Mode, UpdateMode } from './useDockMode';
+import { MOTION, stillMotion } from '../motion';
 import { useFloatingComposer } from './useFloatingComposer';
 
 /**
@@ -172,6 +173,15 @@ function usePicker(context: PickerContext) {
 
 type Box = { top: number; left: number; width: number; height: number };
 
+/** Fade an outline in, hold it and fade it out within `duration`; held still where motion is reduced. */
+const flashFor = (duration: number) => (node: HTMLElement | null) => {
+  if (!node || typeof node.animate !== 'function' || stillMotion(node)) return;
+  node.animate(
+    [{ opacity: 0 }, { opacity: 1, offset: MOTION.enter / duration }, { opacity: 1, offset: 1 - MOTION.exit / duration }, { opacity: 0 }],
+    { duration, easing: MOTION.easeOut, fill: 'forwards' },
+  );
+};
+
 const boxOf = (el: Element): Box => {
   const r = el.getBoundingClientRect();
   return { top: r.top, left: r.left, width: r.width, height: r.height };
@@ -249,13 +259,18 @@ export function PickOverlay({
   picking,
   targets,
   locate,
+  flash,
 }: {
   picking: boolean;
   targets: IsotoneElement[];
   locate: (selector: string) => Element | null;
+  /** Show the outlines once for this many milliseconds, fading in and out: a located note's element. */
+  flash?: number;
 }) {
   const hoverRef = useRef<HTMLDivElement>(null);
   const [pins, setPins] = useState<(Box & { selector: string })[]>([]);
+  // One ref for the overlay's life: following a scroll re-renders the pins, and must not replay the flash.
+  const flashRef = useMemo(() => (flash ? flashFor(flash) : undefined), [flash]);
 
   useEffect(() => {
     let frame: number | undefined;
@@ -330,6 +345,7 @@ export function PickOverlay({
       {pins.map((pin) => (
         <div
           key={pin.selector}
+          ref={flashRef}
           data-isotone
           className="isotone-hover isotone-selected"
           style={{ top: pin.top, left: pin.left, width: pin.width, height: pin.height }}

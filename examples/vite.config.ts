@@ -22,6 +22,24 @@ const demoUpdate = (cwd: string): UpdateInfo => ({
   upgrade: { manager: 'pnpm', command: 'pnpm add -D --exact isotone@1.2.0', cwd },
 });
 
+/**
+ * A note the pretend agent closed just after this page's seeded notes (written up to 7s ahead), so
+ * the demo opens with one to check at the foot of the list.
+ */
+const CLOSED_NOTE = (): Parameters<typeof writeNotes>[1][number] => {
+  const closed = new Date(Date.now() + 8_000).toISOString();
+  return {
+    id: 'demo-closed-heading',
+    route: '/',
+    feedback: 'Make the page title a little larger.',
+    element: { tag: 'h1', text: 'Overview', selector: 'main .page-heading h1' },
+    done: true,
+    doneAt: closed,
+    createdAt: new Date(Date.now() - 40 * 60_000).toISOString(),
+    resolution: { summary: 'Raised the page title from 22px to 26px.', at: closed },
+  };
+};
+
 /** Real notes transport, isolated from every project's review data. */
 function demoNotes(): Plugin {
   return {
@@ -83,6 +101,8 @@ function demoNotes(): Plugin {
               createdAt: new Date(Date.now() + (index + 20) * 1000).toISOString(),
             });
           });
+          // One the agent has closed, waiting for the reviewer's check.
+          notes.push(CLOSED_NOTE());
           examples.forEach(([feedback, text], index) => {
             notes.push({
               id: `demo-review-${index}`,
@@ -132,7 +152,7 @@ function demoNotes(): Plugin {
           }
           return;
         }
-        // The pretend agent: `start` is `isotone --working` on one note, `finish` is `--done`.
+        // The pretend agent: `start` is `isotone --working` on one note, `finish` is `--done -m <summary>`.
         if ((req.url ?? '').startsWith('/demo-agent') && req.method === 'POST') {
           try {
             checkRequest(nodeRequestFacts(req));
@@ -157,9 +177,13 @@ function demoNotes(): Plugin {
               if (!target) return notes;
               if (action === 'start') target.workingAt = new Date().toISOString();
               else {
+                const at = new Date().toISOString();
+                const summary = (query.get('summary') ?? '').trim().slice(0, 500);
                 target.done = true;
-                target.doneAt = new Date().toISOString();
+                target.doneAt = at;
                 delete target.workingAt;
+                delete target.reopened;
+                target.resolution = { ...(summary ? { summary } : {}), at };
               }
               return notes;
             });

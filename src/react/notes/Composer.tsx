@@ -94,6 +94,8 @@ export const Composer = memo(function Composer({
     return () => observer.disconnect();
   }, [text, active, hasContext, fieldRef]);
   const hints = touch ? 'touch' : 'pointer';
+  // "Not quite" on a closed note edits it, and sending reopens it.
+  const reopening = editing?.done === true;
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: This extends the native textarea's pointer area; keyboard users focus the textarea directly.
     <fieldset
@@ -112,10 +114,16 @@ export const Composer = memo(function Composer({
           <span>Agent asks</span> {editing.reply.text}
         </p>
       )}
+      {/* What the agent said it changed, in full, while the reviewer says what is still off. */}
+      {reopening && editing.resolution?.summary && (
+        <p className="isotone-editing-reply">
+          <span>Agent</span> {editing.resolution.summary}
+        </p>
+      )}
       <div className="isotone-context" aria-live="polite">
         {editing && (
           <span className="isotone-chip">
-            Editing note
+            {reopening ? 'Reopening note' : 'Editing note'}
             <button type="button" aria-label="Cancel edit" title="Cancel edit" onClick={onCancelEdit}>
               <Icon name="close" size={12} />
             </button>
@@ -182,11 +190,13 @@ export const Composer = memo(function Composer({
           placeholder={
             voice.listening
               ? 'Listening…'
-              : changes
-                ? 'Add a note, or just send…'
-                : targets.length || variantTarget
-                  ? 'Feedback on your selection…'
-                  : 'What would you change?'
+              : reopening
+                ? 'What is still off?'
+                : changes
+                  ? 'Add a note, or just send…'
+                  : targets.length || variantTarget
+                    ? 'Feedback on your selection…'
+                    : 'What would you change?'
           }
           rows={1}
           className="isotone-textarea"
@@ -238,10 +248,10 @@ export const Composer = memo(function Composer({
           )}
           <button
             type="button"
-            aria-label={editing ? 'Save edit' : 'Send note'}
+            aria-label={reopening ? 'Reopen note' : editing ? 'Save edit' : 'Send note'}
             disabled={!text.trim() && !changes}
             className="isotone-send"
-            title={editing ? 'Save edit (Enter)' : 'Send note (Enter)'}
+            title={reopening ? 'Reopen note (Enter)' : editing ? 'Save edit (Enter)' : 'Send note (Enter)'}
             onClick={send}
           >
             <Icon name="send" size={14} />

@@ -16,7 +16,7 @@ import { runBlast } from './blast';
 import { docPath } from './docs';
 import { runExperiment } from './experiment';
 import { runInit } from './init';
-import { runNotes } from './notes';
+import { runNotes, runRecap } from './notes';
 import { runCheckUpdate } from './update';
 import { type CliIO, errOut, has, makeIo, out, parseArgs, valueFor } from './util';
 import { runVariant } from './variant';
@@ -32,6 +32,7 @@ export async function runCli(argv: string[], ioInput: Partial<CliIO> = {}): Prom
     if (argv[0] === 'variant') return await runVariant(argv.slice(1), io);
     if (argv[0] === 'init') return runInit(argv.slice(1), io);
     if (argv[0] === 'experiment' || argv[0] === 'experiments') return await runExperiment(argv.slice(1), io);
+    if (argv[0] === 'recap') return runRecap(argv.slice(1), io);
     if (isHelp(argv[0])) {
       printHelp(io);
       return 0;
@@ -58,8 +59,12 @@ function printHelp(io: CliIO): void {
   out(io, '  isotone [<route>]              open notes, of every route or one: /items is that page,');
   out(io, '                                 /items/* also every page under it');
   out(io, '  isotone --working <id...>      tell the panel you started on notes');
-  out(io, '  isotone --done <id...>         close notes once fixed and verified; refused while no');
-  out(io, '                                 file changed since the note (or --working)');
+  out(io, '  isotone --done <id...> -m "<what you changed>"');
+  out(io, '                                 close notes once fixed and verified, saying in one line');
+  out(io, '                                 what you changed for the reviewer; refused while no file');
+  out(io, '                                 changed since the note (or --working)');
+  out(io, '  -m, --message <text>           with --done: the line the reviewer sees under the note,');
+  out(io, '                                 at most 500 characters; append it to a doneCommand');
   out(io, '  --force                        with --done: close a note that needed no file change');
   out(io, '  isotone --undone <id...>       reopen notes');
   out(io, '  isotone --reply <id> "<text>"  ask the reviewer about a note; it stays open');
@@ -68,6 +73,8 @@ function printHelp(io: CliIO): void {
   out(io, '  --json                         note records as JSON, one array');
   out(io, '  --file <path>                  another notes file');
   out(io, '  An id prefix is enough; give several ids as "a b" or "a,b".');
+  out(io, '  isotone recap [--days <n>]     notes closed in the last day (or n), with what you said,');
+  out(io, '                                 as Markdown for a commit or pull request');
   out(io);
   out(io, `${BLAST.name}: keep acting on notes for a set time`);
   out(io, `  isotone ${BLAST.command} start [30m] [<route>]   start a session and print how to run it`);

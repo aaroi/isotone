@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { FlaskConical, Gem, Moon, Play, Plus, Search, Sun } from 'lucide-react';
 import { EXPERIMENTS, type ExperimentFlags, experimentFlags } from '../../src/core/experiments';
+import { awaitsCheck } from '../../src/core/resolution';
 import { createVariantsSource, IsotonePanel, type IsotoneTheme, type VariantAxis } from '../../src/react/index';
 import { Tour, tourSeen } from './tour';
 
@@ -9,7 +10,7 @@ const params = new URLSearchParams(location.search);
 // The public demo is a static build: no dev server, so notes live in this
 // browser and the Agent buttons edit them here instead of on disk.
 const hosted = import.meta.env.MODE === 'hosted';
-const HOSTED_KEY = 'isotone-hosted-demo-v2';
+const HOSTED_KEY = 'isotone-hosted-demo-v3';
 const capture = params.get('capture');
 const screenshot = capture === 'light' || capture === 'dark';
 const review = params.get('review') === '1';
@@ -202,6 +203,9 @@ type DemoNote = Record<string, unknown> & {
   doneAt: string | null;
   createdAt: string;
   workingAt?: string;
+  checkedAt?: string;
+  resolution?: { summary?: string; at: string };
+  reopened?: { at: string; summary?: string; unchanged?: true };
 };
 function readHostedNotes(): DemoNote[] {
   try {
@@ -222,8 +226,21 @@ function seedHostedNotes() {
     ['/', 'Give the cards a little more room.', 'Overview cards'],
     ['/', 'Shorten this to "Active".', 'Active projects'],
   ];
-  writeHostedNotes(
-    seed.map(([route, feedback, text], index) => ({
+  // Closed after the seeded notes were written, so it waits at the foot of the list.
+  const closed = new Date(Date.now() - 30_000).toISOString();
+  writeHostedNotes([
+    // One the agent has closed, waiting for the visitor's check.
+    {
+      id: 'seed-closed',
+      route: '/',
+      feedback: 'Make the page title a little larger.',
+      element: { tag: 'h1', text: 'Overview', selector: 'main .page-heading h1' },
+      done: true,
+      doneAt: closed,
+      createdAt: new Date(Date.now() - 40 * 60_000).toISOString(),
+      resolution: { summary: 'Raised the page title from 22px to 26px.', at: closed },
+    },
+    ...seed.map(([route, feedback, text], index) => ({
       id: `seed-${index}`,
       route,
       feedback,
@@ -232,8 +249,16 @@ function seedHostedNotes() {
       doneAt: null,
       createdAt: new Date(Date.now() - (seed.length - index) * 60_000).toISOString(),
     })),
-  );
+  ]);
 }
+/** What the server compares to tell an edit from a resend: the text and what it points at. */
+const noteContent = (note: Record<string, unknown>) =>
+  JSON.stringify([
+    note.feedback,
+    ((note.elements ?? (note.element ? [note.element] : [])) as { selector?: string }[]).map((element) => element.selector),
+    note.variant ?? null,
+    note.variantAction ?? null,
+  ]);
 /**
  * The notes endpoint, answered inside the page for the static hosted build.
  * It follows the dev server's contract closely enough for the real panel code
@@ -263,7 +288,11 @@ function serveNotesInPage(path: string) {
       if (polled && query.get('rev') === rev) return reply(200, { rev, unchanged: true });
       const route = query.get('route');
       const rows = (
-        query.get('all') && query.get('all') !== '0' ? notes : route ? notes.filter((n) => n.route === route) : notes.filter((n) => !n.done)
+        query.get('all') && query.get('all') !== '0'
+          ? notes
+          : route
+            ? notes.filter((n) => n.route === route)
+            : notes.filter((n) => !n.done || awaitsCheck(n))
       ).sort((x, y) => y.createdAt.localeCompare(x.createdAt));
       return reply(200, polled ? { rev, notes: rows } : rows);
     }
@@ -271,7 +300,21 @@ function serveNotesInPage(path: string) {
       writeHostedNotes(notes.filter((n) => n.id !== query.get('id')));
       return reply(200, { ok: true });
     }
-    const body = JSON.parse(String(init?.body ?? '{}')) as Partial<DemoNote> & { elements?: unknown[]; element?: unknown };
+    const body = JSON.parse(String(init?.body ?? '{}')) as Partial<DemoNote> & {
+      elements?: unknown[];
+      element?: unknown;
+      checked?: unknown;
+      reopen?: unknown;
+    };
+    // "Looks good": like the server, only a closed note is checked, and nothing else changes.
+    if (body.checked !== undefined) {
+      const checked = notes.find((n) => n.id === body.id && n.route === body.route);
+      if (!checked) return reply(404, { error: 'No such note on this route' });
+      if (!checked.done || body.checked !== true) return reply(400, { error: 'Only a closed note can be checked' });
+      checked.checkedAt = new Date().toISOString();
+      writeHostedNotes(notes);
+      return reply(200, { id: checked.id });
+    }
     const feedback = String(body.feedback ?? '').trim();
     if (!body.route || !feedback) return reply(400, { error: 'route and feedback are required' });
     const fields = Object.fromEntries(
@@ -286,7 +329,18 @@ function serveNotesInPage(path: string) {
         : undefined;
     const existing = notes.find((n) => n.id === (defaults?.id ?? body.id));
     if (existing) {
+      const before = noteContent(existing);
       Object.assign(existing, fields, { feedback }, defaults ? { createdAt: new Date().toISOString() } : {});
+      // An edit of a closed note, or "Not quite", reopens it with what the agent had said.
+      const edited = noteContent(existing) !== before;
+      if (existing.done && (body.reopen === true || edited)) {
+        const summary = existing.resolution?.summary;
+        const reopened = { at: new Date().toISOString(), ...(summary ? { summary } : {}), ...(edited ? {} : { unchanged: true as const }) };
+        Object.assign(existing, { done: false, doneAt: null, reopened });
+        delete existing.resolution;
+        delete existing.checkedAt;
+        delete existing.workingAt;
+      }
       writeHostedNotes(notes);
       return reply(200, { id: existing.id });
     }
@@ -370,17 +424,16 @@ function runPretendAgent() {
   window.fetch = async (input, init) => {
     const response = await network(input, init);
     const url = new URL(input instanceof Request ? input.url : String(input), location.href);
-    // An update request is a note too: the agent picks it up the same way.
-    if (![endpoint, updateEndpoint].includes(url.pathname) || (init?.method ?? 'GET').toUpperCase() !== 'POST' || response.status !== 201)
-      return response;
+    if (![endpoint, updateEndpoint].includes(url.pathname) || (init?.method ?? 'GET').toUpperCase() !== 'POST') return response;
+    const sent = JSON.parse(String(init?.body ?? '{}')) as { feedback?: string; reopen?: boolean };
+    // A new note, an update request (a note too), or one reopened with "Not quite": the agent picks each up.
+    const reopened = sent.reopen === true && response.status === 200;
+    if (response.status !== 201 && !reopened) return response;
     const { id } = (await response.clone().json()) as { id: string };
-    const feedback =
-      url.pathname === updateEndpoint
-        ? '[update]'
-        : String((JSON.parse(String(init?.body ?? '{}')) as { feedback?: string }).feedback ?? '');
-    window.dispatchEvent(new CustomEvent('demo:note', { detail: { id, action: feedback.startsWith('[') } }));
+    const feedback = url.pathname === updateEndpoint ? '[update]' : String(sent.feedback ?? '');
+    if (!reopened) window.dispatchEvent(new CustomEvent('demo:note', { detail: { id, action: feedback.startsWith('[') } }));
     setTimeout(() => void agentStep(id, 'working'), 1600);
-    setTimeout(() => void agentStep(id, 'done'), 6400);
+    setTimeout(() => void agentStep(id, 'done', agentSummary(feedback)), 6400);
     return response;
   };
 }
@@ -396,20 +449,35 @@ async function clearStaleWorking() {
   }
   await fetch(`/demo-agent?action=reset&session=${session}`, { method: 'POST' });
 }
-async function agentStep(id: string, state: 'working' | 'done') {
+/** The line a real agent would leave with `--done -m`, guessed from the note. */
+function agentSummary(feedback: string): string {
+  const said = feedback.toLowerCase();
+  if (said.startsWith('[update]')) return 'Updated Isotone to 1.2.0 and checked the panel still loads.';
+  if (said.startsWith('[')) return 'Applied the request in the source and removed what it replaced.';
+  if (/bigger|larger|smaller|size/.test(said)) return 'Changed the font size from 14px to 16px.';
+  if (/room|space|spacing|gap|tight|padding/.test(said)) return 'Raised the gap between the cards from 16px to 24px.';
+  if (/colou?r|contrast|dark|light/.test(said)) return 'Darkened the text to raise its contrast to 4.8:1.';
+  if (/shorten|rename|label|copy|text|say|word/.test(said)) return 'Updated the copy as written.';
+  return 'Made the change in OverviewCards.tsx and checked it at your viewport.';
+}
+async function agentStep(id: string, state: 'working' | 'done', summary = '') {
   if (hosted) {
     const notes = readHostedNotes();
     const note = notes.find((n) => n.id === id && !n.done);
     if (!note) return;
     if (state === 'working') note.workingAt = new Date().toISOString();
     else {
+      const at = new Date().toISOString();
       note.done = true;
-      note.doneAt = new Date().toISOString();
+      note.doneAt = at;
       delete note.workingAt;
+      delete note.reopened;
+      note.resolution = { ...(summary ? { summary } : {}), at };
     }
     writeHostedNotes(notes);
   } else {
-    await fetch(`/demo-agent?action=${state === 'working' ? 'start' : 'finish'}&id=${encodeURIComponent(id)}`, { method: 'POST' });
+    const action = state === 'working' ? 'start' : `finish&summary=${encodeURIComponent(summary)}`;
+    await fetch(`/demo-agent?action=${action}&id=${encodeURIComponent(id)}`, { method: 'POST' });
   }
   window.dispatchEvent(new CustomEvent('demo:agent', { detail: { id, state } }));
 }

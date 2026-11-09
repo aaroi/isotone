@@ -364,6 +364,21 @@ describe(`isotone ${BLAST.command}`, () => {
     expect(JSON.parse(p.take())).toMatchObject({ type: 'batch', notes: [{ id: 'abcd1234' }] });
   });
 
+  it('hands out again a note the reviewer reopened from the panel, with what the agent had said', async () => {
+    const p = project();
+    add(p.notes, note('abcd1234', { createdAt: old() }));
+    await start(p, '10s');
+    expect(await runBlast(['--every', '300ms', '--json'], p.io, FAST)).toBe(0);
+    p.take();
+    // Closed behind the session's back, so it still remembers handing the note out.
+    const at = new Date().toISOString();
+    updateNotes(p.notes, (notes) => notes.map((n) => ({ ...n, done: true, doneAt: at, resolution: { summary: 'Raised the gap', at } })));
+    const reopen = { id: 'abcd1234', route: '/', feedback: 'Note abcd1234', reopen: true };
+    expect(notesResponse(p.notes, { method: 'POST', url: '/', body: reopen }).status).toBe(200);
+    expect(await runBlast(['--every', '300ms'], p.io, FAST)).toBe(0);
+    expect(p.take()).toContain('↺ reopened by the reviewer, text unchanged; you had closed it saying: Raised the gap');
+  });
+
   it('quotes a --file path in the commands it prints', async () => {
     const p = project();
     writeNotes(join(p.cwd, 'my notes.json'), []);
@@ -485,7 +500,7 @@ describe(`isotone ${BLAST.command}`, () => {
     expect(lines.at(-1)).toBe(`${BLAST_REMINDER} Then run \`${BLAST_CLI} --every 2s\` again.`);
     // The loop's two easily lost rules, which `start` printed once.
     expect(lines.at(-2)).toContain('at its route and viewport, keeping other breakpoints as they are');
-    expect(lines.at(-2)).toContain('npx isotone --done <id>, run as its own command');
+    expect(lines.at(-2)).toContain('npx isotone --done <id> -m "<what you changed>", run as its own command');
   });
 
   it('hands out notes still settling when the check-in is due', async () => {

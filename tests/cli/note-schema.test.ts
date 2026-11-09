@@ -100,6 +100,10 @@ function notes(root: string): [Required<StoredNote>, StoredNote] {
       // Answered: the note changed since this fingerprint.
       reply: { text: 'Which one?', at: '2026-01-08T09:30:00.000Z', about: 'stale-fingerprint' },
       update: { from: '1.2.0', to: '1.3.0', command: 'npm install -D --save-exact isotone@1.3.0', cwd: root, manager: 'npm' },
+      reopened: { at: '2026-01-08T09:40:00.000Z', summary: 'Made it 18px', unchanged: true },
+      // Only printed for a closed note; the closed fixture below carries them.
+      resolution: { summary: 'Stale', at: '2026-01-08T09:20:00.000Z' },
+      checkedAt: '2026-01-08T09:25:00.000Z',
     },
     {
       id: 'closed',
@@ -109,6 +113,8 @@ function notes(root: string): [Required<StoredNote>, StoredNote] {
       done: true,
       doneAt: '2026-01-08T11:00:00.000Z',
       createdAt: '2026-01-08T08:00:00.000Z',
+      resolution: { summary: 'Raised the contrast to 4.8:1', at: '2026-01-08T11:00:00.000Z' },
+      checkedAt: '2026-01-08T12:00:00.000Z',
     },
   ];
 }
@@ -141,7 +147,7 @@ describe('the note record JSON Schema', () => {
     const later = new Date(Date.now() + 1000);
     utimesSync(join(root, 'fix.txt'), later, later);
     const done = captureIo(root);
-    expect(await runCli(['--done', 'full', '--json'], done), done.text.err).toBe(0);
+    expect(await runCli(['--done', 'full', '-m', 'Made it 20px', '--json'], done), done.text.err).toBe(0);
     outputs.push(...JSON.parse(done.text.out));
     expect(outputs.length).toBe(5);
     for (const record of outputs) expect(validate(record, schema)).toEqual([]);

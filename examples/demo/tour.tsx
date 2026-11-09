@@ -364,6 +364,9 @@ function stepContent(
               In your project the note is saved to a file, with the page, the card and what you wrote. Your agent reads it with{' '}
               <code>npx isotone</code>. This demo has a pretend agent.
             </p>
+            <p>
+              A closed note stays in your list with what the agent changed until you check it: Looks good, or Not quite to send it back.
+            </p>
             {agent === 'waiting' && <Status done={false}>Waiting for the agent</Status>}
             {agent === 'working' && <Status done={false}>The agent is on it. The dot by your note shows that.</Status>}
             {agent === 'done' && <Status done>Done. The agent closed your note.</Status>}

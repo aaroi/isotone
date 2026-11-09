@@ -57,6 +57,9 @@ The note carries a structured `update` field next to its text:
 }
 ```
 
+As with any note, the agent closes it with its `doneCommand` and one line for
+you appended: `-m "Updated Isotone to 1.2.0"`.
+
 The [agent guide](agent-guide.md#update-notes) says how the agent carries it
 out. The button needs a notes endpoint and a command Isotone can name; for Bun,
 competing lockfiles, an optional or peer dependency or the Isotone source

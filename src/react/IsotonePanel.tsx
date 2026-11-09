@@ -1,11 +1,11 @@
 import { FEEDBACK_STORAGE_KEY } from '../core/browser-storage';
 import { type DiagnosticsRecorder, recordDiagnostics } from '../core/diagnostics';
 import type { ExperimentFlags } from '../core/experiments';
-import type { IsotoneStoreConfig } from '../core/types';
+import type { IsotoneElement, IsotoneNote, IsotoneStoreConfig } from '../core/types';
 import { isRouteVisible, normalizeRoute, type RouteGateOptions } from '../core/routes';
 import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
 import type { VariantsSource } from '../core/variants';
-import { type ReactElement, useEffect, useId, useRef } from 'react';
+import { type ReactElement, useEffect, useId, useRef, useState } from 'react';
 import { AdjustPanel } from './adjust/AdjustPanel';
 import { useAdjust } from './adjust/useAdjust';
 import type { StyleEdit } from '../core/style-edits';
@@ -25,6 +25,10 @@ import { useNotes } from './notes/useNotes';
 import { useNoteView } from './notes/useNoteView';
 import { refreshSource, useVariantsSnapshot, VariantsPanel } from './variants/VariantsView';
 import { useKeyboardInset } from './dock/viewport';
+import { stillMotion } from './motion';
+
+/** How long a located note's element stays outlined. */
+const LOCATE_FLASH_MS = 1200;
 
 export interface IsotonePanelProps {
   /** Auto follows the page at the dock. System follows the OS preference. */
@@ -183,6 +187,26 @@ export function IsotonePanel({
     if (!adjust.open) update({ picking: false, anchor: null, notesOpen: true });
     adjust.toggle();
   };
+  // A closed note's row shows its element again: scrolled into view and outlined for a moment.
+  const [located, setLocated] = useState<{ at: number; targets: IsotoneElement[] } | null>(null);
+  const locateNote = (note: IsotoneNote) => {
+    // Another page's selector could match something unrelated here.
+    if (normalizeRoute(note.route) !== route) return actions.say(`This note is on ${note.route}.`);
+    const pinned = note.elements?.length ? note.elements : note.element ? [note.element] : [];
+    if (!pinned.length) return actions.say('This note has no pinned element.');
+    const targets = pinned.filter((target) => select.locate(target.selector));
+    const first = targets[0] && select.locate(targets[0].selector);
+    if (!first) return actions.say('That element is not on this page any more.');
+    actions.say('');
+    const still = rootRef.current ? stillMotion(rootRef.current) : false;
+    first.scrollIntoView?.({ block: 'center', behavior: still ? 'auto' : 'smooth' });
+    setLocated({ at: Date.now(), targets });
+  };
+  useEffect(() => {
+    if (!located) return;
+    const timer = setTimeout(() => setLocated(null), LOCATE_FLASH_MS);
+    return () => clearTimeout(timer);
+  }, [located]);
 
   // Opening a surface or changing route loads at once; the poll in useNotes keeps it current.
   // biome-ignore lint/correctness/useExhaustiveDependencies: open-time refresh.
@@ -215,7 +239,7 @@ export function IsotonePanel({
       {...select.controls}
     />
   );
-  const count = view.notes.length;
+  const count = view.open;
   const working = view.working.size;
   const tools = Number(Boolean(variants)) + Number(notesAvailable);
   return (
@@ -237,6 +261,7 @@ export function IsotonePanel({
       <div className="isotone-rail-track" aria-hidden="true" />
       {/* While adjusting, the outlines say which elements the values belong to. */}
       {(picking || floating || adjust.open) && <PickOverlay picking={picking} targets={draft.targets} locate={select.locate} />}
+      {located && <PickOverlay key={located.at} picking={false} targets={located.targets} locate={select.locate} flash={LOCATE_FLASH_MS} />}
       {floating && notesOpen && (
         <div ref={floatRef} className="isotone-float" role="dialog" aria-label="Feedback on the selection">
           {composer}
@@ -262,6 +287,7 @@ export function IsotonePanel({
             hidden={railOpen}
             variantsOnly={!notesAvailable}
             count={count}
+            toCheck={view.toCheck}
             working={working}
             shortcutLabel={shortcutLabel}
             onClick={(event) => {
@@ -311,6 +337,8 @@ export function IsotonePanel({
             onClose={() => closePanel('notes')}
             onEdit={actions.beginEdit}
             onRemove={actions.removeNote}
+            onCheck={actions.checkNote}
+            onLocate={locateNote}
             compose={
               <>
                 {adjust.open && <AdjustPanel adjust={adjust} />}
@@ -328,6 +356,7 @@ export function IsotonePanel({
             icon="message"
             label="Feedback"
             count={count}
+            detail={view.toCheck ? `${view.toCheck} to check` : undefined}
             controls={`${id}-notes`}
             open={notesOpen}
             onClick={(event) => {

@@ -35,10 +35,27 @@ interface NotesPanelProps {
   onClose: () => void;
   onEdit: (note: IsotoneNote) => void;
   onRemove: (note: IsotoneNote) => void;
+  /** "Looks good" on a closed note. */
+  onCheck: (note: IsotoneNote) => void;
+  /** Show a note's pinned element on the page. */
+  onLocate: (note: IsotoneNote) => void;
 }
 
 /** The feedback panel: its close control, the page filter, saved notes and the compose slot. */
-export function NotesPanel({ id, open, route, view, editingId, resizeHandle, compose, onClose, onEdit, onRemove }: NotesPanelProps) {
+export function NotesPanel({
+  id,
+  open,
+  route,
+  view,
+  editingId,
+  resizeHandle,
+  compose,
+  onClose,
+  onEdit,
+  onRemove,
+  onCheck,
+  onLocate,
+}: NotesPanelProps) {
   const { pages, selectedPages, notes, working, togglePage } = view;
   return (
     <section
@@ -80,6 +97,8 @@ export function NotesPanel({ id, open, route, view, editingId, resizeHandle, com
         working={working}
         onEdit={onEdit}
         onRemove={onRemove}
+        onCheck={onCheck}
+        onLocate={onLocate}
       />
       <div className="isotone-compose">{compose}</div>
     </section>
@@ -99,7 +118,10 @@ const NoteList = memo(function NoteList({
   working,
   onEdit,
   onRemove,
-}: Pick<NotesPanelProps, 'open' | 'route' | 'editingId' | 'onEdit' | 'onRemove'> & Pick<NoteView, 'notes' | 'selectedPages' | 'working'>) {
+  onCheck,
+  onLocate,
+}: Pick<NotesPanelProps, 'open' | 'route' | 'editingId' | 'onEdit' | 'onRemove' | 'onCheck' | 'onLocate'> &
+  Pick<NoteView, 'notes' | 'selectedPages' | 'working'>) {
   const listRef = useRef<HTMLUListElement>(null);
   // A closed panel renders no notes; the rows stay one more render after closing, for the dock's exit snapshot.
   // Opening renders the newest notes first and older ones above them in chunks, as the Variants list does.
@@ -159,6 +181,8 @@ const NoteList = memo(function NoteList({
           tabbable={note.id === stop}
           onEdit={onEdit}
           onRemove={onRemove}
+          onCheck={onCheck}
+          onLocate={onLocate}
         />
       ))}
     </ul>
@@ -167,18 +191,40 @@ const NoteList = memo(function NoteList({
 
 const NOTE_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
 
-/** Up, Down, Home and End move between notes; Left and Right between a note and its delete button. */
+/** A row's controls, left to right: the note, then its actions. Each names its kind in `data-kind`. */
+const controlsOf = (row: Element | null | undefined) => Array.from(row?.querySelectorAll<HTMLElement>('button[data-kind]') ?? []);
+
+/** In `row`, the control of the same kind as `like`, else the row's own button: never an action of another kind. */
+function sameKind(row: Element | null | undefined, like: HTMLElement): HTMLElement | undefined {
+  const controls = controlsOf(row);
+  return controls.find((control) => control.dataset.kind === like.dataset.kind) ?? controls[0];
+}
+
+/**
+ * Up, Down, Home and End move between notes, to the same kind of control or
+ * else the note itself; Left and Right between a note and its actions.
+ */
 function moveNoteFocus(event: KeyboardEvent<HTMLUListElement>) {
   const target = event.target as HTMLElement;
   const row = target.closest('li');
   if (!row || !NOTE_KEYS.includes(event.key)) return;
   const rows = Array.from(event.currentTarget.children);
   const at = rows.indexOf(row);
-  const next = { ArrowUp: rows[at - 1], ArrowDown: rows[at + 1], Home: rows[0], End: rows.at(-1) }[event.key] ?? row;
-  const removing = event.key === 'ArrowRight' || (event.key !== 'ArrowLeft' && target.classList.contains('isotone-x'));
-  const button = next.querySelector<HTMLElement>(removing ? '.isotone-x' : 'button');
   event.preventDefault();
-  button?.focus();
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    const controls = controlsOf(row);
+    const column = Math.max(0, controls.indexOf(target)) + (event.key === 'ArrowLeft' ? -1 : 1);
+    controls[Math.min(Math.max(0, column), controls.length - 1)]?.focus();
+    return;
+  }
+  const next = { ArrowUp: rows[at - 1], ArrowDown: rows[at + 1], Home: rows[0], End: rows.at(-1) }[event.key] ?? row;
+  sameKind(next, target)?.focus();
+}
+
+/** After an action from the keyboard, focus moves on to a neighbouring note rather than out of the list. */
+function focusNeighbour(button: HTMLElement) {
+  const row = button.closest('li');
+  sameKind(row?.nextElementSibling ?? row?.previousElementSibling, button)?.focus();
 }
 
 const WorkingDot = () => (
@@ -200,6 +246,8 @@ const NoteRow = memo(function NoteRow({
   tabbable,
   onEdit,
   onRemove,
+  onCheck,
+  onLocate,
 }: {
   note: IsotoneNote;
   page: string | undefined;
@@ -209,7 +257,11 @@ const NoteRow = memo(function NoteRow({
   tabbable: boolean;
   onEdit: (note: IsotoneNote) => void;
   onRemove: (note: IsotoneNote) => void;
+  onCheck: (note: IsotoneNote) => void;
+  onLocate: (note: IsotoneNote) => void;
 }) {
+  if (note.done)
+    return <CheckRow note={note} page={page} editing={editing} tabbable={tabbable} onEdit={onEdit} onCheck={onCheck} onLocate={onLocate} />;
   const remove = removeAction(note);
   return (
     <li data-motion-key={note.id} className={`isotone-note${editing ? ' isotone-note-editing' : ''}`}>
@@ -224,6 +276,7 @@ const NoteRow = memo(function NoteRow({
         <button
           type="button"
           className="isotone-note-hit"
+          data-kind="note"
           tabIndex={tabbable ? 0 : -1}
           aria-current={editing ? true : undefined}
           onClick={() => onEdit(note)}
@@ -235,15 +288,13 @@ const NoteRow = memo(function NoteRow({
       <button
         type="button"
         className="isotone-x isotone-icon"
+        data-kind="delete"
         // An update note has no note button, so its delete button is the row's stop.
         tabIndex={tabbable && note.update ? 0 : -1}
         aria-label={remove.name}
         title={remove.action}
         onClick={(event) => {
-          // From the keyboard, focus moves on to a neighbouring note rather than out of the list.
-          const row = event.currentTarget.closest('li');
-          if (event.detail === 0)
-            (row?.nextElementSibling ?? row?.previousElementSibling)?.querySelector<HTMLElement>('.isotone-x')?.focus();
+          if (event.detail === 0) focusNeighbour(event.currentTarget);
           onRemove(note);
         }}
       >
@@ -253,12 +304,82 @@ const NoteRow = memo(function NoteRow({
   );
 });
 
+/**
+ * A note the agent closed, waiting for the reviewer: the agent's summary under
+ * the note, and two corner actions. The row itself shows the element again.
+ */
+function CheckRow({
+  note,
+  page,
+  editing,
+  tabbable,
+  onEdit,
+  onCheck,
+  onLocate,
+}: {
+  note: IsotoneNote;
+  page: string | undefined;
+  editing: boolean;
+  tabbable: boolean;
+  onEdit: (note: IsotoneNote) => void;
+  onCheck: (note: IsotoneNote) => void;
+  onLocate: (note: IsotoneNote) => void;
+}) {
+  const text = shortText(note.feedback);
+  return (
+    <li data-motion-key={note.id} className={`isotone-note isotone-note-done${editing ? ' isotone-note-editing' : ''}`}>
+      <button
+        type="button"
+        className="isotone-note-hit"
+        data-kind="note"
+        tabIndex={tabbable ? 0 : -1}
+        aria-current={editing ? true : undefined}
+        onClick={() => onLocate(note)}
+      >
+        <span className="isotone-checked" role="img" aria-label="Closed by the agent">
+          <Icon name="check" size={9} />
+        </span>
+        <NoteSummary note={note} page={page} />
+      </button>
+      {/* Always shown, never on hover only: these two are what the row asks of the reviewer. */}
+      <div className="isotone-check-actions">
+        <button
+          type="button"
+          className="isotone-quiet"
+          data-kind="not-quite"
+          tabIndex={-1}
+          aria-label={`Not quite: ${text}`}
+          onClick={() => onEdit(note)}
+        >
+          Not quite
+        </button>
+        <button
+          type="button"
+          className="isotone-secondary"
+          data-kind="looks-good"
+          tabIndex={-1}
+          aria-label={`Looks good: ${text}`}
+          onClick={(event) => {
+            if (event.detail === 0) focusNeighbour(event.currentTarget);
+            onCheck(note);
+          }}
+        >
+          Looks good
+        </button>
+      </div>
+    </li>
+  );
+}
+
+/** Enough of a note to tell rows apart in an accessible name. */
+const shortText = (text: string) => (text.length > 48 ? `${text.slice(0, 47).trimEnd()}…` : text);
+
 /** The corner action, and an accessible name with enough of the note to tell rows apart. */
 function removeAction(note: IsotoneNote): { action: string; name: string } {
   if (note.update) return { action: 'Cancel update request', name: 'Cancel update request' };
   const action = note.variantAction ? 'Cancel removal' : 'Delete note';
   const text = note.variantAction ? note.feedback.replace(/^\[[\w-]+\]\s*/, '') : note.feedback;
-  return { action, name: `${action}: ${text.length > 48 ? `${text.slice(0, 47).trimEnd()}…` : text}` };
+  return { action, name: `${action}: ${shortText(text)}` };
 }
 
 /** Stands in for the composer while it floats on the page, naming where; a click brings it back. */

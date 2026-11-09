@@ -107,13 +107,16 @@ export function useNoteActions({
       ...(previous?.variantAction ? { variantAction: previous.variantAction } : {}),
       ...(diagnostics ? { diagnostics } : {}),
       // An edited note's changes are the editor's as it stands now, an emptied list included.
-      ...(styleEdits.length || latest.current.editing?.styleEdits ? { styleEdits } : {}),
+      ...(styleEdits.length || (previous?.styleEdits && !previous.done) ? { styleEdits } : {}),
     };
     const noteRoute = previous?.route ?? route;
     const element = targets[0] ?? null;
     const tempId = previous?.id ?? `${UNSENT}${createNoteId()}`;
+    // Sending a closed note ("Not quite") reopens it, even unchanged.
+    const reopen = previous?.done === true;
+    const { resolution: _said, checkedAt: _checked, doneAt: _closed, ...kept } = previous ?? ({} as Partial<IsotoneNote>);
     const entry: IsotoneNote = {
-      ...(previous ?? {}),
+      ...kept,
       id: tempId,
       route: noteRoute,
       feedback: value,
@@ -131,7 +134,7 @@ export function useNoteActions({
       focusComposer();
       const viewport = { w: innerWidth, h: innerHeight };
       const saved = (previous ? (saving.current.get(previous.id) ?? Promise.resolve(previous.id)) : Promise.resolve(null)).then((id) =>
-        store.saveNote(noteRoute, value, element, id, payload, viewport, context),
+        store.saveNote(noteRoute, value, element, id, payload, viewport, context, reopen),
       );
       if (!previous) saving.current.set(tempId, saved);
       try {
@@ -156,13 +159,15 @@ export function useNoteActions({
 
   const beginEdit = useCallback(
     (note: IsotoneNote) => {
+      setNotice('');
       update({ anchor: null });
       setEditing(note);
       text.set(note.feedback);
       setTargets(note.elements ?? (note.element ? [note.element] : []));
       setVariantTarget(note.variant ?? null);
-      // Its style changes come back to the editor and the page, to change or remove like the text.
-      latest.current.restoreStyleEdits?.(note.styleEdits ?? []);
+      // An open note's style changes come back to the editor and the page, to change or remove like the text.
+      // A closed one's stay on the note: the page now shows what the agent made of them, which is what is being judged.
+      if (!note.done) latest.current.restoreStyleEdits?.(note.styleEdits ?? []);
       focusComposer();
     },
     [update, text, focusComposer],
@@ -170,6 +175,7 @@ export function useNoteActions({
 
   const removeNote = useCallback(
     (note: IsotoneNote) => {
+      setNotice('');
       void write(async () => {
         setNotes((prev) => prev.filter((n) => n.id !== note.id));
         if (latest.current.editing?.id === note.id) cancelEdit();
@@ -188,6 +194,23 @@ export function useNoteActions({
       });
     },
     [write, setNotes, cancelEdit, store],
+  );
+
+  /** "Looks good" on a closed note: it leaves the list, and comes back if the server refuses. */
+  const checkNote = useCallback(
+    (note: IsotoneNote) => {
+      setNotice('');
+      void write(async () => {
+        setNotes((prev) => prev.filter((n) => n.id !== note.id));
+        try {
+          await store.checkNote(note);
+        } catch {
+          setNotes((prev) => (prev.some((n) => n.id === note.id) ? prev : [...prev, note]));
+          setNotice('Could not mark the note as checked. Try again.');
+        }
+      });
+    },
+    [write, setNotes, store],
   );
 
   /** Ask the agent to remove a selector or some of its options; the request is a note. */
@@ -236,5 +259,7 @@ export function useNoteActions({
     () => ({ onSend: send, onCancelEdit: cancelEdit, onClearVariant: clearVariant, onUnpin: unpin }),
     [send, cancelEdit, clearVariant, unpin],
   );
-  return { draft, composer, setTargets, cancelEdit, beginEdit, removeNote, queueRemoval, referVariant };
+  /** A line in the composer's notice, such as why a note's element cannot be shown; the next action clears it. */
+  const say = useCallback((line: string) => setNotice(line), []);
+  return { draft, composer, setTargets, cancelEdit, beginEdit, removeNote, checkNote, queueRemoval, referVariant, say };
 }

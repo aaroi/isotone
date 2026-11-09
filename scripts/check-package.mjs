@@ -21,7 +21,11 @@ import { npm } from './npm.mjs';
 // Bundle raised to 397 kB and tarball to 436 kB (style editor experiment,
 // 394 kB): its fields, live preview, the editor's own controls and the
 // lookup of where the page sets a property.
-const BUDGET = { bundle: 397_000, tarball: 436_000 };
+// Bundle raised to 402 kB and tarball to 447 kB (closed notes to check, on top
+// of the style editor: 401.9 kB and 446.8 kB): the check rows and their labelled
+// actions, outlining a closed note's element again, the queued checks, `recap`,
+// and their docs.
+const BUDGET = { bundle: 402_000, tarball: 447_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));
