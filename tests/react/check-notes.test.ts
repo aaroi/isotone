@@ -223,6 +223,8 @@ describe('closed notes to check', () => {
       });
     await press(byText('Looks good: Note a'));
     expect(posts).toEqual([{ id: 'a', route: '/', checked: true }]);
+    // The list ignores presses for a moment after a row collapses (see the double-click test).
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 450)));
     await press(byText('Not quite: Note c'));
     expect(container.querySelector('.isotone-context .isotone-chip')?.textContent).toBe('Reopening note');
   });

@@ -9,7 +9,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 
 import type { IsotoneNote, NoteReply, NoteResolution } from '../../core/types';
 import { NOTE_ID } from '../../core/id';
-import { MAX_REPLY_LENGTH, MAX_RESOLUTION_LENGTH } from '../../core/limits';
+import { MAX_CHOICE_LENGTH, MAX_REPLY_CHOICES, MAX_REPLY_LENGTH, MAX_RESOLUTION_LENGTH } from '../../core/limits';
 import { writeJson } from '../fs/atomic';
 import { withFileLock } from '../fs/lock';
 import { updateRequestOf } from '../update/request';
@@ -76,19 +76,34 @@ export function notesRevision(file: string): string {
   }
 }
 
-/** A stored reply, or null when it is missing or malformed. */
+const isTime = (value: unknown): value is string => typeof value === 'string' && value.length <= 40 && Number.isFinite(Date.parse(value));
+
+/** A stored reply, or null when it is missing or malformed. Malformed choices or an answer are dropped on their own. */
 function replyOf(value: unknown): NoteReply | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const v = value as Partial<NoteReply>;
-  if (typeof v.text !== 'string' || !v.text.trim() || typeof v.at !== 'string' || !Number.isFinite(Date.parse(v.at))) return null;
+  const v = value as Partial<Record<keyof NoteReply, unknown>>;
+  if (typeof v.text !== 'string' || !v.text.trim() || !isTime(v.at)) return null;
+  // A hand edit may repeat one; each is a key in the panel, so the list stays distinct.
+  const choices = Array.isArray(v.choices)
+    ? [
+        ...new Set(
+          v.choices.filter(
+            (choice): choice is string => typeof choice === 'string' && choice.trim() !== '' && choice.length <= MAX_CHOICE_LENGTH,
+          ),
+        ),
+      ]
+    : [];
+  const answer = v.answer as { text?: unknown; at?: unknown } | null | undefined;
   return {
     text: v.text.slice(0, MAX_REPLY_LENGTH),
     at: v.at,
+    ...(choices.length ? { choices: choices.slice(0, MAX_REPLY_CHOICES) } : {}),
+    ...(answer && typeof answer === 'object' && typeof answer.text === 'string' && answer.text.trim() && isTime(answer.at)
+      ? { answer: { text: answer.text.slice(0, MAX_REPLY_LENGTH), at: answer.at } }
+      : {}),
     ...(typeof v.about === 'string' && v.about.length <= 64 ? { about: v.about } : {}),
   };
 }
-
-const isTime = (value: unknown): value is string => typeof value === 'string' && value.length <= 40 && Number.isFinite(Date.parse(value));
 
 /** A stored summary, bounded, or nothing. */
 const summaryOf = (value: unknown) => (typeof value === 'string' && value.trim() ? { summary: value.slice(0, MAX_RESOLUTION_LENGTH) } : {});
@@ -122,12 +137,14 @@ export function contentFingerprint(note: StoredNote): string {
 /**
  * What the agent was given for a note. A reviewer who edits a handed-out note
  * (to answer the agent's question, say) changes it, and the note is handed out
- * again. So does reopening it: the same text, refused once.
+ * again. So does reopening it (the same text, refused once) and answering the
+ * question in the panel.
  */
 export function noteFingerprint(note: StoredNote): string {
   const reopenedAt = reopenedOf(note.reopened)?.at;
-  // Appended only when set, so notes never reopened keep the fingerprints they had.
-  return fingerprint([...contentOf(note), ...(reopenedAt ? [reopenedAt] : [])]);
+  const answeredAt = replyOf(note.reply)?.answer?.at;
+  // Appended only when set, so notes never reopened or answered keep the fingerprints they had.
+  return fingerprint([...contentOf(note), ...(reopenedAt ? [reopenedAt] : []), ...(answeredAt ? [{ answeredAt }] : [])]);
 }
 
 function contentOf(note: StoredNote): unknown[] {
@@ -146,12 +163,17 @@ function contentOf(note: StoredNote): unknown[] {
 const fingerprint = (content: unknown[]) => createHash('sha256').update(JSON.stringify(content)).digest('base64url').slice(0, 16);
 
 /**
- * A note's reply as readers see it. Once the note has changed since the agent
- * asked (the reviewer answers by editing it), the question is no longer
- * pending: it comes back marked `answered`.
+ * A note's reply as readers see it. Once the reviewer has answered in the
+ * panel, or the note has changed since the agent asked (an edit answers too),
+ * the question is no longer pending: it comes back marked `answered`.
  */
 export function replyView(note: StoredNote): NoteReply | null {
   const reply = replyOf(note.reply);
   if (!reply) return null;
-  return reply.about !== undefined && reply.about !== contentFingerprint(note) ? { ...reply, answered: true } : reply;
+  return reply.answer || editedSinceAsked(note, reply) ? { ...reply, answered: true } : reply;
+}
+
+/** The note has changed since the agent asked about it. */
+export function editedSinceAsked(note: StoredNote, reply = replyOf(note.reply)): boolean {
+  return reply?.about !== undefined && reply.about !== contentFingerprint(note);
 }

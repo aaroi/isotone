@@ -1,6 +1,7 @@
 import { type Dispatch, type SetStateAction, useCallback, useMemo, useRef, useState } from 'react';
 import { createNoteId } from '../../core/id';
-import { MAX_FEEDBACK_LENGTH } from '../../core/limits';
+import { MAX_FEEDBACK_LENGTH, MAX_REPLY_LENGTH } from '../../core/limits';
+import { withAnswer } from '../../core/notes-client';
 import type { StyleEdit } from '../../core/style-edits';
 import type { IsotoneElement, IsotoneNote, NoteDiagnostics, VariantReference } from '../../core/types';
 import type { VariantAction } from '../../core/variants';
@@ -32,6 +33,8 @@ interface NoteActionsOptions {
 export interface ComposerDraft {
   text: DraftText;
   editing: IsotoneNote | null;
+  /** The note whose question the reviewer is answering; its own text stays as it is. */
+  answering: IsotoneNote | null;
   variantTarget: VariantReference | null;
   targets: IsotoneElement[];
   notice: string;
@@ -44,6 +47,9 @@ function removalText(action: VariantAction, reference: VariantReference): string
   if (action.action === 'keep-default') return `Keep only the default for ${reference.label}; remove its selector and alternatives.`;
   return `Remove ${reference.label}, its selector and all alternatives.`;
 }
+
+/** Said when a note or answer waits in the browser for the dev server. */
+const QUEUED_NOTICE = 'Saved here; it reaches your agent when the dev server is back.';
 
 /** The text of a note sent with style changes and no words. */
 const STYLE_ONLY_NOTE = 'Apply these style changes.';
@@ -75,21 +81,95 @@ export function useNoteActions({
   const [targets, setTargets] = useState<IsotoneElement[]>([]);
   const [variantTarget, setVariantTarget] = useState<VariantReference | null>(null);
   const [editing, setEditing] = useState<IsotoneNote | null>(null);
+  const [answering, setAnswering] = useState<IsotoneNote | null>(null);
   const [notice, setNotice] = useState('');
   // Handlers read the current render here, so they stay stable and memoized children skip unrelated renders.
-  const latest = useRef({ route, getPayload, getDiagnostics, getStyleEdits, restoreStyleEdits, targets, variantTarget, editing });
-  latest.current = { route, getPayload, getDiagnostics, getStyleEdits, restoreStyleEdits, targets, variantTarget, editing };
+  const latest = useRef({
+    route,
+    getPayload,
+    getDiagnostics,
+    getStyleEdits,
+    restoreStyleEdits,
+    targets,
+    variantTarget,
+    editing,
+    answering,
+  });
+  latest.current = { route, getPayload, getDiagnostics, getStyleEdits, restoreStyleEdits, targets, variantTarget, editing, answering };
   /** Saves in flight, by the temporary id of their optimistic note. */
   const saving = useRef(new Map<string, Promise<string>>());
 
+  /** The draft set aside while the reviewer answers the agent, back once the answer is sent or dropped. */
+  const stash = useRef<{ text: string; targets: IsotoneElement[]; variantTarget: VariantReference | null } | null>(null);
+
   const cancelEdit = useCallback(() => {
+    const draft = stash.current;
+    stash.current = null;
     setEditing(null);
-    text.set('');
-    setTargets([]);
-    setVariantTarget(null);
+    setAnswering(null);
+    text.set(draft?.text ?? '');
+    setTargets(draft?.targets ?? []);
+    setVariantTarget(draft?.variantTarget ?? null);
   }, [text]);
 
+  /**
+   * "Answer…": the composer takes the reviewer's answer in their own words. The note stays as it is,
+   * and an unsent draft is set aside (not an edit's text, which is the note's own).
+   */
+  const beginAnswer = useCallback(
+    (note: IsotoneNote, value = '') => {
+      const { editing, answering, targets, variantTarget } = latest.current;
+      if (!editing && !answering) stash.current = { text: text.get(), targets, variantTarget };
+      else if (editing) stash.current = null;
+      setNotice('');
+      update({ anchor: null, picking: false });
+      setEditing(null);
+      setAnswering(note);
+      text.set(value);
+      setTargets([]);
+      setVariantTarget(null);
+      focusComposer();
+    },
+    [update, text, focusComposer],
+  );
+
+  /**
+   * The reviewer's answer to the agent's question, from a choice or the
+   * composer. Shown at once; if the server refuses, the question comes back,
+   * and an answer written in the composer goes back into it.
+   */
+  const answerNote = useCallback(
+    (note: IsotoneNote, value: string, written = false) => {
+      setNotice('');
+      void write(async () => {
+        setNotes((prev) => prev.map((n) => (n.id === note.id ? withAnswer(note, value) : n)));
+        try {
+          const { queued } = await store.answerNote(note, value);
+          if (queued) setNotice(QUEUED_NOTICE);
+        } catch {
+          setNotes((prev) => prev.map((n) => (n.id === note.id ? note : n)));
+          if (written && !latest.current.editing && !latest.current.answering) beginAnswer(note, value);
+          setNotice('Could not send your answer. Try again.');
+        }
+      });
+    },
+    [write, setNotes, store, beginAnswer],
+  );
+
   const send = useCallback(() => {
+    const { answering } = latest.current;
+    if (answering) {
+      const answer = text.get().trim();
+      if (!answer) return;
+      if (answer.length > MAX_REPLY_LENGTH) {
+        setNotice(`An answer can be at most ${MAX_REPLY_LENGTH} characters.`);
+        return;
+      }
+      cancelEdit();
+      focusComposer();
+      answerNote(answering, answer, true);
+      return;
+    }
     const styleEdits = latest.current.getStyleEdits?.() ?? [];
     // Style changes speak for themselves; words are optional beside them.
     const written = text.get().trim();
@@ -114,9 +194,11 @@ export function useNoteActions({
     const tempId = previous?.id ?? `${UNSENT}${createNoteId()}`;
     // Sending a closed note ("Not quite") reopens it, even unchanged.
     const reopen = previous?.done === true;
-    const { resolution: _said, checkedAt: _checked, doneAt: _closed, ...kept } = previous ?? ({} as Partial<IsotoneNote>);
+    const { resolution: _said, checkedAt: _checked, doneAt: _closed, reply, ...kept } = previous ?? ({} as Partial<IsotoneNote>);
     const entry: IsotoneNote = {
       ...kept,
+      // Changing the text answers the agent's question too; the next poll says so.
+      ...(reply && value === previous?.feedback ? { reply } : {}),
       id: tempId,
       route: noteRoute,
       feedback: value,
@@ -139,6 +221,7 @@ export function useNoteActions({
       if (!previous) saving.current.set(tempId, saved);
       try {
         const id = await saved;
+        if (store.endpoint && store.lastSave === 'local') setNotice(QUEUED_NOTICE);
         setNotes((prev) => prev.map((n) => (n.id === tempId ? { ...n, id } : n)));
         // An edit begun meanwhile holds the temporary id; it now edits the saved note.
         if (!previous) setEditing((current) => (current?.id === tempId ? { ...current, id } : current));
@@ -155,12 +238,15 @@ export function useNoteActions({
         if (!previous) setTimeout(() => saving.current.delete(tempId), 0);
       }
     });
-  }, [text, store, write, setNotes, cancelEdit, update, focusComposer]);
+  }, [text, store, write, setNotes, cancelEdit, update, focusComposer, answerNote]);
 
   const beginEdit = useCallback(
     (note: IsotoneNote) => {
       setNotice('');
       update({ anchor: null });
+      // Editing from an answer drops the set-aside draft, as editing from a draft does.
+      stash.current = null;
+      setAnswering(null);
       setEditing(note);
       text.set(note.feedback);
       setTargets(note.elements ?? (note.element ? [note.element] : []));
@@ -178,7 +264,7 @@ export function useNoteActions({
       setNotice('');
       void write(async () => {
         setNotes((prev) => prev.filter((n) => n.id !== note.id));
-        if (latest.current.editing?.id === note.id) cancelEdit();
+        if (latest.current.editing?.id === note.id || latest.current.answering?.id === note.id) cancelEdit();
         let id: string;
         try {
           id = await (saving.current.get(note.id) ?? note.id);
@@ -240,19 +326,26 @@ export function useNoteActions({
     },
     [update, focusComposer],
   );
+  /** Select mode's pins. While answering nothing pinned would be sent, so none are taken. */
+  const pin = useCallback((next: SetStateAction<IsotoneElement[]>) => {
+    if (!latest.current.answering) setTargets(next);
+  }, []);
   const unpin = useCallback((selector: string) => setTargets((prev) => prev.filter((t) => t.selector !== selector)), []);
   const clearVariant = useCallback(() => setVariantTarget(null), []);
 
-  useDraft(draftKey, text, { targets, variantTarget, editing }, (restoredTargets, restoredVariant) => {
+  // An answer is not a draft either: nothing is saved while one is written.
+  useDraft(draftKey, text, { targets, variantTarget, editing: editing ?? answering }, (restoredTargets, restoredVariant) => {
     update({ anchor: null });
+    stash.current = null;
     setEditing(null);
+    setAnswering(null);
     setTargets(restoredTargets);
     setVariantTarget(restoredVariant);
   });
 
   const draft = useMemo<ComposerDraft>(
-    () => ({ text, editing, variantTarget, targets, notice }),
-    [text, editing, variantTarget, targets, notice],
+    () => ({ text, editing, answering, variantTarget, targets, notice }),
+    [text, editing, answering, variantTarget, targets, notice],
   );
   /** The composer's handlers for writing. */
   const composer = useMemo(
@@ -261,5 +354,18 @@ export function useNoteActions({
   );
   /** A line in the composer's notice, such as why a note's element cannot be shown; the next action clears it. */
   const say = useCallback((line: string) => setNotice(line), []);
-  return { draft, composer, setTargets, cancelEdit, beginEdit, removeNote, checkNote, queueRemoval, referVariant, say };
+  return {
+    draft,
+    composer,
+    setTargets: pin,
+    cancelEdit,
+    beginEdit,
+    beginAnswer,
+    answerNote,
+    removeNote,
+    checkNote,
+    queueRemoval,
+    referVariant,
+    say,
+  };
 }

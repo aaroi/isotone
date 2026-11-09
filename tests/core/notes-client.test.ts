@@ -163,3 +163,111 @@ it('keeps a Not quite and a Looks good made while the server is away, and sends 
   expect(posted).toEqual([expect.objectContaining({ id: 'a', feedback: 'Note a', reopen: true }), { id: 'b', route: '/', checked: true }]);
   expect(JSON.parse(values.get('away-test') ?? '[]')).toEqual([]);
 });
+
+const askedNote = (id: string) => ({
+  id,
+  route: '/',
+  feedback: `Note ${id}`,
+  element: null,
+  done: false,
+  createdAt: '2026-01-01T00:00:00Z',
+  reply: { text: 'Bolder, or more contrast?', at: '2026-01-01T00:01:00Z', choices: ['Bolder', 'More contrast'] },
+});
+
+it('keeps an answer given while the server is away, shows it answered, and sends it when the server is back', async () => {
+  const values = memory();
+  let up = false;
+  const posted: Record<string, unknown>[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url: unknown, init?: RequestInit) => {
+      if (!up) throw new TypeError('Failed to fetch');
+      if (init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        posted.push(body);
+        return { ok: true, status: 200, json: async () => ({ id: body.id }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ rev: 'r', notes: [askedNote('a')] }) };
+    }),
+  );
+  const store = createIsotoneStore({ key: 'answer-test', endpoint: '/notes' });
+  await store.answerNote(askedNote('a'), 'More contrast');
+  expect(JSON.parse(values.get('answer-test') ?? '[]')).toEqual([expect.objectContaining({ id: 'a', answer: 'More contrast' })]);
+  expect((await store.pendingNotes())[0]?.reply).toMatchObject({ answered: true, answer: { text: 'More contrast' } });
+  up = true;
+  await store.pollNotes(null);
+  expect(posted).toEqual([{ id: 'a', route: '/', answer: 'More contrast' }]);
+  expect(JSON.parse(values.get('answer-test') ?? '[]')).toEqual([]);
+});
+
+it('posts an answer, throws on a refusal, and drops a queued one the server calls moot', async () => {
+  const values = memory();
+  let status = 200;
+  const posted: Record<string, unknown>[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url: unknown, init?: RequestInit) => {
+      if (init?.method === 'POST') posted.push(JSON.parse(String(init.body)));
+      return { ok: status < 300, status, json: async () => (status < 300 ? { id: 'a', rev: 'r', notes: [] } : { error: 'no' }) };
+    }),
+  );
+  const store = createIsotoneStore({ key: 'answer-refuse', endpoint: '/notes' });
+  await store.answerNote(askedNote('a'), 'Bolder');
+  expect(posted).toEqual([{ id: 'a', route: '/', answer: 'Bolder' }]);
+  status = 400;
+  await expect(store.answerNote(askedNote('a'), 'Bolder')).rejects.toThrow('(400)');
+  expect(values.get('answer-refuse')).toBeUndefined();
+  // Queued while the server failed, then refused (the agent asked anew meanwhile): dropped, not retried for ever.
+  status = 503;
+  await store.answerNote(askedNote('a'), 'Bolder');
+  expect(JSON.parse(values.get('answer-refuse') ?? '[]')).toHaveLength(1);
+  status = 400;
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+  await store.pollNotes(null).catch(() => {});
+  expect(JSON.parse(values.get('answer-refuse') ?? '[]')).toEqual([]);
+});
+
+it('answers in the browser alone when there is no endpoint', async () => {
+  const values = memory();
+  values.set('answer-local', JSON.stringify([askedNote('a')]));
+  const store = createIsotoneStore({ key: 'answer-local' });
+  await store.answerNote(askedNote('a'), 'Bolder');
+  expect((await store.listNotes('/'))[0]?.reply).toMatchObject({ answered: true, answer: { text: 'Bolder' } });
+});
+
+it('sends an edit made after a queued answer or check as the whole note, never the older answer or check', async () => {
+  const values = memory();
+  let up = false;
+  const posted: Record<string, unknown>[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url: unknown, init?: RequestInit) => {
+      if (!up) throw new TypeError('Failed to fetch');
+      if (init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        posted.push(body);
+        return { ok: true, status: 200, json: async () => ({ id: body.id }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ rev: 'r', notes: [] }) };
+    }),
+  );
+  const store = createIsotoneStore({ key: 'newer-test', endpoint: '/notes' });
+  await store.answerNote(askedNote('a'), 'Red');
+  await store.saveNote('/', 'Note a, in red please', null, 'a');
+  await store.checkNote(closedNote('b'));
+  // "Not quite" after "Looks good": the reopen wins.
+  await store.saveNote('/', 'Note b', null, 'b', undefined, undefined, undefined, true);
+  const queued = JSON.parse(values.get('newer-test') ?? '[]') as Record<string, unknown>[];
+  expect(queued.map((n) => [n.id, 'answer' in n, 'checked' in n])).toEqual([
+    ['a', false, false],
+    ['b', false, false],
+  ]);
+  expect((queued[0]?.reply as Record<string, unknown>) ?? {}).not.toHaveProperty('answer');
+  up = true;
+  await store.pollNotes(null);
+  expect(posted).toEqual([
+    expect.objectContaining({ id: 'a', feedback: 'Note a, in red please' }),
+    expect.objectContaining({ id: 'b', feedback: 'Note b', reopen: true }),
+  ]);
+  expect(posted.some((body) => 'answer' in body || 'checked' in body)).toBe(false);
+});

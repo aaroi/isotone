@@ -206,6 +206,7 @@ type DemoNote = Record<string, unknown> & {
   checkedAt?: string;
   resolution?: { summary?: string; at: string };
   reopened?: { at: string; summary?: string; unchanged?: true };
+  reply?: { text: string; at: string; choices?: string[]; answer?: { text: string; at: string }; answered?: true };
 };
 function readHostedNotes(): DemoNote[] {
   try {
@@ -249,6 +250,17 @@ function seedHostedNotes() {
       doneAt: null,
       createdAt: new Date(Date.now() - (seed.length - index) * 60_000).toISOString(),
     })),
+    // One the agent asked about, as `isotone --reply --choice` leaves it, waiting for the visitor's answer.
+    {
+      id: 'seed-asked',
+      route: '/',
+      feedback: 'Make the status labels easier to read.',
+      element: { tag: 'span', text: 'Project status', selector: '#overview-cards' },
+      done: false,
+      doneAt: null,
+      createdAt: new Date(Date.now() - 45_000).toISOString(),
+      reply: { text: 'Bolder text, or more contrast in the colours?', at: closed, choices: ['Bolder text', 'More contrast'] },
+    },
   ]);
 }
 /** What the server compares to tell an edit from a resend: the text and what it points at. */
@@ -305,7 +317,19 @@ function serveNotesInPage(path: string) {
       element?: unknown;
       checked?: unknown;
       reopen?: unknown;
+      answer?: unknown;
     };
+    // An answer to the agent's question: like the server, only on an open note whose question waits, and nothing else changes.
+    if (body.answer !== undefined) {
+      const asked = notes.find((n) => n.id === body.id && n.route === body.route);
+      const answer = typeof body.answer === 'string' ? body.answer.trim() : '';
+      if (!asked) return reply(404, { error: 'No such note on this route' });
+      if (asked.done || !asked.reply || asked.reply.answered || !answer || answer.length > 2000)
+        return reply(400, { error: 'Only an open note with a question waiting can be answered' });
+      asked.reply = { ...asked.reply, answer: { text: answer, at: new Date().toISOString() }, answered: true };
+      writeHostedNotes(notes);
+      return reply(200, { id: asked.id });
+    }
     // "Looks good": like the server, only a closed note is checked, and nothing else changes.
     if (body.checked !== undefined) {
       const checked = notes.find((n) => n.id === body.id && n.route === body.route);
@@ -333,6 +357,11 @@ function serveNotesInPage(path: string) {
       Object.assign(existing, fields, { feedback }, defaults ? { createdAt: new Date().toISOString() } : {});
       // An edit of a closed note, or "Not quite", reopens it with what the agent had said.
       const edited = noteContent(existing) !== before;
+      // An edit answers the agent's question too, and is newer than an answer given before.
+      if (edited && existing.reply) {
+        const { answer: _older, ...asked } = existing.reply;
+        existing.reply = { ...asked, answered: true };
+      }
       if (existing.done && (body.reopen === true || edited)) {
         const summary = existing.resolution?.summary;
         const reopened = { at: new Date().toISOString(), ...(summary ? { summary } : {}), ...(edited ? {} : { unchanged: true as const }) };
@@ -425,15 +454,18 @@ function runPretendAgent() {
     const response = await network(input, init);
     const url = new URL(input instanceof Request ? input.url : String(input), location.href);
     if (![endpoint, updateEndpoint].includes(url.pathname) || (init?.method ?? 'GET').toUpperCase() !== 'POST') return response;
-    const sent = JSON.parse(String(init?.body ?? '{}')) as { feedback?: string; reopen?: boolean };
-    // A new note, an update request (a note too), or one reopened with "Not quite": the agent picks each up.
+    const sent = JSON.parse(String(init?.body ?? '{}')) as { feedback?: string; reopen?: boolean; answer?: string };
+    // A new note, an update request (a note too), one reopened with "Not quite", or an answer to the
+    // agent's question: the agent picks each up.
     const reopened = sent.reopen === true && response.status === 200;
-    if (response.status !== 201 && !reopened) return response;
+    const answered = typeof sent.answer === 'string' && response.status === 200;
+    if (response.status !== 201 && !reopened && !answered) return response;
     const { id } = (await response.clone().json()) as { id: string };
     const feedback = url.pathname === updateEndpoint ? '[update]' : String(sent.feedback ?? '');
-    if (!reopened) window.dispatchEvent(new CustomEvent('demo:note', { detail: { id, action: feedback.startsWith('[') } }));
+    if (!reopened && !answered) window.dispatchEvent(new CustomEvent('demo:note', { detail: { id, action: feedback.startsWith('[') } }));
+    const summary = answered ? answerSummary(String(sent.answer)) : agentSummary(feedback);
     setTimeout(() => void agentStep(id, 'working'), 1600);
-    setTimeout(() => void agentStep(id, 'done', agentSummary(feedback)), 6400);
+    setTimeout(() => void agentStep(id, 'done', summary), 6400);
     return response;
   };
 }
@@ -454,11 +486,18 @@ function agentSummary(feedback: string): string {
   const said = feedback.toLowerCase();
   if (said.startsWith('[update]')) return 'Updated Isotone to 1.2.0 and checked the panel still loads.';
   if (said.startsWith('[')) return 'Applied the request in the source and removed what it replaced.';
+  if (/bold|weight|heavier/.test(said)) return 'Set the text in semibold (600), up from regular.';
   if (/bigger|larger|smaller|size/.test(said)) return 'Changed the font size from 14px to 16px.';
   if (/room|space|spacing|gap|tight|padding/.test(said)) return 'Raised the gap between the cards from 16px to 24px.';
   if (/colou?r|contrast|dark|light/.test(said)) return 'Darkened the text to raise its contrast to 4.8:1.';
   if (/shorten|rename|label|copy|text|say|word/.test(said)) return 'Updated the copy as written.';
   return 'Made the change in OverviewCards.tsx and checked it at your viewport.';
+}
+/** The line after the reviewer answered the agent's question: what it went with, then what it did. */
+function answerSummary(answer: string): string {
+  const quoted = answer.length > 40 ? `${answer.slice(0, 39).trimEnd()}…` : answer;
+  const did = agentSummary(answer);
+  return `Went with “${quoted}”: ${did.charAt(0).toLowerCase()}${did.slice(1)}`;
 }
 async function agentStep(id: string, state: 'working' | 'done', summary = '') {
   if (hosted) {

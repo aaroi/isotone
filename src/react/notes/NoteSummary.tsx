@@ -12,10 +12,10 @@ function SummaryTag({ label, whole }: { label: string; whole?: boolean }) {
   );
 }
 
-/** The agent's question about a note, from `isotone --reply`; edit the note to answer.
- *  Once answered it is no longer a question, so it is not shown. */
+/** The agent's question about a note, from `isotone --reply`. It stays above the reviewer's answer from the panel
+ *  until the agent acts on it; answered by an edit of the note, or on a closed note, it is not shown. */
 function Reply({ note }: { note: IsotoneNote }) {
-  if (!note.reply?.text || note.reply.answered) return null;
+  if (!note.reply?.text || (note.reply.answered && (!note.reply.answer || note.done))) return null;
   return (
     <p className="isotone-reply" onPointerOver={showOverflowTitle}>
       <span>Agent asks</span> {note.reply.text}

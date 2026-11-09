@@ -141,8 +141,8 @@ export function IsotonePanel({
   };
 
   // Page events read the current render when they arrive.
-  const latest = useRef({ mode, notesAvailable, editing: draft.editing });
-  latest.current = { mode, notesAvailable, editing: draft.editing };
+  const latest = useRef({ mode, notesAvailable, editing: draft.editing ?? draft.answering });
+  latest.current = { mode, notesAvailable, editing: draft.editing ?? draft.answering };
   const events = useDockEvents({
     rootRef,
     visible,
@@ -288,6 +288,7 @@ export function IsotonePanel({
             variantsOnly={!notesAvailable}
             count={count}
             toCheck={view.toCheck}
+            questions={view.questions}
             working={working}
             shortcutLabel={shortcutLabel}
             onClick={(event) => {
@@ -332,12 +333,14 @@ export function IsotonePanel({
             open={notesOpen}
             route={route}
             view={view}
-            editingId={draft.editing?.id}
+            editingId={(draft.editing ?? draft.answering)?.id}
             resizeHandle={dockSize.handle('notes')}
             onClose={() => closePanel('notes')}
             onEdit={actions.beginEdit}
             onRemove={actions.removeNote}
             onCheck={actions.checkNote}
+            onAnswer={actions.answerNote}
+            onBeginAnswer={actions.beginAnswer}
             onLocate={locateNote}
             compose={
               <>
@@ -356,7 +359,10 @@ export function IsotonePanel({
             icon="message"
             label="Feedback"
             count={count}
-            detail={view.toCheck ? `${view.toCheck} to check` : undefined}
+            details={[
+              view.questions && `${view.questions} question${view.questions === 1 ? '' : 's'}`,
+              view.toCheck && `${view.toCheck} to check`,
+            ]}
             controls={`${id}-notes`}
             open={notesOpen}
             onClick={(event) => {

@@ -96,6 +96,16 @@ outlines it for 1.2s, or says in the composer's notice line why it cannot. Not
 quite edits the note in the composer, which reads “Reopening note” and “What is
 still off?”. With no open notes, the pill counts notes to check on the neutral
 key face instead of the accent.
+An open note with the agent's question stacks the same way: the question in the
+reply treatment (“Agent asks”, three lines at most), then, right-aligned and
+always shown, one neutral raised key per offered answer (wrapping onto further
+lines; a long label wraps to two lines inside its key, never cut off) and Answer… (Answer alone without choices) as a
+quiet text button. A choice answers at once; Answer… opens the composer reading
+“Answering agent” and “Your answer…”, with the question in full and the note's
+text left out of the field; pins and the style editor are hidden, and an unsent
+draft returns once the answer is sent or dropped. Once answered, “You answered” and the answer (muted,
+two lines) take the keys' place until the agent acts. The Feedback button's name
+counts the questions waiting.
 Defaults and feedback
 references share one compact tag; a lone tag may take the full width, several
 get compact limits. Composer tags share a horizontal strip whose ends align with

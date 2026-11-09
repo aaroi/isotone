@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { noteRecord } from '../../src/cli/notes';
 import { runCli } from '../../src/cli/run';
-import type { IsotoneElement, VariantReference, VariantRemoval } from '../../src/core/types';
+import type { IsotoneElement, NoteReply, VariantReference, VariantRemoval } from '../../src/core/types';
 import { notesResponse } from '../../src/node/notes/handler';
 import { readNotes, type StoredNote, writeNotes } from '../../src/node/notes/store';
 import { captureIo } from '../helpers/cli';
@@ -97,8 +97,14 @@ function notes(root: string): [Required<StoredNote>, StoredNote] {
       styleEdits: [{ selector: '#app > button', changes: [{ property: 'padding-block', from: '8px', to: '12px' }] }],
       variant,
       variantAction,
-      // Answered: the note changed since this fingerprint.
-      reply: { text: 'Which one?', at: '2026-01-08T09:30:00.000Z', about: 'stale-fingerprint' },
+      // Answered in the panel, and the note changed since this fingerprint too.
+      reply: {
+        text: 'Which one?',
+        at: '2026-01-08T09:30:00.000Z',
+        choices: ['Left', 'Right'],
+        answer: { text: 'Left', at: '2026-01-08T09:35:00.000Z' },
+        about: 'stale-fingerprint',
+      } satisfies Required<Omit<NoteReply, 'answered'>>,
       update: { from: '1.2.0', to: '1.3.0', command: 'npm install -D --save-exact isotone@1.3.0', cwd: root, manager: 'npm' },
       reopened: { at: '2026-01-08T09:40:00.000Z', summary: 'Made it 18px', unchanged: true },
       // Only printed for a closed note; the closed fixture below carries them.
@@ -128,6 +134,7 @@ describe('the note record JSON Schema', () => {
     expect([...printed].sort()).toEqual(Object.keys(schema.properties).sort());
     const pinned = (records[0]?.elements as Record<string, unknown>[] | undefined)?.[0] ?? {};
     expect(Object.keys(pinned).sort()).toEqual(Object.keys(schema.$defs.element.properties).sort());
+    expect(Object.keys(records[0]?.reply as object).sort()).toEqual(Object.keys(schema.properties.reply.properties).sort());
   });
 
   it('matches what --json, --working, --reply and --done print', async () => {
@@ -137,7 +144,7 @@ describe('the note record JSON Schema', () => {
     for (const argv of [
       ['--json', '--all'],
       ['--working', 'full', '--json'],
-      ['--reply', 'full', 'Left or right?', '--json'],
+      ['--reply', 'full', 'Left or right?', '--choice', 'Left', '--choice', 'Right', '--json'],
     ]) {
       const io = captureIo(root);
       expect(await runCli(argv, io), io.text.err).toBe(0);

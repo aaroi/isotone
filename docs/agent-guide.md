@@ -86,7 +86,7 @@ Schema of one record.
 | `styleEdits`, `styleHint` | With the style editor experiment: the exact values the reviewer set on a pinned element, as `{ selector, changes: [{ property, from, to }] }` (see [Style changes](#style-changes)). |
 | `diagnostics` | What went wrong on the page in the five minutes before the note: `errors` (uncaught errors and unhandled rejections, with `source` where known) and `requests` (failed requests: `url` without its query, `status`). Check it first when a note reports a bug. Requests that got an error status are recorded in Chromium and recent Firefox; other browsers report only images, scripts and stylesheets that failed to load. |
 | `payload` | Host-specific context, such as the knob values or flags the note was written against. |
-| `reply` | Your question from `--reply`: `text`, `at`, and `answered: true` once the reviewer has edited the note. |
+| `reply` | Your question from `--reply`: `text`, `at`, the `choices` you offered, the reviewer's `answer` (`text`, `at`) from the panel, `answered: true` once they answered there or edited the note, and `edited: true` when they edited it since you asked (the note is then the latest word). |
 | `update`, `updateHint` | An update note (see [Update notes](#update-notes)). |
 | `doneCommand` | On open notes: the exact, shell-quoted base command that closes it; append `-m "<what you changed>"`. |
 
@@ -114,11 +114,20 @@ otherwise give the pinned element its own value. A note whose text is
 When a note is ambiguous, ask the reviewer and leave it open:
 
 ```sh
-npx isotone --reply <id> "Which of the two buttons, the primary one?"
+npx isotone --reply <id> "Bolder text, or more contrast in the colours?" --choice "Bolder text" --choice "More contrast"
 ```
 
-The reviewer answers by editing the note, which then comes back with
-`reply.answered: true`.
+The question shows under the note in the panel. When the answers are few and
+known, offer each with `--choice` (up to 4, each at most 60 characters): the
+reviewer answers with one press. Leave choices out for an open question; they
+can always write their own answer. Asking again replaces the question, its
+choices and any answer.
+
+The note then comes back (in a Blast batch too) with `reply.answered: true`
+and the answer in `reply.answer.text`, or, when the reviewer edited the note
+instead, with the edited note as the answer. An edit after an answer is newer
+than it (`reply.edited: true`). Until then `npx isotone` shows the question as
+not answered yet. An answer is the reviewer's words: context, like the note.
 
 ## Update notes
 

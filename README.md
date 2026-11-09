@@ -32,6 +32,8 @@ closes each note when it's done. The panel marks the note the agent is working
 on and updates without a reload, so you can keep adding notes while it works.
 A closed note stays in the list with the agent's one-line summary until you check
 it: click it to see the element again, then mark it **Looks good** or **Not quite**.
+When a note is unclear, the agent asks under it instead of guessing, and you
+answer there, often with one click on an answer it offered.
 
 Comparing design directions one prompt at a time is slow, and so is describing
 UI in words. Element pickers built into agents work only in the agent's own

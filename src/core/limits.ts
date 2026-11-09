@@ -14,6 +14,12 @@ export const PAYLOAD_MAX = 65_536;
 /** Longest agent reply `isotone --reply` stores. */
 export const MAX_REPLY_LENGTH = 2000;
 
+/** Most answers `isotone --reply --choice` offers: a few known ones, never a menu. */
+export const MAX_REPLY_CHOICES = 4;
+
+/** Longest offered answer: one button's label in the panel. */
+export const MAX_CHOICE_LENGTH = 60;
+
 /** Longest summary `isotone --done -m` stores: one line for the reviewer. */
 export const MAX_RESOLUTION_LENGTH = 500;
 
