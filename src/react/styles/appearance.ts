@@ -52,7 +52,8 @@ const darkPalette = {
   track: 'oklch(32% .006 286)',
   'track-shadow': 'inset 0 1px 1px #0005',
   tick: 'oklch(80% .01 286)',
-  dot: 'oklch(78% .01 286)',
+  // Dimmer than an unselected label, so it marks the default without competing with the pick.
+  dot: 'oklch(52% .012 286)',
   'range-face': 'linear-gradient(oklch(88% .004 286), oklch(78% .006 286))',
   'range-shadow': 'inset 0 1px 0 #fff6, 0 0 0 1px #0007, 0 1px 2px #0006',
   'pick-line': '#8a8cf3',
