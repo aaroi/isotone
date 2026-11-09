@@ -40,7 +40,7 @@ async function openFeedback(experimental?: { dictation: boolean }) {
   await click(container.querySelector('.isotone-fab'));
   await act(async () => {});
 }
-const mic = () => byText('Dictate') ?? byText('Stop dictating');
+const mic = () => byText('Dictate');
 
 describe('dictation', () => {
   it('shows no microphone with the flag off, or in a browser that cannot listen', async () => {
@@ -81,8 +81,11 @@ describe('dictation', () => {
       setter?.call(field(), 'Rewritten.');
       field().dispatchEvent(new Event('input', { bubbles: true }));
     });
+    // The phrase that was being heard ends where the typing began; it is not written again.
     await act(async () => recognition.hear([' Make the cards wider.', true], ['and taller', true]));
-    expect(field().value).toBe('Rewritten. and taller');
+    expect(field().value).toBe('Rewritten.');
+    await act(async () => recognition.hear([' Make the cards wider.', true], ['and taller', true], ['Next phrase', true]));
+    expect(field().value).toBe('Rewritten. Next phrase');
     await click(mic());
     expect(recognition.aborted).toBe(true);
     expect(mic()?.getAttribute('aria-pressed')).toBe('false');
@@ -106,6 +109,24 @@ describe('dictation', () => {
     expect(mic()?.getAttribute('aria-pressed')).toBe('false');
   });
 
+  it('starts on an empty field, keeps listening when the field is cleared by hand, and stops when the panel closes', async () => {
+    vi.stubGlobal('webkitSpeechRecognition', FakeRecognition);
+    await openFeedback({ dictation: true });
+    await click(mic());
+    const recognition = FakeRecognition.last as FakeRecognition;
+    expect(mic()?.getAttribute('aria-pressed')).toBe('true');
+    await act(async () => recognition.hear(['First', true]));
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+      setter?.call(field(), '');
+      field().dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(recognition.aborted).toBe(false);
+    expect(mic()?.getAttribute('aria-pressed')).toBe('true');
+    await click(byText('Close feedback'));
+    expect(recognition.aborted).toBe(true);
+  });
+
   it('says when the microphone is blocked', async () => {
     vi.stubGlobal('webkitSpeechRecognition', FakeRecognition);
     await openFeedback({ dictation: true });
@@ -117,5 +138,9 @@ describe('dictation', () => {
     });
     expect(container.querySelector('.isotone-notice')?.textContent).toBe('Microphone access is blocked for this page.');
     expect(mic()?.getAttribute('aria-pressed')).toBe('false');
+    // Closing the panel lets go of the message with the microphone.
+    await click(byText('Close feedback'));
+    await click(container.querySelector('.isotone-rail-button[aria-label="Feedback"]'));
+    expect(container.querySelector('.isotone-notice')).toBeNull();
   });
 });

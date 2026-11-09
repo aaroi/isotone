@@ -106,7 +106,7 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
     out(io, 'Run it inside the repo under review, then add the printed <script> tag to the dev page.');
     out(io, '--no-update-check disables the daily background npm update check.');
     out(io, '--update-note files an update note for your agent the first time a new version appears.');
-    out(io, '--experimental turns experiments on for this run; `isotone experiment` lists them.');
+    out(io, '--experimental turns experiments on for this run, unless `isotone experiment off` turned one off.');
     return 0;
   }
   try {

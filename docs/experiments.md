@@ -9,10 +9,10 @@ stable feature gets, so nothing else in Isotone depends on one.
 
 | Flag | What it adds | Know first |
 | --- | --- | --- |
-| `dictation` | A microphone button in the feedback composer. Press it and speak; the words land in the note as you say them, and you can keep typing. Press it again, or send the note, to stop. | Needs a browser with speech recognition (Chrome, Edge, Safari); in others the button is not shown. The browser does the recognising and may send the audio to its vendor's service. The page needs microphone permission. |
+| `dictation` | A microphone button in the feedback composer. Press it and speak; the words land in the note as you say them, and you can keep typing. Press it again, or send the note, to stop. | Needs a browser with speech recognition: Chrome, Edge and Safari have it (Safari with Dictation turned on in system settings); in a browser without it the button is not shown, and a few Chromium builds show it but cannot reach a speech service. The browser does the recognising and may send the audio to its vendor's service. The page needs microphone permission. |
 
 `npx isotone experiment` prints this list for the installed version, with what
-is on.
+the project's file says about each: `on`, `off`, or `-` when it says nothing.
 
 ## Turning one on
 
@@ -38,12 +38,16 @@ mountIsotone({ endpoint, experimental: { dictation: true } })  // your own mount
 ```
 
 `npx isotone serve --experimental dictation` does the same for one run. The
-project's `.isotone/experiments.json` wins over all of these, so a flag set
-from the command line always takes effect. A flag this version does not know is
-ignored.
+project's `.isotone/experiments.json` wins over all of these, in both
+directions: `experiment on` turns a feature on whatever the setup says, and
+`experiment off` keeps it off until you turn it on again. A flag this version
+does not know is ignored.
 
 ## For agents
 
 Turn an experiment on only when the user asks for it, with the command above,
 then tell them to reload the page. `npx isotone experiment --json` lists each
-experiment with `id`, `label`, `summary`, `caveat` and `on`.
+experiment with `id`, `label`, `summary`, `caveat`, `on` and `set` (whether the
+project's file mentions it; where it does not, the app's own setup decides).
+`on` and `off` print the file they wrote: check it is in the app's directory,
+where the dev server runs.

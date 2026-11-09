@@ -23,7 +23,8 @@ export const EXPERIMENTS: readonly Experiment[] = [
     id: 'dictation',
     label: 'Dictation',
     summary: 'A microphone button in the feedback composer: speak a note instead of typing it.',
-    caveat: 'Uses the browser’s speech recognition (Chrome, Edge, Safari), which may send audio to the browser vendor’s service.',
+    caveat:
+      'Uses the browser’s speech recognition (Chrome, Edge, Safari with Dictation on), which may send audio to the browser vendor’s service.',
   },
 ];
 

@@ -13,7 +13,7 @@ import { writeJson } from './fs/atomic';
 /** Relative to the app's directory, beside the notes file and the knobs. */
 export const EXPERIMENTS_FILE = '.isotone/experiments.json';
 
-const experimentsFile = (root: string): string => join(root, EXPERIMENTS_FILE);
+export const experimentsFile = (root: string): string => join(root, EXPERIMENTS_FILE);
 
 /** The flags the project's file sets; none when it is missing, and an error when it is not JSON. */
 export function readExperiments(root: string): ExperimentFlags {
@@ -23,7 +23,7 @@ export function readExperiments(root: string): ExperimentFlags {
     const raw = readFileSync(file, 'utf8').trim();
     return raw ? experimentFlags(JSON.parse(raw)) : {};
   } catch (cause) {
-    throw new Error(`Could not read ${file}: it should hold one JSON object such as { "dictation": true }.`, { cause });
+    throw new Error(`Could not read ${file}: it should hold one JSON object such as { "dictation": true }. Fix the file or delete it.`, { cause });
   }
 }
 

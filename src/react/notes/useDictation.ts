@@ -43,8 +43,8 @@ export interface Dictation {
 /**
  * Speaking a note. Words land in the draft as they are recognised: settled
  * phrases are kept, the phrase still being heard is replaced as it firms up.
- * Typing while listening is respected: whatever the field holds when the next
- * words arrive is what they are added to.
+ * Typing while listening is respected: the field as typed is kept, the phrase
+ * that was being heard ends there, and the next phrase follows it.
  */
 export function useDictation(draft: DraftText, enabled: boolean): Dictation {
   const [listening, setListening] = useState(false);
@@ -61,6 +61,11 @@ export function useDictation(draft: DraftText, enabled: boolean): Dictation {
     running.abort();
     setListening(false);
   }, []);
+  /** Stop, and drop what was said about why it stopped: sent, closed or turned off. */
+  const reset = useCallback(() => {
+    stop();
+    setProblem('');
+  }, [stop]);
 
   const toggle = useCallback(() => {
     if (session.current) {
@@ -80,8 +85,14 @@ export function useDictation(draft: DraftText, enabled: boolean): Dictation {
     let settled = 0;
     recognition.onresult = (event) => {
       if (session.current !== recognition) return;
-      // The reviewer typed meanwhile: their text is the new starting point.
-      if (draft.get() !== written) base = draft.get();
+      // The reviewer typed meanwhile: what the field holds is theirs now, the
+      // phrase being heard included, so the rest of that phrase is let go
+      // rather than written a second time.
+      if (draft.get() !== written) {
+        base = written = draft.get();
+        settled = event.results.length;
+        return;
+      }
       let hearing = '';
       for (let i = Math.max(settled, 0); i < event.results.length; i++) {
         const result = event.results[i];
@@ -116,9 +127,9 @@ export function useDictation(draft: DraftText, enabled: boolean): Dictation {
 
   // Turned off, or the composer gone: the microphone goes with it.
   useEffect(() => {
-    if (!enabled) stop();
+    if (!enabled) reset();
     return stop;
-  }, [enabled, stop]);
+  }, [enabled, stop, reset]);
 
-  return { supported, listening, problem, toggle, stop };
+  return { supported, listening, problem, toggle, stop: reset };
 }

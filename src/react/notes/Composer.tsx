@@ -1,4 +1,4 @@
-import { memo, type RefObject, useEffect, useLayoutEffect, useSyncExternalStore } from 'react';
+import { memo, type RefObject, useLayoutEffect, useSyncExternalStore } from 'react';
 import { HINTS } from './hints';
 import { Icon } from '../icons';
 import { fadeIn } from '../motion';
@@ -56,10 +56,7 @@ export const Composer = memo(function Composer({
   const stopVoice = voice.stop;
   const said = voice.problem || notice;
   const hasContext = Boolean(editing || variantTarget || targets.length || said);
-  // A sent or cancelled note empties the field; the microphone stops with it.
-  useEffect(() => {
-    if (!text) stopVoice();
-  }, [text, stopVoice]);
+  // A sent note takes the microphone with it; clearing the field by hand does not.
   const send = () => {
     stopVoice();
     onSend();
@@ -186,12 +183,12 @@ export const Composer = memo(function Composer({
           >
             <Icon name="pin" size={14} />
           </button>
-          {/* Beside a pin the hint needs the room. */}
-          {voice.supported && !(floating && picking) && (
+          {/* Beside a pin the hint needs the room, unless the microphone is on and needs its off switch. */}
+          {voice.supported && (voice.listening || !(floating && picking)) && (
             <button
               type="button"
               title={voice.listening ? 'Stop dictating' : 'Dictate · experimental'}
-              aria-label={voice.listening ? 'Stop dictating' : 'Dictate'}
+              aria-label="Dictate"
               aria-pressed={voice.listening}
               className="isotone-pick isotone-mic isotone-icon"
               onMouseDown={(e) => e.preventDefault()}

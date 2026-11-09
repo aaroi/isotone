@@ -1317,7 +1317,8 @@ describe('isotone experiment', () => {
     const root = tempRepo();
     const io = makeIo(root);
     expect(await runCli(['experiment'], io)).toBe(0);
-    expect(io.text.out).toMatch(/^off {2}dictation — A microphone button/m);
+    // `-`: the project's file says nothing, so the app's own setup decides.
+    expect(io.text.out).toMatch(/^- {4}dictation — A microphone button/m);
     expect(io.text.out).toContain('may send audio');
     expect(io.text.out).toContain('npx isotone experiment on <id>');
   });
@@ -1327,13 +1328,19 @@ describe('isotone experiment', () => {
     const on = makeIo(root);
     expect(await runCli(['experiment', 'on', 'Dictation'], on)).toBe(0);
     expect(on.text.out).toContain('dictation: on. Reload the page to see it.');
+    expect(on.text.out).toContain(`Saved in ${join('.isotone', 'experiments.json')}`);
     expect(JSON.parse(readFileSync(join(root, '.isotone/experiments.json'), 'utf8'))).toEqual({ dictation: true });
     const listed = makeIo(root);
     await runCli(['experiments', '--json'], listed);
-    expect(JSON.parse(listed.text.out)).toEqual([expect.objectContaining({ id: 'dictation', on: true, summary: expect.any(String) })]);
+    expect(JSON.parse(listed.text.out)).toEqual([
+      expect.objectContaining({ id: 'dictation', on: true, set: true, summary: expect.any(String) }),
+    ]);
     const off = makeIo(root);
     expect(await runCli(['experiment', 'off', 'dictation', '--json'], off)).toBe(0);
-    expect(JSON.parse(off.text.out)).toEqual({ id: 'dictation', on: false, enabled: [] });
+    expect(JSON.parse(off.text.out)).toEqual({ id: 'dictation', on: false, enabled: [], file: join(root, '.isotone', 'experiments.json') });
+    const after = makeIo(root);
+    await runCli(['experiment'], after);
+    expect(after.text.out).toMatch(/^off {2}dictation/m);
   });
 
   it('writes beside the notes file when run from a subdirectory', async () => {

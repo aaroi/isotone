@@ -3,7 +3,9 @@
  * on or off for the project.
  */
 import { enabledExperiments, EXPERIMENTS, experimentId } from '../core/experiments';
-import { EXPERIMENTS_FILE, readExperiments, setExperiment } from '../node/experiments';
+import { relative } from 'node:path';
+
+import { EXPERIMENTS_FILE, experimentsFile, readExperiments, setExperiment } from '../node/experiments';
 import { docPath } from './docs';
 import { findNotesFile } from './notes';
 import { toJson } from './text';
@@ -40,16 +42,22 @@ export async function runExperiment(args: string[], io: CliIO): Promise<number> 
     if (action === undefined) {
       const flags = readExperiments(dir);
       if (json) {
-        out(io, toJson(EXPERIMENTS.map((experiment) => ({ ...experiment, on: flags[experiment.id] === true }))));
+        // `set` tells a flag the file turns off from one it does not mention, which a host's own option may still turn on.
+        out(
+          io,
+          toJson(EXPERIMENTS.map((experiment) => ({ ...experiment, on: flags[experiment.id] === true, set: experiment.id in flags }))),
+        );
         return 0;
       }
       for (const experiment of EXPERIMENTS) {
-        out(io, `${flags[experiment.id] === true ? 'on ' : 'off'}  ${experiment.id} — ${experiment.summary}`);
+        const state = flags[experiment.id] === true ? 'on ' : experiment.id in flags ? 'off' : '-  ';
+        out(io, `${state}  ${experiment.id} — ${experiment.summary}`);
         if (experiment.caveat) out(io, `     ${experiment.caveat}`);
       }
       out(io);
       out(io, `Turn one on with: npx isotone experiment on <id>   (kept in ${EXPERIMENTS_FILE}; reload the page)`);
-      out(io, 'A host can also set experimental: { <id>: true } where it sets up Isotone; this file wins over it.');
+      out(io, `This is what ${EXPERIMENTS_FILE} says: on, off, or - when it does not say. Where the file does not say,`);
+      out(io, 'the app’s own Isotone setup may still turn one on (experimental: { <id>: true }); on and off here win over it.');
       return 0;
     }
     if (action !== 'on' && action !== 'off') throw new Error(`Unknown experiment command "${action}". Run \`${HELP}\`.`);
@@ -60,12 +68,15 @@ export async function runExperiment(args: string[], io: CliIO): Promise<number> 
         `No experiment called "${name}" in this version. There ${EXPERIMENTS.length === 1 ? 'is' : 'are'}: ${EXPERIMENTS.map((e) => e.id).join(', ')}.`,
       );
     const flags = setExperiment(dir, id, action === 'on');
+    // Named in full: run from the wrong directory, this is the only sign the dev server reads another file.
+    const file = experimentsFile(dir);
     if (json) {
-      out(io, toJson({ id, on: action === 'on', enabled: enabledExperiments(flags) }));
+      out(io, toJson({ id, on: action === 'on', enabled: enabledExperiments(flags), file }));
       return 0;
     }
     const experiment = EXPERIMENTS.find((e) => e.id === id);
     out(io, `${id}: ${action}. Reload the page to ${action === 'on' ? 'see it' : 'remove it'}.`);
+    out(io, `Saved in ${relative(io.cwd, file) || file}, which the dev server reads from the app’s directory.`);
     if (action === 'on' && experiment?.caveat) out(io, experiment.caveat);
     return 0;
   } catch (error) {
