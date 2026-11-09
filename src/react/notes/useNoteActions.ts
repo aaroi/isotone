@@ -107,7 +107,7 @@ export function useNoteActions({
       ...(previous?.variantAction ? { variantAction: previous.variantAction } : {}),
       ...(diagnostics ? { diagnostics } : {}),
       // An edited note's changes are the editor's as it stands now, an emptied list included.
-      ...(styleEdits.length || latest.current.editing?.styleEdits ? { styleEdits } : {}),
+      ...(styleEdits.length || (previous?.styleEdits && !previous.done) ? { styleEdits } : {}),
     };
     const noteRoute = previous?.route ?? route;
     const element = targets[0] ?? null;
@@ -165,8 +165,9 @@ export function useNoteActions({
       text.set(note.feedback);
       setTargets(note.elements ?? (note.element ? [note.element] : []));
       setVariantTarget(note.variant ?? null);
-      // Its style changes come back to the editor and the page, to change or remove like the text.
-      latest.current.restoreStyleEdits?.(note.styleEdits ?? []);
+      // An open note's style changes come back to the editor and the page, to change or remove like the text.
+      // A closed one's stay on the note: the page now shows what the agent made of them, which is what is being judged.
+      if (!note.done) latest.current.restoreStyleEdits?.(note.styleEdits ?? []);
       focusComposer();
     },
     [update, text, focusComposer],
