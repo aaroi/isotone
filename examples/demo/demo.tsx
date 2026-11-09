@@ -274,7 +274,7 @@ function serveNotesInPage(path: string) {
     const feedback = String(body.feedback ?? '').trim();
     if (!body.route || !feedback) return reply(400, { error: 'route and feedback are required' });
     const fields = Object.fromEntries(
-      ['element', 'elements', 'variant', 'variantAction', 'payload', 'viewport']
+      ['element', 'elements', 'variant', 'variantAction', 'payload', 'viewport', 'diagnostics']
         .filter((key) => body[key] !== undefined)
         .map((key) => [key, body[key]]),
     );
@@ -775,6 +775,23 @@ function Demo() {
               </article>
             ))}
           </section>
+          {!screenshot && (
+            <p className="demo-hint">
+              A note also carries what went wrong on the page just before it.{' '}
+              <button
+                type="button"
+                className="demo-link"
+                onClick={() =>
+                  setTimeout(() => {
+                    throw new Error('Demo: could not load the projects');
+                  })
+                }
+              >
+                Throw a page error
+              </button>
+              , then send a note: it is tagged “1 error”, and your agent reads the message with it.
+            </p>
+          )}
           {!screenshot && !hosted && (
             <p className="demo-hint">
               Notes sent here go to a temporary file and a pretend agent picks each one up a moment later. New project opens on press and on{' '}

@@ -170,6 +170,7 @@ function createBacklogSync(endpoint: string | null, local: LocalNotes): () => Pr
             ...(item.elements !== undefined ? { elements: item.elements } : {}),
             ...(item.variant !== undefined ? { variant: item.variant } : {}),
             ...(item.variantAction !== undefined ? { variantAction: item.variantAction } : {}),
+            ...(item.diagnostics !== undefined ? { diagnostics: item.diagnostics } : {}),
             ...(item.payload !== undefined ? { payload: item.payload } : {}),
             ...(item.viewport ? { viewport: item.viewport } : {}),
           }),

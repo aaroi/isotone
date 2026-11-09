@@ -27,6 +27,9 @@ export interface IsotoneElement {
   near?: string;
   /** Where it sat on the page when pinned, in CSS pixels from the document's corner. */
   rect?: { x: number; y: number; w: number; h: number };
+  /** How it looked when pinned: the computed styles that differ from a plain
+   *  box (spacing, type, colours as hex, layout), so "bigger" has a "from". */
+  styles?: Record<string, string>;
 }
 
 /** A durable reference to a selector or one of its options, not a DOM path. */
@@ -44,7 +47,17 @@ export interface VariantRemoval {
   optionId?: string;
 }
 
+/** Trouble on the page in the minutes before a note was written. */
+export interface NoteDiagnostics {
+  /** Uncaught errors and unhandled rejections, oldest first. */
+  errors?: { message: string; source?: string; at: string; count?: number }[];
+  /** Requests that failed: a 4xx or 5xx answer, or an element that did not load. Paths only, no query. */
+  requests?: { url: string; status?: number; at: string; count?: number }[];
+}
+
 export interface NoteContext {
+  /** Recorded by the panel when the note was first sent; never edited. */
+  diagnostics?: NoteDiagnostics;
   /** Pending instruction: deleting its note cancels it before the agent acts. */
   variantAction?: VariantRemoval;
   elements?: IsotoneElement[];

@@ -1,4 +1,5 @@
 import { FEEDBACK_STORAGE_KEY } from '../core/browser-storage';
+import { type DiagnosticsRecorder, recordDiagnostics } from '../core/diagnostics';
 import type { IsotoneStoreConfig } from '../core/types';
 import { isRouteVisible, normalizeRoute, type RouteGateOptions } from '../core/routes';
 import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
@@ -77,6 +78,17 @@ export function IsotonePanel({
   useDockMotion(rootRef, visible);
   useKeyboardInset(rootRef, visible);
   const theme = useDockTheme(rootRef, visible, themePreference);
+  // The page's errors and failed requests, kept for the next note while the panel can take one.
+  const diagnostics = useRef<DiagnosticsRecorder | null>(null);
+  useEffect(() => {
+    if (!visible || !notesAvailable) return;
+    const recorder = recordDiagnostics(window);
+    diagnostics.current = recorder;
+    return () => {
+      recorder.stop();
+      diagnostics.current = null;
+    };
+  }, [visible, notesAvailable]);
   const dockSize = useDockSize(rootRef, `${nsKey}::dock`, { variants: variantsOpen, notes: notesOpen });
   const focus = useDockFocus(rootRef, fieldRef, fabRef, id);
   const actions = useNoteActions({
@@ -86,6 +98,7 @@ export function IsotonePanel({
     write,
     setNotes,
     getPayload,
+    getDiagnostics: () => diagnostics.current?.recent(),
     update,
     focusComposer: focus.composer,
   });

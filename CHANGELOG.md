@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- **A pinned element now tells your agent how it looks.** Each pin records the computed styles that matter (spacing, type size and weight, colours as hex, layout, radius, shadow), so a note like "too tight" or "make this bigger" comes with the values to start from. `npx isotone` prints them on a `styles:` line and `--json` has them under `elements[].styles`.
+- **A note carries what went wrong on the page just before it.** The panel keeps the uncaught errors, unhandled promise rejections and failed requests of the last five minutes and attaches them to a new note, which is tagged "1 error" or "2 failed" in the panel. Your agent reads them as `⚠` lines and under `diagnostics` in `--json`. Request URLs are stored without their query string, and `console` is never wrapped.
+
 ## 1.3.4
 
 ### Fixed

@@ -264,6 +264,8 @@ function elementContext(el: Element): Partial<IsotoneElement> {
   }
   const box = el.getBoundingClientRect();
   const view = el.ownerDocument?.defaultView;
+  // Only what is painted has a look worth recording.
+  const styles = box.width || box.height ? styleDigest(el, Boolean(ownText)) : undefined;
   return {
     ...(Object.keys(attributes).length ? { attributes } : {}),
     ...reactContext(el),
@@ -279,7 +281,105 @@ function elementContext(el: Element): Partial<IsotoneElement> {
           },
         }
       : {}),
+    ...(styles ? { styles } : {}),
   };
+}
+
+/** `rgb(17, 17, 17)` as `#111111`, the form a stylesheet is searched for; anything else as it is. */
+function hexColor(value: string): string {
+  return value.replace(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/g, (match, r, g, b, a) => {
+    const hex = [r, g, b].map((n) => Number(n).toString(16).padStart(2, '0')).join('');
+    if (a === undefined || Number(a) === 1) return `#${hex}`;
+    return Number(a) === 0 ? 'transparent' : match;
+  });
+}
+
+/** Four sides as the shortest CSS shorthand, or nothing when all are zero. */
+function sides(style: CSSStyleDeclaration, name: (side: string) => string): string | undefined {
+  const [top, right, bottom, left] = ['top', 'right', 'bottom', 'left'].map((side) => style.getPropertyValue(name(side)) || '0px') as [
+    string,
+    string,
+    string,
+    string,
+  ];
+  if ([top, right, bottom, left].every((v) => v === '0px')) return undefined;
+  if (right === left) return top === bottom ? (top === right ? top : `${top} ${right}`) : `${top} ${right} ${bottom}`;
+  return `${top} ${right} ${bottom} ${left}`;
+}
+
+/** Longest style value kept; a long gradient or font stack is cut, never the whole digest. */
+const MAX_STYLE_VALUE = 120;
+
+/**
+ * How the element looks now, as the handful of computed styles a reviewer's
+ * "bigger", "too tight" or "wrong colour" is about. Values that say nothing
+ * (no padding, no shadow, static position) are left out, so the digest stays
+ * a few short lines and "from what" is never a guess.
+ */
+function styleDigest(el: Element, hasText: boolean): Record<string, string> | undefined {
+  let style: CSSStyleDeclaration | undefined;
+  try {
+    style = el.ownerDocument?.defaultView?.getComputedStyle(el);
+  } catch {}
+  if (!style) return undefined;
+  const get = (name: string) => style.getPropertyValue(name).trim();
+  const out: Record<string, string> = {};
+  const add = (name: string, value: string | undefined, skip: readonly string[] = []) => {
+    if (value && !skip.includes(value)) out[name] = hexColor(value).slice(0, MAX_STYLE_VALUE);
+  };
+  const display = get('display');
+  add('display', display, ['block', 'inline']);
+  if (display.includes('flex')) {
+    add('flex-direction', get('flex-direction'), ['row']);
+    add('flex-wrap', get('flex-wrap'), ['nowrap']);
+  }
+  if (display.includes('grid')) add('grid-template-columns', get('grid-template-columns'), ['none']);
+  if (display.includes('flex') || display.includes('grid')) {
+    add('justify-content', get('justify-content'), ['normal', 'flex-start', 'start']);
+    add('align-items', get('align-items'), ['normal', 'stretch']);
+    add('gap', get('gap'), ['normal', '0px', 'normal normal', '0px 0px']);
+  }
+  add('position', get('position'), ['static']);
+  add('z-index', get('z-index'), ['auto']);
+  add(
+    'padding',
+    sides(style, (side) => `padding-${side}`),
+  );
+  add(
+    'margin',
+    sides(style, (side) => `margin-${side}`),
+  );
+  if (hasText) {
+    add('font-size', get('font-size'));
+    add('font-weight', get('font-weight'));
+    add('line-height', get('line-height'));
+    // The first family is the one in use, or meant to be.
+    add(
+      'font-family',
+      get('font-family')
+        .split(',')[0]
+        ?.trim()
+        .replace(/^["']|["']$/g, ''),
+    );
+    add('color', get('color'));
+    add('text-align', get('text-align'), ['start', 'left', '-webkit-auto']);
+    add('letter-spacing', get('letter-spacing'), ['normal', '0px']);
+    add('text-transform', get('text-transform'), ['none']);
+  }
+  add('background-color', get('background-color'), ['rgba(0, 0, 0, 0)', 'transparent']);
+  add('background-image', get('background-image'), ['none']);
+  const borders = ['top', 'right', 'bottom', 'left'].map((side) =>
+    get(`border-${side}-style`) === 'none' || get(`border-${side}-width`) === '0px'
+      ? ''
+      : `${get(`border-${side}-width`)} ${get(`border-${side}-style`)} ${get(`border-${side}-color`)}`,
+  );
+  if (borders.every((b) => b === borders[0])) add('border', borders[0]);
+  else for (const [at, side] of ['top', 'right', 'bottom', 'left'].entries()) add(`border-${side}`, borders[at]);
+  add('border-radius', get('border-radius'), ['0px', '0']);
+  add('box-shadow', get('box-shadow'), ['none']);
+  add('opacity', get('opacity'), ['1']);
+  add('overflow', get('overflow'), ['visible']);
+  return Object.keys(out).length ? out : undefined;
 }
 
 /** Lazy DOM views: describing one element never walks unrelated subtrees. */

@@ -3,7 +3,7 @@
  * what it keeps and drops anything malformed, so a hostile or buggy page
  * cannot bloat or corrupt the notes file.
  */
-import type { IsotoneElement, VariantReference, VariantRemoval } from '../../core/types';
+import type { IsotoneElement, NoteDiagnostics, VariantReference, VariantRemoval } from '../../core/types';
 import { MAX_SELECTOR, PAYLOAD_MAX } from '../../core/limits';
 
 function cap(v: string, max: number): string {
@@ -58,8 +58,18 @@ function elementContext(value: object): Partial<IsotoneElement> {
   if (rect && typeof rect === 'object' && [rect.x, rect.y, rect.w, rect.h].every((n) => typeof n === 'number' && Number.isFinite(n))) {
     out.rect = { x: rect.x, y: rect.y, w: rect.w, h: rect.h } as NonNullable<IsotoneElement['rect']>;
   }
+  if (v.styles && typeof v.styles === 'object' && !Array.isArray(v.styles)) {
+    const entries = Object.entries(v.styles)
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1] !== '' && STYLE_NAME.test(entry[0]))
+      .slice(0, 32)
+      .map(([name, text]): [string, string] => [name, cap(text, 160)]);
+    if (entries.length) out.styles = Object.fromEntries(entries);
+  }
   return out;
 }
+
+/** A CSS property name: nothing else is a key of `styles`. */
+const STYLE_NAME = /^[a-z][a-z-]{0,39}$/;
 
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -115,4 +125,37 @@ export function removalOf(value: unknown): VariantRemoval | undefined {
     action: v.action as VariantRemoval['action'],
     ...(typeof v.optionId === 'string' ? { optionId: v.optionId.slice(0, 200) } : {}),
   };
+}
+
+const isoTime = (value: unknown): string | null =>
+  typeof value === 'string' && value.length <= 40 && Number.isFinite(Date.parse(value)) ? value : null;
+const repeat = (value: unknown) =>
+  typeof value === 'number' && Number.isInteger(value) && value > 1 && value < 1e6 ? { count: value } : {};
+
+/** The page's recent errors and failed requests, bounded; undefined when there are none worth keeping. */
+export function diagnosticsOf(value: unknown): NoteDiagnostics | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const v = value as { errors?: unknown; requests?: unknown };
+  const rows = (list: unknown) => (Array.isArray(list) ? list.filter((row) => row && typeof row === 'object').slice(-8) : []);
+  const errors = rows(v.errors).flatMap((row: { message?: unknown; source?: unknown; at?: unknown; count?: unknown }) => {
+    const at = isoTime(row.at);
+    if (typeof row.message !== 'string' || !row.message || !at) return [];
+    return [
+      {
+        message: cap(row.message, 300),
+        ...(typeof row.source === 'string' && row.source ? { source: cap(row.source, 300) } : {}),
+        at,
+        ...repeat(row.count),
+      },
+    ];
+  });
+  const requests = rows(v.requests).flatMap((row: { url?: unknown; status?: unknown; at?: unknown; count?: unknown }) => {
+    const at = isoTime(row.at);
+    if (typeof row.url !== 'string' || !row.url || !at) return [];
+    const status =
+      typeof row.status === 'number' && Number.isInteger(row.status) && row.status >= 100 && row.status < 600 ? { status: row.status } : {};
+    return [{ url: cap(row.url, 300), ...status, at, ...repeat(row.count) }];
+  });
+  if (!errors.length && !requests.length) return undefined;
+  return { ...(errors.length ? { errors } : {}), ...(requests.length ? { requests } : {}) };
 }

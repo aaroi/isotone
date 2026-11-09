@@ -15,6 +15,7 @@ import { blastFile, touchSession } from '../node/blast';
 import { realPath } from '../node/fs/paths';
 import { noteFingerprint, readNotes, replyView, type StoredNote, updateNotes } from '../node/notes/store';
 import { defaultNotesFile, NOTES_FILE } from '../node/notes/location';
+import { diagnosticsOf } from '../node/notes/validate';
 import { foreignServers } from '../node/serve-owner';
 import { notesProjectRoot, updateRequestOf } from '../node/update/request';
 import { listVariants, readActive, variantDir } from '../node/variants';
@@ -452,6 +453,7 @@ export function noteRecord(record: StoredNote, root: string) {
     payload: n.payload,
     variant: n.variant,
     variantAction: n.variantAction,
+    diagnostics: diagnosticsOf(n.diagnostics),
     update: n.update,
     elements: pinned,
     doneAt: n.doneAt,
@@ -492,6 +494,13 @@ export function printNotes(io: CliIO, rows: StoredNote[], root: string): void {
             .map(([name, value]) => `${oneLine(name)}="${oneLine(value)}"`)
             .join(' ')}`,
         );
+      if (element.styles)
+        out(
+          io,
+          `    styles: ${Object.entries(element.styles)
+            .map(([name, value]) => `${oneLine(name)}: ${oneLine(value)}`)
+            .join('; ')}`,
+        );
       if (element.rect) out(io, `    at: ${oneLine(`${element.rect.x},${element.rect.y} ${element.rect.w}×${element.rect.h}`)}`);
     }
     const update = updateRequestOf(n.update, { root });
@@ -510,6 +519,11 @@ export function printNotes(io: CliIO, rows: StoredNote[], root: string): void {
         ),
       );
     }
+    const trouble = diagnosticsOf(n.diagnostics);
+    for (const error of trouble?.errors ?? [])
+      out(io, `  ⚠ page error${times(error.count)}: ${oneLine(error.message)}${error.source ? ` (${oneLine(error.source)})` : ''}`);
+    for (const request of trouble?.requests ?? [])
+      out(io, `  ⚠ failed request${times(request.count)}: ${oneLine(request.url)}${request.status ? ` → ${oneLine(request.status)}` : ''}`);
     const context = n.payload === undefined ? '' : describePayload(n.payload);
     if (context) out(io, `  · ${oneLine(context)}`);
     // An update note's text is Isotone's own; everything else is quoted.
@@ -531,6 +545,8 @@ export function printNotes(io: CliIO, rows: StoredNote[], root: string): void {
   if (rows.some((n) => !n.done && updateRequestOf(n.update, { root }))) out(io, UPDATE_HINT);
   if (rows.some((n) => !n.done)) out(io, DONE_HINT);
 }
+
+const times = (count: number | undefined) => (count && count > 1 ? ` ×${count}` : '');
 
 /** Under every listing and Blast batch, so the loop survives context compaction. */
 const DONE_HINT =

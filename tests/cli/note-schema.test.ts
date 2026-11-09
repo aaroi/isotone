@@ -70,6 +70,7 @@ const element: Required<IsotoneElement> = {
   within: ['Hero'],
   near: 'Welcome',
   rect: { x: 1, y: 2, w: 3, h: 4 },
+  styles: { 'font-size': '14px', padding: '8px 16px' },
 };
 
 const variant: Required<VariantReference> = { axisId: 'hero', label: 'Hero', optionId: 'left', optionLabel: 'Left', value: '12' };
@@ -89,6 +90,10 @@ function notes(root: string): [Required<StoredNote>, StoredNote] {
       createdAt: '2026-01-08T09:00:00.000Z',
       viewport: { w: 1280, h: 800 },
       payload: { knobs: { radius: 12 } },
+      diagnostics: {
+        errors: [{ message: 'TypeError: x is undefined', source: '/src/App.jsx:12', at: '2026-01-08T08:59:00.000Z', count: 2 }],
+        requests: [{ url: '/api/trails', status: 500, at: '2026-01-08T08:59:30.000Z' }],
+      },
       variant,
       variantAction,
       // Answered: the note changed since this fingerprint.

@@ -220,3 +220,63 @@ describe('the viewport', () => {
     expect(readNotes(file).every((n) => !('viewport' in n))).toBe(true);
   });
 });
+
+describe('note evidence', () => {
+  const post = (file: string, body: Record<string, unknown>) => notesResponse(file, { method: 'POST', url: '/api/notes', body });
+
+  it("keeps a pinned element's styles, bounded, and drops what is not a CSS property", () => {
+    const file = tempFile();
+    post(file, {
+      route: '/',
+      feedback: 'too tight',
+      element: null,
+      elements: [
+        {
+          tag: 'article',
+          text: 'Card',
+          selector: '#card',
+          styles: { padding: '8px 12px', 'font-size': '14px', __proto__x: 'no', 'Not A Property': 'no', gap: 7, color: 'x'.repeat(500) },
+        },
+      ],
+    });
+    const styles = readNotes(file)[0]?.elements?.[0]?.styles;
+    expect(styles).toEqual({ padding: '8px 12px', 'font-size': '14px', color: 'x'.repeat(160) });
+  });
+
+  it('records diagnostics with a new note, bounded, and never from an edit', () => {
+    const file = tempFile();
+    const at = '2026-01-08T09:00:00.000Z';
+    const created = post(file, {
+      route: '/',
+      feedback: 'flashes an error',
+      element: null,
+      diagnostics: {
+        errors: [{ message: 'TypeError: x', source: '/src/App.jsx:3', at, count: 3 }, { message: '', at }, { message: 'no time' }, 'junk'],
+        requests: [
+          { url: '/api/trails', status: 500, at },
+          { url: '/x', status: 9000, at },
+        ],
+        extra: 'dropped',
+      },
+    });
+    const id = (created.body as { id: string }).id;
+    const stored = readNotes(file)[0]?.diagnostics;
+    expect(stored).toEqual({
+      errors: [{ message: 'TypeError: x', source: '/src/App.jsx:3', at, count: 3 }],
+      requests: [
+        { url: '/api/trails', status: 500, at },
+        { url: '/x', at },
+      ],
+    });
+    post(file, { id, route: '/', feedback: 'flashes an error, twice', element: null, diagnostics: { errors: [{ message: 'later', at }] } });
+    expect(readNotes(file)[0]?.diagnostics).toEqual(stored);
+    const listed = notesResponse(file, { method: 'GET', url: '/api/notes' }).body as { diagnostics?: unknown }[];
+    expect(listed[0]?.diagnostics).toEqual(stored);
+  });
+
+  it('leaves the field out when nothing valid was sent', () => {
+    const file = tempFile();
+    post(file, { route: '/', feedback: 'quiet page', element: null, diagnostics: { errors: [] } });
+    expect(readNotes(file)[0]).not.toHaveProperty('diagnostics');
+  });
+});
