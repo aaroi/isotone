@@ -69,6 +69,7 @@ what it is. The outline, in `.github/pull_request_template.md` and for
 | `src/node/variants` | Manifests, file alternatives, activation and promotion, the export scanner, and the variants endpoint. | |
 | `src/node/update`, `src/node/blast.ts` | Update checks and update notes; Blast sessions. | |
 | `src/node/http.ts`, `src/node/bundle.ts` | Bounded request bodies, origin checks and response writing; reading the built browser bundle. | |
+| `src/node/serve-owner.ts` | Which checkout an `isotone serve` port belongs to. | |
 | `src/vite`, `src/serve` | Development-server integration and self-contained panel delivery. | core, node |
 | `src/cli` | Setup, feedback and variant commands over the same stores. | core, node, serve (only to start `isotone serve`) |
 

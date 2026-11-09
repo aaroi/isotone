@@ -104,10 +104,51 @@ first). Swapping source files needs the Vite plugin or a host `VariantsSource`.
 
 `serve` prints the `panel` URL and loader `tag` for the port it listens on:
 paste them as printed, and keep a non-default port in one script such as
-`"isotone": "isotone serve --port 4124"`. `--file` picks the notes file and
+`"isotone": "isotone serve --port 4124"`, or [one port per
+checkout](#several-checkouts-at-once) when several run at once. `--file` picks the notes file and
 `--theme` the panel theme. It binds to `127.0.0.1` and answers only this
 machine, so another device gets 403 even when the app's dev server listens on
 every interface (`next dev` does). An HTTPS page may block the HTTP script.
+
+## Several checkouts at once
+
+A loader tag names one port, and every checkout of the project (Git worktrees,
+parallel agent sessions) shares the same tag. The first `isotone serve` to
+start gets the port, and the other checkouts' pages then save their notes in
+that checkout's file. To keep each checkout's notes in its own file, give each
+`serve` a port derived from the dev server's, on both sides. With 20000 added
+to the dev server's port, a checkout on 3001 serves notes on 23001:
+
+```sh
+npx isotone serve --port $((PORT + 20000))
+```
+
+```html
+<script>
+  if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))
+    document.head.append(Object.assign(document.createElement('script'),
+      { src: 'http://127.0.0.1:' + (Number(location.port) + 20000) + '/isotone.js' }));
+</script>
+```
+
+Set `PORT` once per checkout where both commands see it, such as the script
+that starts both; an unset `PORT` makes every checkout serve on 20000. In Next,
+render the loader above as an inline `<Script id="isotone"
+strategy="afterInteractive">` so it reads `location.port` too, since
+`process.env.PORT` is not defined in client code. In a client mount, build the
+`endpoint` from `location.port`. A port the dev server picks for itself is one
+`serve` cannot know in advance, so start the dev server on its `PORT`. The
+`$((…))` arithmetic needs a POSIX shell; on Windows, compute the port in a
+Node script.
+
+When a checkout's `serve` cannot start because another checkout's `serve`
+holds the port, it says which checkout has it and exits. `npx isotone` and
+`isotone blast start` print a warning on stderr when the `serve` on this
+project's port saves to another notes file, whether another worktree of the
+repository runs it or this one does with another `--file`. The port is one a
+package.json script passes to `isotone serve`, or the default when no script
+names one and no Vite config uses the plugin. Each `serve` reports its project
+and notes file at `GET /api/isotone/server`.
 
 ## Client mount
 
@@ -193,7 +234,8 @@ and `IsotonePanel`. The standalone CLI accepts the same values with `--theme`:
 
 If the panel is visible but the CLI has no notes, compare the dev server's printed
 notes path with the file the CLI reads: the nearest `.isotone/notes.json` up to
-the Git root, or `--file`. If the endpoint is unreachable, the panel
+the Git root, or `--file`. With several checkouts running, see [Several checkouts
+at once](#several-checkouts-at-once). If the endpoint is unreachable, the panel
 keeps unsent notes in the browser until it can retry; keep that browser profile
 until they reach the file.
 
