@@ -87,6 +87,8 @@ ${APPEARANCE_CSS}
 .isotone-root[data-tools='2'] .isotone-rail-button::before { inset: var(--iso-rail-key-inset) calc(var(--iso-rail-gap) / 2); }
 .isotone-tool-label { display: none; }
 .isotone-badge { position: absolute; right: -3px; top: -3px; pointer-events: none; display: grid; place-items: center; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: var(--iso-accent); box-shadow: 0 0 0 2px var(--iso-rail-base); color: var(--iso-accent-ink); font-size: 9px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Nothing open but notes to check: the count, quiet, on the neutral key face rather than the accent. */
+.isotone-badge[data-quiet] { background: var(--iso-control-face); color: var(--iso-muted); }
 /* Panels are sections inside the dock. Only long content scrolls. */
 .isotone-panel { order: 0; position: relative; display: none; flex-direction: column; min-height: 0; flex: 0 1 auto; width: 100%; }
 .isotone-panel[data-open='true'] { display: flex; }
@@ -338,6 +340,16 @@ ${APPEARANCE_CSS}
 /* A long list lays out only the rows in view. The placeholder is one line of text; a row keeps its height once seen. */
 .isotone-note-hit { position: relative; content-visibility: auto; contain-intrinsic-size: auto 18px; }
 .isotone-working { position: absolute; left: 3px; top: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--iso-focus); }
+/* A note the agent closed, waiting for the reviewer's check: a small muted check where the working dot sits,
+   the reviewer's words quieter, and the agent's summary on the second line. */
+.isotone-checked { position: absolute; left: 1px; top: 3px; color: var(--iso-muted); }
+.isotone-note-done .isotone-note-hit > p:first-of-type { color: var(--iso-muted); }
+/* The agent's line wraps to three lines at most; a clamped one shows the rest on hover. */
+.isotone-note-done .isotone-note-hit > p.isotone-reply { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; }
+/* Under it, the two answers the row asks for, always shown: a quiet text button and the neutral raised key. */
+.isotone-check-actions { display: flex; justify-content: flex-end; align-items: center; gap: 4px; padding: 2px var(--iso-note-padding-x) 6px; }
+.isotone-check-actions > button { display: inline-flex; align-items: center; min-height: 24px; padding: 0 12px; font-size: 11px; line-height: 16px; white-space: nowrap; }
+.isotone-quiet { border-radius: var(--iso-control-radius); color: var(--iso-muted); font-weight: 500; background: none; box-shadow: none; }
 .isotone-ring { position: absolute; inset: 0; border-radius: 999px; pointer-events: none; }
 .isotone-list:empty { display: none; }
 /* A single line per note, with compact references sharing its trailing space. */
@@ -449,6 +461,7 @@ ${APPEARANCE_CSS}
   .isotone-page[aria-pressed='false']:hover { color: var(--iso-fg); box-shadow: inset 0 0 0 1px var(--iso-edge); }
   .isotone-root :where(.isotone-save, .isotone-secondary, .isotone-picking button):not(:disabled):hover, .isotone-away:hover .isotone-away-action { background: var(--iso-control-hover-face); box-shadow: var(--iso-control-hover-shadow); }
   .isotone-chip button:hover { color: var(--iso-fg); background: var(--iso-hover); }
+  .isotone-quiet:hover { color: var(--iso-fg); background: var(--iso-hover); }
   .isotone-x:hover { color: var(--iso-fg); }
   .isotone-x:hover::before { background: var(--iso-control-hover-face); }
   .isotone-note .isotone-x { opacity: 0; }
@@ -487,6 +500,9 @@ ${APPEARANCE_CSS}
   .isotone-pick::after, .isotone-send::after { inset: -8px -10px; }
   .isotone-chip button { position: relative; }
   .isotone-chip button::after, .isotone-note > .isotone-x::after, .isotone-panel-close::after { content: ''; position: absolute; inset: -6px; border-radius: 50%; }
+  /* A finger gets 32px keys with a clear gap, so the two answers never share a press. */
+  .isotone-check-actions { gap: 8px; }
+  .isotone-check-actions > button { min-height: 32px; }
 }
 @media (max-height: 580px) { .isotone-list { --iso-list-height: 72px; } .isotone-root .isotone-textarea { max-height: calc(64px + var(--iso-textarea-inset)); } }
 @media (prefers-reduced-motion: reduce) {

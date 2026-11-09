@@ -2,6 +2,7 @@ import { FEEDBACK_STORAGE_KEY, readBrowserStorage } from './browser-storage';
 import { createNoteId } from './id';
 import { MAX_FEEDBACK_LENGTH } from './limits';
 import { request } from './request';
+import { awaitsCheck } from './resolution';
 import type { IsotoneElement, IsotoneNote, IsotoneStoreConfig, NoteContext } from './types';
 
 /* ---------------------------------------------------------------------------
@@ -17,6 +18,8 @@ export type SaveLocation = 'server' | 'local';
 type Viewport = { w: number; h: number };
 
 const newestFirst = (a: IsotoneNote, b: IsotoneNote) => b.createdAt.localeCompare(a.createdAt);
+/** What the panel lists: open notes, and closed ones the reviewer has yet to check. */
+const isListed = (note: IsotoneNote) => !note.done || awaitsCheck(note);
 const isDefaultsRequest = (feedback: string) => feedback.startsWith('[set-defaults]');
 
 function parseLocal(raw: string | null): IsotoneNote[] {
@@ -52,6 +55,13 @@ function merge(remote: IsotoneNote[], local: IsotoneNote[]): IsotoneNote[] {
 }
 
 /**
+ * A note waiting in the browser for the server, with what the reviewer asked
+ * of it while the server was away: reopen it ("Not quite"), or mark it
+ * checked ("Looks good").
+ */
+type QueuedNote = IsotoneNote & { reopen?: true; checked?: true };
+
+/**
  * The notes kept in `localStorage`: every note when there is no endpoint, and
  * otherwise the backlog the server has not acknowledged yet.
  */
@@ -70,6 +80,20 @@ function createLocalNotes(key: string) {
     window.localStorage.setItem(key, JSON.stringify(items));
   }
 
+  /** Marks a closed note as checked by the reviewer: in the browser's own notes, or queued for the server. */
+  function check(note: IsotoneNote, queue: boolean): void {
+    const notes = all();
+    const checkedAt = new Date().toISOString();
+    const held = notes.find((n) => n.id === note.id && n.done);
+    if (!queue) {
+      if (!held) return;
+      held.checkedAt = checkedAt;
+      write(notes);
+      return;
+    }
+    write([...notes.filter((n) => n.id !== note.id), { ...note, done: true, checkedAt, checked: true } as QueuedNote]);
+  }
+
   /** Drops the exact snapshot the server acknowledged; a newer local edit of the note stays. */
   function acknowledge(item: IsotoneNote): void {
     const current = all();
@@ -86,6 +110,7 @@ function createLocalNotes(key: string) {
     payload?: unknown,
     viewport?: Viewport,
     context?: NoteContext,
+    reopen = false,
   ): string {
     const notes = all();
     let savedId: string;
@@ -111,6 +136,13 @@ function createLocalNotes(key: string) {
       }
       if (context) Object.assign(existing, context);
       if (existing.elements) existing.element = existing.elements[0] ?? null;
+      if (reopen) {
+        existing.done = false;
+        existing.doneAt = null;
+        delete existing.resolution;
+        delete existing.checkedAt;
+        (existing as QueuedNote).reopen = true;
+      }
       savedId = existing.id;
     } else {
       savedId = id ?? createNoteId();
@@ -125,13 +157,15 @@ function createLocalNotes(key: string) {
         ...(payload !== undefined ? { payload } : {}),
         ...context,
         ...(context?.elements ? { element: context.elements[0] ?? null } : {}),
-      });
+        // Reopening a closed note while the server is away: the backlog asks for it.
+        ...(reopen ? { reopen: true } : {}),
+      } as QueuedNote);
     }
     write(defaultsRequest ? notes.filter((n) => n.id === savedId || n.done || n.route !== route || !isDefaultsRequest(n.feedback)) : notes);
     return savedId;
   }
 
-  return { all, write, acknowledge, save };
+  return { all, write, acknowledge, save, check };
 }
 
 type LocalNotes = ReturnType<typeof createLocalNotes>;
@@ -142,6 +176,8 @@ type LocalNotes = ReturnType<typeof createLocalNotes>;
  * server or its notes file changes, so those notes stay queued.
  */
 const NEVER_ACCEPTED = new Set([400, 413, 415]);
+/** A check queued for a note the server no longer has, or that is open again, is moot. */
+const CHECK_MOOT = new Set([400, 404]);
 
 /** Pushes the local backlog to the server, one run at a time: a second call joins the run in flight. */
 function createBacklogSync(endpoint: string | null, local: LocalNotes): () => Promise<void> {
@@ -151,30 +187,35 @@ function createBacklogSync(endpoint: string | null, local: LocalNotes): () => Pr
     if (!endpoint) return;
     const backlog = local.all();
     if (backlog.length === 0) return;
-    for (const item of backlog) {
+    for (const item of backlog as QueuedNote[]) {
       // Notes saved by an older client may exceed today's server limit.
       // Keep them in the browser, but let valid notes behind them sync.
-      if (item.feedback.trim().length > MAX_FEEDBACK_LENGTH) continue;
+      if (!item.checked && item.feedback.trim().length > MAX_FEEDBACK_LENGTH) continue;
       let rejected = null as { status: number; error: unknown } | null;
       const saved = await request(
         endpoint,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: item.id,
-            createdAt: item.createdAt,
-            route: item.route,
-            feedback: item.feedback,
-            element: item.element ?? null,
-            ...(item.elements !== undefined ? { elements: item.elements } : {}),
-            ...(item.variant !== undefined ? { variant: item.variant } : {}),
-            ...(item.variantAction !== undefined ? { variantAction: item.variantAction } : {}),
-            ...(item.diagnostics !== undefined ? { diagnostics: item.diagnostics } : {}),
-            ...(item.styleEdits !== undefined ? { styleEdits: item.styleEdits } : {}),
-            ...(item.payload !== undefined ? { payload: item.payload } : {}),
-            ...(item.viewport ? { viewport: item.viewport } : {}),
-          }),
+          body: JSON.stringify(
+            item.checked
+              ? { id: item.id, route: item.route, checked: true }
+              : {
+                  id: item.id,
+                  createdAt: item.createdAt,
+                  route: item.route,
+                  feedback: item.feedback,
+                  element: item.element ?? null,
+                  ...(item.elements !== undefined ? { elements: item.elements } : {}),
+                  ...(item.variant !== undefined ? { variant: item.variant } : {}),
+                  ...(item.variantAction !== undefined ? { variantAction: item.variantAction } : {}),
+                  ...(item.diagnostics !== undefined ? { diagnostics: item.diagnostics } : {}),
+                  ...(item.styleEdits !== undefined ? { styleEdits: item.styleEdits } : {}),
+                  ...(item.payload !== undefined ? { payload: item.payload } : {}),
+                  ...(item.viewport ? { viewport: item.viewport } : {}),
+                  ...(item.reopen ? { reopen: true } : {}),
+                },
+          ),
         },
         async (res) => {
           if (!res.ok) {
@@ -190,7 +231,7 @@ function createBacklogSync(endpoint: string | null, local: LocalNotes): () => Pr
         if (rejected) {
           // A note the server can never accept is dropped, once and loudly,
           // instead of being posted again on every poll.
-          if (NEVER_ACCEPTED.has(rejected.status)) {
+          if ((item.checked ? CHECK_MOOT : NEVER_ACCEPTED).has(rejected.status)) {
             local.acknowledge(item);
             console.warn(
               `Isotone dropped a saved note the server rejects (${rejected.status}${typeof rejected.error === 'string' ? `: ${rejected.error}` : ''}).`,
@@ -286,7 +327,7 @@ export function createIsotoneStore(cfg: IsotoneStoreConfig = {}) {
    * caller can back off.
    */
   async function pollNotes(rev: string | null): Promise<{ rev: string | null; notes: IsotoneNote[] | null }> {
-    if (!endpoint) return { rev: null, notes: local.all().filter((n) => !n.done) };
+    if (!endpoint) return { rev: null, notes: local.all().filter(isListed) };
     if (local.all().length) await syncBacklog().catch(() => {});
     const pending = local.all();
     const data = await request(`${endpoint}?rev=${encodeURIComponent(rev ?? '')}`, undefined, async (res) => {
@@ -302,10 +343,10 @@ export function createIsotoneStore(cfg: IsotoneStoreConfig = {}) {
     return { rev: next, notes: merge(data.notes as IsotoneNote[], pending) };
   }
 
-  /** Every still-open note across all routes, newest first. */
+  /** What the panel lists across all routes, newest first: open notes, and closed ones to check. */
   async function pendingNotes(): Promise<IsotoneNote[]> {
     const notes = endpoint ? await readRemote(endpoint) : local.all();
-    return notes.filter((note) => !note.done).sort(newestFirst);
+    return notes.filter(isListed).sort(newestFirst);
   }
 
   async function saveNote(
@@ -318,12 +359,14 @@ export function createIsotoneStore(cfg: IsotoneStoreConfig = {}) {
     /** Window size at write time; attached on create only. */
     viewport?: Viewport,
     context?: NoteContext,
+    /** "Not quite" on a closed note: reopen it even when its text is unchanged. */
+    reopen = false,
   ): Promise<string> {
     if (feedback.trim().length > MAX_FEEDBACK_LENGTH) {
       throw new RangeError(`Feedback must be at most ${MAX_FEEDBACK_LENGTH} characters.`);
     }
     if (!endpoint) {
-      const savedId = local.save(route, feedback, element, id, payload, viewport, context);
+      const savedId = local.save(route, feedback, element, id, payload, viewport, context, reopen);
       lastSave = 'local';
       return savedId;
     }
@@ -339,15 +382,44 @@ export function createIsotoneStore(cfg: IsotoneStoreConfig = {}) {
       ...context,
       ...(payload !== undefined ? { payload } : {}),
       ...(viewport ? { viewport } : {}),
+      ...(reopen ? { reopen: true } : {}),
     });
     if (serverId === null) {
-      const localId = local.save(route, feedback, element, savedId, payload, viewport, context);
+      const localId = local.save(route, feedback, element, savedId, payload, viewport, context, reopen);
       lastSave = 'local';
       return localId;
     }
     if (pendingBefore) local.acknowledge(pendingBefore);
     lastSave = 'server';
     return serverId;
+  }
+
+  /**
+   * "Looks good": the reviewer checked a closed note, and the panel stops
+   * showing it. With the server away or failing, the check waits in the
+   * browser and is sent with the backlog; a refusal throws.
+   */
+  async function checkNote(note: IsotoneNote): Promise<void> {
+    if (!endpoint) {
+      local.check(note, false);
+      return;
+    }
+    let res: Response;
+    try {
+      res = await request(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: note.id, route: note.route, checked: true }),
+      });
+    } catch {
+      local.check(note, true);
+      return;
+    }
+    if (res.status >= 500) {
+      local.check(note, true);
+      return;
+    }
+    if (!res.ok) throw new Error(`Checking Isotone note failed (${res.status})`);
   }
 
   async function deleteNote(id: string): Promise<void> {
@@ -368,6 +440,7 @@ export function createIsotoneStore(cfg: IsotoneStoreConfig = {}) {
     pollNotes,
     pendingNotes,
     saveNote,
+    checkNote,
     deleteNote,
     endpoint,
     /** Where the last save landed, for the panel's sync notice. */

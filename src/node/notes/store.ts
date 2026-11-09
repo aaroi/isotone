@@ -7,9 +7,9 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 
-import type { IsotoneNote, NoteReply } from '../../core/types';
+import type { IsotoneNote, NoteReply, NoteResolution } from '../../core/types';
 import { NOTE_ID } from '../../core/id';
-import { MAX_REPLY_LENGTH } from '../../core/limits';
+import { MAX_REPLY_LENGTH, MAX_RESOLUTION_LENGTH } from '../../core/limits';
 import { writeJson } from '../fs/atomic';
 import { withFileLock } from '../fs/lock';
 import { updateRequestOf } from '../update/request';
@@ -88,25 +88,62 @@ function replyOf(value: unknown): NoteReply | null {
   };
 }
 
+const isTime = (value: unknown): value is string => typeof value === 'string' && value.length <= 40 && Number.isFinite(Date.parse(value));
+
+/** A stored summary, bounded, or nothing. */
+const summaryOf = (value: unknown) => (typeof value === 'string' && value.trim() ? { summary: value.slice(0, MAX_RESOLUTION_LENGTH) } : {});
+
+/** How `--done` closed a note (when, and the agent's summary if it gave one), or null when missing or malformed. */
+export function resolutionOf(value: unknown): NoteResolution | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const v = value as { summary?: unknown; at?: unknown };
+  return isTime(v.at) ? { ...summaryOf(v.summary), at: v.at } : null;
+}
+
+/** When the reviewer reopened a closed note, what the agent had said, and whether the note was sent back unchanged; or null. */
+export function reopenedOf(value: unknown): NonNullable<IsotoneNote['reopened']> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const v = value as { at?: unknown; summary?: unknown; unchanged?: unknown };
+  if (!isTime(v.at)) return null;
+  return { at: v.at, ...summaryOf(v.summary), ...(v.unchanged === true ? { unchanged: true as const } : {}) };
+}
+
+/** A stored time a reader can trust to be one, or undefined. */
+export const timeOf = (value: unknown): string | undefined => (isTime(value) ? value : undefined);
+
+/**
+ * What the reviewer wrote: a reply asked about this answers itself once it
+ * changes. Reopening a note unchanged is not an answer.
+ */
+export function contentFingerprint(note: StoredNote): string {
+  return fingerprint(contentOf(note));
+}
+
 /**
  * What the agent was given for a note. A reviewer who edits a handed-out note
  * (to answer the agent's question, say) changes it, and the note is handed out
- * again.
+ * again. So does reopening it: the same text, refused once.
  */
 export function noteFingerprint(note: StoredNote): string {
-  const update = updateRequestOf(note.update);
-  const content = JSON.stringify([
+  const reopenedAt = reopenedOf(note.reopened)?.at;
+  // Appended only when set, so notes never reopened keep the fingerprints they had.
+  return fingerprint([...contentOf(note), ...(reopenedAt ? [reopenedAt] : [])]);
+}
+
+function contentOf(note: StoredNote): unknown[] {
+  return [
     note.feedback,
     note.route,
     (note.elements ?? (note.element ? [note.element] : [])).map((element) => element.selector),
     note.variant ?? null,
     note.variantAction ?? null,
-    update?.to ?? null,
+    updateRequestOf(note.update)?.to ?? null,
     // Appended only when present, so notes without edits keep the fingerprint they had.
     ...(note.styleEdits?.length ? [note.styleEdits] : []),
-  ]);
-  return createHash('sha256').update(content).digest('base64url').slice(0, 16);
+  ];
 }
+
+const fingerprint = (content: unknown[]) => createHash('sha256').update(JSON.stringify(content)).digest('base64url').slice(0, 16);
 
 /**
  * A note's reply as readers see it. Once the note has changed since the agent
@@ -116,5 +153,5 @@ export function noteFingerprint(note: StoredNote): string {
 export function replyView(note: StoredNote): NoteReply | null {
   const reply = replyOf(note.reply);
   if (!reply) return null;
-  return reply.about !== undefined && reply.about !== noteFingerprint(note) ? { ...reply, answered: true } : reply;
+  return reply.about !== undefined && reply.about !== contentFingerprint(note) ? { ...reply, answered: true } : reply;
 }

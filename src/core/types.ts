@@ -74,6 +74,22 @@ export interface NoteContext {
    *  `isotone --reply <id> "<text>"`. Only the CLI writes it; the panel shows it
    *  under the note, and the reviewer answers by editing the note. */
   reply?: NoteReply;
+  /** Written by `isotone --done`: when, and with `-m "<text>"` what the agent
+   *  said it changed. Only the CLI writes it; the panel shows the closed note
+   *  for checking only when it is there. */
+  resolution?: NoteResolution;
+  /** When the reviewer looked at the closed note and said it looks good. The
+   *  panel stops showing it. */
+  checkedAt?: string;
+  /** The reviewer reopened the closed note: when, what the agent had said
+   *  when closing it, and whether they sent the note back without changing
+   *  it, so the agent knows its fix fell short. */
+  reopened?: { at: string; summary?: string; unchanged?: true };
+}
+
+export interface NoteResolution {
+  summary?: string;
+  at: string;
 }
 
 export interface NoteReply {

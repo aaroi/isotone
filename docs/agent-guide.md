@@ -21,17 +21,25 @@ refresh just that section.
 ## Act on notes
 
 The loop (`--working`, reproduce at the note's route and viewport, fix, verify,
-`--done` as its own command) is in the Isotone section `init` writes into
+`--done <id> -m "<what you changed>"` as its own command) is in the Isotone section `init` writes into
 `AGENTS.md`. The commands:
 
 ```sh
 npx isotone --json                 # every open note, as one JSON array
 npx isotone /settings --json       # one page's notes (when agents share a dev server)
 npx isotone --working <id>         # the panel shows the note as in progress
-npx isotone --done <id>            # close it once fixed and verified
+npx isotone --done <id> -m "Raised the card gap to 24px"   # close it once fixed and verified
 npx isotone --done <id> --force    # close one that needed no file change
 npx isotone --undone <id>          # reopen it
+npx isotone recap --days 2         # what was closed lately, as Markdown for a commit or PR
 ```
+
+- Close with `-m` (or `--message`): one line, at most 500 characters, on what
+  you changed; newlines become spaces. The reviewer reads it under the note in the panel, checks the
+  page, and either says it looks good or reopens the note. A reopened note
+  lists again with `reopened` and a line that quotes what you had said, and says
+  "text unchanged" when the reviewer sent it back as it was: the fix fell short,
+  so read the note again before changing anything.
 
 - `--done` refuses while no project file has changed since `--working` (or the
   note), usually because an earlier edit in a chained command failed; in Git,
@@ -67,6 +75,9 @@ Schema of one record.
 | `feedback` | The reviewer's text. |
 | `createdAt` | ISO time. |
 | `done`, `doneAt` | Whether it is closed, and when. |
+| `resolution` | On a closed note: `at`, when `--done` closed it, and `summary`, what you said with `-m`. |
+| `checkedAt` | On a closed note: when the reviewer checked it and said it looks good. |
+| `reopened` | On an open note: the reviewer reopened it after you closed it, `at`, with the `summary` you had given, and `unchanged: true` when they sent it back without editing it. |
 | `workingAt` | When an agent last ran `--working` on it. The panel ignores a claim older than 20 minutes. |
 | `viewport` | `{ w, h }` of the window it was written in: the breakpoint a layout note is about. |
 | `elements` | The pinned elements, in order: `tag`, `text`, and `selector` (matches only that element on that page), with `attributes`, `component` (React components, outermost first), `source` (`file:line`, where React records it), `within` (labelled ancestors), `near` (nearby text), `rect` (`x`, `y`, `w`, `h` in page pixels) and `styles` (the computed styles it had when pinned: spacing, type, layout, colours as hex; start from these when a note says "bigger" or "tighter") where known. |
@@ -77,7 +88,7 @@ Schema of one record.
 | `payload` | Host-specific context, such as the knob values or flags the note was written against. |
 | `reply` | Your question from `--reply`: `text`, `at`, and `answered: true` once the reviewer has edited the note. |
 | `update`, `updateHint` | An update note (see [Update notes](#update-notes)). |
-| `doneCommand` | On open notes: the exact, shell-quoted command that closes it. |
+| `doneCommand` | On open notes: the exact, shell-quoted base command that closes it; append `-m "<what you changed>"`. |
 
 ## Style changes
 

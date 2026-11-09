@@ -82,8 +82,20 @@ Note text sits 3px outside the composer's text inset; references take at most
 a third of the row and name the pinned element or selector, not a route and pin
 count. Delete floats over the top-right corner (24px hit target, no column),
 shown on hover, focus or selection and always on touch. The list is one Tab
-stop: Up, Down, Home and End move between notes, Left and Right between a note
-and its delete, and a delete from the keyboard moves on to the next note's.
+stop: Up, Down, Home and End move between notes in the same column, Left and
+Right between a note and its corner actions, and a corner action from the
+keyboard moves on to the next note's.
+A note the agent closed stays until the reviewer checks it, placed by when it
+was closed, so a fresh one arrives at the foot beside the composer. It stacks: a
+muted check where the working dot sits with the muted text and tags; the
+agent's line in the reply treatment (“Agent”, or “Done” alone), wrapping to
+three lines; then, right-aligned and always shown, Not quite (a quiet text
+button) and Looks good (the neutral raised key), 24px tall, 32px with a gap on
+touch. It has no corner delete. Pressing the row scrolls to its element and
+outlines it for 1.2s, or says in the composer's notice line why it cannot. Not
+quite edits the note in the composer, which reads “Reopening note” and “What is
+still off?”. With no open notes, the pill counts notes to check on the neutral
+key face instead of the accent.
 Defaults and feedback
 references share one compact tag; a lone tag may take the full width, several
 get compact limits. Composer tags share a horizontal strip whose ends align with

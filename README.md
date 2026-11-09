@@ -30,6 +30,8 @@ the text of every element you pinned.
 Your agent reads the notes with `npx isotone --json`, makes the changes, and
 closes each note when it's done. The panel marks the note the agent is working
 on and updates without a reload, so you can keep adding notes while it works.
+A closed note stays in the list with the agent's one-line summary until you check
+it: click it to see the element again, then mark it **Looks good** or **Not quite**.
 
 Comparing design directions one prompt at a time is slow, and so is describing
 UI in words. Element pickers built into agents work only in the agent's own

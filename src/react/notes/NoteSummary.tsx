@@ -23,6 +23,23 @@ function Reply({ note }: { note: IsotoneNote }) {
   );
 }
 
+/** On a closed note: what the agent said it changed (`isotone --done -m`), or that it is done. */
+function Resolution({ note }: { note: IsotoneNote }) {
+  if (!note.done) return null;
+  const summary = note.resolution?.summary;
+  return (
+    <p className="isotone-reply" onPointerOver={showOverflowTitle}>
+      {summary ? (
+        <>
+          <span>Agent</span> {summary}
+        </>
+      ) : (
+        <span>Done</span>
+      )}
+    </p>
+  );
+}
+
 /**
  * What the panel recorded about the page with the note, as one short tag, so
  * the reviewer knows the agent gets it too. One count however it is made up:
@@ -47,6 +64,7 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
       <>
         <p>{updateNoteText(note.update)}</p>
         <Reply note={note} />
+        <Resolution note={note} />
         <span className="isotone-meta">
           <SummaryTag label="Update" />
         </span>
@@ -72,6 +90,7 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
       <>
         <p>{note.feedback}</p>
         <Reply note={note} />
+        <Resolution note={note} />
         {references.length > 0 && (
           <span className="isotone-meta">
             {references.map((reference) => (
@@ -112,6 +131,7 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
     <>
       <p>{note.feedback}</p>
       <Reply note={note} />
+      <Resolution note={note} />
       {(page || tags.length > 0) && (
         <span className="isotone-meta">
           {page && <SummaryTag label={page} />}

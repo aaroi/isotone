@@ -140,6 +140,32 @@
         "answered": { "const": true }
       }
     },
+    "resolution": {
+      "type": "object",
+      "description": "On a closed note: when --done closed it, and summary, what you said you changed with -m. The reviewer reads the summary under the note in the panel.",
+      "required": ["at"],
+      "additionalProperties": false,
+      "properties": {
+        "summary": { "type": "string" },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "checkedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "On a closed note: when the reviewer checked the page and said it looks good."
+    },
+    "reopened": {
+      "type": "object",
+      "description": "On an open note: the reviewer reopened it after you closed it, so the fix fell short. summary is what you had said you changed; unchanged is true when they sent the note back without editing it.",
+      "required": ["at"],
+      "additionalProperties": false,
+      "properties": {
+        "at": { "type": "string", "format": "date-time" },
+        "summary": { "type": "string" },
+        "unchanged": { "const": true }
+      }
+    },
     "update": {
       "type": "object",
       "description": "The user's request to upgrade Isotone, from Isotone's own update check. Follow updateHint.",
@@ -157,7 +183,7 @@
     "updateHint": { "type": "string", "description": "On an open update note: what to check before running update.command." },
     "doneCommand": {
       "type": "string",
-      "description": "On an open note: the exact, shell-quoted command that closes it once the fix has landed."
+      "description": "On an open note: the exact, shell-quoted base command that closes it once the fix has landed. Append -m \"<what you changed>\" for the reviewer."
     }
   },
   "$defs": {

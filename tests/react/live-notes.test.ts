@@ -214,3 +214,51 @@ it('fades the composer top only after its text has scrolled', async () => {
   });
   expect(field.dataset.scrolled).toBe('false');
 });
+
+it('sends notes pinned one after another with their elements, and empties the composer each time', async () => {
+  const posts: Record<string, unknown>[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method !== 'POST') return { ok: true, status: 200, json: async () => [] };
+      const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      posts.push(body);
+      return { ok: true, status: 201, json: async () => ({ id: body.id }) };
+    }),
+  );
+  const frame = () => act(async () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0))));
+  await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
+  await click(container.querySelector('.isotone-fab'));
+  await frame();
+  const cards = ['First', 'Second', 'Third'].map((name) => {
+    const card = document.createElement('section');
+    card.id = `card-${name}`;
+    card.textContent = `${name} card`;
+    document.body.append(card);
+    return card;
+  });
+  for (const card of cards) {
+    Object.defineProperty(document, 'elementFromPoint', { value: () => card, configurable: true });
+    await click(byText('Select elements'));
+    await act(async () => {
+      card.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, clientX: 5, clientY: 5 }));
+    });
+    await frame();
+    const field = container.querySelector('textarea') as HTMLTextAreaElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(field, `About the ${card.textContent}`);
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, composed: true }));
+    });
+    await frame();
+    expect((container.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+    expect(container.querySelectorAll('.isotone-context .isotone-chip')).toHaveLength(0);
+  }
+  expect(posts.map((p) => [p.feedback, (p.elements as { selector: string }[]).map((e) => e.selector)])).toEqual(
+    cards.map((card) => [`About the ${card.textContent}`, [`#${card.id}`]]),
+  );
+  for (const card of cards) card.remove();
+  Reflect.deleteProperty(document, 'elementFromPoint');
+});

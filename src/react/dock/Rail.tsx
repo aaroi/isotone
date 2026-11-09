@@ -83,6 +83,7 @@ export function RailButton({
   icon,
   label,
   count,
+  detail,
   controls,
   open,
   onClick,
@@ -90,6 +91,8 @@ export function RailButton({
   icon: ComponentProps<typeof Icon>['name'];
   label: string;
   count?: number;
+  /** A short addition to the name, such as "2 to check". */
+  detail?: string;
   controls: string;
   open: boolean;
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -98,8 +101,8 @@ export function RailButton({
     <button
       type="button"
       className="isotone-rail-button"
-      aria-label={count ? `${label}, ${plural(count, 'note')}` : label}
-      title={label}
+      aria-label={[label, count && plural(count, 'note'), detail].filter(Boolean).join(', ')}
+      title={detail ? `${label} · ${detail}` : label}
       aria-controls={controls}
       aria-expanded={open}
       onClick={onClick}
@@ -124,6 +127,7 @@ export function Launcher({
   hidden,
   variantsOnly,
   count,
+  toCheck = 0,
   working,
   shortcutLabel,
   onClick,
@@ -134,12 +138,19 @@ export function Launcher({
   /** Without a notes endpoint, the launcher opens Variants. */
   variantsOnly: boolean;
   count: number;
+  /** Closed notes the reviewer has yet to check; counted on the pill only while none are open. */
+  toCheck?: number;
   /** How many notes an agent is working on. */
   working: number;
   shortcutLabel: string;
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
-  const label = [variantsOnly ? 'Variants' : 'Isotone', count && plural(count, 'note'), working && `${working} in progress`];
+  const label = [
+    variantsOnly ? 'Variants' : 'Isotone',
+    count && plural(count, 'note'),
+    toCheck && `${toCheck} to check`,
+    working && `${working} in progress`,
+  ];
   return (
     <button
       type="button"
@@ -154,10 +165,16 @@ export function Launcher({
     >
       {working > 0 && <span className="isotone-ring" ref={ringPulse} />}
       <Icon name="iterate" />
-      {count > 0 && (
+      {count > 0 ? (
         <span className="isotone-badge" aria-hidden="true">
           {count}
         </span>
+      ) : (
+        toCheck > 0 && (
+          <span className="isotone-badge" data-quiet="" aria-hidden="true">
+            {toCheck}
+          </span>
+        )
       )}
     </button>
   );

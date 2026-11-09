@@ -8,11 +8,22 @@ import type { IsotoneElement } from '../../core/types';
 import { NOTE_ID } from '../../core/id';
 import { styleEditsOf } from '../../core/style-edits';
 import { MAX_FEEDBACK_LENGTH, MAX_NOTES, MAX_ROUTE, PAYLOAD_MAX } from '../../core/limits';
+import { awaitsCheck } from '../../core/resolution';
 import { updateNoteText } from '../../core/update';
 import { LockBusyError, SERVER_LOCK_WAIT_MS, withFileLock } from '../fs/lock';
 import { type HandlerRequest, type HandlerResponse, jsonResponse } from '../http';
 import { notesProjectRoot, updateRequestOf } from '../update/request';
-import { noteFingerprint, notesRevision, readNotes, replyView, type StoredNote, writeNotes } from './store';
+import {
+  contentFingerprint,
+  notesRevision,
+  readNotes,
+  reopenedOf,
+  replyView,
+  resolutionOf,
+  type StoredNote,
+  timeOf,
+  writeNotes,
+} from './store';
 import { diagnosticsOf, elementFields, elementOf, removalOf, variantOf, viewportOf, withinPayloadCap } from './validate';
 
 /** The endpoint path the client calls. */
@@ -63,9 +74,16 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     const all = query.all !== undefined && String(query.all) !== '' && String(query.all) !== '0';
     const notes = polled ? readNotesAt(file, rev) : readNotes(file);
     // `?all=1` lists every note on every route, done ones included. `?route=`
-    // scopes to a page; neither means the open backlog, which is what the
-    // panel shows and polls.
-    const rows = (all ? [...notes] : route ? notes.filter((n) => n.route === route) : notes.filter((n) => !n.done))
+    // scopes to a page; neither means what the panel shows and polls: the open
+    // backlog, and the notes the agent closed that the reviewer has yet to check.
+    const now = Date.now();
+    const rows = (
+      all
+        ? [...notes]
+        : route
+          ? notes.filter((n) => n.route === route)
+          : notes.filter((n) => !n.done || awaitsCheck({ ...n, resolution: resolutionOf(n.resolution) ?? undefined }, now))
+    )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((note) => toItem(note, root));
     return json(200, polled ? { rev, notes: rows } : rows);
@@ -95,10 +113,13 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
       createdAt?: unknown;
       diagnostics?: unknown;
       styleEdits?: unknown;
+      checked?: unknown;
+      reopen?: unknown;
     };
     // A body's `update` is never read: only the update endpoint writes one,
     // from the server's own check, and an update note cannot be edited.
-    // Nor is `reply`: only the agent writes one, with `isotone --reply`.
+    // Nor are `reply` and `resolution`: only the agent writes them, with
+    // `isotone --reply` and `--done -m`.
     const { id, route, feedback, element, payload, viewport } = body;
     if (id !== undefined && id !== null && (typeof id !== 'string' || !NOTE_ID.test(id))) {
       return json(400, { error: 'id must be 1-64 letters, digits, - or _, not starting with -' });
@@ -109,6 +130,17 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     // A page path, so a route cannot pass for a line of instructions to the agent.
     if (!route.startsWith('/')) return json(400, { error: 'route must start with /' });
     if (route.length > MAX_ROUTE) return json(400, { error: `route must be at most ${MAX_ROUTE} characters` });
+    // "Looks good" on a closed note: the reviewer has checked it, and nothing else changes.
+    if (body.checked !== undefined) {
+      if (body.checked !== true || typeof id !== 'string') return json(400, { error: 'checked takes true and the id of a closed note' });
+      const notes = readNotes(file);
+      const checked = notes.find((n) => n.id === id && n.route === route);
+      if (!checked) return json(404, { error: 'No such note on this route' });
+      if (!checked.done) return json(400, { error: 'Only a closed note can be checked' });
+      checked.checkedAt = new Date().toISOString();
+      writeNotes(file, notes);
+      return json(200, { id });
+    }
     const cleanFeedback = typeof feedback === 'string' ? feedback.trim() : '';
     if (cleanFeedback === '') {
       return json(400, { error: 'feedback is required' });
@@ -152,7 +184,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
         return json(409, { error: 'An update note is written by Isotone and cannot be edited. Delete it to cancel the update.' });
       }
       if (existing) {
-        const before = noteFingerprint(existing);
+        const before = contentFingerprint(existing);
         if (previousDefaults) {
           delete existing.elements;
           delete existing.variant;
@@ -173,11 +205,11 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
         // sends it on the first save does not lose it on the next autosave.
         if (payload !== undefined) existing.payload = payload;
         // An edit that lands just after the agent closed the note is new
-        // feedback: reopen it, or the agent would never see it.
-        if (existing.done && noteFingerprint(existing) !== before) {
-          existing.done = false;
-          existing.doneAt = null;
-          delete existing.workingAt;
+        // feedback: reopen it, or the agent would never see it. "Not quite"
+        // reopens it as it stands, with `reopen: true`.
+        if (existing.done) {
+          const edited = contentFingerprint(existing) !== before;
+          if (edited || body.reopen === true) reopen(existing, !edited);
         }
         if (defaultsRequest && !existing.done) {
           existing.createdAt = new Date().toISOString();
@@ -224,6 +256,21 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
   return json(405, { error: 'method not allowed' });
 }
 
+/**
+ * The reviewer reopened a closed note. The agent's summary moves to
+ * `reopened`, so the next listing says what it had claimed, and whether the
+ * reviewer sent the note back as it was.
+ */
+function reopen(note: StoredNote, unchanged: boolean): void {
+  const summary = resolutionOf(note.resolution)?.summary;
+  note.done = false;
+  note.doneAt = null;
+  note.reopened = { at: new Date().toISOString(), ...(summary ? { summary } : {}), ...(unchanged ? { unchanged: true as const } : {}) };
+  delete note.workingAt;
+  delete note.resolution;
+  delete note.checkedAt;
+}
+
 // The last parse per file, keyed by revision: when the file changes, every
 // polling tab gets its answer from one read and one parse.
 const parsed = new Map<string, { rev: string; notes: StoredNote[] }>();
@@ -245,6 +292,8 @@ function toItem(n: StoredNote, root: string) {
     element: IsotoneElement | null;
     done: boolean;
     createdAt: string;
+    doneAt?: string;
+    checkedAt?: string;
     workingAt?: string;
     viewport?: { w: number; h: number };
     payload?: unknown;
@@ -260,6 +309,11 @@ function toItem(n: StoredNote, root: string) {
   // Absent stays absent: a host that never sends a payload should not start
   // seeing a null one appear in its notes.
   if (n.workingAt && !n.done) item.workingAt = n.workingAt;
+  // A closed note's time orders the panel's "to check" rows.
+  if (n.done && timeOf(n.doneAt)) item.doneAt = timeOf(n.doneAt);
+  if (n.done && timeOf(n.checkedAt)) item.checkedAt = timeOf(n.checkedAt);
+  const resolution = n.done ? resolutionOf(n.resolution) : null;
+  const reopened = n.done ? null : reopenedOf(n.reopened);
   if (n.viewport !== undefined) item.viewport = n.viewport;
   if (n.payload !== undefined) item.payload = n.payload;
   return {
@@ -274,5 +328,8 @@ function toItem(n: StoredNote, root: string) {
     ...(update ? { update } : {}),
     // Only the CLI writes a reply; a hand-edited, malformed one is not shown.
     ...(replyView(n) ? { reply: replyView(n) } : {}),
+    // Only the CLI writes these, and only well-formed ones are shown.
+    ...(resolution ? { resolution } : {}),
+    ...(reopened ? { reopened } : {}),
   };
 }

@@ -35,7 +35,7 @@ Each output names the next step, so an agent that lost the start text still know
 
 | Output | Exit | What the agent does |
 | --- | --- | --- |
-| Up to ten new notes, in the same shape as `npx isotone`, with a one-line guardrail | 0 | Act on each note as usual (`--working`, reproduce, fix, verify, `--done`), then run it again |
+| Up to ten new notes, in the same shape as `npx isotone`, with a one-line guardrail | 0 | Act on each note as usual (`--working`, reproduce, fix, verify, `--done <id> -m "<what you changed>"`), then run it again |
 | `No new notes · 32 min left · run npx isotone blast again`, after 90 seconds | 0 | Run it again |
 | `Blast session over`, with the notes still open | 3 | Stop, and give the user a short summary |
 | Cut off by the agent's command timeout, or an error on stderr | other | Fix what stderr names, if anything, and run it again |

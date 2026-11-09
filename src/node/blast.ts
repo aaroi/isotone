@@ -11,7 +11,7 @@ import { matchRoute } from '../core/routes';
 import { writeJson } from './fs/atomic';
 import { withFileLock } from './fs/lock';
 import { ensureFileIgnored } from './fs/git-exclude';
-import { noteFingerprint, type StoredNote } from './notes/store';
+import { contentFingerprint, noteFingerprint, type StoredNote } from './notes/store';
 import { updateRequestOf } from './update/request';
 
 /** The stored session. `seen` maps each handed-out note to its fingerprint. */
@@ -124,7 +124,7 @@ export function seenOpenNotes(notes: StoredNote[], session: BlastSession): Store
 
 /** The agent asked about this note and the reviewer has not edited it since. */
 export function isAwaitingAnswer(note: StoredNote): boolean {
-  return Boolean(note.reply?.about) && note.reply?.about === noteFingerprint(note);
+  return Boolean(note.reply?.about) && note.reply?.about === contentFingerprint(note);
 }
 
 /**
