@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.3.4
+
 ### Fixed
 
 - **Several checkouts no longer lose notes to each other's `isotone serve` without a word.** When one checkout's `serve` holds the port, another checkout's `serve` now says which checkout has it, and `npx isotone` and `isotone blast start` warn that this checkout's panel saves its notes there. `serve` reports its project and notes file at `GET /api/isotone/server`, and the integration guide shows how to give each checkout its own port.
