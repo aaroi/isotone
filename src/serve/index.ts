@@ -26,6 +26,7 @@ import type { IsotoneTheme } from '../core/types';
 import { checkRequest, isLoopback, nodeRequestFacts, readNodeJson, sendFailure, writeResponse } from '../node/http';
 import { ensureFileIgnored } from '../node/fs/git-exclude';
 import { notesResponse, NOTES_ENDPOINT } from '../node/notes/handler';
+import { SERVER_ENDPOINT, serverOwner, urlHost } from '../node/serve-owner';
 import { VARIANTS_ENDPOINT } from '../core/variants';
 import { readKnobs } from '../node/variants';
 
@@ -223,7 +224,7 @@ export function serveIsotone(opts: ServeIsotoneOptions): Promise<ServedIsotone> 
     cors(req, res);
     const path = new URL(req.url ?? '/', 'http://localhost').pathname;
     const method = req.method ?? 'GET';
-    const origin = `http://${host.includes(':') && !host.startsWith('[') ? `[${host}]` : host}:${boundPort}`;
+    const origin = `http://${urlHost(host)}:${boundPort}`;
     try {
       checkRequest({ ...nodeRequestFacts(req), loopbackOrigins: true });
     } catch (error) {
@@ -244,6 +245,16 @@ export function serveIsotone(opts: ServeIsotoneOptions): Promise<ServedIsotone> 
           writeResponse(res, () => updateResponse(file, updates.getSnapshot(), { method, body }));
         })
         .catch((error) => sendFailure(res, error));
+      return;
+    }
+
+    // Whose server this is, so another checkout's `serve` and notes CLI can
+    // tell a port held by this checkout from one held by theirs.
+    if (path === SERVER_ENDPOINT && method === 'GET') {
+      res.statusCode = 200;
+      res.setHeader('content-type', 'application/json; charset=utf-8');
+      res.setHeader('cache-control', 'no-store');
+      res.end(JSON.stringify(serverOwner(projectRoot, file)));
       return;
     }
 
@@ -319,7 +330,7 @@ export function serveIsotone(opts: ServeIsotoneOptions): Promise<ServedIsotone> 
     server.listen(port, host, () => {
       const actual = server.address();
       boundPort = typeof actual === 'object' && actual ? actual.port : port;
-      const url = `http://${host.includes(':') && !host.startsWith('[') ? `[${host}]` : host}:${boundPort}`;
+      const url = `http://${urlHost(host)}:${boundPort}`;
       ok({
         port: boundPort,
         url,

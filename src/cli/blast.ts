@@ -45,7 +45,7 @@ import {
 import { noteFingerprint, notesRevision, readNotes, type StoredNote } from '../node/notes/store';
 import { notesProjectRoot } from '../node/update/request';
 import { LockBusyError } from '../node/fs/lock';
-import { findNotesFile, noteRecord, printNotes } from './notes';
+import { findNotesFile, noteRecord, printNotes, warnForeignServers } from './notes';
 import { oneLine, shellQuote, toJson } from './text';
 import { type CliIO, errOut, has, out, parseArgs, valueFor } from './util';
 
@@ -133,7 +133,8 @@ export async function runBlast(argv: string[], io: CliIO, timingOverrides: Parti
   }
   const json = has(rest, '--json');
   const fileText = valueFor(rest, '--file');
-  const notesFile = findNotesFile(io, fileText).file;
+  const found = findNotesFile(io, fileText);
+  const notesFile = found.file;
   const file = blastFile(notesFile);
   const fileFlag = fileText ? ` --file ${shellQuote(fileText)}` : '';
 
@@ -145,6 +146,7 @@ export async function runBlast(argv: string[], io: CliIO, timingOverrides: Parti
     case 'extend':
       return extend(io, file, durationMs ?? 0, json);
     case 'start':
+      await warnForeignServers(io, found.dir, notesFile);
       return start(io, file, durationMs ?? DEFAULT_FOR_MS, route, json, fileFlag);
   }
   const next = `${BLAST_CLI}${everyArg ? ` --every ${everyArg}` : ''}${json ? ' --json' : ''}${fileFlag}`;

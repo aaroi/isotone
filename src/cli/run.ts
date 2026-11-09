@@ -9,6 +9,7 @@ import { resolve } from 'node:path';
 import { version } from '../../package.json';
 import { BLAST } from '../core/blast';
 import { defaultNotesFile, NOTES_FILE } from '../node/notes/location';
+import { probeOwner, samePath, type ServerOwner } from '../node/serve-owner';
 import { DEFAULT_PORT, guardedScriptTag } from '../core/tag';
 import { runBlast } from './blast';
 import { docPath } from './docs';
@@ -36,7 +37,7 @@ export async function runCli(argv: string[], ioInput: Partial<CliIO> = {}): Prom
       out(io, version);
       return 0;
     }
-    return runNotes(argv, io);
+    return await runNotes(argv, io);
   } catch (error) {
     errOut(io, error instanceof Error ? error.message : String(error));
     return 1;
@@ -135,7 +136,7 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
     });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'EADDRINUSE') {
-      errOut(io, `Port ${port} is already in use, by another \`isotone serve\` or a dev server. Pass --port <n> to use a different one.`);
+      for (const line of portTaken(port, file, io.cwd, await probeOwner(port, host))) errOut(io, line);
       return 1;
     }
     throw err;
@@ -150,6 +151,28 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
     process.on('SIGINT', stop);
     process.on('SIGTERM', stop);
   });
+}
+
+/**
+ * Why `serve` could not start. When the port is held by an `isotone serve` for
+ * another checkout, say whose: pages that load the panel from that port are
+ * saving their notes there, and nothing else would tell anyone.
+ */
+function portTaken(port: number, file: string, cwd: string, owner: ServerOwner | null): string[] {
+  if (owner && samePath(owner.file, file))
+    return [`isotone serve is already running for this project on port ${port}, saving notes to ${owner.file}.`];
+  if (owner && samePath(owner.root, cwd))
+    return [
+      `Port ${port} is taken by the isotone serve in this directory, which saves notes to ${owner.file}.`,
+      'Stop it, or pass --port <n> to serve this notes file on another port.',
+    ];
+  if (owner)
+    return [
+      `Port ${port} is taken by the isotone serve in ${owner.root}, which saves notes to ${owner.file}.`,
+      'Pages that load the panel from this port save their notes there, not in this checkout.',
+      `Give each checkout its own port: see "Several checkouts at once" in ${docPath(cwd, 'docs/integrations.md')}.`,
+    ];
+  return [`Port ${port} is already in use, by another \`isotone serve\` or a dev server. Pass --port <n> to use a different one.`];
 }
 
 /**

@@ -15,10 +15,12 @@ import { blastFile, touchSession } from '../node/blast';
 import { realPath } from '../node/fs/paths';
 import { noteFingerprint, readNotes, replyView, type StoredNote, updateNotes } from '../node/notes/store';
 import { defaultNotesFile, NOTES_FILE } from '../node/notes/location';
+import { foreignServers } from '../node/serve-owner';
 import { notesProjectRoot, updateRequestOf } from '../node/update/request';
 import { listVariants, readActive, variantDir } from '../node/variants';
 import { latestChange, mtime, snapshot } from './changes';
-import { oneLine, quoted, shellCommand, toJson, utcStamp } from './text';
+import { docPath } from './docs';
+import { oneLine, quoted, shellCommand, shellQuote, toJson, utcStamp } from './text';
 import { type CliIO, errOut, findNoteByPrefix, has, out, parseArgs, valueFor } from './util';
 
 const VALUE_FLAGS = ['--days', '--file', '--done', '--undone', '--working', '--reply'] as const;
@@ -128,7 +130,7 @@ export function findNotesFile(io: CliIO, file: string | undefined): { file: stri
   }
 }
 
-export function runNotes(argv: string[], io: CliIO): number {
+export async function runNotes(argv: string[], io: CliIO): Promise<number> {
   let args: NotesArgs;
   try {
     args = parseNotesArgs(argv, io);
@@ -143,7 +145,24 @@ export function runNotes(argv: string[], io: CliIO): number {
   if (args.foundAbove) errOut(io, `Notes: ${relative(io.cwd, args.file)}`);
   if (args.action === '--reply') return reply(io, args, root);
   if (args.action) return flip(io, args, args.action, root);
+  await warnForeignServers(io, args.dir, args.file);
   return list(io, args, root);
+}
+
+/**
+ * On stderr, before a listing: the `isotone serve` on this project's port
+ * saves to another notes file, usually another checkout's. This checkout's
+ * panel saves its notes there, so this listing cannot show them.
+ */
+export async function warnForeignServers(io: CliIO, dir: string, file: string): Promise<void> {
+  for (const owner of await foreignServers(dir, file)) {
+    if (owner.otherCheckout) errOut(io, `Warning: the isotone serve on port ${owner.port} belongs to another checkout, ${owner.root}.`);
+    else errOut(io, `Warning: the isotone serve on port ${owner.port} runs in ${owner.root} and saves notes to another file.`);
+    errOut(io, `Pages that load the panel from port ${owner.port} save their notes in ${owner.file}, not ${file}.`);
+    if (owner.otherCheckout)
+      errOut(io, `Give each checkout its own port: see "Several checkouts at once" in ${docPath(io.cwd, 'docs/integrations.md')}.`);
+    else errOut(io, `Pass --file ${shellQuote(relative(io.cwd, owner.file) || owner.file)} to read that file.`);
+  }
 }
 
 function reply(io: CliIO, args: NotesArgs, root: string): number {
