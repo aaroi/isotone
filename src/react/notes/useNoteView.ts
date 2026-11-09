@@ -9,6 +9,9 @@ const WORKING_FRESH_MS = 20 * 60 * 1000;
 /** When a note last changed hands: closed by the agent, else written by the reviewer. */
 const handedOver = (note: IsotoneNote): string => (note.done && note.doneAt ? note.doneAt : note.createdAt);
 
+/** An open note whose question from the agent waits for the reviewer: their turn. */
+export const awaitsAnswer = (note: IsotoneNote): boolean => !note.done && Boolean(note.reply?.text) && !note.reply?.answered;
+
 /** The notes the feedback panel lists, and the page filter above them. */
 export interface NoteView {
   /** Pages with notes listed and how many, this page first. */
@@ -20,6 +23,8 @@ export interface NoteView {
   open: number;
   /** Closed notes on every page that the reviewer has yet to check. */
   toCheck: number;
+  /** Open notes on every page whose question from the agent waits for an answer. */
+  questions: number;
   /** Notes an agent is working on now. */
   working: ReadonlySet<string>;
   togglePage: (page: string) => void;
@@ -61,6 +66,7 @@ export function useNoteView(all: IsotoneNote[], route: string, clock: number) {
   );
   const shownOpen = useMemo(() => notes.filter((n) => !n.done).length, [notes]);
   const toCheck = listed.length - open.length;
+  const questions = useMemo(() => open.filter(awaitsAnswer).length, [open]);
   const working = useMemo(
     () => new Set(notes.filter((n) => n.workingAt && clock - Date.parse(n.workingAt) < WORKING_FRESH_MS).map((n) => n.id)),
     [notes, clock],
@@ -77,8 +83,8 @@ export function useNoteView(all: IsotoneNote[], route: string, clock: number) {
     [route],
   );
   const view = useMemo<NoteView>(
-    () => ({ pages, selectedPages, notes, open: shownOpen, toCheck, working, togglePage }),
-    [pages, selectedPages, notes, shownOpen, toCheck, working, togglePage],
+    () => ({ pages, selectedPages, notes, open: shownOpen, toCheck, questions, working, togglePage }),
+    [pages, selectedPages, notes, shownOpen, toCheck, questions, working, togglePage],
   );
   return {
     view,

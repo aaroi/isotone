@@ -52,7 +52,7 @@ costs nothing. `--every 5m` suits an agent whose commands may run longer (at mos
 When new notes appear, the command waits about three seconds for them to go
 quiet, so a burst arrives as one batch. A note is handed out once. A note still
 open after the agent's fix stays in `npx isotone --json` but is not handed out
-again, unless the reviewer edits it (to answer a question, say) or reopens it.
+again, unless the reviewer answers a question about it, edits it or reopens it.
 
 | Command | |
 | --- | --- |
@@ -75,8 +75,8 @@ never install packages (except for an [update note](agent-guide.md#update-notes)
 push, deploy or delete anything outside the change, and leave risky or large
 requests open and flag them in its summary. When a note is ambiguous, it asks with
 [`--reply`](agent-guide.md#ask-instead-of-guessing) and leaves the note open; no
-session hands that note out again until you edit it, and the end of a session
-lists it as waiting for you.
+session hands that note out again until you answer in the panel (or edit the
+note), and the end of a session lists it as waiting for you.
 
 ## Session state
 

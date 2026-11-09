@@ -277,6 +277,34 @@ describe(`isotone ${BLAST.command}`, () => {
     expect(row?.reply?.answered).toBe(true);
   });
 
+  it('hands a note out again once, when the reviewer answers in the panel', async () => {
+    const p = project();
+    add(p.notes, note('ask', { createdAt: old() }));
+    await start(p, '20s');
+    await runBlast(['--every', '300ms'], p.io, FAST);
+    p.take();
+    expect(await runCli(['--reply', 'ask', 'Bolder, or more contrast?', '--choice', 'Bolder', '--choice', 'More contrast'], p.io)).toBe(0);
+    p.take();
+    // Waiting on the reviewer: nothing to hand out.
+    expect(await runBlast(['--every', '300ms', '--json'], p.io, FAST)).toBe(0);
+    expect(JSON.parse(p.take())).toMatchObject({ type: 'checkin' });
+    const waiting = runBlast(['--json'], p.io, FAST);
+    await later(100, () => notesResponse(p.notes, { method: 'POST', url: '/', body: { id: 'ask', route: '/', answer: 'More contrast' } }));
+    expect(await waiting).toBe(0);
+    const batch = JSON.parse(p.take());
+    expect(batch).toMatchObject({ type: 'batch', notes: [{ id: 'ask', feedback: 'Note ask' }] });
+    expect(batch.notes[0].reply).toMatchObject({ answered: true, choices: ['Bolder', 'More contrast'], answer: { text: 'More contrast' } });
+    // Once only.
+    expect(await runBlast(['--every', '300ms', '--json'], p.io, FAST)).toBe(0);
+    expect(JSON.parse(p.take())).toMatchObject({ type: 'checkin' });
+    await runCli([], p.io);
+    expect(p.take()).toContain('  ↪ the reviewer answered: "More contrast"');
+    await runBlast(['stop'], p.io, FAST);
+    p.take();
+    expect(await runBlast(['--json'], p.io, FAST)).toBe(ENDED_EXIT);
+    expect(JSON.parse(p.take()).stillOpen).toEqual([{ id: 'ask', route: '/', feedback: 'Note ask' }]);
+  });
+
   it('keeps a question pending until the note changes', async () => {
     const p = project();
     add(p.notes, note('wait', { createdAt: old() }));

@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import type { IsotoneElement } from '../../core/types';
 import { NOTE_ID } from '../../core/id';
 import { styleEditsOf } from '../../core/style-edits';
-import { MAX_FEEDBACK_LENGTH, MAX_NOTES, MAX_ROUTE, PAYLOAD_MAX } from '../../core/limits';
+import { MAX_FEEDBACK_LENGTH, MAX_NOTES, MAX_REPLY_LENGTH, MAX_ROUTE, PAYLOAD_MAX } from '../../core/limits';
 import { awaitsCheck } from '../../core/resolution';
 import { updateNoteText } from '../../core/update';
 import { LockBusyError, SERVER_LOCK_WAIT_MS, withFileLock } from '../fs/lock';
@@ -15,6 +15,7 @@ import { type HandlerRequest, type HandlerResponse, jsonResponse } from '../http
 import { notesProjectRoot, updateRequestOf } from '../update/request';
 import {
   contentFingerprint,
+  editedSinceAsked,
   notesRevision,
   readNotes,
   reopenedOf,
@@ -115,11 +116,13 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
       styleEdits?: unknown;
       checked?: unknown;
       reopen?: unknown;
+      answer?: unknown;
     };
     // A body's `update` is never read: only the update endpoint writes one,
     // from the server's own check, and an update note cannot be edited.
     // Nor are `reply` and `resolution`: only the agent writes them, with
-    // `isotone --reply` and `--done -m`.
+    // `isotone --reply` and `--done -m`. The reviewer's `answer` is the one
+    // part of a reply a browser sets, below.
     const { id, route, feedback, element, payload, viewport } = body;
     if (id !== undefined && id !== null && (typeof id !== 'string' || !NOTE_ID.test(id))) {
       return json(400, { error: 'id must be 1-64 letters, digits, - or _, not starting with -' });
@@ -138,6 +141,23 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
       if (!checked) return json(404, { error: 'No such note on this route' });
       if (!checked.done) return json(400, { error: 'Only a closed note can be checked' });
       checked.checkedAt = new Date().toISOString();
+      writeNotes(file, notes);
+      return json(200, { id });
+    }
+    // The reviewer answers the agent's pending question in the panel; the note itself is left as it is.
+    if (body.answer !== undefined) {
+      if (typeof body.answer !== 'string' || typeof id !== 'string')
+        return json(400, { error: 'answer takes text and the id of an open note with a question' });
+      const answer = body.answer.trim();
+      if (answer === '') return json(400, { error: 'answer is empty' });
+      if (answer.length > MAX_REPLY_LENGTH) return json(400, { error: `answer must be at most ${MAX_REPLY_LENGTH} characters` });
+      const notes = readNotes(file);
+      const asked = notes.find((n) => n.id === id && n.route === route);
+      if (!asked) return json(404, { error: 'No such note on this route' });
+      const reply = asked.done ? null : replyView(asked);
+      if (!reply || reply.answered) return json(400, { error: 'Only an open note with a question waiting can be answered' });
+      const { answered: _view, ...stored } = reply;
+      asked.reply = { ...stored, answer: { text: answer, at: new Date().toISOString() } };
       writeNotes(file, notes);
       return json(200, { id });
     }
@@ -314,6 +334,12 @@ function toItem(n: StoredNote, root: string) {
   if (n.done && timeOf(n.checkedAt)) item.checkedAt = timeOf(n.checkedAt);
   const resolution = n.done ? resolutionOf(n.resolution) : null;
   const reopened = n.done ? null : reopenedOf(n.reopened);
+  // The panel shows an answer until the agent acts on it; a later edit of the note is the newer answer.
+  let reply = replyView(n);
+  if (reply?.answer && editedSinceAsked(n)) {
+    const { answer: _older, ...rest } = reply;
+    reply = rest;
+  }
   if (n.viewport !== undefined) item.viewport = n.viewport;
   if (n.payload !== undefined) item.payload = n.payload;
   return {
@@ -326,8 +352,8 @@ function toItem(n: StoredNote, root: string) {
     // Only the server writes an update request; a malformed one, or one whose
     // directory is outside the project, is not shown.
     ...(update ? { update } : {}),
-    // Only the CLI writes a reply; a hand-edited, malformed one is not shown.
-    ...(replyView(n) ? { reply: replyView(n) } : {}),
+    // Only the CLI writes a reply, and the panel its answer; a hand-edited, malformed one is not shown.
+    ...(reply ? { reply } : {}),
     // Only the CLI writes these, and only well-formed ones are shown.
     ...(resolution ? { resolution } : {}),
     ...(reopened ? { reopened } : {}),

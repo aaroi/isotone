@@ -344,12 +344,19 @@ ${APPEARANCE_CSS}
    the reviewer's words quieter, and the agent's summary on the second line. */
 .isotone-checked { position: absolute; left: 1px; top: 3px; color: var(--iso-muted); }
 .isotone-note-done .isotone-note-hit > p:first-of-type { color: var(--iso-muted); }
-/* The agent's line wraps to three lines at most; a clamped one shows the rest on hover. */
-.isotone-note-done .isotone-note-hit > p.isotone-reply { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; }
+/* The agent's line, or its question, wraps to three lines at most; a clamped one shows the rest on hover. */
+.isotone-note-done .isotone-note-hit > p.isotone-reply,
+.isotone-note-asked .isotone-note-hit > p.isotone-reply { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; }
 /* Under it, the two answers the row asks for, always shown: a quiet text button and the neutral raised key. */
 .isotone-check-actions { display: flex; justify-content: flex-end; align-items: center; gap: 4px; padding: 2px var(--iso-note-padding-x) 6px; }
 .isotone-check-actions > button { display: inline-flex; align-items: center; min-height: 24px; padding: 0 12px; font-size: 11px; line-height: 16px; white-space: nowrap; }
 .isotone-quiet { border-radius: var(--iso-control-radius); color: var(--iso-muted); font-weight: 500; background: none; box-shadow: none; }
+/* Under the agent's question, the answers it offered wrap onto a second line rather than squeeze; a long one truncates. */
+.isotone-answer-actions { flex-wrap: wrap; row-gap: 4px; }
+.isotone-answer-actions > button { min-width: 0; max-width: 100%; }
+.isotone-answer-actions > button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* The reviewer's answer takes the answers' place, muted, until the agent acts on it. */
+.isotone-note > p.isotone-answered { margin-top: -2px; padding: 0 var(--iso-note-padding-x) var(--iso-note-padding-y); color: var(--iso-muted); font-size: 11px; line-height: 18px; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .isotone-ring { position: absolute; inset: 0; border-radius: 999px; pointer-events: none; }
 .isotone-list:empty { display: none; }
 /* A single line per note, with compact references sharing its trailing space. */
@@ -502,6 +509,7 @@ ${APPEARANCE_CSS}
   .isotone-chip button::after, .isotone-note > .isotone-x::after, .isotone-panel-close::after { content: ''; position: absolute; inset: -6px; border-radius: 50%; }
   /* A finger gets 32px keys with a clear gap, so the two answers never share a press. */
   .isotone-check-actions { gap: 8px; }
+  .isotone-answer-actions { row-gap: 8px; }
   .isotone-check-actions > button { min-height: 32px; }
 }
 @media (max-height: 580px) { .isotone-list { --iso-list-height: 72px; } .isotone-root .isotone-textarea { max-height: calc(64px + var(--iso-textarea-inset)); } }

@@ -25,7 +25,10 @@ import { npm } from './npm.mjs';
 // of the style editor: 401.9 kB and 446.8 kB): the check rows and their labelled
 // actions, outlining a closed note's element again, the queued checks, `recap`,
 // and their docs.
-const BUDGET = { bundle: 402_000, tarball: 447_000 };
+// Bundle raised to 407 kB and tarball to 454 kB (answers, 405.9 kB and
+// 452.4 kB): the question rows with their offered answers, the composer's
+// answering mode, the queued answers, `--choice` and their docs.
+const BUDGET = { bundle: 407_000, tarball: 454_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 import { notesResponse } from '../src/node/notes/handler';
-import { updateNotes, writeNotes } from '../src/node/notes/store';
+import { contentFingerprint, updateNotes, writeNotes } from '../src/node/notes/store';
 import { isotone } from '../src/vite/index';
 import { checkRequest, nodeRequestFacts, readNodeJson, sendFailure } from '../src/node/http';
 import type { UpdateInfo } from '../src/core/update';
@@ -38,6 +38,27 @@ const CLOSED_NOTE = (): Parameters<typeof writeNotes>[1][number] => {
     createdAt: new Date(Date.now() - 40 * 60_000).toISOString(),
     resolution: { summary: 'Raised the page title from 22px to 26px.', at: closed },
   };
+};
+
+/** An open note the pretend agent asked about, with two answers to pick from. */
+const ASKED_NOTE = (): Parameters<typeof writeNotes>[1][number] => {
+  const note: Parameters<typeof writeNotes>[1][number] = {
+    id: 'demo-asked-status',
+    route: '/',
+    feedback: 'Make the status labels easier to read.',
+    element: { tag: 'span', text: 'Project status', selector: '#overview-cards' },
+    done: false,
+    doneAt: null,
+    createdAt: new Date(Date.now() + 7_500).toISOString(),
+  };
+  // As `isotone --reply --choice` writes it, so an edit of the note answers it too.
+  note.reply = {
+    text: 'Bolder text, or more contrast in the colours?',
+    at: new Date().toISOString(),
+    choices: ['Bolder text', 'More contrast'],
+    about: contentFingerprint(note),
+  };
+  return note;
 };
 
 /** Real notes transport, isolated from every project's review data. */
@@ -101,8 +122,8 @@ function demoNotes(): Plugin {
               createdAt: new Date(Date.now() + (index + 20) * 1000).toISOString(),
             });
           });
-          // One the agent has closed, waiting for the reviewer's check.
-          notes.push(CLOSED_NOTE());
+          // One the agent has closed, waiting for the reviewer's check, and one it asked about.
+          notes.push(CLOSED_NOTE(), ASKED_NOTE());
           examples.forEach(([feedback, text], index) => {
             notes.push({
               id: `demo-review-${index}`,

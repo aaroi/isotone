@@ -21,7 +21,7 @@ import { showOverflowTitle } from '../tooltips';
 import { useLayoutMotion } from '../useLayoutMotion';
 import { useRenderLimit } from '../useRenderLimit';
 import { isUnsent } from './useNoteActions';
-import type { NoteView } from './useNoteView';
+import { awaitsAnswer, type NoteView } from './useNoteView';
 
 interface NotesPanelProps {
   id: string;
@@ -37,6 +37,10 @@ interface NotesPanelProps {
   onRemove: (note: IsotoneNote) => void;
   /** "Looks good" on a closed note. */
   onCheck: (note: IsotoneNote) => void;
+  /** One of the answers the agent offered, pressed. */
+  onAnswer: (note: IsotoneNote, answer: string) => void;
+  /** "Answer…": write the answer in the composer. */
+  onBeginAnswer: (note: IsotoneNote) => void;
   /** Show a note's pinned element on the page. */
   onLocate: (note: IsotoneNote) => void;
 }
@@ -54,6 +58,8 @@ export function NotesPanel({
   onEdit,
   onRemove,
   onCheck,
+  onAnswer,
+  onBeginAnswer,
   onLocate,
 }: NotesPanelProps) {
   const { pages, selectedPages, notes, working, togglePage } = view;
@@ -98,6 +104,8 @@ export function NotesPanel({
         onEdit={onEdit}
         onRemove={onRemove}
         onCheck={onCheck}
+        onAnswer={onAnswer}
+        onBeginAnswer={onBeginAnswer}
         onLocate={onLocate}
       />
       <div className="isotone-compose">{compose}</div>
@@ -119,8 +127,10 @@ const NoteList = memo(function NoteList({
   onEdit,
   onRemove,
   onCheck,
+  onAnswer,
+  onBeginAnswer,
   onLocate,
-}: Pick<NotesPanelProps, 'open' | 'route' | 'editingId' | 'onEdit' | 'onRemove' | 'onCheck' | 'onLocate'> &
+}: Pick<NotesPanelProps, 'open' | 'route' | 'editingId' | 'onEdit' | 'onRemove' | 'onCheck' | 'onAnswer' | 'onBeginAnswer' | 'onLocate'> &
   Pick<NoteView, 'notes' | 'selectedPages' | 'working'>) {
   const listRef = useRef<HTMLUListElement>(null);
   // A closed panel renders no notes; the rows stay one more render after closing, for the dock's exit snapshot.
@@ -182,6 +192,8 @@ const NoteList = memo(function NoteList({
           onEdit={onEdit}
           onRemove={onRemove}
           onCheck={onCheck}
+          onAnswer={onAnswer}
+          onBeginAnswer={onBeginAnswer}
           onLocate={onLocate}
         />
       ))}
@@ -247,6 +259,8 @@ const NoteRow = memo(function NoteRow({
   onEdit,
   onRemove,
   onCheck,
+  onAnswer,
+  onBeginAnswer,
   onLocate,
 }: {
   note: IsotoneNote;
@@ -258,13 +272,22 @@ const NoteRow = memo(function NoteRow({
   onEdit: (note: IsotoneNote) => void;
   onRemove: (note: IsotoneNote) => void;
   onCheck: (note: IsotoneNote) => void;
+  onAnswer: (note: IsotoneNote, answer: string) => void;
+  onBeginAnswer: (note: IsotoneNote) => void;
   onLocate: (note: IsotoneNote) => void;
 }) {
   if (note.done)
     return <CheckRow note={note} page={page} editing={editing} tabbable={tabbable} onEdit={onEdit} onCheck={onCheck} onLocate={onLocate} />;
   const remove = removeAction(note);
+  // The agent's question stacks the row like a closed note's: the question, then the answers, or the one given.
+  const asked = awaitsAnswer(note);
+  const answer = !asked && note.reply?.answered ? note.reply.answer?.text : undefined;
+  const stacked = asked || answer !== undefined;
   return (
-    <li data-motion-key={note.id} className={`isotone-note${editing ? ' isotone-note-editing' : ''}`}>
+    <li
+      data-motion-key={note.id}
+      className={`isotone-note${stacked ? ' isotone-note-asked' : ''}${editing ? ' isotone-note-editing' : ''}`}
+    >
       {note.update ? (
         // Isotone writes an update note's text from its request, so
         // there is nothing to edit; its corner action cancels it.
@@ -285,6 +308,12 @@ const NoteRow = memo(function NoteRow({
           <NoteSummary note={note} page={page} />
         </button>
       )}
+      {asked && <AnswerActions note={note} onAnswer={onAnswer} onBeginAnswer={onBeginAnswer} />}
+      {answer !== undefined && (
+        <p className="isotone-reply isotone-answered" onPointerOver={showOverflowTitle}>
+          <span>You answered</span> {answer}
+        </p>
+      )}
       <button
         type="button"
         className="isotone-x isotone-icon"
@@ -303,6 +332,54 @@ const NoteRow = memo(function NoteRow({
     </li>
   );
 });
+
+/**
+ * Under the agent's question, always shown: the answers it offered, one press
+ * each, then Answer… to write one's own in the composer.
+ */
+function AnswerActions({
+  note,
+  onAnswer,
+  onBeginAnswer,
+}: {
+  note: IsotoneNote;
+  onAnswer: (note: IsotoneNote, answer: string) => void;
+  onBeginAnswer: (note: IsotoneNote) => void;
+}) {
+  const text = shortText(note.feedback);
+  const choices = note.reply?.choices ?? [];
+  return (
+    <div className="isotone-check-actions isotone-answer-actions">
+      {choices.map((choice) => (
+        <button
+          key={choice}
+          type="button"
+          className="isotone-secondary"
+          data-kind="choice"
+          tabIndex={-1}
+          aria-label={`${choice}: answer for ${text}`}
+          onClick={(event) => {
+            // The answers give way to the one chosen; the keyboard stays on the row.
+            if (event.detail === 0) event.currentTarget.closest('li')?.querySelector<HTMLElement>('[data-kind="note"]')?.focus();
+            onAnswer(note, choice);
+          }}
+        >
+          <span onPointerOver={showOverflowTitle}>{choice}</span>
+        </button>
+      ))}
+      <button
+        type="button"
+        className="isotone-quiet"
+        data-kind="answer"
+        tabIndex={-1}
+        aria-label={`Answer the agent: ${text}`}
+        onClick={() => onBeginAnswer(note)}
+      >
+        {choices.length ? 'Answer…' : 'Answer'}
+      </button>
+    </div>
+  );
+}
 
 /**
  * A note the agent closed, waiting for the reviewer: the agent's summary under

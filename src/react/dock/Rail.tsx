@@ -83,7 +83,7 @@ export function RailButton({
   icon,
   label,
   count,
-  detail,
+  details = [],
   controls,
   open,
   onClick,
@@ -91,8 +91,8 @@ export function RailButton({
   icon: ComponentProps<typeof Icon>['name'];
   label: string;
   count?: number;
-  /** A short addition to the name, such as "2 to check". */
-  detail?: string;
+  /** Short additions to the name, such as "1 question" and "2 to check"; empty ones are left out. */
+  details?: (string | 0 | false | undefined)[];
   controls: string;
   open: boolean;
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
@@ -101,8 +101,8 @@ export function RailButton({
     <button
       type="button"
       className="isotone-rail-button"
-      aria-label={[label, count && plural(count, 'note'), detail].filter(Boolean).join(', ')}
-      title={detail ? `${label} · ${detail}` : label}
+      aria-label={[label, count && plural(count, 'note'), ...details].filter(Boolean).join(', ')}
+      title={[label, ...details].filter(Boolean).join(' · ')}
       aria-controls={controls}
       aria-expanded={open}
       onClick={onClick}
@@ -128,6 +128,7 @@ export function Launcher({
   variantsOnly,
   count,
   toCheck = 0,
+  questions = 0,
   working,
   shortcutLabel,
   onClick,
@@ -140,6 +141,8 @@ export function Launcher({
   count: number;
   /** Closed notes the reviewer has yet to check; counted on the pill only while none are open. */
   toCheck?: number;
+  /** Open notes whose question from the agent waits for the reviewer's answer. */
+  questions?: number;
   /** How many notes an agent is working on. */
   working: number;
   shortcutLabel: string;
@@ -148,6 +151,7 @@ export function Launcher({
   const label = [
     variantsOnly ? 'Variants' : 'Isotone',
     count && plural(count, 'note'),
+    questions && plural(questions, 'question'),
     toCheck && `${toCheck} to check`,
     working && `${working} in progress`,
   ];

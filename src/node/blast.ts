@@ -11,7 +11,7 @@ import { matchRoute } from '../core/routes';
 import { writeJson } from './fs/atomic';
 import { withFileLock } from './fs/lock';
 import { ensureFileIgnored } from './fs/git-exclude';
-import { contentFingerprint, noteFingerprint, type StoredNote } from './notes/store';
+import { noteFingerprint, replyView, type StoredNote } from './notes/store';
 import { updateRequestOf } from './update/request';
 
 /** The stored session. `seen` maps each handed-out note to its fingerprint. */
@@ -111,7 +111,7 @@ export function unseenNotes(notes: StoredNote[], session: BlastSession): StoredN
       .filter((note) => !note.done)
       // An update request concerns the whole project, as in `npx isotone <route>`.
       .filter((note) => !session.route || matchRoute(session.route, note.route) || Boolean(updateRequestOf(note.update)))
-      // A question the reviewer has not answered yet (by editing the note) waits for them.
+      // A question the reviewer has not answered yet (in the panel, or by editing the note) waits for them.
       .filter((note) => session.seen[note.id] !== noteFingerprint(note) && !isAwaitingAnswer(note))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   );
@@ -122,9 +122,10 @@ export function seenOpenNotes(notes: StoredNote[], session: BlastSession): Store
   return notes.filter((note) => !note.done && (note.id in session.seen || isAwaitingAnswer(note)));
 }
 
-/** The agent asked about this note and the reviewer has not edited it since. */
+/** The agent asked about this note and the reviewer has neither answered nor edited it since. */
 export function isAwaitingAnswer(note: StoredNote): boolean {
-  return Boolean(note.reply?.about) && note.reply?.about === contentFingerprint(note);
+  const reply = replyView(note);
+  return Boolean(reply?.about) && !reply?.answered;
 }
 
 /**

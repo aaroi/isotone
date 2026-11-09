@@ -67,7 +67,10 @@ function printHelp(io: CliIO): void {
   out(io, '                                 at most 500 characters; append it to a doneCommand');
   out(io, '  --force                        with --done: close a note that needed no file change');
   out(io, '  isotone --undone <id...>       reopen notes');
-  out(io, '  isotone --reply <id> "<text>"  ask the reviewer about a note; it stays open');
+  out(io, '  isotone --reply <id> "<text>"  ask the reviewer about a note; it stays open, and their');
+  out(io, '                                 answer from the panel comes back with it');
+  out(io, '  --choice <text>                with --reply: an answer they can give with one press;');
+  out(io, '                                 up to 4, each at most 60 characters');
   out(io, '  --days <n>                     also list notes closed in the last n days');
   out(io, '  --all                          also list every closed note');
   out(io, '  --json                         note records as JSON, one array');

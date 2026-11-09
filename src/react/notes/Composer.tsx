@@ -34,7 +34,7 @@ interface ComposerProps {
 
 /** One composer, in the dock or floating beside the element being written about. */
 export const Composer = memo(function Composer({
-  draft: { text: draft, editing, variantTarget, targets, notice },
+  draft: { text: draft, editing, answering, variantTarget, targets, notice },
   fieldRef,
   active,
   picking,
@@ -59,7 +59,7 @@ export const Composer = memo(function Composer({
   const stopVoice = voice.stop;
   const said = voice.problem || notice;
   const changes = adjust?.count ?? 0;
-  const hasContext = Boolean(editing || variantTarget || targets.length || said || changes);
+  const hasContext = Boolean(editing || answering || variantTarget || targets.length || said || changes);
   // A sent note takes the microphone with it; clearing the field by hand does not.
   const send = () => {
     stopVoice();
@@ -96,6 +96,7 @@ export const Composer = memo(function Composer({
   const hints = touch ? 'touch' : 'pointer';
   // "Not quite" on a closed note edits it, and sending reopens it.
   const reopening = editing?.done === true;
+  const action = answering ? 'Send answer' : reopening ? 'Reopen note' : editing ? 'Save edit' : 'Send note';
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: This extends the native textarea's pointer area; keyboard users focus the textarea directly.
     <fieldset
@@ -108,10 +109,10 @@ export const Composer = memo(function Composer({
         fieldRef.current?.focus({ preventScroll: true });
       }}
     >
-      {/* The agent's question, in full, while the reviewer edits the note to answer it. */}
-      {editing?.reply?.text && !editing.reply.answered && (
+      {/* The agent's question, in full, while the reviewer answers it or edits the note to. */}
+      {(answering ?? editing)?.reply?.text && !(answering ?? editing)?.reply?.answered && (
         <p className="isotone-editing-reply">
-          <span>Agent asks</span> {editing.reply.text}
+          <span>Agent asks</span> {(answering ?? editing)?.reply?.text}
         </p>
       )}
       {/* What the agent said it changed, in full, while the reviewer says what is still off. */}
@@ -121,10 +122,15 @@ export const Composer = memo(function Composer({
         </p>
       )}
       <div className="isotone-context" aria-live="polite">
-        {editing && (
+        {(editing || answering) && (
           <span className="isotone-chip">
-            {reopening ? 'Reopening note' : 'Editing note'}
-            <button type="button" aria-label="Cancel edit" title="Cancel edit" onClick={onCancelEdit}>
+            {answering ? 'Answering agent' : reopening ? 'Reopening note' : 'Editing note'}
+            <button
+              type="button"
+              aria-label={answering ? 'Cancel answer' : 'Cancel edit'}
+              title={answering ? 'Cancel answer' : 'Cancel edit'}
+              onClick={onCancelEdit}
+            >
               <Icon name="close" size={12} />
             </button>
           </span>
@@ -174,7 +180,7 @@ export const Composer = memo(function Composer({
         <textarea
           ref={fieldRef}
           value={text}
-          aria-label="Feedback for the agent"
+          aria-label={answering ? 'Your answer to the agent' : 'Feedback for the agent'}
           onChange={(e) => draft.set(e.target.value)}
           onFocus={onFieldFocus}
           onPointerDown={onFieldPointerDown}
@@ -190,13 +196,15 @@ export const Composer = memo(function Composer({
           placeholder={
             voice.listening
               ? 'Listening…'
-              : reopening
-                ? 'What is still off?'
-                : changes
-                  ? 'Add a note, or just send…'
-                  : targets.length || variantTarget
-                    ? 'Feedback on your selection…'
-                    : 'What would you change?'
+              : answering
+                ? 'Your answer…'
+                : reopening
+                  ? 'What is still off?'
+                  : changes
+                    ? 'Add a note, or just send…'
+                    : targets.length || variantTarget
+                      ? 'Feedback on your selection…'
+                      : 'What would you change?'
           }
           rows={1}
           className="isotone-textarea"
@@ -248,10 +256,11 @@ export const Composer = memo(function Composer({
           )}
           <button
             type="button"
-            aria-label={reopening ? 'Reopen note' : editing ? 'Save edit' : 'Send note'}
-            disabled={!text.trim() && !changes}
+            aria-label={action}
+            // Style changes go with a note, never with an answer.
+            disabled={!text.trim() && (!changes || Boolean(answering))}
             className="isotone-send"
-            title={reopening ? 'Reopen note (Enter)' : editing ? 'Save edit (Enter)' : 'Send note (Enter)'}
+            title={`${action} (Enter)`}
             onClick={send}
           >
             <Icon name="send" size={14} />

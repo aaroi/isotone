@@ -72,7 +72,8 @@ export interface NoteContext {
   update?: UpdateRequest;
   /** The agent's question or remark about the note, written with
    *  `isotone --reply <id> "<text>"`. Only the CLI writes it; the panel shows it
-   *  under the note, and the reviewer answers by editing the note. */
+   *  under the note, and the reviewer answers there (its `answer`) or by
+   *  editing the note. */
   reply?: NoteReply;
   /** Written by `isotone --done`: when, and with `-m "<text>"` what the agent
    *  said it changed. Only the CLI writes it; the panel shows the closed note
@@ -95,11 +96,15 @@ export interface NoteResolution {
 export interface NoteReply {
   text: string;
   at: string;
+  /** Answers the agent offered with `--choice`, each one press in the panel. */
+  choices?: string[];
+  /** The reviewer's answer from the panel: the only part of a reply a browser writes. */
+  answer?: { text: string; at: string };
   /** A fingerprint of the note as it was when the agent asked. Until the
    *  reviewer edits the note, Blast does not hand it out again. */
   about?: string;
-  /** Set when the note has changed since the agent asked: the reviewer's
-   *  edit answered the question, so it is no longer pending. */
+  /** Set once the reviewer has answered, in the panel or by editing the
+   *  note since the agent asked: the question is no longer pending. */
   answered?: boolean;
 }
 

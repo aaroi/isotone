@@ -366,6 +366,7 @@ function stepContent(
             </p>
             <p>
               A closed note stays in your list with what the agent changed until you check it: Looks good, or Not quite to send it back.
+              When the agent needs to know more, it asks under the note, and one {press.toLowerCase()} on an answer replies.
             </p>
             {agent === 'waiting' && <Status done={false}>Waiting for the agent</Status>}
             {agent === 'working' && <Status done={false}>The agent is on it. The dot by your note shows that.</Status>}

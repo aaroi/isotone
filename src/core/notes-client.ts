@@ -56,10 +56,15 @@ function merge(remote: IsotoneNote[], local: IsotoneNote[]): IsotoneNote[] {
 
 /**
  * A note waiting in the browser for the server, with what the reviewer asked
- * of it while the server was away: reopen it ("Not quite"), or mark it
- * checked ("Looks good").
+ * of it while the server was away: reopen it ("Not quite"), mark it checked
+ * ("Looks good"), or send their answer to the agent's question.
  */
-type QueuedNote = IsotoneNote & { reopen?: true; checked?: true };
+type QueuedNote = IsotoneNote & { reopen?: true; checked?: true; answer?: string };
+
+/** The note as the panel shows it once answered: the answer under the question, which is no longer pending. */
+export function withAnswer(note: IsotoneNote, text: string, at = new Date().toISOString()): IsotoneNote {
+  return note.reply ? { ...note, reply: { ...note.reply, answer: { text, at }, answered: true } } : note;
+}
 
 /**
  * The notes kept in `localStorage`: every note when there is no endpoint, and
@@ -92,6 +97,16 @@ function createLocalNotes(key: string) {
       return;
     }
     write([...notes.filter((n) => n.id !== note.id), { ...note, done: true, checkedAt, checked: true } as QueuedNote]);
+  }
+
+  /** Records the reviewer's answer: on the browser's own note, or queued for the server. */
+  function answer(note: IsotoneNote, text: string, queue: boolean): void {
+    const notes = all();
+    if (!queue) {
+      write(notes.map((n) => (n.id === note.id && !n.done ? withAnswer(n, text) : n)));
+      return;
+    }
+    write([...notes.filter((n) => n.id !== note.id), { ...withAnswer(note, text), answer: text } as QueuedNote]);
   }
 
   /** Drops the exact snapshot the server acknowledged; a newer local edit of the note stays. */
@@ -165,7 +180,7 @@ function createLocalNotes(key: string) {
     return savedId;
   }
 
-  return { all, write, acknowledge, save, check };
+  return { all, write, acknowledge, save, check, answer };
 }
 
 type LocalNotes = ReturnType<typeof createLocalNotes>;
@@ -176,7 +191,7 @@ type LocalNotes = ReturnType<typeof createLocalNotes>;
  * server or its notes file changes, so those notes stay queued.
  */
 const NEVER_ACCEPTED = new Set([400, 413, 415]);
-/** A check queued for a note the server no longer has, or that is open again, is moot. */
+/** A check or answer queued for a note the server no longer has, or that has moved on (open again, asked anew), is moot. */
 const CHECK_MOOT = new Set([400, 404]);
 
 /** Pushes the local backlog to the server, one run at a time: a second call joins the run in flight. */
@@ -190,7 +205,8 @@ function createBacklogSync(endpoint: string | null, local: LocalNotes): () => Pr
     for (const item of backlog as QueuedNote[]) {
       // Notes saved by an older client may exceed today's server limit.
       // Keep them in the browser, but let valid notes behind them sync.
-      if (!item.checked && item.feedback.trim().length > MAX_FEEDBACK_LENGTH) continue;
+      const intent = item.checked || item.answer !== undefined;
+      if (!intent && item.feedback.trim().length > MAX_FEEDBACK_LENGTH) continue;
       let rejected = null as { status: number; error: unknown } | null;
       const saved = await request(
         endpoint,
@@ -200,21 +216,23 @@ function createBacklogSync(endpoint: string | null, local: LocalNotes): () => Pr
           body: JSON.stringify(
             item.checked
               ? { id: item.id, route: item.route, checked: true }
-              : {
-                  id: item.id,
-                  createdAt: item.createdAt,
-                  route: item.route,
-                  feedback: item.feedback,
-                  element: item.element ?? null,
-                  ...(item.elements !== undefined ? { elements: item.elements } : {}),
-                  ...(item.variant !== undefined ? { variant: item.variant } : {}),
-                  ...(item.variantAction !== undefined ? { variantAction: item.variantAction } : {}),
-                  ...(item.diagnostics !== undefined ? { diagnostics: item.diagnostics } : {}),
-                  ...(item.styleEdits !== undefined ? { styleEdits: item.styleEdits } : {}),
-                  ...(item.payload !== undefined ? { payload: item.payload } : {}),
-                  ...(item.viewport ? { viewport: item.viewport } : {}),
-                  ...(item.reopen ? { reopen: true } : {}),
-                },
+              : item.answer !== undefined
+                ? { id: item.id, route: item.route, answer: item.answer }
+                : {
+                    id: item.id,
+                    createdAt: item.createdAt,
+                    route: item.route,
+                    feedback: item.feedback,
+                    element: item.element ?? null,
+                    ...(item.elements !== undefined ? { elements: item.elements } : {}),
+                    ...(item.variant !== undefined ? { variant: item.variant } : {}),
+                    ...(item.variantAction !== undefined ? { variantAction: item.variantAction } : {}),
+                    ...(item.diagnostics !== undefined ? { diagnostics: item.diagnostics } : {}),
+                    ...(item.styleEdits !== undefined ? { styleEdits: item.styleEdits } : {}),
+                    ...(item.payload !== undefined ? { payload: item.payload } : {}),
+                    ...(item.viewport ? { viewport: item.viewport } : {}),
+                    ...(item.reopen ? { reopen: true } : {}),
+                  },
           ),
         },
         async (res) => {
@@ -231,7 +249,7 @@ function createBacklogSync(endpoint: string | null, local: LocalNotes): () => Pr
         if (rejected) {
           // A note the server can never accept is dropped, once and loudly,
           // instead of being posted again on every poll.
-          if ((item.checked ? CHECK_MOOT : NEVER_ACCEPTED).has(rejected.status)) {
+          if ((intent ? CHECK_MOOT : NEVER_ACCEPTED).has(rejected.status)) {
             local.acknowledge(item);
             console.warn(
               `Isotone dropped a saved note the server rejects (${rejected.status}${typeof rejected.error === 'string' ? `: ${rejected.error}` : ''}).`,
@@ -422,6 +440,34 @@ export function createIsotoneStore(cfg: IsotoneStoreConfig = {}) {
     if (!res.ok) throw new Error(`Checking Isotone note failed (${res.status})`);
   }
 
+  /**
+   * The reviewer's answer to the agent's question on an open note. With the
+   * server away or failing, it waits in the browser and is sent with the
+   * backlog; a refusal throws.
+   */
+  async function answerNote(note: IsotoneNote, text: string): Promise<void> {
+    if (!endpoint) {
+      local.answer(note, text, false);
+      return;
+    }
+    let res: Response;
+    try {
+      res = await request(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: note.id, route: note.route, answer: text }),
+      });
+    } catch {
+      local.answer(note, text, true);
+      return;
+    }
+    if (res.status >= 500) {
+      local.answer(note, text, true);
+      return;
+    }
+    if (!res.ok) throw new Error(`Answering the agent failed (${res.status})`);
+  }
+
   async function deleteNote(id: string): Promise<void> {
     if (!endpoint) {
       local.write(local.all().filter((f) => f.id !== id));
@@ -441,6 +487,7 @@ export function createIsotoneStore(cfg: IsotoneStoreConfig = {}) {
     pendingNotes,
     saveNote,
     checkNote,
+    answerNote,
     deleteNote,
     endpoint,
     /** Where the last save landed, for the panel's sync notice. */
