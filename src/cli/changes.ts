@@ -102,21 +102,26 @@ function projectChange(root: string, ignore: (file: string) => boolean): number 
 }
 
 /**
- * The files under `root` or `own` that `ignore` does not exclude and that were
- * modified after `since` (ms), newest first, from the same files as
- * {@link latestChange}; null when it cannot tell. A deleted file has no time,
- * so it is left out.
+ * The files under `root` or `own` that `ignore` does not exclude, as a lookup
+ * of those modified after a given time (ms), newest first, from the same files
+ * as {@link latestChange}; null when it cannot tell. One walk of the project
+ * serves every time asked for, so `--done a b c` stats each file once. A
+ * deleted file has no time, so it is left out; so is a file dated in the
+ * future (a restored backup, a skewed clock), which would otherwise be
+ * "changed" for every note from now on.
  */
-export function changedSince(root: string, ignore: (file: string) => boolean, own: string[], since: number): string[] | null {
+export function changesAfter(root: string, ignore: (file: string) => boolean, own: string[]): ((since: number) => string[]) | null {
   const managed = filesUnder(own);
   const project = projectFiles(root);
   if (managed === null || project === null) return null;
+  const latest = Date.now() + 60_000;
   const times = new Map<string, number>();
   for (const abs of [...project.files, ...managed]) {
     const at = ignore(abs) ? null : mtime(abs);
-    if (at !== null && at > since) times.set(abs, at);
+    if (at !== null && at <= latest) times.set(abs, at);
   }
-  return [...times].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([abs]) => abs);
+  const newestFirst = [...times].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  return (since) => newestFirst.filter(([, at]) => at > since).map(([abs]) => abs);
 }
 
 /**

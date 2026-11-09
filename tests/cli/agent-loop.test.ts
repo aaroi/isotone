@@ -242,6 +242,8 @@ describe('--done names what it counted as the fix', () => {
     write(root, 'src/App.css', 'a { color: red }\n', Date.now() + 1000);
     write(root, 'src/App.jsx', 'export default () => 1;\n', Date.now() + 2000);
     write(root, '.isotone/active.json', '{"active":[]}', Date.now() + 3000);
+    // A file dated years ahead would be "changed" for every note from now on: it is never named.
+    write(root, 'restored-backup.txt', 'old\n', Date.now() + 5 * 365 * 86_400_000);
     const io = captureIo(root);
     expect(await runCli(['--done', 'aaaa', '-m', 'Red links'], io)).toBe(0);
     const lines = io.text.out.split('\n');

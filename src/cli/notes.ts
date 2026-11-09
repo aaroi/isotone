@@ -30,7 +30,7 @@ import { diagnosticsOf } from '../node/notes/validate';
 import { foreignServers } from '../node/serve-owner';
 import { notesProjectRoot, updateRequestOf } from '../node/update/request';
 import { listVariants, readActive, variantDir } from '../node/variants';
-import { changedSince, latestChange, mtime, snapshot } from './changes';
+import { changesAfter, latestChange, mtime, snapshot } from './changes';
 import { docPath } from './docs';
 import { oneLine, quoted, shellCommand, shellQuote, toJson, utcStamp } from './text';
 import { type CliIO, errOut, findNoteByPrefix, has, out, parseArgs, valueFor } from './util';
@@ -415,10 +415,11 @@ function countedChanges(file: string, root: string, closed: { note: StoredNote; 
     /* As given. */
   }
   const ignore = isBookkeeping(file);
-  const own = managedFiles(file, root);
+  const changes = changesAfter(root, ignore, managedFiles(file, root));
+  if (!changes) return lines;
   for (const { note, since: from, working } of fresh) {
-    const files = changedSince(root, ignore, own, from);
-    if (!files?.length) continue;
+    const files = changes(from);
+    if (!files.length) continue;
     const named = files.slice(0, MAX_NAMED_FILES).map((abs) => oneLine(relative(base, abs).split(sep).join('/')));
     const more = files.length > MAX_NAMED_FILES ? ` (+${files.length - MAX_NAMED_FILES} more)` : '';
     lines.set(note, `  changed since ${working ? '--working' : 'the note was written'}: ${named.join(', ')}${more}`);
