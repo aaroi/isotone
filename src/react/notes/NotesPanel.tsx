@@ -133,6 +133,23 @@ const NoteList = memo(function NoteList({
 }: Pick<NotesPanelProps, 'open' | 'route' | 'editingId' | 'onEdit' | 'onRemove' | 'onCheck' | 'onAnswer' | 'onBeginAnswer' | 'onLocate'> &
   Pick<NoteView, 'notes' | 'selectedPages' | 'working'>) {
   const listRef = useRef<HTMLUListElement>(null);
+  // Answering or checking a note collapses its row, so the second click of a quick double-click lands on
+  // whatever moved under the pointer. Pointer presses in the list are ignored for a moment after either.
+  const settling = useRef(0);
+  const answer = useCallback(
+    (note: IsotoneNote, text: string) => {
+      settling.current = Date.now() + SETTLE_MS;
+      onAnswer(note, text);
+    },
+    [onAnswer],
+  );
+  const check = useCallback(
+    (note: IsotoneNote) => {
+      settling.current = Date.now() + SETTLE_MS;
+      onCheck(note);
+    },
+    [onCheck],
+  );
   // A closed panel renders no notes; the rows stay one more render after closing, for the dock's exit snapshot.
   // Opening renders the newest notes first and older ones above them in chunks, as the Variants list does.
   const lingering = useDeferredValue(open);
@@ -175,6 +192,13 @@ const NoteList = memo(function NoteList({
       aria-label="Notes"
       onFocus={(e) => setFocused((e.target as HTMLElement).closest('li')?.dataset.motionKey)}
       onKeyDown={moveNoteFocus}
+      onClickCapture={(event) => {
+        // A keyboard press has detail 0 and never lands by accident.
+        if (event.detail > 0 && Date.now() < settling.current) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
       onScroll={(e) => {
         const list = e.currentTarget;
         // A hidden list reads as all zeros; it keeps the place it had.
@@ -191,8 +215,8 @@ const NoteList = memo(function NoteList({
           tabbable={note.id === stop}
           onEdit={onEdit}
           onRemove={onRemove}
-          onCheck={onCheck}
-          onAnswer={onAnswer}
+          onCheck={check}
+          onAnswer={answer}
           onBeginAnswer={onBeginAnswer}
           onLocate={onLocate}
         />
@@ -200,6 +224,9 @@ const NoteList = memo(function NoteList({
     </ul>
   );
 });
+
+/** How long a row's own press is ignored after an action collapsed a row. */
+const SETTLE_MS = 400;
 
 const NOTE_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
 
@@ -364,7 +391,7 @@ function AnswerActions({
             onAnswer(note, choice);
           }}
         >
-          <span onPointerOver={showOverflowTitle}>{choice}</span>
+          <span>{choice}</span>
         </button>
       ))}
       <button

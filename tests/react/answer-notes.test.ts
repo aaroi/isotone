@@ -6,6 +6,7 @@ import { act, createElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { IsotonePanel } from '../../src/react/index';
+import { PANEL_CSS } from '../../src/react/styles/panel';
 import { byText, click, container, render, setUpPanelFixture } from '../helpers/panel';
 
 setUpPanelFixture();
@@ -208,5 +209,71 @@ describe("answering the agent's question", () => {
     await act(async () => document.activeElement?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 })));
     expect(rows()[1]?.querySelector('.isotone-answered')?.textContent).toBe('You answered Bolder text');
     expect(document.activeElement).toBe(rows()[1]?.querySelector('.isotone-note-hit'));
+  });
+
+  it('sets an unsent draft and its pin aside while answering, and gives them back after sending or Escape', async () => {
+    localStorage.setItem(
+      'isotone-feedback::draft::/',
+      JSON.stringify({ text: 'Draft words', elements: [{ tag: 'p', text: 'Pinned', selector: '#p' }] }),
+    );
+    const posts = serve([asked('a'), asked('b')]);
+    await open();
+    expect(field()?.value).toBe('Draft words');
+    const chips = () => Array.from(container.querySelectorAll('.isotone-context .isotone-chip')).map((chip) => chip.textContent);
+    expect(chips()).toEqual(['Pinned']);
+    await click(byText('Answer the agent: Note a'));
+    expect(field()?.value).toBe('');
+    expect(chips()).toEqual(['Answering agent']);
+    // Nothing pinned would go with an answer: no crosshair, no style editor.
+    expect(container.querySelector('[aria-label="Select elements"]')).toBeNull();
+    await act(async () => {
+      const textarea = field();
+      if (!textarea) return;
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set?.call(textarea, 'The first one');
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await click(byText('Send answer'));
+    expect(posts).toEqual([{ id: 'a', route: '/', answer: 'The first one' }]);
+    expect(field()?.value).toBe('Draft words');
+    expect(chips()).toEqual(['Pinned']);
+    expect(container.querySelector('[aria-label="Select elements"]')).not.toBeNull();
+    await click(byText('Answer the agent: Note b'));
+    await act(async () => field()?.focus());
+    await press('Escape', field());
+    expect(field()?.value).toBe('Draft words');
+    expect(chips()).toEqual(['Pinned']);
+    localStorage.clear();
+  });
+
+  it('says an answer waits in the browser while the dev server is away', async () => {
+    serve([asked('a', ['Bolder text'])], () => ({ ok: false, status: 503 }));
+    await open();
+    await click(byText('Bolder text: answer for Note a'));
+    expect(rows()[0]?.querySelector('.isotone-answered')?.textContent).toBe('You answered Bolder text');
+    expect(container.querySelector('.isotone-notice')?.textContent).toBe('Saved here; it reaches your agent when the dev server is back.');
+    localStorage.clear();
+  });
+
+  it('ignores the second click of a quick double-click on a choice, so the row moving under it is not opened', async () => {
+    serve([asked('a', ['Bolder text']), note('b', { createdAt: minutesAgo(10) })]);
+    await open();
+    const choice = byText('Bolder text: answer for Note a');
+    const pointer = (target: Element | null | undefined) =>
+      act(async () => {
+        target?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true, detail: 1 }));
+      });
+    await pointer(choice);
+    // The row collapsed: the next row is now under the pointer.
+    await pointer(rows()[1]?.querySelector('.isotone-note-hit'));
+    expect(container.querySelector('.isotone-context .isotone-chip')).toBeNull();
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 450)));
+    await pointer(rows()[1]?.querySelector('.isotone-note-hit'));
+    expect(container.querySelector('.isotone-context .isotone-chip')?.textContent).toBe('Editing note');
+  });
+
+  it('wraps a long choice inside its key instead of cutting it off', () => {
+    const rule = /\.isotone-answer-actions > button\[data-kind='choice'\] \{([^}]*)\}/.exec(PANEL_CSS)?.[1] ?? '';
+    expect(rule).toContain('white-space: normal');
+    expect(PANEL_CSS).not.toMatch(/isotone-answer-actions[^{]*\{[^}]*(text-overflow|line-clamp)/);
   });
 });

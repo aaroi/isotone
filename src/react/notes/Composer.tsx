@@ -210,19 +210,22 @@ export const Composer = memo(function Composer({
           className="isotone-textarea"
         />
         <div className="isotone-toolbar">
-          <button
-            type="button"
-            title={`Select elements${shortcutLabel ? ` · ${shortcutLabel}` : ''}`}
-            aria-label="Select elements"
-            aria-pressed={picking}
-            className="isotone-pick isotone-icon"
-            // Keep focus where it is, so a focused composer stays focused.
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={onTogglePicking}
-          >
-            <Icon name="pin" size={14} />
-          </button>
-          {adjust && (
+          {/* An answer goes without pins or style changes, so neither is offered while writing one. */}
+          {!answering && (
+            <button
+              type="button"
+              title={`Select elements${shortcutLabel ? ` · ${shortcutLabel}` : ''}`}
+              aria-label="Select elements"
+              aria-pressed={picking}
+              className="isotone-pick isotone-icon"
+              // Keep focus where it is, so a focused composer stays focused.
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onTogglePicking}
+            >
+              <Icon name="pin" size={14} />
+            </button>
+          )}
+          {adjust && !answering && (
             <button
               type="button"
               title="Adjust styles · experimental"

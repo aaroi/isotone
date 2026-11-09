@@ -151,6 +151,15 @@ function createLocalNotes(key: string) {
       }
       if (context) Object.assign(existing, context);
       if (existing.elements) existing.element = existing.elements[0] ?? null;
+      // A save is the whole note, newer than an answer or a check queued for it: the edit answers the
+      // question itself, and "Not quite" overrides "Looks good". The backlog then posts the note.
+      const queued = existing as QueuedNote;
+      delete queued.answer;
+      delete queued.checked;
+      if (existing.reply?.answer) {
+        const { answer: _older, ...reply } = existing.reply;
+        existing.reply = reply;
+      }
       if (reopen) {
         existing.done = false;
         existing.doneAt = null;
@@ -443,12 +452,12 @@ export function createIsotoneStore(cfg: IsotoneStoreConfig = {}) {
   /**
    * The reviewer's answer to the agent's question on an open note. With the
    * server away or failing, it waits in the browser and is sent with the
-   * backlog; a refusal throws.
+   * backlog (`queued`); a refusal throws.
    */
-  async function answerNote(note: IsotoneNote, text: string): Promise<void> {
+  async function answerNote(note: IsotoneNote, text: string): Promise<{ queued: boolean }> {
     if (!endpoint) {
       local.answer(note, text, false);
-      return;
+      return { queued: false };
     }
     let res: Response;
     try {
@@ -459,13 +468,14 @@ export function createIsotoneStore(cfg: IsotoneStoreConfig = {}) {
       });
     } catch {
       local.answer(note, text, true);
-      return;
+      return { queued: true };
     }
     if (res.status >= 500) {
       local.answer(note, text, true);
-      return;
+      return { queued: true };
     }
     if (!res.ok) throw new Error(`Answering the agent failed (${res.status})`);
+    return { queued: false };
   }
 
   async function deleteNote(id: string): Promise<void> {

@@ -99,10 +99,11 @@ key face instead of the accent.
 An open note with the agent's question stacks the same way: the question in the
 reply treatment (“Agent asks”, three lines at most), then, right-aligned and
 always shown, one neutral raised key per offered answer (wrapping onto further
-lines, a long label truncated) and Answer… (Answer alone without choices) as a
+lines; a long label wraps to two lines inside its key, never cut off) and Answer… (Answer alone without choices) as a
 quiet text button. A choice answers at once; Answer… opens the composer reading
 “Answering agent” and “Your answer…”, with the question in full and the note's
-text left out of the field. Once answered, “You answered” and the answer (muted,
+text left out of the field; pins and the style editor are hidden, and an unsent
+draft returns once the answer is sent or dropped. Once answered, “You answered” and the answer (muted,
 two lines) take the keys' place until the agent acts. The Feedback button's name
 counts the questions waiting.
 Defaults and feedback

@@ -234,3 +234,40 @@ it('answers in the browser alone when there is no endpoint', async () => {
   await store.answerNote(askedNote('a'), 'Bolder');
   expect((await store.listNotes('/'))[0]?.reply).toMatchObject({ answered: true, answer: { text: 'Bolder' } });
 });
+
+it('sends an edit made after a queued answer or check as the whole note, never the older answer or check', async () => {
+  const values = memory();
+  let up = false;
+  const posted: Record<string, unknown>[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url: unknown, init?: RequestInit) => {
+      if (!up) throw new TypeError('Failed to fetch');
+      if (init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        posted.push(body);
+        return { ok: true, status: 200, json: async () => ({ id: body.id }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ rev: 'r', notes: [] }) };
+    }),
+  );
+  const store = createIsotoneStore({ key: 'newer-test', endpoint: '/notes' });
+  await store.answerNote(askedNote('a'), 'Red');
+  await store.saveNote('/', 'Note a, in red please', null, 'a');
+  await store.checkNote(closedNote('b'));
+  // "Not quite" after "Looks good": the reopen wins.
+  await store.saveNote('/', 'Note b', null, 'b', undefined, undefined, undefined, true);
+  const queued = JSON.parse(values.get('newer-test') ?? '[]') as Record<string, unknown>[];
+  expect(queued.map((n) => [n.id, 'answer' in n, 'checked' in n])).toEqual([
+    ['a', false, false],
+    ['b', false, false],
+  ]);
+  expect((queued[0]?.reply as Record<string, unknown>) ?? {}).not.toHaveProperty('answer');
+  up = true;
+  await store.pollNotes(null);
+  expect(posted).toEqual([
+    expect.objectContaining({ id: 'a', feedback: 'Note a, in red please' }),
+    expect.objectContaining({ id: 'b', feedback: 'Note b', reopen: true }),
+  ]);
+  expect(posted.some((body) => 'answer' in body || 'checked' in body)).toBe(false);
+});

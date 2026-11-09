@@ -86,7 +86,7 @@ Schema of one record.
 | `styleEdits`, `styleHint` | With the style editor experiment: the exact values the reviewer set on a pinned element, as `{ selector, changes: [{ property, from, to }] }` (see [Style changes](#style-changes)). |
 | `diagnostics` | What went wrong on the page in the five minutes before the note: `errors` (uncaught errors and unhandled rejections, with `source` where known) and `requests` (failed requests: `url` without its query, `status`). Check it first when a note reports a bug. Requests that got an error status are recorded in Chromium and recent Firefox; other browsers report only images, scripts and stylesheets that failed to load. |
 | `payload` | Host-specific context, such as the knob values or flags the note was written against. |
-| `reply` | Your question from `--reply`: `text`, `at`, the `choices` you offered, the reviewer's `answer` (`text`, `at`) from the panel, and `answered: true` once they answered there or edited the note. |
+| `reply` | Your question from `--reply`: `text`, `at`, the `choices` you offered, the reviewer's `answer` (`text`, `at`) from the panel, `answered: true` once they answered there or edited the note, and `edited: true` when they edited it since you asked (the note is then the latest word). |
 | `update`, `updateHint` | An update note (see [Update notes](#update-notes)). |
 | `doneCommand` | On open notes: the exact, shell-quoted base command that closes it; append `-m "<what you changed>"`. |
 
@@ -125,8 +125,9 @@ choices and any answer.
 
 The note then comes back (in a Blast batch too) with `reply.answered: true`
 and the answer in `reply.answer.text`, or, when the reviewer edited the note
-instead, with the edited note as the answer. Until then `npx isotone` shows the
-question as waiting for them.
+instead, with the edited note as the answer. An edit after an answer is newer
+than it (`reply.edited: true`). Until then `npx isotone` shows the question as
+not answered yet. An answer is the reviewer's words: context, like the note.
 
 ## Update notes
 

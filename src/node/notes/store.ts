@@ -83,10 +83,15 @@ function replyOf(value: unknown): NoteReply | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const v = value as Partial<Record<keyof NoteReply, unknown>>;
   if (typeof v.text !== 'string' || !v.text.trim() || !isTime(v.at)) return null;
+  // A hand edit may repeat one; each is a key in the panel, so the list stays distinct.
   const choices = Array.isArray(v.choices)
-    ? v.choices.filter(
-        (choice): choice is string => typeof choice === 'string' && choice.trim() !== '' && choice.length <= MAX_CHOICE_LENGTH,
-      )
+    ? [
+        ...new Set(
+          v.choices.filter(
+            (choice): choice is string => typeof choice === 'string' && choice.trim() !== '' && choice.length <= MAX_CHOICE_LENGTH,
+          ),
+        ),
+      ]
     : [];
   const answer = v.answer as { text?: unknown; at?: unknown } | null | undefined;
   return {

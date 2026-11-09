@@ -351,10 +351,10 @@ ${APPEARANCE_CSS}
 .isotone-check-actions { display: flex; justify-content: flex-end; align-items: center; gap: 4px; padding: 2px var(--iso-note-padding-x) 6px; }
 .isotone-check-actions > button { display: inline-flex; align-items: center; min-height: 24px; padding: 0 12px; font-size: 11px; line-height: 16px; white-space: nowrap; }
 .isotone-quiet { border-radius: var(--iso-control-radius); color: var(--iso-muted); font-weight: 500; background: none; box-shadow: none; }
-/* Under the agent's question, the answers it offered wrap onto a second line rather than squeeze; a long one truncates. */
+/* Under the agent's question, the answers it offered wrap onto further lines rather than squeeze, and a long
+   one wraps inside its key (two lines at most, by the CLI's length limit), so none is ever cut off. */
 .isotone-answer-actions { flex-wrap: wrap; row-gap: 4px; }
-.isotone-answer-actions > button { min-width: 0; max-width: 100%; }
-.isotone-answer-actions > button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.isotone-answer-actions > button[data-kind='choice'] { max-width: 100%; padding-block: 4px; white-space: normal; text-wrap: balance; overflow-wrap: anywhere; text-align: center; }
 /* The reviewer's answer takes the answers' place, muted, until the agent acts on it. */
 .isotone-note > p.isotone-answered { margin-top: -2px; padding: 0 var(--iso-note-padding-x) var(--iso-note-padding-y); color: var(--iso-muted); font-size: 11px; line-height: 18px; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .isotone-ring { position: absolute; inset: 0; border-radius: 999px; pointer-events: none; }

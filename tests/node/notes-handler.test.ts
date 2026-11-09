@@ -5,6 +5,7 @@ import { afterEach, assert, describe, expect, it } from 'vitest';
 import { notesResponse } from '../../src/node/notes/handler';
 import { contentFingerprint, readNotes, replyView, type StoredNote, updateNotes } from '../../src/node/notes/store';
 import { MAX_REPLY_LENGTH, PAYLOAD_MAX } from '../../src/core/limits';
+import type { NoteReply } from '../../src/core/types';
 import { tempNotesFile } from '../helpers/fs';
 
 const dirs: string[] = [];
@@ -577,5 +578,8 @@ describe("answers to the agent's question", () => {
       ),
     );
     expect(replyView(readNotes(file)[0] as StoredNote)).toEqual({ text: 'Which card?', at: expect.any(String), choices: ['ok'] });
+    // A repeated choice in a hand-edited file is read once, so each is a distinct key in the panel.
+    updateNotes(file, (notes) => notes.map((n) => ({ ...n, reply: { ...(n.reply as NoteReply), choices: ['ok', 'Bolder', 'ok'] } })));
+    expect(replyView(readNotes(file)[0] as StoredNote)?.choices).toEqual(['ok', 'Bolder']);
   });
 });

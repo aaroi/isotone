@@ -150,11 +150,15 @@
           "required": ["text", "at"],
           "additionalProperties": false,
           "properties": {
-            "text": { "type": "string" },
+            "text": { "type": "string", "maxLength": 2000 },
             "at": { "type": "string", "format": "date-time" }
           }
         },
-        "answered": { "const": true }
+        "answered": { "const": true },
+        "edited": {
+          "const": true,
+          "description": "The reviewer has edited the note since you asked: the note as it stands is newer than any answer."
+        }
       }
     },
     "resolution": {
