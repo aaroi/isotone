@@ -23,6 +23,11 @@ type Layout = 'row' | 'wrap';
 
 const tracks = new Set<HTMLElement>();
 let observer: ResizeObserver | null = null;
+/** The width each track was last laid out at: only a width change can change its layout. */
+const laidOutAt = new WeakMap<HTMLElement, number>();
+const pending = new Set<HTMLElement>();
+let flushQueued = false;
+let frame = 0;
 
 /** Measures every changed track before writing any, so a resize lays out once. */
 function relayout(targets: Iterable<HTMLElement>) {
@@ -33,10 +38,47 @@ function relayout(targets: Iterable<HTMLElement>) {
     if (plan) plans.push([track, ...plan]);
   }
   for (const [track, layout, columns] of plans) {
+    laidOutAt.set(track, track.clientWidth);
     if (track.dataset.layout !== layout) track.dataset.layout = layout;
     const value = String(columns);
     if (track.style.getPropertyValue('--iso-seg-cols') !== value) track.style.setProperty('--iso-seg-cols', value);
   }
+}
+
+/**
+ * Lays out a mounting selector before the first paint, batched: every selector
+ * mounting in one commit queues here and is measured in one pass, not one
+ * forced layout each.
+ */
+function queue(track: HTMLElement) {
+  pending.add(track);
+  if (flushQueued) return;
+  flushQueued = true;
+  queueMicrotask(() => {
+    flushQueued = false;
+    const batch = [...pending];
+    pending.clear();
+    relayout(batch);
+  });
+}
+
+/**
+ * Resizes lay out in the next frame. Writing from inside the observer's callback
+ * changes the observed tracks' heights, which browsers report as a
+ * "ResizeObserver loop" error that host apps' error overlays show.
+ */
+function onResize(entries: ResizeObserverEntry[]) {
+  for (const entry of entries) {
+    const track = entry.target as HTMLElement;
+    if (laidOutAt.get(track) !== track.clientWidth) pending.add(track);
+  }
+  if (pending.size === 0 || frame) return;
+  frame = requestAnimationFrame(() => {
+    frame = 0;
+    const batch = [...pending];
+    pending.clear();
+    relayout(batch);
+  });
 }
 
 function measure(track: HTMLElement): [Layout, number] | null {
@@ -71,14 +113,17 @@ export function useSegmentLayout<T extends HTMLElement>(labels: string) {
   useLayoutEffect(() => {
     const track = ref.current;
     if (!track?.classList.contains('isotone-segs')) return;
-    relayout([track]);
+    // New labels mean new widths, at whatever width the track already has.
+    laidOutAt.delete(track);
+    queue(track);
     if (typeof ResizeObserver === 'undefined') return;
-    observer ??= new ResizeObserver((entries) => relayout(entries.map((entry) => entry.target as HTMLElement)));
+    observer ??= new ResizeObserver(onResize);
     observer.observe(track);
     tracks.add(track);
     return () => {
       observer?.unobserve(track);
       tracks.delete(track);
+      pending.delete(track);
     };
   }, [labels]);
   return ref;

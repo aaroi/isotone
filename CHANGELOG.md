@@ -5,6 +5,9 @@
 ### Fixed
 
 - **Segmented selectors that need more than one row look right again.** When the options fit side by side they stay one capsule. When they don't, they wrap into balanced rows with aligned columns, a short last row stretches to fill, and labels truncate rather than stack. The track's corners follow the capsules inside instead of ballooning into a stadium.
+- **Changing a pick no longer moves the Variants panel.** The "Make default" bar floats over the foot of the panel instead of pushing the selectors up, and the list scrolls far enough to show its last row above it. If the bar would cover the control you just used, the list brings that control clear of it.
+- **A segment's hover chevron no longer overlaps its label.**
+- **Closing a panel with the pointer no longer leaves a focus ring on the pill's corner.** Focus still returns there, with the ring shown only after keyboard use.
 
 ## 1.3.2
 

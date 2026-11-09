@@ -104,7 +104,7 @@ ${APPEARANCE_CSS}
 .isotone-panel-close:hover::before { background: var(--iso-control-hover-face); }
 @media (hover: none) { .isotone-panel-close { opacity: 1; } }
 /* The defaults bar, at the foot of the variants panel while a pick differs from its default. */
-.isotone-root .isotone-vars > .isotone-panel-head { order: 2; flex: 0 0 auto; min-height: 48px; display: flex; align-items: center; gap: 8px; padding: var(--iso-space); position: relative; z-index: 1; margin-top: calc(0px - var(--iso-space)); background: linear-gradient(to bottom, transparent, var(--iso-bg) var(--iso-space)); }
+.isotone-root .isotone-vars > .isotone-panel-head { display: flex; align-items: center; gap: 8px; padding: var(--iso-space); z-index: 1; }
 /* --iso-menu-max bounds a dialog squeezed above its heading, which then scrolls there; 12px stays clear below. */
 .isotone-root .isotone-axis-menu { top: var(--iso-menu-top, 6px); max-height: min(var(--iso-menu-max, 100%), calc(100% - var(--iso-menu-top, 6px) - 12px)); }
 .isotone-head-actions { display: flex; align-items: center; gap: 6px; margin-right: auto; }
@@ -114,7 +114,8 @@ ${APPEARANCE_CSS}
 .isotone-vars { min-height: min(var(--iso-menu-need, 0px), calc(var(--iso-view-height) - 76px)); }
 /* The panel no longer clips, so its corner close can overhang; the variants body clips itself. */
 .isotone-root .isotone-panel > .isotone-vars { overflow: hidden; border-radius: var(--iso-panel-radius); }
-.isotone-vars-body { flex: 1; overflow-x: hidden; overflow-y: auto; min-height: 0; overscroll-behavior: contain; padding: var(--iso-panel-inset); display: flex; flex-direction: column; gap: var(--iso-panel-inset); }
+/* A stable gutter: classic scrollbars appearing (the defaults bar adds scroll room) never narrow and re-wrap the list. */
+.isotone-vars-body { flex: 1; overflow-x: hidden; overflow-y: auto; scrollbar-gutter: stable; min-height: 0; overscroll-behavior: contain; padding: var(--iso-panel-inset); display: flex; flex-direction: column; gap: var(--iso-panel-inset); }
 /* The footer overlaps only the scroller's bottom padding: content fades beneath
    it while scrolling, but the last control remains fully visible at the end. */
 /* A selector out of view skips layout, so opening Feedback beside hundreds of them does not lay out every one.
@@ -158,12 +159,13 @@ ${APPEARANCE_CSS}
 .isotone-axis-value { min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--iso-muted); font: 11px var(--iso-sans); font-variant-numeric: tabular-nums; }
 /* The track's corner is a segment's half height plus the track's padding, so it stays concentric with the capsules inside:
    a full capsule on one row, a rounded card around wrapped rows. useSegmentLayout picks the layout from the labels. */
-.isotone-segs { --iso-seg-h: 28px; --iso-seg-pad: 3px; display: flex; flex-wrap: wrap; gap: 3px; padding: var(--iso-seg-pad); border-radius: calc(var(--iso-seg-h) / 2 + var(--iso-seg-pad)); background: var(--iso-well); box-shadow: var(--iso-segment-track-shadow); }
+.isotone-segs { --iso-seg-h: 28px; --iso-seg-pad: 3px; --iso-seg-gap: 3px; display: flex; flex-wrap: wrap; gap: var(--iso-seg-gap); padding: var(--iso-seg-pad); border-radius: calc(var(--iso-seg-h) / 2 + var(--iso-seg-pad)); background: var(--iso-well); box-shadow: var(--iso-segment-track-shadow); }
 /* Measured to fit, so a row never wraps: options share the room evenly but never shrink past their labels. */
 .isotone-segs[data-layout='row'] { flex-wrap: nowrap; }
 .isotone-segs[data-layout='row'] > .isotone-opt-seg { flex-basis: 0; }
 /* Wrapped rows keep one column width, so options line up; a short last row stretches to fill, and labels truncate before they stack. */
-.isotone-segs[data-layout='wrap'] > .isotone-opt-seg { flex: 1 1 calc((100% - (var(--iso-seg-cols) - 1) * 3px) / var(--iso-seg-cols)); min-width: 0; }
+/* Half a pixel under the exact share, so rounding never pushes a row's last column onto the next row. */
+.isotone-segs[data-layout='wrap'] > .isotone-opt-seg { flex: 1 1 calc((100% - (var(--iso-seg-cols) - 1) * var(--iso-seg-gap)) / var(--iso-seg-cols) - .5px); min-width: 0; }
 .isotone-seg { width: 100%; flex: 1 1 64px; min-width: 0; height: var(--iso-seg-h, 28px); padding: 6px 8px; line-height: 16px; border-radius: 999px; color: var(--iso-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isotone-seg > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isotone-seg[aria-checked='true'] { color: var(--iso-fg); }
@@ -171,7 +173,8 @@ ${APPEARANCE_CSS}
 /* Never narrower than its label plus the chevron's corner on both sides, so a long label widens its own segment instead of running under the chevron. */
 /* A segment is at least its label wide, so labels wrap to a new row before they truncate, but never wider than the row. */
 .isotone-opt-seg { flex: 1 1 64px; min-width: auto; max-width: 100%; }
-.isotone-opt-seg > .isotone-seg { padding-inline: 18px; }
+/* The right side clears the hover chevron (5px in, 16px wide); the left only needs the default dot, so options stay narrow enough to share a row. */
+.isotone-opt-seg > .isotone-seg { padding-inline: 18px 24px; }
 .isotone-opt-swatch { flex: none; }
 .isotone-opt > .isotone-seg, .isotone-opt > .isotone-thumb { flex: 1 1 auto; }
 /* Quiet and tucked into the option's corner so it never covers the label. With a
@@ -244,6 +247,17 @@ ${APPEARANCE_CSS}
 .isotone-secondary { padding: 6px 12px; font-size: 11px; font-weight: 500; white-space: nowrap; }
 .isotone-save { min-height: 26px; padding: 2px 12px; font-size: 11px; white-space: nowrap; overflow: hidden; }
 .isotone-root .isotone-vars > .isotone-panel-head .isotone-head-actions { flex: 1; min-width: 0; }
+/* The defaults bar floats over the panel's foot and takes no space, so a pick never moves the selectors and an
+   untouched panel has no gap. While it shows, the list can scroll its last row clear of it (see .isotone-vars-tail). */
+.isotone-vars { --iso-save-bar-h: calc(var(--iso-space) * 3 + 26px); }
+.isotone-root .isotone-vars > .isotone-panel-head { position: absolute; left: 0; right: 0; bottom: 0; height: var(--iso-save-bar-h); min-height: 0; margin: 0; padding-top: calc(var(--iso-space) * 2); background: linear-gradient(to bottom, transparent, var(--iso-bg) calc(var(--iso-space) * 2)); transition: opacity var(--iso-enter) var(--iso-ease-out), transform var(--iso-enter) var(--iso-ease-out); }
+.isotone-root .isotone-vars > .isotone-panel-head[data-shown='false'] { opacity: 0; transform: translateY(6px); pointer-events: none; }
+/* Extends how far the list scrolls without adding to its height: an absolute box counts towards the scroller's
+   overflow but not its size. Cancels its own gap, so it costs nothing while the bar is hidden. */
+.isotone-vars-tail { position: relative; flex: none; height: 0; margin-top: calc(0px - var(--iso-panel-inset)); pointer-events: none; }
+.isotone-vars[data-saving='true'] .isotone-vars-tail::after { content: ''; position: absolute; left: 0; top: 0; width: 1px; height: var(--iso-save-bar-h); }
+/* Keyboard focus scrolls a control clear of the bar too. */
+.isotone-vars[data-saving='true'] > .isotone-vars-body { scroll-padding-bottom: var(--iso-save-bar-h); }
 .isotone-save-row { position: relative; display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; }
 .isotone-save-count { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--iso-muted); }
 /* The source default, marked where the choice is made rather than only in the actions dialog. */
@@ -441,7 +455,7 @@ ${APPEARANCE_CSS}
   .isotone-ring { box-shadow: 0 0 0 2px color-mix(in srgb, var(--iso-focus) 50%, transparent); }
   .isotone-root .isotone-rail-track { transition: none; }
   .isotone-root .isotone-panel, .isotone-root .isotone-axis-menu, .isotone-root .isotone-rail-tools { transition-property: opacity, visibility; }
-  .isotone-colour { transition-property: opacity; }
+  .isotone-colour, .isotone-root .isotone-vars > .isotone-panel-head { transition-property: opacity; }
   .isotone-root button { transition: opacity 125ms ease; }
   .isotone-root button:not(:disabled):active > svg { transform: none; }
 }
@@ -451,6 +465,8 @@ ${APPEARANCE_CSS}
   .isotone-seg, .isotone-thumb { outline: 1px solid ButtonBorder; outline-offset: -1px; }
   .isotone-seg[aria-checked='true'], .isotone-thumb[aria-checked='true'], .isotone-note-editing .isotone-note-hit, .isotone-pick[aria-pressed='true'], .isotone-page[aria-pressed='true'] { forced-color-adjust: none; background: Highlight; color: HighlightText; }
   .isotone-rail-button[aria-expanded='true']::before { background: Highlight; }
+  /* Its gradient is dropped here, and it floats over selectors: give it a solid face. */
+  .isotone-root .isotone-vars > .isotone-panel-head { background: Canvas; }
   .isotone-rail-button[aria-expanded='true'] { color: HighlightText; }
   .isotone-swatch, .isotone-picker, .isotone-colour-field, .isotone-colour-handle, .isotone-hue { forced-color-adjust: none; }
   .isotone-swatch, .isotone-picker { box-shadow: 0 0 0 1px CanvasText; }

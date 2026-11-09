@@ -201,16 +201,29 @@ describe('VariantsView', () => {
     expect(container.querySelector('.isotone-range-tick')).not.toBeNull();
   });
 
-  it('shows Save only while visible choices differ from defaults', async () => {
+  // The bar used to mount on the first change, growing the panel and moving every selector.
+  it('shows Save only while visible choices differ from defaults, floating so nothing moves', async () => {
     const source = createVariantsSource({ axes: AXES, saveDefaults: async () => {} });
     await render(createElement(VariantsView, { source }));
-    expect(byText('Make default')).toBeUndefined();
+    const bar = () => container.querySelector('.isotone-vars > .isotone-panel-head');
+    const actions = () => container.querySelector('.isotone-head-actions');
+    const shown = () => bar()?.getAttribute('data-shown') === 'true' && !actions()?.hasAttribute('inert');
+    expect(bar()).not.toBeNull();
+    expect(shown()).toBe(false);
+    expect(actions()?.getAttribute('aria-hidden')).toBe('true');
+    // The list only gets room to scroll past the floating bar while it shows.
+    const saving = () => container.querySelector('.isotone-vars')?.getAttribute('data-saving');
+    expect(container.querySelector('.isotone-vars-body > .isotone-vars-tail')).not.toBeNull();
+    expect(saving()).toBe('false');
     await click(byText('Bold'));
-    expect(byText('Make default')).toBeDefined();
+    expect(shown()).toBe(true);
+    expect(saving()).toBe('true');
     await click(byText('Plain'));
-    expect(byText('Make default')).toBeUndefined();
+    expect(shown()).toBe(false);
+    // Fading out, it keeps its last count rather than reading "0 picks".
+    expect(container.querySelector('.isotone-save-count')?.textContent).toBe('1 pick changed');
     await act(async () => source.setSelection('tagline', 'y'));
-    expect(byText('Make default')).toBeUndefined();
+    expect(shown()).toBe(false);
   });
 
   it('a failed save says so', async () => {
