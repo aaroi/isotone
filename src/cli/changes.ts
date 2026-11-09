@@ -89,24 +89,55 @@ export function latestChange(root: string, ignore: (file: string) => boolean, ow
 }
 
 function projectChange(root: string, ignore: (file: string) => boolean): number {
-  const top = gitTop(root);
-  const listed = top ? git(top, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']) : null;
-  if (!top || listed === null) return walk(root, ignore);
-  const files = [...new Set(listed.split('\0').filter(Boolean))];
-  if (files.length > MAX_FILES) return Number.POSITIVE_INFINITY;
-  const head = Number(git(top, ['log', '-1', '--format=%ct'])?.trim()) * 1000;
+  const project = projectFiles(root);
+  if (project === null) return Number.POSITIVE_INFINITY;
+  const head = project.top ? Number(git(project.top, ['log', '-1', '--format=%ct'])?.trim()) * 1000 : 0;
   let latest = Number.isFinite(head) ? head : 0;
-  for (const file of files) {
-    const abs = join(top, file);
+  for (const abs of project.files) {
     if (ignore(abs)) continue;
-    // A deleted file is a change too, of unknown age.
+    // A deleted file is a change too, of unknown age; the walk outside Git only finds files that exist.
     latest = Math.max(latest, mtime(abs) ?? Number.POSITIVE_INFINITY);
   }
   return latest;
 }
 
-function walk(root: string, ignore: (file: string) => boolean): number {
-  let latest = 0;
+/**
+ * The files under `root` or `own` that `ignore` does not exclude and that were
+ * modified after `since` (ms), newest first, from the same files as
+ * {@link latestChange}; null when it cannot tell. A deleted file has no time,
+ * so it is left out.
+ */
+export function changedSince(root: string, ignore: (file: string) => boolean, own: string[], since: number): string[] | null {
+  const managed = filesUnder(own);
+  const project = projectFiles(root);
+  if (managed === null || project === null) return null;
+  const times = new Map<string, number>();
+  for (const abs of [...project.files, ...managed]) {
+    const at = ignore(abs) ? null : mtime(abs);
+    if (at !== null && at > since) times.set(abs, at);
+  }
+  return [...times].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([abs]) => abs);
+}
+
+/**
+ * Every file of the project: in Git, the tracked and untracked ones that are
+ * not ignored, under the work tree's `top`; elsewhere a bounded walk that skips
+ * dependencies, build output and dot-directories. Null past {@link MAX_FILES}.
+ */
+function projectFiles(root: string): { top: string | null; files: string[] } | null {
+  const top = gitTop(root);
+  const listed = top ? git(top, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']) : null;
+  if (!top || listed === null) {
+    const files = walk(root);
+    return files && { top: null, files };
+  }
+  const files = [...new Set(listed.split('\0').filter(Boolean))];
+  if (files.length > MAX_FILES) return null;
+  return { top, files: files.map((file) => join(top, file)) };
+}
+
+function walk(root: string): string[] | null {
+  const files: string[] = [];
   let seen = 0;
   // Walk the long path, as the ignore list holds it (Windows can name a folder both ways).
   const queue = [realPath(root)];
@@ -118,14 +149,14 @@ function walk(root: string, ignore: (file: string) => boolean): number {
       continue;
     }
     for (const entry of entries) {
-      if (++seen > MAX_FILES) return Number.POSITIVE_INFINITY;
+      if (++seen > MAX_FILES) return null;
       const abs = join(dir, entry.name);
       if (entry.isDirectory()) {
         if (!SKIP_DIRS.has(entry.name) && (!entry.name.startsWith('.') || entry.name === '.isotone')) queue.push(abs);
-      } else if (entry.isFile() && !ignore(abs)) latest = Math.max(latest, mtime(abs) ?? 0);
+      } else if (entry.isFile()) files.push(abs);
     }
   }
-  return latest;
+  return files;
 }
 
 /** Every file at or under `paths`, sorted; null past {@link MAX_FILES}. */

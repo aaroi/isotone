@@ -35,7 +35,7 @@ import { mutateVariants } from '../node/variants/options';
 import { repoRelativeKey } from '../node/variants/paths';
 import { docPath } from './docs';
 import { findNotesFile } from './notes';
-import { toJson } from './text';
+import { oneLine, shellCommand, shellQuote, toJson } from './text';
 import { type CliIO, errOut, extractFlag, findNoteByPrefix, has, out, parseArgs, printTable, valueFor } from './util';
 
 /** Each subcommand's value flags, boolean flags and most positionals; anything else is refused. */
@@ -347,6 +347,18 @@ function cmdNew(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
       variant.group ? ` in group ${variant.group}` : ''
     }${variant.section ? ` in section "${variant.section}"` : ''}`,
   );
+  if (note !== undefined) {
+    // Alternatives answer a note with a choice, not a fix: the reviewer picks before it closes.
+    out(io, `Leave note ${oneLine(note.slice(0, 8))} open. Once its variants are ready, ask the reviewer to pick one:`);
+    out(
+      io,
+      `  ${shellCommand('npx', 'isotone', '--reply', note)} "Made two variants of <what>: which should I keep?" --choice ${shellQuote(variant.label)} --choice "<other label>"`,
+    );
+    out(
+      io,
+      `When the answer comes back, ${shellCommand('npx', 'isotone', 'variant', 'promote')} <chosen id>, then ${shellCommand('npx', 'isotone', '--done', note)} -m "<what you kept>".`,
+    );
+  }
   return 0;
 }
 

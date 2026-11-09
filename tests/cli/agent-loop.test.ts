@@ -233,6 +233,64 @@ describe('--done waits for the fix to land', () => {
   });
 });
 
+describe('--done names what it counted as the fix', () => {
+  it('lists the files changed since --working, newest first, without Isotone bookkeeping', async () => {
+    const root = repo();
+    notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000) }]);
+    write(root, 'src/old.css', 'a {}\n', Date.now() - 30_000);
+    expect(await runCli(['--working', 'aaaa'], captureIo(root))).toBe(0);
+    write(root, 'src/App.css', 'a { color: red }\n', Date.now() + 1000);
+    write(root, 'src/App.jsx', 'export default () => 1;\n', Date.now() + 2000);
+    write(root, '.isotone/active.json', '{"active":[]}', Date.now() + 3000);
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa', '-m', 'Red links'], io)).toBe(0);
+    const lines = io.text.out.split('\n');
+    expect(lines[0]).toMatch(/^done: \[aaaa1111\]/);
+    expect(lines[1]).toBe('  changed since --working: src/App.jsx, src/App.css');
+  });
+
+  it('says when it measured from the note, caps the list, and keeps --json stdout one array', async () => {
+    const root = repo();
+    notes(root, [
+      { id: 'aaaa1111', createdAt: ago(60_000) },
+      { id: 'bbbb2222', createdAt: ago(60_000) },
+    ]);
+    // With src/App.jsx from the repo's first commit, also written after the note: eight files.
+    for (let i = 1; i <= 7; i++) write(root, `src/f${i}.js`, `${i}\n`, Date.now() + i * 1000);
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa', '--json'], io)).toBe(0);
+    expect(JSON.parse(io.text.out)).toMatchObject([{ id: 'aaaa1111', done: true }]);
+    expect(io.text.err).toContain(
+      '[aaaa1111] changed since the note was written: src/f7.js, src/f6.js, src/f5.js, src/f4.js, src/f3.js (+3 more)',
+    );
+
+    const forced = captureIo(root);
+    expect(await runCli(['--done', 'bbbb', '--force'], forced)).toBe(0);
+    expect(forced.text.out).not.toContain('changed since');
+  });
+
+  it('names nothing when no file it can date changed', async () => {
+    const root = repo();
+    notes(root, [{ id: 'aaaa1111', createdAt: new Date(Date.now() + 1000).toISOString() }]);
+    // A deleted file lets the note close, but has no time to name it by.
+    rmSync(join(root, 'src/App.jsx'));
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    expect(io.text.out).not.toContain('changed since');
+  });
+
+  it('lists files without Git too', async () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'isotone-plain-')));
+    dirs.push(root);
+    notes(root, [{ id: 'aaaa1111', createdAt: ago(1000) }]);
+    write(root, 'node_modules/x/index.js', '', Date.now() + 5000);
+    write(root, 'index.html', '<h1>Hello</h1>', Date.now() + 5000);
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    expect(io.text.out).toContain('  changed since the note was written: index.html\n');
+  });
+});
+
 describe('--done and variants', () => {
   it('names variants on the route whose copies lack the fix, and one showing instead of the real file', async () => {
     const root = repo();
@@ -355,12 +413,14 @@ describe('what an agent reads', () => {
     );
     const plain = captureIo(repo());
     expect(await runCli(['init'], plain)).toBe(0);
-    expect(plain.text.out.replace(/\s+/g, ' ')).toContain('`tag` line for that port: paste it in step 2 as printed.');
+    expect(plain.text.out.replace(/\s+/g, ' ')).toContain(
+      'If port 4123 is taken, `npx isotone init --approach serve --port <n>` prints this setup for another port.',
+    );
     const next = repo();
     write(next, 'next.config.js', 'module.exports = {};\n');
     const nextIo = captureIo(next);
     expect(await runCli(['init'], nextIo)).toBe(0);
-    expect(nextIo.text.out.replace(/\s+/g, ' ')).toContain('`panel` URL for that port: use it as the src in step 2.');
+    expect(nextIo.text.out.replace(/\s+/g, ' ')).toContain('`npx isotone init --approach serve --port <n>` prints this setup');
   });
 
   it('has serve print the loader tag for the port it listens on', () => {

@@ -29,7 +29,9 @@ import { npm } from './npm.mjs';
 // 454.0 kB): the question rows with their offered answers, the composer's
 // answering mode and its set-aside draft, the queued answers, `--choice` and
 // their docs.
-const BUDGET = { bundle: 408_000, tarball: 456_000 };
+// Tarball raised to 458 kB (agent ergonomics, 456.9 kB): `init --port`, the
+// files `--done` names and their docs.
+const BUDGET = { bundle: 408_000, tarball: 458_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

@@ -105,7 +105,9 @@ first). Swapping source files needs the Vite plugin or a host `VariantsSource`.
 `serve` prints the `panel` URL and loader `tag` for the port it listens on:
 paste them as printed, and keep a non-default port in one script such as
 `"isotone": "isotone serve --port 4124"`, or [one port per
-checkout](#several-checkouts-at-once) when several run at once. `--file` picks the notes file and
+checkout](#several-checkouts-at-once) when several run at once. When 4123 is
+taken before setup, `npx isotone init --approach serve --port 4124` prints the
+whole setup, the tags, the check and that script, for port 4124. `--file` picks the notes file and
 `--theme` the panel theme. It binds to `127.0.0.1` and answers only this
 machine, so another device gets 403 even when the app's dev server listens on
 every interface (`next dev` does). An HTTPS page may block the HTTP script.

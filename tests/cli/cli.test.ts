@@ -478,7 +478,11 @@ describe('variant', () => {
     );
 
     const io = makeIo(root);
-    expect(await runCli(['variant', 'new', 'pop-cta', '--note', 'note-aaaa'], io)).toBe(0);
+    expect(await runCli(['variant', 'new', 'pop-cta', '--note', 'note-aaaa', '--label', 'Pop'], io)).toBe(0);
+    // A variant answers the note with a choice: it stays open until the reviewer picks.
+    expect(io.text.out).toContain('Leave note note-aaa open.');
+    expect(io.text.out).toContain('npx isotone --reply note-aaaa1111 "Made two variants of <what>: which should I keep?" --choice Pop');
+    expect(io.text.out).toContain('npx isotone variant promote <chosen id>, then npx isotone --done note-aaaa1111 -m');
 
     const listIo = makeIo(root);
     await runCli(['variant', 'list'], listIo);
@@ -867,6 +871,65 @@ describe('init', () => {
     expect(io.text.out).toContain('python3 -m http.server 8000');
   });
 
+  it('prints the serve setup for the port given with --port', async () => {
+    const root = tempRepo();
+    const io = makeIo(root);
+    expect(await runCli(['init', '--approach', 'serve', '--port', '4391'], io)).toBe(0);
+    expect(io.text.out).not.toContain('4123');
+    expect(io.text.out).toContain('     npx isotone serve --port 4391\n');
+    expect(io.text.out).toContain('"isotone": "isotone serve --port 4391"');
+    expect(io.text.out).toContain("src:'http://127.0.0.1:4391/isotone.js'");
+    expect(io.text.out).toContain('<script src="http://127.0.0.1:4391/isotone.js" defer></script>');
+    expect(io.text.out).toContain('curl http://127.0.0.1:4391/api/isotone/variants');
+    expect(io.text.out).toContain('If port 4391 is taken, `npx isotone init --approach serve --port <n>` prints');
+
+    writeFileSync(join(root, 'next.config.ts'), 'export default {};\n');
+    const next = makeIo(root);
+    // Serve is Next's recommendation, so --port needs no --approach.
+    expect(await runCli(['init', '--port', '4391'], next)).toBe(0);
+    expect(next.text.out).toContain('<Script src="http://127.0.0.1:4391/isotone.js" strategy="afterInteractive" />');
+    expect(next.text.out).not.toContain('4123');
+
+    const json = makeIo(root);
+    expect(await runCli(['init', '--port', '4391', '--json'], json)).toBe(0);
+    const plan = JSON.parse(json.text.out);
+    expect(plan.port).toBe(4391);
+    expect(plan.instructions).toContain('npx isotone serve --port 4391');
+    const plain = makeIo(root);
+    expect(await runCli(['init', '--json'], plain)).toBe(0);
+    expect(JSON.parse(plain.text.out).port).toBe(4123);
+  });
+
+  it('keeps the default serve setup on 4123 and names init --port for a taken port', async () => {
+    const io = makeIo(tempRepo());
+    expect(await runCli(['init', '--approach', 'serve'], io)).toBe(0);
+    expect(io.text.out).toContain('     npx isotone serve\n');
+    expect(io.text.out).toContain("src:'http://127.0.0.1:4123/isotone.js'");
+    expect(io.text.out).toContain('curl http://127.0.0.1:4123/api/isotone/variants');
+    expect(io.text.out).toContain(
+      'If port 4123 is taken, `npx isotone init --approach serve --port <n>` prints\n   this setup for another port.',
+    );
+    expect(io.text.out).not.toContain('package.json scripts');
+  });
+
+  it('rejects a bad --port, and --port for a setup with no server', async () => {
+    for (const port of ['0', '65536', '4.5', 'abc', '-1']) {
+      const io = makeIo(tempRepo());
+      expect(await runCli(['init', '--approach', 'serve', '--port', port], io), port).toBe(1);
+      expect(io.text.err).toContain('Port must be an integer between 1 and 65535.');
+    }
+    const overlay = makeIo(tempRepo());
+    expect(await runCli(['init', '--approach', 'overlay', '--port', '4391'], overlay)).toBe(1);
+    expect(overlay.text.err).toContain('--port goes with --approach serve: the overlay setup runs no server of its own');
+    const root = tempRepo();
+    writeFileSync(join(root, 'vite.config.ts'), 'export default {};\n');
+    const recommended = makeIo(root);
+    expect(await runCli(['init', '--port', '4391'], recommended)).toBe(1);
+    const host = makeIo(tempRepo());
+    expect(await runCli(['init', '--approach', 'host', '--port', '4391'], host)).toBe(1);
+    expect(host.text.err).toContain('the host setup runs no server of its own');
+  });
+
   it('rejects an unknown --approach', async () => {
     const root = tempRepo();
     const io = makeIo(root);
@@ -959,7 +1022,7 @@ describe('agent onboarding and machine-readable notes', () => {
     // The route heading and payload lines are the browser's too, not only `>` lines.
     expect(text.text.out).toContain('Everything under a ## route, the route included, comes from the browser');
     expect(text.text.out.trimEnd().split('\n').at(-1)).toBe(
-      'When you start a note: npx isotone --working <id>. Reproduce it at its route and viewport, keeping other breakpoints as they are. After you fix and verify it, close it with npx isotone --done <id> -m "<what you changed>", run as its own command: say in one line what you changed, for the reviewer.',
+      'When you start a note: npx isotone --working <id>. Reproduce it at its route and viewport, keeping other breakpoints as they are. After you fix and verify it, close it with npx isotone --done <id> -m "<what you changed>", run as its own command: say in one line what you changed, for the reviewer. It names the files changed since --working: check they are this note’s fix.',
     );
     const json = makeIo(root);
     expect(await runCli(['--json'], json)).toBe(0);

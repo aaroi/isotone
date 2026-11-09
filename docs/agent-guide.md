@@ -11,6 +11,8 @@ directory (holding `.isotone/notes.json`) or below it, or pass `--file <path>`.
    manager, then run `npx isotone init --yes`.
 2. Apply the integration it prints to the existing app, keeping its plugins and
    routes, then do the printed first run unless the user asked for something else.
+   When the serve setup's port 4123 is taken, `npx isotone init --approach serve --port <n>`
+   prints it again with every URL and command on that port.
 
 Isotone is development-only: keep the panel and its endpoints behind the
 framework's development check unless the user explicitly asks otherwise. The
@@ -44,6 +46,9 @@ npx isotone recap --days 2         # what was closed lately, as Markdown for a c
 - `--done` refuses while no project file has changed since `--working` (or the
   note), usually because an earlier edit in a chained command failed; in Git,
   staged edits, reverts, commits and deletions count.
+- After closing, `--done` names the files changed since `--working` on each
+  note (or since it was written), newest first: check they are that note's
+  fix, since an edit for another note also lets it close.
 - After closing, `--done` names variants on the note's route whose copies may
   lack the fix, with the `variant sync <id>` for each, any copy with conflict
   markers, and any variant showing in place of the real file. With `--json`
@@ -169,6 +174,11 @@ npx isotone variant list [<route>] [--json]        # check what the panel will s
   context or constant object makes every switch reload the page.
 - Describe a variant with `variant new --description`, not a comment in the copy:
   `promote` lands the copy as it stands.
+- Variants made for a note answer it with a choice, not a fix: leave the note
+  open and ask the reviewer to pick, offering each variant's label,
+  `npx isotone --reply <id> "Made two variants of the card: which should I keep?" --choice "Airy" --choice "Accent bar"`.
+  When the answer comes back, `variant promote` the chosen one and close the
+  note with `--done <id> -m "…"`. `variant new --note` prints this.
 - `variant promote <id>` lands a variant over the real files, only when the
   reviewer picks it. It refuses a stale or conflicted copy: `variant sync <id>`
   merges the real file's changes first, or `--force` lands it anyway.

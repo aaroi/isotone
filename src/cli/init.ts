@@ -12,7 +12,7 @@ import { dirname, isAbsolute, join } from 'node:path';
 
 import { version } from '../../package.json';
 
-import { guardedScriptTag } from '../core/tag';
+import { DEFAULT_PORT, guardedScriptTag } from '../core/tag';
 import { DEFAULT_VARIANTS_DIR, KNOBS_FILE } from '../node/variants';
 import { docPath } from './docs';
 import { toJson } from './text';
@@ -38,15 +38,13 @@ const LEGACY_LAST_LINES = [
   'requested, from the reported directory, then restart the dev server and verify the app.',
   'the panel still loads, summarize notable changes from the new CHANGELOG, then `--done` it.',
 ];
-const SERVE_BUNDLE = 'http://127.0.0.1:4123/isotone.js';
-
-const GUARDED_SCRIPT_TAG = guardedScriptTag(SERVE_BUNDLE);
+const serveOrigin = (port: number) => `http://127.0.0.1:${port}`;
 
 export function runInit(args: string[], io: CliIO): number {
   const help = args.some((arg) => ['--help', '-h', 'help'].includes(arg));
   if (!help) {
     try {
-      if (parseArgs(args, ['--approach'], ['--yes', '--json'], 'npx isotone init --help').length)
+      if (parseArgs(args, ['--approach', '--port'], ['--yes', '--json'], 'npx isotone init --help').length)
         throw new Error('init does not take positional arguments.');
     } catch (error) {
       errOut(io, (error as Error).message);
@@ -56,10 +54,13 @@ export function runInit(args: string[], io: CliIO): number {
   const { value: approachArg, rest: r1 } = extractFlag(args, '--approach');
   const { present: yes } = extractBoolFlag(r1, '--yes');
   const json = args.includes('--json');
+  const portArg = extractFlag(args, '--port').value;
 
   if (help) {
     out(io, 'Usage: isotone init                      look at this repo and print the setup to apply');
     out(io, '       isotone init --approach <name>    print the setup for overlay, host or serve');
+    out(io, '       isotone init --approach serve --port <n>');
+    out(io, '                                         the serve setup for another port than 4123');
     out(io, '       isotone init --yes                also write or refresh the AGENTS.md section');
     out(io, '                                         (and, for overlay, .isotone/variants/README.md)');
     out(io, 'Without --approach, uses the recommendation. --json prints a structured setup plan.');
@@ -75,9 +76,25 @@ export function runInit(args: string[], io: CliIO): number {
     errOut(io, `Unknown approach "${approach}". Use host, overlay or serve.`);
     return 1;
   }
+  const port = portArg === undefined ? DEFAULT_PORT : Number(portArg);
+  if (portArg !== undefined && (!/^\d+$/.test(portArg) || port < 1 || port > 65535)) {
+    errOut(io, 'Port must be an integer between 1 and 65535.');
+    return 1;
+  }
+  if (portArg !== undefined && approach !== 'serve') {
+    errOut(
+      io,
+      `--port goes with --approach serve: the ${approach} setup runs no server of its own (${
+        approach === 'overlay' ? 'the Vite dev server serves the panel' : 'the app mounts the panel'
+      }).`,
+    );
+    return 1;
+  }
   const setup: Setup = {
     host,
     approach,
+    port,
+    portGiven: portArg !== undefined,
     nextEntry: host === 'next' ? detectNextEntry(io.cwd) : null,
     firstRun: !hasReviewContent(io.cwd),
     install: installCommand(io.cwd),
@@ -102,6 +119,7 @@ export function runInit(args: string[], io: CliIO): number {
         approach,
         recommended,
         reason,
+        ...(approach === 'serve' ? { port } : {}),
         writes: yes ? [...('next' in agents ? ['AGENTS.md'] : []), ...(approach === 'overlay' ? ['.isotone/variants/README.md'] : [])] : [],
         agents: agents.status,
         integration: setup.existing ? (setup.rename ? 'rename' : 'present') : 'missing',
@@ -157,6 +175,10 @@ function isApproach(v: string): v is Approach {
 interface Setup {
   host: Host;
   approach: Approach;
+  /** The port `isotone serve` listens on, for every URL and command of the serve setup. */
+  port: number;
+  /** `--port` was given: the serve command and script name it. */
+  portGiven: boolean;
   /** Where a Next app renders every page, for the dev-only script tag. */
   nextEntry: string | null;
   /** Print the first run: the project has no variants or knobs yet. */
@@ -321,7 +343,7 @@ function printSetup(print: Print, setup: Setup): void {
   else if (setup.approach === 'host') printHost(print);
   else printServe(print, setup);
   print();
-  if (setup.firstRun) printFirstRun(print, setup.approach);
+  if (setup.firstRun) printFirstRun(print, setup.approach, setup.port);
   else {
     print('This project already has variants or knobs, so there is no first run to do.');
     print('Tell the user the URL to open and that the pill in the corner is Isotone.');
@@ -384,17 +406,19 @@ function printHost(print: Print): void {
 
 function printServe(print: Print, setup: Setup): void {
   const next = setup.host === 'next';
+  const bundle = `${serveOrigin(setup.port)}/isotone.js`;
   print('Setup (serve)');
   print('1. Run the panel’s local server in this directory and leave it running, next to');
   print('   the app’s own dev server:');
   print();
-  print('     npx isotone serve');
+  print(setup.portGiven ? `     npx isotone serve --port ${setup.port}` : '     npx isotone serve');
   print();
-  print('   If port 4123 is taken, run `npx isotone serve --port <n>` instead. It prints the');
-  print(
-    `   ${next ? '`panel` URL for that port: use it as the src in step 2.' : '`tag` line for that port: paste it in step 2 as printed.'} Add`,
-  );
-  print('   "isotone": "isotone serve --port <n>" to the package.json scripts so later runs agree.');
+  if (setup.portGiven) {
+    print(`   Add "isotone": "isotone serve --port ${setup.port}" to the package.json scripts so`);
+    print('   later runs use the same port.');
+  }
+  print(`   If port ${setup.port} is taken, \`npx isotone init --approach serve --port <n>\` prints`);
+  print('   this setup for another port.');
   if (next) {
     const entry = setup.nextEntry ?? 'app/layout.tsx';
     print(`2. Load the panel in development only. In ${entry}, import Script at the top`);
@@ -408,7 +432,7 @@ function printServe(print: Print, setup: Setup): void {
     print("     import Script from 'next/script';");
     print('     ...');
     print("     {process.env.NODE_ENV === 'development' && (");
-    print(`       <Script src="${SERVE_BUNDLE}" strategy="afterInteractive" />`);
+    print(`       <Script src="${bundle}" strategy="afterInteractive" />`);
     print('     )}');
     print();
     print('   Next inlines NODE_ENV when it builds, so production HTML has no tag.');
@@ -417,10 +441,10 @@ function printServe(print: Print, setup: Setup): void {
     print('   the <head> of every page the user reviews. It requests nothing unless the page is');
     print('   on localhost, so it stays inert if the HTML ships:');
     print();
-    print(`     ${GUARDED_SCRIPT_TAG}`);
+    print(`     ${guardedScriptTag(bundle)}`);
     print();
     print('   Where a template or build step has a development flag, a plain tag behind that');
-    print(`   flag also works: <script src="${SERVE_BUNDLE}" defer></script>`);
+    print(`   flag also works: <script src="${bundle}" defer></script>`);
   }
   print('3. Reload the page: the panel is the small pill in the bottom-right corner. Pages');
   print('   must come from a dev server or any local static server on localhost; `isotone');
@@ -437,7 +461,7 @@ function printServe(print: Print, setup: Setup): void {
  * within minutes, then a short message that teaches the panel by naming
  * what was made. The real design stays as it is until the user picks.
  */
-function printFirstRun(print: Print, approach: Approach): void {
+function printFirstRun(print: Print, approach: Approach, port: number): void {
   print('First run: do this now, unless the user asked for something else');
   print('Show the user what Isotone does on the page they care about (the main page if');
   print('they named none). Leave the real design as it is; everything below is opt-in.');
@@ -467,7 +491,7 @@ function printFirstRun(print: Print, approach: Approach): void {
   print('c. Check: `npx isotone variant list <route>` lists what you made and names any');
   print('   knob the panel would skip. Without a browser, confirm the panel is live:');
   if (approach === 'serve') {
-    print('   the page HTML has the tag, and `curl http://127.0.0.1:4123/api/isotone/variants`');
+    print(`   the page HTML has the tag, and \`curl ${serveOrigin(port)}/api/isotone/variants\``);
     print('   returns the knobs the panel will show.');
   } else {
     print("   `curl -H 'Accept: text/html' <page URL>` includes `data-isotone-inject`, and");
