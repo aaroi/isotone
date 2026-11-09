@@ -164,6 +164,27 @@ it('returns focus to the rail or launcher when a panel closes from inside', asyn
   expect([$('.isotone-fab'), $('.isotone-rail-button[aria-label^="Feedback"]')]).toContain(shadow.activeElement);
 });
 
+// A scripted focus with nothing focused before it drew Chrome's ring on the rail after a click on the close button.
+it('returns focus after a pointer close without asking for a focus ring, and with one after a key', async () => {
+  await render({ variants: source() });
+  const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+  const closeWith = async (input: Event) => {
+    await openFeedback();
+    const close = $<HTMLButtonElement>('.isotone-notes-panel > .isotone-panel-close');
+    window.dispatchEvent(input);
+    focus.mockClear();
+    await act(async () => close.click());
+    await frame();
+    return focus.mock.calls.at(-1)?.[0];
+  };
+  try {
+    expect(await closeWith(new PointerEvent('pointerdown'))).toEqual({ focusVisible: false });
+    expect(await closeWith(new KeyboardEvent('keydown', { key: 'Enter' }))).toEqual({ focusVisible: true });
+  } finally {
+    focus.mockRestore();
+  }
+});
+
 it('never drops focus to the page body when Escape closes a panel opened from the launcher', async () => {
   await render();
   document.getElementById('host-button')?.focus();

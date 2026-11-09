@@ -327,11 +327,11 @@ describe('mountIsotone variants options', () => {
     expect(fetchMock.mock.calls.map((c) => String(c[0]))).toContain('/api/isotone/variants');
     expect(shadow.querySelectorAll('.isotone-rail-button')).toHaveLength(2);
 
-    // An untouched overlay has nothing to promote; the save action stays hidden.
+    // An untouched overlay has nothing to promote; the save action stays hidden in its kept space.
     await act(async () => {
       shadow.querySelector('.isotone-rail-button[aria-label=Variants]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(shadow.querySelector('.isotone-save')).toBeNull();
+    expect(shadow.querySelector('.isotone-vars > .isotone-panel-head')?.getAttribute('data-shown')).toBe('false');
 
     off();
     await act(async () => {

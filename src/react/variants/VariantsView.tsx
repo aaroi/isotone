@@ -246,13 +246,43 @@ export const VariantsView = memo(function VariantsView({
     />
   );
   const colourAxis = shown.find((a) => a.id === colourOpen);
+  const dirty = isDirty(shown, selections);
+  // While the bar fades out, it keeps the count it had rather than reading "0 picks".
+  const lastCount = useRef(0);
+  if (dirty) lastCount.current = changedCount(shown, selections);
+  const shownCount = lastCount.current;
+  // The bar rises over the foot of the list: if it would cover the control just used, bring that control clear of it.
+  const touched = useRef<Element | null>(null);
+  const saving = Boolean(source.saveDefaults) && dirty;
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    const control = touched.current?.closest('.isotone-axis');
+    // Used once: a pick changed some other way later must not jump to an old control.
+    touched.current = null;
+    if (!saving || !body || !control?.isConnected || !body.contains(control)) return;
+    const bar = body.parentElement?.querySelector<HTMLElement>(':scope > .isotone-panel-head')?.offsetHeight ?? 0;
+    const view = body.getBoundingClientRect();
+    const rect = control.getBoundingClientRect();
+    // Only a control in view that the bar would cover; one scrolled away stays where the reviewer left it.
+    if (rect.top >= view.bottom || rect.bottom <= view.top) return;
+    const covered = rect.bottom - (view.bottom - bar);
+    const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (covered > 0) body.scrollBy?.({ top: covered, behavior: still ? 'auto' : 'smooth' });
+  }, [saving]);
 
   return (
-    <div className="isotone-vars">
-      {source.saveDefaults && isDirty(shown, selections) && (
-        <div className="isotone-panel-head">
-          <div className="isotone-head-actions">
-            <DefaultsBar source={source} changed={changedCount(shown, selections)} onSaved={onSaved} />
+    <div className="isotone-vars" data-saving={saving}>
+      {source.saveDefaults && (
+        // Always mounted and floating, so changing a pick never moves the selectors; it fades in once one differs.
+        <div className="isotone-panel-head" data-shown={dirty}>
+          <div
+            className="isotone-head-actions"
+            ref={(node) => {
+              node?.toggleAttribute('inert', !dirty);
+            }}
+            aria-hidden={!dirty}
+          >
+            <DefaultsBar source={source} changed={shownCount} onSaved={onSaved} />
           </div>
         </div>
       )}
@@ -261,6 +291,12 @@ export const VariantsView = memo(function VariantsView({
         ref={(node) => {
           bodyRef.current = node;
           node?.toggleAttribute('inert', menuShown);
+        }}
+        onPointerDownCapture={(e) => {
+          touched.current = e.target as Element;
+        }}
+        onFocusCapture={(e) => {
+          touched.current = e.target as Element;
         }}
       >
         {sourceError && (
@@ -300,6 +336,7 @@ export const VariantsView = memo(function VariantsView({
             </SectionBlock>
           );
         })}
+        {source.saveDefaults && <div className="isotone-vars-tail" aria-hidden="true" />}
       </div>
       {colourAxis?.kind === 'color' && (
         <ColorPicker

@@ -3,6 +3,19 @@ import { type RefObject, useCallback, useEffect, useMemo, useRef } from 'react';
 export type Surface = 'notes' | 'variants';
 
 /**
+ * Whether the last input was a key. A scripted focus with no focused element
+ * before it shows the focus ring in Chrome even after a click, so closing a panel
+ * with the pointer left a ring on the rail button in the corner.
+ */
+let lastInputWasKey = false;
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', () => (lastInputWasKey = true), true);
+  window.addEventListener('pointerdown', () => (lastInputWasKey = false), true);
+}
+/** Focus without drawing a ring the reviewer did not ask for with the keyboard. */
+const quietFocus = (el: HTMLElement | null | undefined) => el?.focus({ focusVisible: lastInputWasKey } as FocusOptions);
+
+/**
  * Where keyboard focus goes as the dock opens and closes. Moves wait for the
  * next frame, after the commit that shows their target, and a newer move
  * replaces a pending one.
@@ -48,7 +61,7 @@ export function useDockFocus(
       later(() => {
         const selector = panel ? `.isotone-rail-button[aria-controls="${id}-${panel}"]` : '.isotone-rail-button';
         const button = rootRef.current?.querySelector<HTMLButtonElement>(selector);
-        (button && !button.closest('[inert]') ? button : fabRef.current)?.focus();
+        quietFocus(button && !button.closest('[inert]') ? button : fabRef.current);
       }),
     [later, id, rootRef, fabRef],
   );

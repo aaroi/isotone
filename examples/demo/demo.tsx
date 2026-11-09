@@ -135,6 +135,38 @@ if (stress) {
     });
   }
 }
+// Dev only: `?data=worst` adds segmented selectors with every option count and label shape we have seen in projects.
+const worst = !screenshot && !hosted && params.get('data') === 'worst';
+if (worst) {
+  const choice = (id: string, label: string, labels: string[], defaultIndex = 0) =>
+    axes.push({
+      id: `worst-${id}`,
+      label: `Worst case > ${label}`,
+      defaultOption: `o${defaultIndex}`,
+      options: labels.map((option, index) => ({ id: `o${index}`, label: option })),
+    });
+  choice('one', 'One option', ['Default']);
+  choice('two-long', 'Two long options', ['Follows the cursor and stays pinned', 'Pinned to the top-left corner']);
+  choice('three', 'Legend position', ['Default', 'Below the labels', 'Above the labels']);
+  choice('three-short', 'Chart settings', ['Default', 'Icon menus', 'Icon toggles']);
+  choice('four', 'Running list', ['Default', 'Follows, pins, by kind', 'Follows the cursor', 'Follows and pins']);
+  choice('five-short', 'Size', ['XS', 'S', 'M', 'L', 'XL'], 2);
+  choice('five-mixed', 'Gridlines', ['Off', 'Dots', 'Dashed lines', 'Solid gridlines', 'Alternating bands'], 3);
+  choice('seven', 'Week starts on', ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
+  choice('twelve', 'Month', ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], 10);
+  choice('compound', 'Settings label', ['Standard', 'Benachrichtigungseinstellungen']);
+  choice('translated', 'Privacy copy', ['Défaut', 'Paramètres de confidentialité et de sécurité avancés', 'Court'], 1);
+  choice('scripts', 'Script', ['日本語', 'العربية', 'Ελληνικά', 'Tiếng Việt'], 2);
+  choice('emoji', 'Mood', ['🔥 Hot', '❄️ Cold', '🌤️ Mild', '🌧️ Wet', '🌪️ Wild', '🌈 After']);
+  choice('six-long', 'Empty state', [
+    'Illustration',
+    'Illustration and a call to action',
+    'Text only',
+    'Text and link',
+    'Skeleton rows',
+    'Nothing',
+  ]);
+}
 const source = createVariantsSource({
   axes,
   selections: { spacing: 'comfy' },
@@ -771,3 +803,27 @@ function subscribeVariants(listener: () => void) {
 
 const mount = document.getElementById('demo');
 if (mount) createRoot(mount).render(<Demo />);
+
+// Dev-only data switch, plain chrome kept out of the panel's corner.
+if (!screenshot && !hosted) {
+  const bar = document.createElement('div');
+  bar.setAttribute('role', 'group');
+  bar.setAttribute('aria-label', 'Demo data');
+  bar.style.cssText =
+    'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:10;display:flex;gap:2px;padding:2px;border-radius:8px;background:#e4e4e7;font:12px system-ui,sans-serif;box-shadow:0 1px 2px #0002';
+  for (const [value, text] of [
+    [null, 'Demo data'],
+    ['worst', 'Worst case'],
+  ] as const) {
+    const link = document.createElement('a');
+    const next = new URLSearchParams(location.search);
+    if (value) next.set('data', value);
+    else next.delete('data');
+    link.href = `?${next}`;
+    link.textContent = text;
+    const on = (params.get('data') ?? null) === value;
+    link.style.cssText = `padding:4px 10px;border-radius:6px;color:#18181b;text-decoration:none;${on ? 'background:#fff;box-shadow:0 1px 2px #0002' : 'opacity:.7'}`;
+    bar.append(link);
+  }
+  document.body.append(bar);
+}
