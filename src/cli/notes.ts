@@ -566,12 +566,19 @@ export function printNotes(io: CliIO, rows: StoredNote[], root: string): void {
   if (rows.some((n) => !n.done)) out(io, DONE_HINT);
 }
 
-const changeLine = (change: StyleEdit['changes'][number], indent: string) =>
-  `${indent}change: ${oneLine(change.property)}: ${oneLine(change.from) || '(unset)'} → ${oneLine(change.to)}`;
+/** One change, with where the page sets the property today when the editor could tell: page text, so quoted. */
+function changeLine(change: StyleEdit['changes'][number], indent: string): string {
+  const where = !change.rule
+    ? ''
+    : change.rule === 'inline'
+      ? ` (set inline${change.declared ? ` as ${pageText(change.declared)}` : ''})`
+      : ` (set by ${pageText(change.rule)}${change.declared ? ` as ${pageText(change.declared)}` : ''})`;
+  return `${indent}change: ${oneLine(change.property)}: ${oneLine(change.from) || '(unset)'} → ${oneLine(change.to)}${where}`;
+}
 
 /** Under a listing with style edits: how to carry a previewed change into the source. */
 const STYLE_HINT =
-  'A change: line is the exact value the reviewer set on that element with the style editor, previewed in their browser only. Make it in the source the way the project styles things: the class, token, utility or component prop that sets the property today. Never an inline style or !important, and change a shared rule only when the note is about every element it styles.';
+  'A change: line is the exact value the reviewer set on that element with the style editor, previewed in their browser only. Make it in the source the way the project styles things: the class, token, utility or component prop that sets the property today. Where the line ends with (set by …), that is the rule and the value it declares, as far as the browser could tell: check it, and prefer the nearest token of the project to a raw number. Never add an inline style or !important (edit an inline style only where the line says it is set inline), and change a shared rule or token only when the note is about everything it styles.';
 
 /** Text a page wrote, in quotes on one line, so it cannot pass for the CLI's own words. */
 const pageText = (text: string) => JSON.stringify(oneLine(text));

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { hexColor, type StyleEdit } from '../../core/style-edits';
 import type { IsotoneElement } from '../../core/types';
+import { type Declared, findDeclared } from './declared';
 import { ADJUST_FIELDS, type AdjustField, joinSides } from './fields';
 import { applyPreview, supportsValue, withoutPreview } from './preview';
 
@@ -56,10 +57,18 @@ const applies = (field: AdjustField, target: IsotoneElement, baseline: Record<st
  * per element, before its first preview rule exists, so `from` is always the
  * page's own value and never an earlier edit.
  */
-export function useAdjust(enabled: boolean, targets: IsotoneElement[], locate: (selector: string) => Element | null): Adjust {
+export function useAdjust(
+  enabled: boolean,
+  targets: IsotoneElement[],
+  locate: (selector: string) => Element | null,
+  /** The feedback panel is open: a closed panel leaves the page as it really is, and shows the changes again when reopened. */
+  showing = true,
+): Adjust {
   const [open, setOpen] = useState(false);
   const [baselines, setBaselines] = useState<Baselines>({});
   const [edits, setEdits] = useState<Edits>({});
+  // Where the page sets each property, read with the baseline; kept beside it, never shown.
+  const declared = useRef<Record<string, Record<string, Declared>>>({});
   const selectors = useMemo(() => targets.map((target) => target.selector), [targets]);
   const key = selectors.join('\n');
   const latest = useRef({ selectors, baselines });
@@ -84,7 +93,12 @@ export function useAdjust(enabled: boolean, targets: IsotoneElement[], locate: (
         withoutPreview(document, () => {
           for (const selector of missing) {
             const element = locate(selector);
-            if (element) added[selector] = readBaseline(element);
+            if (!element) continue;
+            added[selector] = readBaseline(element);
+            declared.current[selector] = findDeclared(
+              element,
+              ADJUST_FIELDS.map((field) => field.property),
+            );
           }
         });
       }
@@ -98,11 +112,15 @@ export function useAdjust(enabled: boolean, targets: IsotoneElement[], locate: (
   const list = useMemo<StyleEdit[]>(
     () =>
       selectors.flatMap((selector) => {
-        const changes = Object.entries(edits[selector] ?? {}).map(([property, to]) => ({
-          property,
-          from: baselines[selector]?.[property] ?? '',
-          to,
-        }));
+        const changes = Object.entries(edits[selector] ?? {}).map(([property, to]) => {
+          const set = declared.current[selector]?.[property];
+          return {
+            property,
+            from: baselines[selector]?.[property] ?? '',
+            to,
+            ...(set ? { rule: set.rule, declared: set.value } : {}),
+          };
+        });
         return changes.length ? [{ selector, changes }] : [];
       }),
     [selectors, edits, baselines],
@@ -115,15 +133,15 @@ export function useAdjust(enabled: boolean, targets: IsotoneElement[], locate: (
   // biome-ignore lint/correctness/useExhaustiveDependencies: `key` stands for the selectors.
   useEffect(() => {
     if (typeof document === 'undefined') return;
-    applyPreview(document, enabled ? list : []);
-    if (!enabled || !open) return;
+    applyPreview(document, enabled && showing ? list : []);
+    if (!enabled || !open || !showing) return;
     const next: Baselines = {};
     for (const selector of selectors) {
       const element = locate(selector);
       if (element) next[selector] = readBaseline(element);
     }
     setLive((current) => (JSON.stringify(current) === JSON.stringify(next) ? current : next));
-  }, [list, enabled, open, key, locate, resized]);
+  }, [list, enabled, open, showing, key, locate, resized]);
   // A breakpoint can change every value shown; the starting values stay those read at the width the pin was made.
   useEffect(() => {
     if (!enabled || !open || typeof window === 'undefined') return;
@@ -181,6 +199,11 @@ export function useAdjust(enabled: boolean, targets: IsotoneElement[], locate: (
         saved.map(({ selector, changes }) => [selector, Object.fromEntries(changes.map((change) => [change.property, change[pick]]))]),
       );
     setEdits((current) => ({ ...current, ...byProperty('to') }));
+    for (const { selector, changes } of saved)
+      declared.current[selector] = {
+        ...declared.current[selector],
+        ...Object.fromEntries(changes.flatMap((c) => (c.rule ? [[c.property, { rule: c.rule, value: c.declared ?? '' }]] : []))),
+      };
     // Where each started is what the note recorded; the page may show the preview by the time it is read again.
     setBaselines((current) => {
       const next = { ...current };

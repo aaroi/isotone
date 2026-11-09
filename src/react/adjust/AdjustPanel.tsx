@@ -4,6 +4,14 @@ import { ColorPicker, normalizeHex } from '../variants/ColorPicker';
 import { ADJUST_GROUPS, type AdjustField, fieldCss, fieldNumber } from './fields';
 import type { Adjust, FieldState } from './useAdjust';
 
+/** Where the picker opens: the colour itself, the solid colour under a translucent one, else mid grey. */
+function pickerStart(value: string | null): string {
+  const hex = normalizeHex(value ?? '');
+  if (hex) return hex;
+  const [, r, g, b] = value?.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/) ?? [];
+  return r === undefined ? '#808080' : `#${[r, g, b].map((n) => Number(n).toString(16).padStart(2, '0')).join('')}`;
+}
+
 /** Pixels of pointer travel per step while scrubbing a label: slow enough to land on a value. */
 const SCRUB_PX = 3;
 
@@ -98,7 +106,8 @@ function NumberField({ state, onSet, onReset }: { state: FieldState; onSet: Adju
         onChange={(event) => {
           const text = event.target.value;
           setDraft(text);
-          const n = Number.parseFloat(text);
+          // A decimal comma is a decimal point to half the world.
+          const n = Number.parseFloat(text.replace(',', '.'));
           if (Number.isFinite(n)) apply(n);
           // A lone minus or point is a number being typed, not a mistake.
           else setInvalid(!/^\s*-?\.?\s*$/.test(text));
@@ -227,7 +236,7 @@ export const AdjustPanel = memo(function AdjustPanel({ adjust }: { adjust: Adjus
             </div>
             {colour && (
               <ColorPicker
-                value={normalizeHex(colour.value ?? '') ?? '#808080'}
+                value={pickerStart(colour.value)}
                 label={colour.field.label}
                 onChange={(hex) => adjust.set(colour.field.property, hex)}
                 onClose={() => setPicking(null)}

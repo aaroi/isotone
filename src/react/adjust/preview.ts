@@ -32,8 +32,9 @@ export function previewCss(edits: readonly StyleEdit[]): string {
         .filter((change) => isStyleProperty(change.property) && isStyleValue(change.to))
         .map((change) => `${change.property}:${change.to} !important`)
         .join(';');
-      // A selector that could close the rule is not one of ours.
-      return body && !/[{}<]/.test(selector) ? `${selector}${BOOST}{${body}}` : '';
+      // A selector that could close the rule is not one of ours. The page's own transitions are held still:
+      // a value being typed or scrubbed should land at once, not ease in over the page's two seconds.
+      return body && !/[{}<]/.test(selector) ? `${selector}${BOOST}{${body};transition:none !important}` : '';
     })
     .filter(Boolean)
     .join('\n');

@@ -275,7 +275,8 @@ export function PickOverlay({
     const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(schedule);
     for (const t of targets) {
       const el = locate(t.selector);
-      if (el) observer?.observe(el);
+      // The border box: padding and borders move an outline as much as content does.
+      if (el) observer?.observe(el, { box: 'border-box' });
     }
     window.addEventListener('scroll', schedule, { capture: true, passive: true });
     window.addEventListener('resize', schedule);

@@ -112,7 +112,9 @@ describe('the preview stylesheet', () => {
       { selector: 'p', changes: [{ property: 'gap', from: '', to: '8px;} body{display:none' }] },
       { selector: 'p{}', changes: [{ property: 'gap', from: '', to: '8px' }] },
     ]);
-    expect(css).toBe('#app > main:nth-child(2):not(#\\:isotone):not(#\\:isotone){padding-block:24px !important;color:#ff0080 !important}');
+    expect(css).toBe(
+      '#app > main:nth-child(2):not(#\\:isotone):not(#\\:isotone){padding-block:24px !important;color:#ff0080 !important;transition:none !important}',
+    );
     expect(previewCss([])).toBe('');
   });
 

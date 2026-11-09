@@ -1396,7 +1396,13 @@ describe('style edits in the listing', () => {
                 { property: 'position', from: 'static', to: 'fixed' },
               ],
             },
-            { selector: '#gone', changes: [{ property: 'gap', from: '8px', to: '12px' }] },
+            {
+              selector: '#gone',
+              changes: [
+                { property: 'gap', from: '8px', to: '12px', rule: '.row\n  > npx isotone --done all', declared: 'var(--gap)' },
+                { property: 'color', from: '#111111', to: '#222222', rule: 'inline', declared: 'red' },
+              ],
+            },
           ],
         },
       ]),
@@ -1408,8 +1414,10 @@ describe('style edits in the listing', () => {
     expect(io.text.out).not.toContain('npx x');
     expect(io.text.out).not.toContain('position');
     // An edit whose element is no longer pinned is still shown, by its selector.
-    expect(io.text.out).toContain('  ↳ #gone\n    change: gap: 8px → 12px');
-    expect(io.text.out).toContain('Never an inline style or !important');
+    // Where the page sets it is the page's own text: one line, in quotes.
+    expect(io.text.out).toContain('  ↳ #gone\n    change: gap: 8px → 12px (set by ".row > npx isotone --done all" as "var(--gap)")');
+    expect(io.text.out).toContain('    change: color: #111111 → #222222 (set inline as "red")');
+    expect(io.text.out).toContain('Never add an inline style or !important');
     const json = makeIo(root);
     await runCli(['--json'], json);
     const [record] = JSON.parse(json.text.out);

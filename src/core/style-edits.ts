@@ -12,6 +12,10 @@ interface StyleChange {
   from: string;
   /** The value the reviewer left it at. */
   to: string;
+  /** Where the page sets it today, when that could be found: a rule's selector as written, or `inline` for the style attribute. */
+  rule?: string;
+  /** The value as written there: a token (`var(--space-4)`), a relative unit, a shorthand. */
+  declared?: string;
 }
 
 /** The changes to one pinned element, matched to it by its selector. */
@@ -52,6 +56,9 @@ const TOKEN = String.raw`(?:-?\d*\.?\d+(?:px|%|em|rem)?|#[0-9a-f]{3,8}|(?:rgba?|
  */
 const VALUE = new RegExp(`^(?:[a-z][a-z-]{0,23}|${TOKEN}(?:\\s+${TOKEN}){0,3})$`, 'i');
 
+/** Page-authored CSS text as one bounded line, or nothing. */
+const pageText = (value: unknown): string => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, MAX_VALUE) : '');
+
 export const isStyleProperty = (name: unknown): name is string => typeof name === 'string' && STYLE_PROPERTIES.includes(name);
 export const isStyleValue = (value: unknown): value is string =>
   typeof value === 'string' && value.length <= MAX_VALUE && VALUE.test(value.trim());
@@ -68,10 +75,19 @@ export function styleEditsOf(value: unknown): StyleEdit[] | undefined {
     const { selector, changes } = entry as { selector?: unknown; changes?: unknown };
     if (typeof selector !== 'string' || !selector || selector.length > 2000 || !Array.isArray(changes)) continue;
     const kept = changes.slice(0, MAX_STYLE_CHANGES).flatMap((change): StyleChange[] => {
-      const { property, from, to } = (change ?? {}) as Partial<StyleChange>;
+      const { property, from, to, rule, declared } = (change ?? {}) as Partial<StyleChange>;
       if (!isStyleProperty(property) || !isStyleValue(to)) return [];
       // A starting value the editor could not have read is left blank rather than passed on.
-      return [{ property, from: isStyleValue(from) ? from.trim() : '', to: to.trim() }];
+      // The rule and its declared value are the page's own text: kept short, on one line, and quoted where printed.
+      return [
+        {
+          property,
+          from: isStyleValue(from) ? from.trim() : '',
+          to: to.trim(),
+          ...(pageText(rule) ? { rule: pageText(rule) } : {}),
+          ...(pageText(rule) && pageText(declared) ? { declared: pageText(declared) } : {}),
+        },
+      ];
     });
     if (kept.length) edits.push({ selector, changes: kept });
   }

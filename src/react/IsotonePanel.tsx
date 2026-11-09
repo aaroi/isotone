@@ -175,7 +175,7 @@ export function IsotonePanel({
 
   const select = useSelectMode({ mode, update, focus, rootRef, fieldRef, floatRef, targets: draft.targets, setTargets, touch });
 
-  const adjust = useAdjust(experimental?.styleEditor === true && notesAvailable, draft.targets, select.locate);
+  const adjust = useAdjust(experimental?.styleEditor === true && notesAvailable, draft.targets, select.locate, notesOpen);
   styleEdits.current = adjust.edits;
   restoreEdits.current = adjust.restore;
   /** The editor sits above the docked composer, so opening it brings the composer home and ends selecting. */

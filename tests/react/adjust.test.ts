@@ -82,7 +82,7 @@ describe('the style editor', () => {
     await pin({ styleEditor: true }, '#title');
     await click(byText('Adjust styles'));
     await type(input('Size'), '24');
-    expect(sheet()).toBe('#title:not(#\\:isotone):not(#\\:isotone){font-size:24px !important}');
+    expect(sheet()).toBe('#title:not(#\\:isotone):not(#\\:isotone){font-size:24px !important;transition:none !important}');
     // The page's element itself is untouched.
     expect(document.getElementById('title')?.getAttribute('style')).toContain('font-size: 20px');
     await key(input('Size'), 'ArrowUp');
@@ -177,7 +177,7 @@ describe('the style editor', () => {
     await act(async () => {});
     expect(container.querySelector('.isotone-notice')?.textContent).toContain('Could not save');
     expect(container.querySelector('textarea')?.value).toBe('');
-    expect(sheet()).toBe('#title:not(#\\:isotone):not(#\\:isotone){font-size:24px !important}');
+    expect(sheet()).toBe('#title:not(#\\:isotone):not(#\\:isotone){font-size:24px !important;transition:none !important}');
     expect(container.querySelector('.isotone-context')?.textContent).toContain('1 style change');
   });
 
@@ -218,12 +218,65 @@ describe('the style editor', () => {
     await click(byText('Adjust styles'));
     await type(input('Pad ↕'), '10');
     await click(byText('Remove pinned element 1'));
-    expect(sheet()).toBe('#row:not(#\\:isotone):not(#\\:isotone){padding-block:10px !important}');
+    expect(sheet()).toBe('#row:not(#\\:isotone):not(#\\:isotone){padding-block:10px !important;transition:none !important}');
     // With one flex box pinned, its gap can be set.
     expect(input('Gap')?.value).toBe('6');
     await click(byText('Remove style changes'));
     expect(sheet()).toBeNull();
     await type(input('Gap'), '12');
     expect(sheet()).toContain('gap:12px');
+  });
+
+  it('tells the note where the page sets each property today: the rule and its token, or inline', async () => {
+    const posted: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') posted.push(JSON.parse(String(init.body)));
+        return { ok: true, status: 200, json: async () => (init?.method === 'POST' ? { id: 'saved-2' } : []) };
+      }),
+    );
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: !query.includes('99999'),
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    const rules = document.createElement('style');
+    rules.textContent =
+      'p { padding: 1px } .tok, .other { padding: var(--space-4); color: var(--ink) } @media (min-width: 99999px) { .tok { padding: 9px } } #tok.tok { color: rebeccapurple }';
+    document.head.append(rules);
+    document.body.insertAdjacentHTML('beforeend', '<p id="tok" class="tok" style="font-size: 1.25rem">Token</p>');
+    await pin({ styleEditor: true }, '#tok');
+    await click(byText('Adjust styles'));
+    await type(input('Pad ↕'), '40');
+    await type(input('Size'), '30');
+    await click(byText('Colour'));
+    await act(async () => {
+      const hex = container.querySelector<HTMLInputElement>('.isotone-colour-hex');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(hex, '00ff00');
+      hex?.dispatchEvent(new Event('input', { bubbles: true }));
+      hex?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    await click(byText('Send note'));
+    await act(async () => {});
+    const sent = (posted[0]?.styleEdits ?? []) as { changes: Record<string, string>[] }[];
+    const changes = sent[0]?.changes ?? [];
+    const by = (property: string) => changes.find((change) => change.property === property);
+    // The class rule wins over the tag rule, and the media query that does not apply is not read.
+    expect(by('padding-block')).toMatchObject({ rule: '.tok, .other', declared: 'var(--space-4)' });
+    expect(by('font-size')).toMatchObject({ rule: 'inline', declared: '1.25rem' });
+    expect(by('color')).toMatchObject({ rule: '#tok.tok', declared: 'rebeccapurple', to: '#00ff00' });
+    rules.remove();
+    document.getElementById('tok')?.remove();
+  });
+
+  it('shows the changes only while the feedback panel is open', async () => {
+    await pin({ styleEditor: true }, '#title');
+    await click(byText('Adjust styles'));
+    await type(input('Size'), '24');
+    await click(byText('Close feedback'));
+    expect(sheet()).toBeNull();
+    await click(container.querySelector('.isotone-rail-button[aria-label^="Feedback"]'));
+    expect(sheet()).toContain('font-size:24px');
   });
 });

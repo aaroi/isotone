@@ -83,12 +83,17 @@ Schema of one record.
 
 A reviewer with the style editor experiment on can adjust a pinned element in
 the browser and send the result. The note then lists each change under its
-element (`change: padding-block: 16px → 24px`) and in `styleEdits`. The
+element (`change: padding-block: 16px → 24px (set by ".card" as "var(--space-4)")`)
+and in `styleEdits`. The part in brackets, `rule` and `declared` in JSON, is
+where the page sets the property today as far as the browser could tell: a
+rule's selector and the value written there, or `set inline`. Check it rather
+than trust it, and prefer the project's nearest token to a raw number. The
 preview existed only in their browser, so nothing in the source has changed
 yet. Make each change the way the project styles things: the class, token,
 utility or component prop that sets the property today. `padding-block` and
 `padding-inline` are the vertical and horizontal pair, as are the `margin-`
-ones. Never add an inline style or `!important`. When the rule you would edit
+ones. Never add an inline style or `!important`; edit an inline style only where
+the change says it is set inline. When the rule you would edit
 styles other elements too, change it only if the note is about all of them;
 otherwise give the pinned element its own value. A note whose text is
 "Apply these style changes." has nothing else to say.
