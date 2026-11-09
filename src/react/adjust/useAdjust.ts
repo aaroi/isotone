@@ -120,7 +120,7 @@ export function useAdjust(
           const set = declared.current[selector]?.[property];
           return {
             property,
-            from: recorded[selector]?.[property] ?? baselines[selector]?.[property] ?? '',
+            from: recorded[selector]?.[property] || baselines[selector]?.[property] || '',
             to,
             ...(set ? { rule: set.rule, declared: set.value } : {}),
           };
@@ -175,7 +175,7 @@ export function useAdjust(
       for (const selector of selectors) {
         const own = { ...next[selector] };
         // Back at the starting value is no change at all.
-        if ((recorded[selector]?.[property] ?? baselines[selector]?.[property]) === value) delete own[property];
+        if ((recorded[selector]?.[property] || baselines[selector]?.[property]) === value) delete own[property];
         else own[property] = value;
         if (Object.keys(own).length) next[selector] = own;
         else delete next[selector];
