@@ -32,9 +32,10 @@ export function previewCss(edits: readonly StyleEdit[]): string {
         .filter((change) => isStyleProperty(change.property) && isStyleValue(change.to))
         .map((change) => `${change.property}:${change.to} !important`)
         .join(';');
-      // A selector that could close the rule is not one of ours. The page's own transitions are held still:
+      // A selector that could close the rule, or list a second target, is not one of ours: a pin's selector
+      // names one element. The page's own transitions are held still:
       // a value being typed or scrubbed should land at once, not ease in over the page's two seconds.
-      return body && !/[{}<]/.test(selector) ? `${selector}${BOOST}{${body};transition:none !important}` : '';
+      return body && !/[{}<,]|\/\*/.test(selector) ? `${selector}${BOOST}{${body};transition:none !important}` : '';
     })
     .filter(Boolean)
     .join('\n');
@@ -56,13 +57,20 @@ export function applyPreview(doc: Document, edits: readonly StyleEdit[]): void {
   if (sheet.textContent !== css) sheet.textContent = css;
 }
 
-/** Run `read` with the preview switched off, so computed styles are the page's own. */
+/**
+ * Run `read` with the preview switched off, so computed styles are the page's
+ * own. Transitions are held still meanwhile: taking the preview away would
+ * otherwise start one from the previewed value, and that is what would be read.
+ */
 export function withoutPreview(doc: Document, read: () => void): void {
   const sheet = doc.head.querySelector<HTMLStyleElement>(`style[${MARK}]`);
   if (!sheet) {
     read();
     return;
   }
+  const still = doc.createElement('style');
+  still.textContent = '*,*::before,*::after{transition:none !important}';
+  doc.head.append(still);
   // `media` rather than `disabled`: it turns the rules off without the sheet leaving the document.
   const media = sheet.media;
   sheet.media = 'not all';
@@ -70,5 +78,6 @@ export function withoutPreview(doc: Document, read: () => void): void {
     read();
   } finally {
     sheet.media = media;
+    still.remove();
   }
 }

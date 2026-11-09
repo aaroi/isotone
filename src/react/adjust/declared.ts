@@ -34,10 +34,33 @@ const SOURCES: Record<string, readonly string[]> = {
 /** A rough specificity, as one comparable number: ids, then classes and attributes, then tags. */
 function specificity(selector: string): number {
   const bare = selector.replace(/:(?:not|is|where|has)\(/g, ' (');
-  const ids = (bare.match(/#[\w-]+/g) ?? []).length;
+  const ids = (bare.match(/#(?:\\.|[\w-])+/g) ?? []).length;
   const classes = (bare.match(/\.[\w-]+|\[[^\]]*\]|:(?!:)[\w-]+/g) ?? []).length;
   const tags = (bare.match(/(?:^|[\s>+~(])[a-z][\w-]*/gi) ?? []).length;
   return ids * 10_000 + classes * 100 + tags;
+}
+
+/** A selector list split at its own commas, not those inside `:is(a, b)` or `[title="a,b"]`. */
+function topLevelParts(list: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let quote = '';
+  let start = 0;
+  for (let i = 0; i < list.length; i++) {
+    const c = list[i] as string;
+    if (quote) {
+      if (c === '\\') i++;
+      else if (c === quote) quote = '';
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === '(' || c === '[') depth++;
+    else if (c === ')' || c === ']') depth--;
+    else if (c === ',' && depth === 0) {
+      parts.push(list.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(list.slice(start));
+  return parts.map((part) => part.trim()).filter(Boolean);
 }
 
 function declaredIn(style: CSSStyleDeclaration, names: readonly string[]): string | null {
@@ -53,23 +76,24 @@ export function findDeclared(element: Element, properties: readonly string[]): R
   const found: Record<string, Declared & { weight: number }> = {};
   const view = element.ownerDocument.defaultView;
   let seen = 0;
+  const matches = (part: string) => {
+    try {
+      return element.matches(part);
+    } catch {
+      // A pseudo-element or a selector this browser does not know matches nothing.
+      return false;
+    }
+  };
   const visit = (rules: CSSRuleList | undefined) => {
     for (const rule of Array.from(rules ?? [])) {
       if (seen++ > MAX_RULES) return;
       const group = rule as CSSGroupingRule & { media?: MediaList };
       const styled = rule as CSSStyleRule;
       if (typeof styled.selectorText === 'string') {
-        let matched: string | undefined;
-        try {
-          // The part of a selector list that matches is the one whose specificity counts.
-          matched = styled.selectorText
-            .split(',')
-            .map((part) => part.trim())
-            .filter((part) => part && element.matches(part))
-            .sort((a, b) => specificity(b) - specificity(a))[0];
-        } catch {
-          matched = undefined;
-        }
+        // The part of a selector list that matches is the one whose specificity counts.
+        const matched = topLevelParts(styled.selectorText)
+          .filter(matches)
+          .sort((x, y) => specificity(y) - specificity(x))[0];
         if (matched) {
           for (const property of properties) {
             const value = declaredIn(styled.style, SOURCES[property] ?? [property]);
@@ -79,8 +103,14 @@ export function findDeclared(element: Element, properties: readonly string[]): R
           }
         }
       }
-      // Rules nested in a media query count only while it applies.
-      if (group.cssRules && (!group.media || !view?.matchMedia || view.matchMedia(group.media.mediaText).matches)) visit(group.cssRules);
+      // Rules nested in a media query count only while it applies. Rules nested in a style rule are written
+      // relative to it (`&:hover`, `.child`) and would match on their own what they do not style: not read.
+      if (
+        typeof styled.selectorText !== 'string' &&
+        group.cssRules &&
+        (!group.media || !view?.matchMedia || view.matchMedia(group.media.mediaText).matches)
+      )
+        visit(group.cssRules);
     }
   };
   for (const sheet of Array.from(element.ownerDocument.styleSheets)) {
@@ -92,13 +122,15 @@ export function findDeclared(element: Element, properties: readonly string[]): R
       // A stylesheet from another origin cannot be read; its rules are simply not named.
     }
   }
+  // Past the cap the rules not read are the later ones, which win: better to name nothing than the loser.
+  const complete = seen <= MAX_RULES;
   const inline = (element as HTMLElement).style;
   const out: Record<string, Declared> = {};
   for (const property of properties) {
     const own = inline ? declaredIn(inline, SOURCES[property] ?? [property]) : null;
     const rule = found[property];
     if (own) out[property] = { rule: 'inline', value: own };
-    else if (rule) out[property] = { rule: rule.rule, value: rule.value };
+    else if (rule && complete) out[property] = { rule: rule.rule, value: rule.value };
   }
   return out;
 }

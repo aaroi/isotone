@@ -243,7 +243,7 @@ describe('the style editor', () => {
     }));
     const rules = document.createElement('style');
     rules.textContent =
-      'p { padding: 1px } .tok, .other { padding: var(--space-4); color: var(--ink) } @media (min-width: 99999px) { .tok { padding: 9px } } #tok.tok { color: rebeccapurple }';
+      'p { padding: 1px } [title="a,b"], .tok, .other::before { padding: var(--space-4); color: var(--ink) } @media (min-width: 99999px) { .tok { padding: 9px } } #tok.tok { color: rebeccapurple }';
     document.head.append(rules);
     document.body.insertAdjacentHTML('beforeend', '<p id="tok" class="tok" style="font-size: 1.25rem">Token</p>');
     await pin({ styleEditor: true }, '#tok');
@@ -263,7 +263,8 @@ describe('the style editor', () => {
     const changes = sent[0]?.changes ?? [];
     const by = (property: string) => changes.find((change) => change.property === property);
     // The class rule wins over the tag rule, and the media query that does not apply is not read.
-    expect(by('padding-block')).toMatchObject({ rule: '.tok, .other', declared: 'var(--space-4)' });
+    // A comma inside an attribute value splits nothing, and a part that cannot match does not lose the rule.
+    expect(by('padding-block')).toMatchObject({ rule: '[title="a,b"], .tok, .other::before', declared: 'var(--space-4)' });
     expect(by('font-size')).toMatchObject({ rule: 'inline', declared: '1.25rem' });
     expect(by('color')).toMatchObject({ rule: '#tok.tok', declared: 'rebeccapurple', to: '#00ff00' });
     rules.remove();

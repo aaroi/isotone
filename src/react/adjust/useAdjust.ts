@@ -67,12 +67,14 @@ export function useAdjust(
   const [open, setOpen] = useState(false);
   const [baselines, setBaselines] = useState<Baselines>({});
   const [edits, setEdits] = useState<Edits>({});
+  // Starting values a saved note recorded: they stand in for the page's, which may have moved on since.
+  const [recorded, setRecorded] = useState<Baselines>({});
   // Where the page sets each property, read with the baseline; kept beside it, never shown.
   const declared = useRef<Record<string, Record<string, Declared>>>({});
   const selectors = useMemo(() => targets.map((target) => target.selector), [targets]);
   const key = selectors.join('\n');
-  const latest = useRef({ selectors, baselines });
-  latest.current = { selectors, baselines };
+  const latest = useRef({ selectors, baselines, recorded });
+  latest.current = { selectors, baselines, recorded };
 
   // Unpinned elements take their edits with them; newly pinned ones are read while the editor is open.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `key` stands for the selectors.
@@ -83,6 +85,8 @@ export function useAdjust(
         ? all
         : Object.fromEntries(Object.entries(all).filter(([selector]) => kept.has(selector)));
     setEdits(prune);
+    setRecorded(prune);
+    for (const selector of Object.keys(declared.current)) if (!kept.has(selector)) delete declared.current[selector];
     // Nothing pinned, nothing to adjust: the next pin starts with the editor closed.
     if (!selectors.length) setOpen(false);
     const added: Baselines = {};
@@ -116,14 +120,14 @@ export function useAdjust(
           const set = declared.current[selector]?.[property];
           return {
             property,
-            from: baselines[selector]?.[property] ?? '',
+            from: recorded[selector]?.[property] ?? baselines[selector]?.[property] ?? '',
             to,
             ...(set ? { rule: set.rule, declared: set.value } : {}),
           };
         });
         return changes.length ? [{ selector, changes }] : [];
       }),
-    [selectors, edits, baselines],
+    [selectors, edits, baselines, recorded],
   );
 
   // The page shows exactly the edits held here, and nothing once this unmounts.
@@ -165,13 +169,13 @@ export function useAdjust(
 
   const set = useCallback((property: string, value: string) => {
     if (!supportsValue(property, value)) return false;
-    const { selectors, baselines } = latest.current;
+    const { selectors, baselines, recorded } = latest.current;
     setEdits((current) => {
       const next = { ...current };
       for (const selector of selectors) {
         const own = { ...next[selector] };
         // Back at the starting value is no change at all.
-        if (baselines[selector]?.[property] === value) delete own[property];
+        if ((recorded[selector]?.[property] ?? baselines[selector]?.[property]) === value) delete own[property];
         else own[property] = value;
         if (Object.keys(own).length) next[selector] = own;
         else delete next[selector];
@@ -204,8 +208,9 @@ export function useAdjust(
         ...declared.current[selector],
         ...Object.fromEntries(changes.flatMap((c) => (c.rule ? [[c.property, { rule: c.rule, value: c.declared ?? '' }]] : []))),
       };
-    // Where each started is what the note recorded; the page may show the preview by the time it is read again.
-    setBaselines((current) => {
+    // Where each started is what the note recorded. The page itself is still read when the editor opens, for
+    // every other field and for which fields apply.
+    setRecorded((current) => {
       const next = { ...current };
       for (const [selector, values] of Object.entries(byProperty('from'))) next[selector] = { ...next[selector], ...values };
       return next;

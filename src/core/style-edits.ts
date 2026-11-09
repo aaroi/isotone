@@ -47,8 +47,8 @@ export const STYLE_PROPERTIES: readonly string[] = [
   'opacity',
 ];
 
-// One CSS value token: a number with a unit, a hex colour, or a colour function.
-const TOKEN = String.raw`(?:-?\d*\.?\d+(?:px|%|em|rem)?|#[0-9a-f]{3,8}|(?:rgba?|hsla?|oklch|oklab|lab|lch|color)\([\w\s.,%/+-]{1,80}\))`;
+// One CSS value token: a number with a unit, a hex colour, or a colour function of numbers and a few fixed words.
+const TOKEN = String.raw`(?:-?\d*\.?\d+(?:px|%|em|rem)?|#[0-9a-f]{3,8}|(?:rgba?|hsla?|oklch|oklab|lab|lch|color)\((?:[\d\s.,%/+-]|none|deg|srgb|display-p3|rec2020){1,80}\))`;
 /**
  * Up to four of them (`24px`, `16px 8px`, `#ff0080`, `rgba(0, 0, 0, 0.5)`), or
  * one keyword (`normal`, `transparent`). Never several words: nothing that
@@ -57,7 +57,10 @@ const TOKEN = String.raw`(?:-?\d*\.?\d+(?:px|%|em|rem)?|#[0-9a-f]{3,8}|(?:rgba?|
 const VALUE = new RegExp(`^(?:[a-z][a-z-]{0,23}|${TOKEN}(?:\\s+${TOKEN}){0,3})$`, 'i');
 
 /** Page-authored CSS text as one bounded line, or nothing. */
-const pageText = (value: unknown): string => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, MAX_VALUE) : '');
+// biome-ignore lint/suspicious/noControlCharactersInRegex: control and bidi characters are what this removes.
+const UNPRINTABLE = /[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
+const pageText = (value: unknown): string =>
+  typeof value === 'string' ? value.replace(UNPRINTABLE, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_VALUE) : '';
 
 export const isStyleProperty = (name: unknown): name is string => typeof name === 'string' && STYLE_PROPERTIES.includes(name);
 export const isStyleValue = (value: unknown): value is string =>
