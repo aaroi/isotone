@@ -1,7 +1,11 @@
-import { act, createElement as h, useRef } from 'react';
+import { act, createElement as h, type MouseEvent, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { IsotoneElement } from '../../src/core/types';
+import { PickOverlay } from '../../src/react/dock/picking';
 import { MAX_ANIMATED_ITEMS } from '../../src/react/motion';
+import { Composer } from '../../src/react/notes/Composer';
+import { useKeyFade } from '../../src/react/variants/keyFade';
 import { useDockMotion } from '../../src/react/dock/useDockMotion';
 import { useLayoutMotion } from '../../src/react/useLayoutMotion';
 
@@ -117,6 +121,40 @@ describe('list motion', () => {
     expect(current.every((animation) => animation.cancel.mock.calls.length === 1)).toBe(true);
   });
 
+  it('does not animate from positions that went stale while the layout settled', async () => {
+    const observers: { run: () => void; disconnect: ReturnType<typeof vi.fn> }[] = [];
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        disconnect = vi.fn();
+        constructor(callback: () => void) {
+          observers.push({ run: callback, disconnect: this.disconnect });
+        }
+        observe() {}
+      },
+    );
+    // How far the rows have drifted since they were rendered, with no change of contents.
+    let drift = 0;
+    offsets.mockImplementation(function (this: HTMLElement) {
+      return Number(this.dataset.top ?? 0) + drift;
+    });
+    await act(async () => root.render(h(List, {})));
+    expect(animate).toHaveBeenCalledTimes(3);
+    // The panel settles after opening: thumbnails size, a row wraps, and every row ends 40px lower.
+    drift = 40;
+    observers.at(-1)?.run();
+    // The first real change (a pick) leaves the rows where they are, so nothing reflows.
+    await act(async () => root.render(h(List, { revision: 0.25 })));
+    expect(animate).toHaveBeenCalledTimes(3);
+    // A later change that does move rows still animates, from where they really were.
+    await act(async () => root.render(h(List, { revision: 12 })));
+    expect(animate).toHaveBeenCalledTimes(6);
+    expect(animate.mock.calls.at(-1)?.[0]).toEqual([{ transform: 'translateY(-11.75px)' }, { transform: 'translateY(0)' }]);
+    // Each measurement replaces its observer, and hiding the list lets go of the last.
+    await act(async () => root.render(h(List, { revision: 12, active: false })));
+    expect(observers.every((observer) => observer.disconnect.mock.calls.length >= 1)).toBe(true);
+  });
+
   it('skips geometry under reduced motion and cancels running animations when it changes', async () => {
     media.matches = true;
     await act(async () => root.render(h(List, {})));
@@ -190,5 +228,198 @@ describe('dock motion', () => {
     const calls = animate.mock.calls.length;
     await act(async () => root.render(h(Dock, {})));
     expect(animate).toHaveBeenCalledTimes(calls);
+  });
+});
+
+const OPTIONS = ['a', 'b', 'c'];
+let pickFromElsewhere: (value: string) => void = () => {};
+
+/** A selector with options 100px apart in one row. */
+function Selector({ initial = 'a', count = OPTIONS.length }: { initial?: string; count?: number }) {
+  const [value, setValue] = useState(initial);
+  pickFromElsewhere = setValue;
+  const ref = useRef<HTMLDivElement>(null);
+  const leave = useKeyFade(ref, value, count);
+  return h(
+    'div',
+    { ref, className: 'isotone-segs' },
+    ...OPTIONS.map((id, i) =>
+      h(
+        'div',
+        { key: id, className: 'isotone-opt', 'data-x': i * 100 },
+        h(
+          'button',
+          {
+            type: 'button',
+            role: 'radio',
+            'aria-checked': value === id,
+            onClick: (e: MouseEvent) => {
+              leave(e, id);
+              setValue(id);
+            },
+          },
+          id,
+        ),
+      ),
+    ),
+  );
+}
+
+describe('selection key', () => {
+  let instant: HTMLDivElement;
+  beforeEach(() => {
+    instant = document.createElement('div');
+    instant.dataset.instant = 'false';
+    host.replaceWith(instant);
+    instant.append(host);
+    rects.mockImplementation(function (this: HTMLElement) {
+      const x = Number(this.dataset.x ?? 0);
+      return { x, y: 0, left: x, top: 0, width: 100, height: 28, right: x + 100, bottom: 28, toJSON: () => ({}) };
+    });
+  });
+  afterEach(() => instant.remove());
+
+  const option = (id: string) => [...host.querySelectorAll('button')].find((b) => b.textContent === id) as HTMLButtonElement;
+  const press = (id: string, detail = 1) =>
+    act(async () => {
+      option(id).dispatchEvent(new MouseEvent('click', { bubbles: true, detail }));
+    });
+  const keys = () => host.querySelectorAll<HTMLElement>('.isotone-key');
+
+  it('selects a pointer pick at once and fades the option it left out in place', async () => {
+    await act(async () => root.render(h(Selector, {})));
+    expect(animate).not.toHaveBeenCalled();
+    await press('c');
+    // The pick is selected in the same commit; nothing hides its face.
+    expect(option('c').getAttribute('aria-checked')).toBe('true');
+    expect(host.querySelector('.isotone-segs')?.hasAttribute('data-key')).toBe(false);
+    expect(animate).toHaveBeenCalledTimes(1);
+    expect(animate.mock.calls[0]?.[0]).toEqual([{ opacity: 1 }, { opacity: 0 }]);
+    const [key] = keys();
+    expect(key?.getAttribute('aria-hidden')).toBe('true');
+    expect([key?.style.left, key?.style.width]).toEqual(['0px', '100px']);
+    expect(host.querySelector('.isotone-segs')?.firstElementChild).toBe(key);
+    await act(async () => animations[0]?.onfinish?.());
+    expect(keys()).toHaveLength(0);
+  });
+
+  it('replaces a running fade, and a pick back onto the fading option clears it', async () => {
+    await act(async () => root.render(h(Selector, {})));
+    await press('b');
+    await press('c');
+    expect(animations[0]?.cancel).toHaveBeenCalled();
+    expect(keys()).toHaveLength(1);
+    expect(keys()[0]?.style.left).toBe('100px');
+    await act(async () => animations[0]?.onfinish?.());
+    expect(keys()).toHaveLength(1);
+    await press('b');
+    expect(animations[1]?.cancel).toHaveBeenCalled();
+    expect([...keys()].map((key) => key.style.left)).toEqual(['200px']);
+  });
+
+  it('swaps at once for keys, keyboard mode, reduced motion and long lists', async () => {
+    await act(async () => root.render(h(Selector, {})));
+    await press('b', 0);
+    instant.dataset.instant = 'true';
+    await press('c');
+    instant.dataset.instant = 'false';
+    media.matches = true;
+    await press('a');
+    media.matches = false;
+    await act(async () => root.render(h(Selector, { count: MAX_ANIMATED_ITEMS + 1 })));
+    await press('b');
+    expect(animate).not.toHaveBeenCalled();
+    expect(keys()).toHaveLength(0);
+  });
+
+  it('does not animate a change from elsewhere, and one clears a fade', async () => {
+    await act(async () => root.render(h(Selector, {})));
+    await act(async () => pickFromElsewhere('c'));
+    expect(animate).not.toHaveBeenCalled();
+    await press('a');
+    expect(keys()).toHaveLength(1);
+    await act(async () => pickFromElsewhere('b'));
+    expect(animations[0]?.cancel).toHaveBeenCalled();
+    expect(keys()).toHaveLength(0);
+  });
+});
+
+const pin = (selector: string) => ({ tag: 'div', text: selector, selector }) as IsotoneElement;
+
+describe('arrivals', () => {
+  beforeEach(() => {
+    for (const id of ['one', 'two', 'three']) {
+      const element = document.createElement('div');
+      element.id = id;
+      document.body.append(element);
+    }
+  });
+  afterEach(() => {
+    for (const id of ['one', 'two', 'three']) document.getElementById(id)?.remove();
+  });
+  const settled = () => animate.mock.contexts as HTMLElement[];
+
+  it('settles in only a new pin, never the ones already drawn', async () => {
+    const locate = (selector: string) => document.querySelector(selector);
+    const overlay = (targets: IsotoneElement[]) => h(PickOverlay, { picking: true, targets, locate });
+    await act(async () => root.render(overlay([pin('#one')])));
+    expect(host.querySelectorAll('.isotone-selected')).toHaveLength(1);
+    expect(animate).not.toHaveBeenCalled();
+    await act(async () => root.render(overlay([pin('#one'), pin('#two')])));
+    expect(animate).toHaveBeenCalledTimes(1);
+    expect(settled()[0]).toBe(host.querySelectorAll('.isotone-selected')[1]);
+    expect(animate.mock.calls[0]?.[0]).toEqual([{ opacity: 0 }, { opacity: 1 }]);
+    // A re-render, a scroll or a third pin leaves the earlier pins alone.
+    await act(async () => root.render(overlay([pin('#one'), pin('#two')])));
+    await act(async () => {
+      window.dispatchEvent(new Event('scroll'));
+      await new Promise((done) => requestAnimationFrame(() => done(null)));
+    });
+    expect(animate).toHaveBeenCalledTimes(1);
+    await act(async () => root.render(overlay([pin('#one'), pin('#two'), pin('#three')])));
+    expect(animate).toHaveBeenCalledTimes(2);
+    expect(settled()[1]).toBe(host.querySelectorAll('.isotone-selected')[2]);
+    // The hover preview never animates.
+    expect(settled()).not.toContain(host.querySelector('.isotone-hover:not(.isotone-selected)'));
+  });
+
+  it('settles in a chip added to the open composer, not chips it mounts with', async () => {
+    const text = { subscribe: () => () => {}, get: () => '', set: () => {} };
+    const composer = (targets: IsotoneElement[], active = true) =>
+      h(Composer, {
+        draft: { text, editing: null, variantTarget: null, targets, notice: '' },
+        fieldRef: { current: null },
+        active,
+        picking: false,
+        pickingWithPanel: false,
+        floating: false,
+        touch: false,
+        shortcutLabel: '',
+        onSend: () => {},
+        onCancelEdit: () => {},
+        onClearVariant: () => {},
+        onUnpin: () => {},
+        onFieldFocus: () => {},
+        onFieldPointerDown: () => {},
+        onTogglePicking: () => {},
+        onDonePicking: () => {},
+      } as unknown as Parameters<typeof Composer>[0]);
+    await act(async () => root.render(composer([pin('#one'), pin('#two')])));
+    expect(animate).not.toHaveBeenCalled();
+    await act(async () => root.render(composer([pin('#one'), pin('#two'), pin('#three')])));
+    expect(animate).toHaveBeenCalledTimes(1);
+    expect(settled()[0]?.textContent).toBe('#three');
+    expect(animate.mock.calls[0]?.[0]).toEqual([
+      { opacity: 0, transform: 'scale(0.96)' },
+      { opacity: 1, transform: 'none' },
+    ]);
+    // Hidden, then opened with a new chip: the panel's own entrance is enough.
+    await act(async () => root.render(composer([pin('#one')], false)));
+    await act(async () => root.render(composer([pin('#one'), pin('#two')], true)));
+    expect(animate).toHaveBeenCalledTimes(1);
+    // Reduced motion keeps the fade alone.
+    media.matches = true;
+    await act(async () => root.render(composer([pin('#one'), pin('#two'), pin('#three')])));
+    expect(animate.mock.calls[1]?.[0]).toEqual([{ opacity: 0 }, { opacity: 1 }]);
   });
 });
