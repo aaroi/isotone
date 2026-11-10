@@ -54,6 +54,9 @@ ${APPEARANCE_CSS}
 .isotone-root button:not(:disabled):active > svg { transform: scale(.92); transition-duration: 100ms; }
 /* A key with words instead of an icon sinks a little under the press, so every button answers a click. */
 .isotone-root :where(.isotone-save, .isotone-secondary, .isotone-picking button, .isotone-away, .isotone-page, .isotone-seg):not(:disabled):active { transform: scale(.97); transition-duration: 100ms; }
+/* A swatch is small, so it sinks further; a thumbnail is large, so less. */
+.isotone-root :where(.isotone-swatch, .isotone-picker):not(:disabled):active { transform: scale(.94); transition-duration: 100ms; }
+.isotone-root :where(.isotone-thumb):not(:disabled):active { transform: scale(.98); transition-duration: 100ms; }
 .isotone-root svg { display: block; flex-shrink: 0; pointer-events: none; transition: transform var(--iso-fast) var(--iso-ease-out); }
 /* Panels move independently; their content and corners retain their natural size. */
 .isotone-root[data-open='true'] { width: var(--iso-dock-width); }
@@ -161,7 +164,7 @@ ${APPEARANCE_CSS}
 .isotone-axis-value { min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--iso-muted); font: 11px var(--iso-sans); font-variant-numeric: tabular-nums; }
 /* The track's corner is a segment's half height plus the track's padding, so it stays concentric with the capsules inside:
    a full capsule on one row, a rounded card around wrapped rows. useSegmentLayout picks the layout from the labels. */
-.isotone-segs { --iso-seg-h: 28px; --iso-seg-pad: 3px; --iso-seg-gap: 3px; display: flex; flex-wrap: wrap; gap: var(--iso-seg-gap); padding: var(--iso-seg-pad); border-radius: calc(var(--iso-seg-h) / 2 + var(--iso-seg-pad)); background: var(--iso-well); box-shadow: var(--iso-segment-track-shadow); }
+.isotone-segs { position: relative; --iso-seg-h: 28px; --iso-seg-pad: 3px; --iso-seg-gap: 3px; display: flex; flex-wrap: wrap; gap: var(--iso-seg-gap); padding: var(--iso-seg-pad); border-radius: calc(var(--iso-seg-h) / 2 + var(--iso-seg-pad)); background: var(--iso-well); box-shadow: var(--iso-segment-track-shadow); }
 /* Measured to fit, so a row never wraps: options share the room evenly but never shrink past their labels. */
 .isotone-segs[data-layout='row'] { flex-wrap: nowrap; }
 .isotone-segs[data-layout='row'] > .isotone-opt-seg { flex-basis: 0; }
@@ -197,9 +200,9 @@ ${APPEARANCE_CSS}
 /* The option leads, the selector follows in the same line and size, quieter, as in “Compact Spacing”. */
 .isotone-menu-heading > strong { flex: 0 1 auto; }
 .isotone-menu-heading > span { flex: 0 1000 auto; color: var(--iso-muted); font-weight: 400; }
-.isotone-grid { display: grid; grid-template-columns: repeat(${GRID_COLUMNS},minmax(0,1fr)); gap: 10px; }
+.isotone-grid { position: relative; display: grid; grid-template-columns: repeat(${GRID_COLUMNS},minmax(0,1fr)); gap: 10px; }
 .isotone-thumb { position: relative; display: block; min-width: 0; border-radius: 10px; overflow: hidden; background: var(--iso-deep); box-shadow: var(--iso-thumb-shadow); color: var(--iso-muted); }
-.isotone-thumb img { display: block; width: 100%; height: 72px; object-fit: cover; }
+.isotone-thumb img { position: relative; display: block; width: 100%; height: 72px; object-fit: cover; }
 .isotone-thumb > span { position: absolute; bottom: 6px; left: 6px; max-width: calc(100% - 12px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 8px; border-radius: 999px; background: var(--iso-label-face); box-shadow: var(--iso-label-shadow); color: color-mix(in oklch, var(--iso-fg) 50%, var(--iso-muted)); text-align: left; font-size: 10px; font-weight: 500; }
 .isotone-thumb[aria-checked='true'], .isotone-thumb[aria-checked='true'] > span { color: var(--iso-fg); }
 /* The 14px knob has 5px of space above it inside its 24px hit area. */
@@ -207,9 +210,9 @@ ${APPEARANCE_CSS}
 .isotone-range { display: block; appearance: none; -webkit-appearance: none; width: 100%; height: 24px; cursor: pointer; }
 /* A recessed groove, a round knob and a clear default mark. */
 .isotone-range::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: var(--iso-track); box-shadow: var(--iso-track-shadow); }
-.isotone-range::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: var(--iso-range-thumb-face); box-shadow: var(--iso-range-thumb-shadow); }
+.isotone-range::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: var(--iso-range-thumb-face); box-shadow: var(--iso-range-thumb-shadow); transition: transform 100ms var(--iso-ease-out); }
 .isotone-range::-moz-range-track { height: 4px; border-radius: 4px; background: var(--iso-track); box-shadow: var(--iso-track-shadow); }
-.isotone-range::-moz-range-thumb { width: 14px; height: 14px; border: 0; box-shadow: var(--iso-range-thumb-shadow); border-radius: 50%; background: var(--iso-range-thumb-face); }
+.isotone-range::-moz-range-thumb { width: 14px; height: 14px; border: 0; box-shadow: var(--iso-range-thumb-shadow); border-radius: 50%; background: var(--iso-range-thumb-face); transition: transform 100ms var(--iso-ease-out); }
 .isotone-swatches { display: flex; flex-wrap: wrap; gap: 10px; padding: 3px; }
 .isotone-swatch, .isotone-picker { width: 26px; height: 26px; border-radius: 50%; box-shadow: var(--iso-swatch-shadow); flex: none; }
 .isotone-swatch[aria-checked='true'] { box-shadow: var(--iso-swatch-selected-shadow); }
@@ -226,9 +229,12 @@ ${APPEARANCE_CSS}
 .isotone-colour-handle:focus-visible { outline: 2px solid var(--iso-focus); outline-offset: 2px; }
 .isotone-hue { display: block; appearance: none; -webkit-appearance: none; width: 100%; height: 14px; margin: 0; background: transparent; cursor: pointer; }
 .isotone-hue::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .12); }
-.isotone-hue::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 14px; height: 14px; margin-top: -3px; border-radius: 4px; background: var(--iso-range-thumb-face); box-shadow: var(--iso-range-thumb-shadow); }
+.isotone-hue::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 14px; height: 14px; margin-top: -3px; border-radius: 4px; background: var(--iso-range-thumb-face); box-shadow: var(--iso-range-thumb-shadow); transition: transform 100ms var(--iso-ease-out); }
 .isotone-hue::-moz-range-track { height: 8px; border-radius: 4px; background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
-.isotone-hue::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 4px; background: var(--iso-range-thumb-face); box-shadow: var(--iso-range-thumb-shadow); }
+.isotone-hue::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 4px; background: var(--iso-range-thumb-face); box-shadow: var(--iso-range-thumb-shadow); transition: transform 100ms var(--iso-ease-out); }
+/* A held knob grows a little under the finger. Each engine's pseudo-element needs a rule of its own. */
+:is(.isotone-range, .isotone-hue):active::-webkit-slider-thumb { transform: scale(1.12); }
+:is(.isotone-range, .isotone-hue):active::-moz-range-thumb { transform: scale(1.12); }
 .isotone-colour-row { display: flex; align-items: center; gap: 4px; min-height: 24px; }
 .isotone-colour-hash { color: var(--iso-faint); font-size: 11px; padding-left: 4px; }
 .isotone-colour-hex { flex: 1; min-width: 0; height: 24px; padding: 0 2px; border: 0; background: transparent; color: var(--iso-fg); font: inherit; font-size: 11px; font-variant-numeric: tabular-nums; letter-spacing: .04em; text-transform: uppercase; outline: none; }
@@ -243,7 +249,14 @@ ${APPEARANCE_CSS}
 .isotone-note-editing .isotone-note-hit,
 .isotone-seg[aria-checked='true'],
 .isotone-thumb[aria-checked='true'],
+.isotone-key,
 .isotone-pick[aria-pressed='true'] { background: var(--iso-selected-face); box-shadow: var(--iso-selected-shadow); }
+/* A pointer's pick: the option it left fades its face out in place (keyFade.ts), beneath the labels. */
+.isotone-key { position: absolute; pointer-events: none; border-radius: 999px; }
+/* A thumbnail's slot is opaque, so in a grid the fading face lies over the slot and under its picture and label. */
+.isotone-grid { isolation: isolate; }
+.isotone-grid > .isotone-key { z-index: 1; border-radius: 10px; }
+.isotone-thumb img, .isotone-thumb > span, .isotone-thumb .isotone-default-dot { z-index: 1; }
 /* The open tool lifts into a key on the rail's capsule. */
 .isotone-rail-button[aria-expanded='true']::before { background: var(--iso-key-face); box-shadow: var(--iso-key-shadow); }
 .isotone-secondary { padding: 6px 12px; font-size: 11px; font-weight: 500; white-space: nowrap; }
@@ -274,6 +287,8 @@ ${APPEARANCE_CSS}
 .isotone-range-tick { position: absolute; top: 50%; left: calc(7px + (100% - 14px) * var(--iso-default-at, 0)); width: 2px; height: 10px; margin: -5px 0 0 -1px; border-radius: 1px; background: var(--iso-tick); pointer-events: none; }
 .isotone-save-state { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .isotone-save-label { display: block; }
+/* The line it replaces, fading out over the new one (VariantsView's crossfade); it takes no room. */
+.isotone-save-was { position: absolute; flex: none; pointer-events: none; }
 /* A local action sheet overlays controls, preserving every underlying position. */
 .isotone-axis-menu { position: absolute; inset: 48px 6px auto; z-index: 2; background: var(--iso-popup-face); border-radius: 14px; max-height: calc(100% - 54px); box-shadow: var(--iso-popup-shadow); display: flex; flex-direction: column; transform-origin: top left; opacity: 0; transform: translateY(-4px) scale(.97); visibility: hidden; transition: opacity var(--iso-exit) var(--iso-ease-out), transform var(--iso-exit) var(--iso-ease-out), visibility 0s var(--iso-exit); }
 .isotone-axis-menu[data-open='true'] { visibility: visible; opacity: 1; transform: none; transition-delay: 0s; }
@@ -357,7 +372,7 @@ ${APPEARANCE_CSS}
 /* Content starts and ends at the shared inset, but scrolls through the full
    field width without a fade or a permanent blank strip at either edge. */
 .isotone-context { display: flex; flex: none; align-items: center; gap: 4px; flex-wrap: nowrap; height: 32px; overflow-x: auto; overflow-y: hidden; overscroll-behavior: contain; padding: 4px var(--iso-input-padding); margin: 0 calc(0px - var(--iso-input-padding)); scroll-padding-inline: var(--iso-input-padding); }
-.isotone-chip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; height: 24px; max-width: 100%; padding: 0 6px 0 9px; border: 0; border-radius: var(--iso-control-radius); font-size: 10.5px; color: color-mix(in oklch, var(--iso-fg) 55%, var(--iso-muted)); background: var(--iso-label-face); box-shadow: var(--iso-label-shadow); }
+.isotone-chip { transform-origin: left center; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; height: 24px; max-width: 100%; padding: 0 6px 0 9px; border: 0; border-radius: var(--iso-control-radius); font-size: 10.5px; color: color-mix(in oklch, var(--iso-fg) 55%, var(--iso-muted)); background: var(--iso-label-face); box-shadow: var(--iso-label-shadow); }
 .isotone-context > .isotone-chip:not(:only-child) { max-width: calc(100% - 32px); }
 .isotone-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isotone-chip button { display: grid; place-items: center; flex: none; width: 16px; height: 16px; border-radius: 50%; background: transparent; box-shadow: none; }
@@ -460,6 +475,8 @@ ${APPEARANCE_CSS}
   .isotone-colour, .isotone-root .isotone-vars > .isotone-panel-head { transition-property: opacity; }
   .isotone-root button { transition: opacity 125ms ease; }
   .isotone-root button:not(:disabled):active > svg, .isotone-root button:not(:disabled):active { transform: none; }
+  :is(.isotone-range, .isotone-hue):active::-webkit-slider-thumb { transform: none; }
+  :is(.isotone-range, .isotone-hue):active::-moz-range-thumb { transform: none; }
 }
 /* Windows high contrast swaps the palette for system colours and drops every shadow, which drew the edges,
    the selection and the slider. Selection becomes Highlight; colour choices keep their own colour. */
