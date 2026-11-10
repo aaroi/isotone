@@ -143,13 +143,23 @@ function create(path: string, contents: string): boolean {
   }
 }
 
+/** How many times, 5ms apart, an exclusive create is retried on Windows before EPERM counts as a real refusal. */
+const DELETE_PENDING_TRIES = 20;
+
 function createExclusive(path: string, contents: string): boolean {
   let fd: number;
-  try {
-    fd = openSync(path, 'wx', 0o600);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
-    throw error;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      fd = openSync(path, 'wx', 0o600);
+      break;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'EEXIST') return false;
+      // Windows keeps a file another process just deleted until its last handle
+      // closes, and refuses to create over it with EPERM for those few milliseconds.
+      if (code !== 'EPERM' || process.platform !== 'win32' || attempt >= DELETE_PENDING_TRIES) throw error;
+      sleep(5);
+    }
   }
   try {
     writeFileSync(fd, contents);

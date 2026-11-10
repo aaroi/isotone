@@ -110,6 +110,8 @@ The sample app's selectors sit in two sections, Cards and Theme. Other demo URLs
 corners have no frame, and a 15s virtual time budget so the opening motion has
 settled. `?scene=focus` shows the feedback panel alone, `?scene=pin` select mode
 with a pinned card, and `?theme=light` the light page.
+Give each capture a fresh `--user-data-dir`: the pin scene leaves a draft
+behind that the next capture from the same profile would show.
 
 `scripts/capture/record-loop.mjs` records `docs/assets/loop.gif` from the hosted
 demo build over the Chrome DevTools Protocol and ffmpeg; its header has the

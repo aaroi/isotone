@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Notes no longer fail to save on Windows when several writers land at once.** Windows briefly refuses to recreate a lock file another process has just deleted; Isotone now waits those few milliseconds instead of reporting that it cannot lock the store.
+
 ## 1.4.0
 
 ### Added

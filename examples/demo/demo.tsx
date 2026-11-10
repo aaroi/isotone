@@ -435,7 +435,9 @@ function Panel({ theme }: { theme: IsotoneTheme }) {
     if (screenshot) {
       const style = document.createElement('style');
       // Select mode draws fixed outlines and a hint, which a scaled root would displace.
-      style.textContent = `${scene === 'pin' ? '' : '.isotone-root { transform: scale(1.1); transform-origin: bottom right; right: 22px; bottom: 22px; }'} .isotone-textarea { caret-color: transparent; }`;
+      // The defaults bar floats over the last selector until the list is scrolled; the still image shows the
+      // list as it sits when scrolled clear of the bar.
+      style.textContent = `${scene === 'pin' ? '' : '.isotone-root { transform: scale(1.1); transform-origin: bottom right; right: 22px; bottom: 22px; }'} .isotone-textarea { caret-color: transparent; } .isotone-vars[data-saving='true'] > .isotone-vars-body { padding-bottom: calc(var(--iso-save-bar-h) - var(--iso-space)); }`;
       shadow.append(style);
     }
     const target = document.createElement('div');
@@ -475,8 +477,8 @@ function Panel({ theme }: { theme: IsotoneTheme }) {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', code: 'ShiftLeft' }));
       launcher.click();
       frame = requestAnimationFrame(() => {
-        const feedback = shadow?.querySelector<HTMLButtonElement>('[aria-label="Feedback"]');
-        const variants = shadow?.querySelector<HTMLButtonElement>('[aria-label="Variants"]');
+        const feedback = shadow?.querySelector<HTMLButtonElement>('.isotone-rail-button[aria-label^="Feedback"]');
+        const variants = shadow?.querySelector<HTMLButtonElement>('.isotone-rail-button[aria-label^="Variants"]');
         if (feedback?.getAttribute('aria-expanded') !== 'true') feedback?.click();
         const wantVariants = scene === 'both';
         if ((variants?.getAttribute('aria-expanded') === 'true') !== wantVariants) variants?.click();
@@ -495,7 +497,9 @@ function Panel({ theme }: { theme: IsotoneTheme }) {
 
 /** Select mode mid-flow: one card pinned and a note being typed. */
 function pinScene(shadow: ShadowRoot | null | undefined) {
-  shadow?.querySelector<HTMLButtonElement>('[aria-label="Select elements"]')?.click();
+  // A pointer click on Feedback starts select mode by itself, and pressing the button again would end it.
+  if (shadow?.querySelector<HTMLElement>('.isotone-root')?.dataset.selecting !== 'true')
+    shadow?.querySelector<HTMLButtonElement>('[aria-label="Select elements"]')?.click();
   const first = document.querySelector<HTMLElement>('#overview-cards article');
   // Give select mode a moment to attach its listeners before the scripted pointer acts.
   setTimeout(() => {

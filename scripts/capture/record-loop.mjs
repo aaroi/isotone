@@ -4,7 +4,9 @@
 //   pnpm build:demo && python3 -m http.server 4190 --directory demo-dist &
 //   node scripts/capture/record-loop.mjs http://127.0.0.1:4190/ docs/assets/loop.gif
 //
-// Needs Chrome (see cdp.mjs) and ffmpeg on PATH.
+// Needs Chrome (see cdp.mjs; CHROME=<binary> picks another copy) and ffmpeg on PATH.
+// Check the result frame by frame afterwards: a step that misses its target
+// still records, it just shows nothing happening.
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -67,19 +69,28 @@ await sleep(600);
 // Hovering the launcher fans out the rail; Variants opens on its own.
 await glide(await inPanel('.isotone-fab'), 700);
 await sleep(450);
-await clickAt(await inPanel('[aria-label="Variants"]'), 600);
+await clickAt(await inPanel('.isotone-rail-button[aria-label^="Variants"]'), 600);
 await clickAt(await inPanel('[aria-label="Feature"]'), 750);
 await clickAt(await inPanel('[aria-label="Sidebar"]'), 750);
 await clickAt(await inPanel('[aria-label="Spacious"]'), 650);
+// The colour sits in the next section, below the fold: scroll the list down to it.
+await glide(await inPanel('[aria-label="Spacious"]'), 300);
+await b.eval(
+  `(() => { const list = ${root}.querySelector('.isotone-vars-body'); list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' }); })()`,
+);
+await sleep(650);
 await clickAt(await inPanel('[aria-label="Green"]'), 850);
 
 // 2. Feedback: close variants, pin a card, write the note.
-await clickAt(await inPanel('[aria-label="Variants"]'), 300);
-await clickAt(await inPanel('[aria-label="Feedback"]'), 700);
-await clickAt(await inPanel('[aria-label="Select elements"]'), 500);
-// Aim at the card's chart, which lets clicks through, so the whole card is pinned.
+await clickAt(await inPanel('.isotone-rail-button[aria-label^="Variants"]'), 300);
+await clickAt(await inPanel('.isotone-rail-button[aria-label^="Feedback"]'), 700);
+// Opening Feedback starts select mode by itself; pressing the button again would end it.
+if (!(await b.eval(`${root}.querySelector('.isotone-root').dataset.selecting === 'true'`)))
+  await clickAt(await inPanel('[aria-label="Select elements"]'), 500);
+// Aim at the first card's chart, which lets clicks through, so the whole card is pinned.
+// In the Sidebar layout the first card is the one the panel leaves uncovered.
 const card = await b.eval(
-  `(() => { const r = document.querySelector('#overview-cards article:nth-child(2)').getBoundingClientRect(); return [r.left + r.width * 0.5, r.bottom - 22]; })()`,
+  `(() => { const r = document.querySelector('#overview-cards article:nth-child(1)').getBoundingClientRect(); return [r.left + r.width * 0.5, r.bottom - 22]; })()`,
 );
 await glide(card, 900);
 await sleep(450);

@@ -17,7 +17,7 @@ const NO_LINKS = `
 `;
 
 /** An error code the exclusive create of the lock fails with, when set. */
-const openFails = vi.hoisted(() => ({ code: null as string | null }));
+const openFails = vi.hoisted(() => ({ code: null as string | null, times: Number.POSITIVE_INFINITY }));
 
 vi.mock('node:fs', async (original) => {
   const fs = await original<typeof import('node:fs')>();
@@ -27,7 +27,8 @@ vi.mock('node:fs', async (original) => {
       throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
     },
     openSync: (...args: Parameters<typeof fs.openSync>) => {
-      if (openFails.code && String(args[0]).endsWith('.lock')) {
+      if (openFails.code && openFails.times > 0 && String(args[0]).endsWith('.lock')) {
+        openFails.times--;
         throw Object.assign(new Error(`${openFails.code}: refused, open '${args[0]}'`), { code: openFails.code });
       }
       return fs.openSync(...args);
@@ -41,6 +42,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   openFails.code = null;
+  openFails.times = Number.POSITIVE_INFINITY;
+  vi.unstubAllGlobals();
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -71,6 +74,17 @@ it('reports a lock it cannot create as an error at once, not as a busy store', (
     expect((caught as Error).message, code).toBe(`Cannot lock the local store ${file}: ${code}: refused, open '${file}.lock'`);
     expect(Date.now() - started, code).toBeLessThan(1_000);
   }
+});
+
+it('waits out the moment Windows refuses to create over a lock another process just deleted', () => {
+  const file = join(root, 'notes.json');
+  vi.stubGlobal('process', { ...process, platform: 'win32', pid: process.pid });
+  openFails.code = 'EPERM';
+  openFails.times = 3;
+  expect(withFileLock(file, () => 'ran')).toBe('ran');
+  // A refusal that never clears is still reported as what it is.
+  openFails.times = Number.POSITIVE_INFINITY;
+  expect(() => withFileLock(file, () => 'ran')).toThrow(/^Cannot lock the local store .*EPERM/);
 });
 
 it('still takes over an abandoned lock', () => {
