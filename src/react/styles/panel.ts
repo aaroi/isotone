@@ -317,8 +317,6 @@ ${APPEARANCE_CSS}
 .isotone-meta .isotone-chip { flex: 0 1 auto; min-width: 0; height: 18px; padding: 0 7px; font-size: 10px; }
 /* A lone reference gets all available space; multiple references share the row. */
 .isotone-meta .isotone-chip:not(:only-child) { max-width: 140px; }
-/* A count of page errors is short and says nothing cut off. */
-.isotone-meta .isotone-chip[data-whole] { flex: none; max-width: none; }
 /* The corner action floats outside the text column; its 24px hit target
    surrounds a 16px face without reserving trailing space in every row. */
 .isotone-note > .isotone-x { position: absolute; right: -8px; top: -8px; width: 24px; height: 24px; isolation: isolate; opacity: .6; background: none; box-shadow: none; }
@@ -351,7 +349,6 @@ ${APPEARANCE_CSS}
 .isotone-note-hit > p { flex: 1; min-width: 0; }
 /* The note keeps most of the row; references take at most a third and shrink first. */
 .isotone-note-hit > .isotone-meta { flex: 0 1 auto; max-width: 34%; margin-top: 0; }
-.isotone-note-hit > .isotone-meta:has([data-whole]) { max-width: 46%; }
 .isotone-compose { flex: none; display: flex; flex-direction: column; }
 .isotone-input { --iso-input-padding: var(--iso-space); flex: none; min-width: 0; min-height: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; padding: var(--iso-input-padding); background: var(--iso-well); border: 1px solid var(--iso-input-border); box-shadow: var(--iso-input-shadow); border-radius: var(--iso-inner-radius); cursor: text; }
 .isotone-context:empty { display: none; }

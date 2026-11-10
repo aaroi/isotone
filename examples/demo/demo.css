@@ -250,6 +250,3 @@ h1 { margin: 0; font-size: 26px; font-weight: 650; letter-spacing: -.025em; line
 :root[data-capture='true'] .projects-head, :root[data-capture='true'] .projects article { grid-template-columns: minmax(0, 1fr) 100px; }
 :root[data-capture='true'] .projects-head span:not(:first-child, :last-child), :root[data-capture='true'] .project-team,
 :root[data-capture='true'] .project-progress, :root[data-capture='true'] .project-due { display: none; }
-
-.demo-link { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
-.demo-link:hover { color: var(--fg); }

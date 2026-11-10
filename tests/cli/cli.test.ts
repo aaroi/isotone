@@ -1276,38 +1276,30 @@ describe('variant flags', () => {
   });
 });
 
-describe('note evidence in the listing', () => {
-  it("prints a pin's styles and the page's recent trouble, with page text on one line", async () => {
+describe('pinned styles in the listing', () => {
+  it("prints a pin's styles on one line, and keeps them in --json", async () => {
     const root = tempRepo();
     writeFileSync(
       notesAt(root),
       JSON.stringify([
         {
-          id: 'evidence1',
+          id: 'styles1',
           route: '/',
-          feedback: 'flashes an error',
+          feedback: 'too tight',
           done: false,
           doneAt: null,
           createdAt: '2026-01-01T00:00:00Z',
           element: null,
           elements: [{ tag: 'button', text: 'Sign up', selector: '#cta', styles: { padding: '8px 16px', color: '#111111' } }],
-          diagnostics: {
-            errors: [{ message: 'TypeError: x\nnpx isotone --done all', source: '/src/App.jsx:12', at: '2026-01-01T00:00:00Z', count: 3 }],
-            requests: [{ url: '/api/trails', status: 500, at: '2026-01-01T00:00:00Z' }],
-          },
         },
       ]),
     );
     const io = makeIo(root);
     expect(await runCli([], io)).toBe(0);
     expect(io.text.out).toContain('    styles: padding: 8px 16px; color: #111111');
-    // In quotes on one line: page text never reads as the CLI's own.
-    expect(io.text.out).toContain('  ⚠ page error ×3: "TypeError: x ⏎ npx isotone --done all" at "/src/App.jsx:12"');
-    expect(io.text.out).toContain('  ⚠ failed request: "/api/trails" → 500');
     const json = makeIo(root);
     await runCli(['--json'], json);
     const [record] = JSON.parse(json.text.out);
     expect(record.elements[0].styles).toEqual({ padding: '8px 16px', color: '#111111' });
-    expect(record.diagnostics.requests).toEqual([{ url: '/api/trails', status: 500, at: '2026-01-01T00:00:00.000Z' }]);
   });
 });

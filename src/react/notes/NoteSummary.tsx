@@ -3,9 +3,9 @@ import type { IsotoneNote } from '../../core/types';
 import { updateNoteText } from '../../core/update';
 
 /** Pinned references and saved defaults use the same compact tag. */
-function SummaryTag({ label, whole }: { label: string; whole?: boolean }) {
+function SummaryTag({ label }: { label: string }) {
   return (
-    <span className="isotone-chip" data-whole={whole || undefined}>
+    <span className="isotone-chip">
       <span onPointerOver={showOverflowTitle}>{label}</span>
     </span>
   );
@@ -20,16 +20,6 @@ function Reply({ note }: { note: IsotoneNote }) {
       <span>Agent asks</span> {note.reply.text}
     </p>
   );
-}
-
-/**
- * What the panel recorded about the page with the note, as one short tag, so
- * the reviewer knows the agent gets it too. One count however it is made up:
- * the row has room for a few characters, never for two tags.
- */
-function troubleTags(note: IsotoneNote): { key: string; label: string; whole: true }[] {
-  const count = (note.diagnostics?.errors?.length ?? 0) + (note.diagnostics?.requests?.length ?? 0);
-  return count ? [{ key: 'diagnostics', label: `${count} issue${count === 1 ? '' : 's'}`, whole: true }] : [];
 }
 
 /** Keep machine-directed requests readable without changing the agent's original text. */
@@ -48,7 +38,7 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
   if (!note.feedback.startsWith('[set-defaults]')) {
     const elements = note.elements ?? (note.element ? [note.element] : []);
     const references = [
-      ...(page ? [{ key: `page:${page}`, label: page, whole: false }] : []),
+      ...(page ? [{ key: `page:${page}`, label: page }] : []),
       ...(note.variant
         ? [
             {
@@ -58,7 +48,6 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
           ]
         : []),
       ...elements.map((element) => ({ key: element.selector, label: element.text || element.tag })),
-      ...troubleTags(note),
     ];
     return (
       <>
@@ -67,7 +56,7 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
         {references.length > 0 && (
           <span className="isotone-meta">
             {references.map((reference) => (
-              <SummaryTag key={reference.key} label={reference.label} whole={'whole' in reference && reference.whole} />
+              <SummaryTag key={reference.key} label={reference.label} />
             ))}
           </span>
         )}
