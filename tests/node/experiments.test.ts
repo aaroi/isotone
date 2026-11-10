@@ -22,50 +22,50 @@ describe('the project’s experiment flags', () => {
   it('has none without a file, and keeps the others when one is set', () => {
     const root = project();
     expect(readExperiments(root)).toEqual({});
-    expect(setExperiment(root, 'dictation', true)).toEqual({ dictation: true });
-    expect(JSON.parse(readFileSync(join(root, EXPERIMENTS_FILE), 'utf8'))).toEqual({ dictation: true });
-    expect(setExperiment(root, 'dictation', false)).toEqual({ dictation: false });
-    expect(readExperiments(root)).toEqual({ dictation: false });
+    expect(setExperiment(root, 'styleEditor', true)).toEqual({ styleEditor: true });
+    expect(JSON.parse(readFileSync(join(root, EXPERIMENTS_FILE), 'utf8'))).toEqual({ styleEditor: true });
+    expect(setExperiment(root, 'styleEditor', false)).toEqual({ styleEditor: false });
+    expect(readExperiments(root)).toEqual({ styleEditor: false });
   });
 
   it('drops flags this version does not know, on read and on the next write', () => {
     const root = project();
     mkdirSync(join(root, '.isotone'));
-    writeFileSync(join(root, EXPERIMENTS_FILE), JSON.stringify({ teleport: true, dictation: true }));
-    expect(readExperiments(root)).toEqual({ dictation: true });
+    writeFileSync(join(root, EXPERIMENTS_FILE), JSON.stringify({ teleport: true, styleEditor: true }));
+    expect(readExperiments(root)).toEqual({ styleEditor: true });
   });
 
   it('lets the file win over the host option, either way', () => {
     const root = project();
-    expect(resolveExperiments(root, { dictation: true })).toEqual({ dictation: true });
-    setExperiment(root, 'dictation', false);
-    expect(resolveExperiments(root, { dictation: true })).toEqual({ dictation: false });
-    setExperiment(root, 'dictation', true);
-    expect(resolveExperiments(root, undefined)).toEqual({ dictation: true });
+    expect(resolveExperiments(root, { styleEditor: true })).toEqual({ styleEditor: true });
+    setExperiment(root, 'styleEditor', false);
+    expect(resolveExperiments(root, { styleEditor: true })).toEqual({ styleEditor: false });
+    setExperiment(root, 'styleEditor', true);
+    expect(resolveExperiments(root, undefined)).toEqual({ styleEditor: true });
   });
 
   it('keeps the host option and says why when the file is broken', () => {
     const root = project();
     mkdirSync(join(root, '.isotone'));
-    writeFileSync(join(root, EXPERIMENTS_FILE), '{ dictation: ');
+    writeFileSync(join(root, EXPERIMENTS_FILE), '{ styleEditor: ');
     expect(() => readExperiments(root)).toThrow(/should hold one JSON object/);
     const warn = vi.fn();
-    expect(resolveExperiments(root, { dictation: true }, warn)).toEqual({ dictation: true });
+    expect(resolveExperiments(root, { styleEditor: true }, warn)).toEqual({ styleEditor: true });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining(EXPERIMENTS_FILE.replace('/', join('a', 'b').slice(1, 2))));
   });
 
   it('reaches the panel through `isotone serve`, read with every bundle', () => {
     const root = project();
     expect(serveMountOptions('http://localhost:4123', root, {})).not.toHaveProperty('experimental');
-    setExperiment(root, 'dictation', true);
-    expect(serveMountOptions('http://localhost:4123', root, {}).experimental).toEqual({ dictation: true });
-    expect(serveMountOptions('http://localhost:4123', project(), { experimental: { dictation: true } }).experimental).toEqual({
-      dictation: true,
+    setExperiment(root, 'styleEditor', true);
+    expect(serveMountOptions('http://localhost:4123', root, {}).experimental).toEqual({ styleEditor: true });
+    expect(serveMountOptions('http://localhost:4123', project(), { experimental: { styleEditor: true } }).experimental).toEqual({
+      styleEditor: true,
     });
   });
 
   it('reaches the panel through the Vite plugin’s mount module, and is absent when nothing is on', () => {
     expect(mountModuleSource({}, '', true)).not.toContain('experimental');
-    expect(mountModuleSource({}, '', true, undefined, undefined, { dictation: true })).toContain('"experimental":{"dictation":true}');
+    expect(mountModuleSource({}, '', true, undefined, undefined, { styleEditor: true })).toContain('"experimental":{"styleEditor":true}');
   });
 });

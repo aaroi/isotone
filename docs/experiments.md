@@ -9,7 +9,6 @@ stable feature gets, so nothing else in Isotone depends on one.
 
 | Flag | What it adds | Know first |
 | --- | --- | --- |
-| `dictation` | A microphone button in the feedback composer. Press it and speak; the words land in the note as you say them, and you can keep typing. Press it again, or send the note, to stop. | Needs a browser with speech recognition: Chrome, Edge and Safari have it (Safari with Dictation turned on in system settings); in a browser without it the button is not shown, and a few Chromium builds show it but cannot reach a speech service. The browser does the recognising and may send the audio to its vendor's service. The page needs microphone permission. |
 | `styleEditor` | A ruler button in the composer once an element is pinned. It opens **Adjust**: spacing, type and box values for the pinned elements, as numbers you type, step with the arrow keys or change by dragging their label, and colours you pick. Every change shows on the page at once and is sent with the note as an exact value (`padding-block: 16px → 24px`), with the rule and token that set it today where the browser can tell, so you can send the note without writing a word. | The preview is in your browser only, shows while the feedback panel is open, and ends when you send the note, reload or unpin: the page goes back to how it was until your agent has made the change in the source. A page's own `!important` rules can beat the preview (always, when they sit in a cascade layer, as Tailwind's `!` utilities do), and elements inside a shadow root or a frame cannot be adjusted. Starting values are read when the element is pinned: after a breakpoint or variant change, unpin and pin again. |
 
 `npx isotone experiment` prints this list for the installed version, with what
@@ -17,12 +16,12 @@ the project's file says about each: `on`, `off`, or `-` when it says nothing.
 
 ## Turning one on
 
-Ask your agent ("turn on Isotone's dictation experiment"), or run it yourself in
-the app's directory:
+Ask your agent ("turn on Isotone's style editor experiment"), or run it
+yourself in the app's directory:
 
 ```sh
-npx isotone experiment on dictation
-npx isotone experiment off dictation
+npx isotone experiment on style-editor
+npx isotone experiment off style-editor
 ```
 
 The flag is saved in `.isotone/experiments.json`. Reload the page to apply it;
@@ -32,13 +31,13 @@ with your team, or leave it out.
 Whoever sets Isotone up can turn one on in code instead:
 
 ```ts
-isotone({ experimental: { dictation: true } })                 // Vite
-serveIsotone({ file, experimental: { dictation: true } })      // isotone/serve
-mountIsotone({ endpoint, experimental: { dictation: true } })  // your own mount
-<IsotonePanel experimental={{ dictation: true }} … />
+isotone({ experimental: { styleEditor: true } })                 // Vite
+serveIsotone({ file, experimental: { styleEditor: true } })      // isotone/serve
+mountIsotone({ endpoint, experimental: { styleEditor: true } })  // your own mount
+<IsotonePanel experimental={{ styleEditor: true }} … />
 ```
 
-`npx isotone serve --experimental dictation` does the same for one run. The
+`npx isotone serve --experimental style-editor` does the same for one run. The
 project's `.isotone/experiments.json` wins over all of these, in both
 directions: `experiment on` turns a feature on whatever the setup says, and
 `experiment off` keeps it off until you turn it on again. A flag this version

@@ -13,14 +13,11 @@ import { npm } from './npm.mjs';
 // Tarball raised to 405 kB (round 2 integration, 387 kB): the shipped note
 // schema, the split Vite modules and the CLI's new guards.
 // Bundle raised to 369 kB (368.6 kB): the style digest of a pinned element.
-// Bundle raised to 377 kB (experiments, 374.9 kB): the flag list and the
-// dictation experiment's recogniser and icon.
-// Tarball raised to 416 kB (experiments, 411 kB): the experiment command,
-// its shipped guide, and the bundle growth above in both panel builds.
-// Bundle raised to 397 kB and tarball to 436 kB (style editor experiment,
-// 394 kB): its fields, live preview, the editor's own controls and the
-// lookup of where the page sets a property.
-const BUDGET = { bundle: 397_000, tarball: 436_000 };
+// Bundle raised to 390 kB and tarball to 426 kB (experiments, 389.5 kB and
+// 425.4 kB): the flag list, the experiment command and its shipped guide, and
+// the style editor experiment's fields, live preview, controls and lookup of
+// where the page sets a property, in both panel builds.
+const BUDGET = { bundle: 390_000, tarball: 426_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

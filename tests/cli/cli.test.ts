@@ -1310,38 +1310,45 @@ describe('isotone experiment', () => {
     const io = makeIo(root);
     expect(await runCli(['experiment'], io)).toBe(0);
     // `-`: the project's file says nothing, so the app's own setup decides.
-    expect(io.text.out).toMatch(/^- {4}dictation — A microphone button/m);
-    expect(io.text.out).toContain('may send audio');
+    expect(io.text.out).toMatch(/^- {4}styleEditor — Adjust a pinned element/m);
+    expect(io.text.out).toContain('The preview lives in your browser only');
     expect(io.text.out).toContain('npx isotone experiment on <id>');
+    // An experiment the file does not mention is neither on nor set.
+    const listed = makeIo(root);
+    await runCli(['experiment', '--json'], listed);
+    expect(JSON.parse(listed.text.out)).toContainEqual(expect.objectContaining({ id: 'styleEditor', on: false, set: false }));
   });
 
   it('turns one on and off in the project’s file, in either spelling', async () => {
     const root = tempRepo();
     const on = makeIo(root);
-    expect(await runCli(['experiment', 'on', 'Dictation'], on)).toBe(0);
-    expect(on.text.out).toContain('dictation: on. Reload the page to see it.');
+    expect(await runCli(['experiment', 'on', 'Style-Editor'], on)).toBe(0);
+    expect(on.text.out).toContain('styleEditor: on. Reload the page to see it.');
     expect(on.text.out).toContain(`Saved in ${join('.isotone', 'experiments.json')}`);
-    expect(JSON.parse(readFileSync(join(root, '.isotone/experiments.json'), 'utf8'))).toEqual({ dictation: true });
+    expect(JSON.parse(readFileSync(join(root, '.isotone/experiments.json'), 'utf8'))).toEqual({ styleEditor: true });
     const listed = makeIo(root);
     await runCli(['experiments', '--json'], listed);
     expect(JSON.parse(listed.text.out)).toContainEqual(
-      expect.objectContaining({ id: 'dictation', on: true, set: true, summary: expect.any(String) }),
+      expect.objectContaining({ id: 'styleEditor', on: true, set: true, summary: expect.any(String) }),
     );
-    // An experiment the file does not mention is neither on nor set.
-    expect(JSON.parse(listed.text.out)).toContainEqual(expect.objectContaining({ id: 'styleEditor', on: false, set: false }));
     const off = makeIo(root);
-    expect(await runCli(['experiment', 'off', 'dictation', '--json'], off)).toBe(0);
-    expect(JSON.parse(off.text.out)).toEqual({ id: 'dictation', on: false, enabled: [], file: join(root, '.isotone', 'experiments.json') });
+    expect(await runCli(['experiment', 'off', 'styleEditor', '--json'], off)).toBe(0);
+    expect(JSON.parse(off.text.out)).toEqual({
+      id: 'styleEditor',
+      on: false,
+      enabled: [],
+      file: join(root, '.isotone', 'experiments.json'),
+    });
     const after = makeIo(root);
     await runCli(['experiment'], after);
-    expect(after.text.out).toMatch(/^off {2}dictation/m);
+    expect(after.text.out).toMatch(/^off {2}styleEditor/m);
   });
 
   it('writes beside the notes file when run from a subdirectory', async () => {
     const root = tempRepo();
     writeFileSync(notesAt(root), '[]');
     mkdirSync(join(root, 'src'));
-    expect(await runCli(['experiment', 'on', 'dictation'], makeIo(join(root, 'src')))).toBe(0);
+    expect(await runCli(['experiment', 'on', 'style-editor'], makeIo(join(root, 'src')))).toBe(0);
     expect(existsSync(join(root, '.isotone/experiments.json'))).toBe(true);
     expect(existsSync(join(root, 'src/.isotone'))).toBe(false);
   });
@@ -1349,9 +1356,9 @@ describe('isotone experiment', () => {
   it('refuses an unknown experiment, command or flag, naming what there is', async () => {
     const root = tempRepo();
     for (const [args, message] of [
-      [['experiment', 'on', 'teleport'], 'No experiment called "teleport" in this version. There are: dictation, styleEditor.'],
+      [['experiment', 'on', 'teleport'], 'No experiment called "teleport" in this version. There is: styleEditor.'],
       [['experiment', 'on', 'style-editor', 'extra'], 'Give one experiment'],
-      [['experiment', 'enable', 'dictation'], 'Unknown experiment command "enable"'],
+      [['experiment', 'enable', 'style-editor'], 'Unknown experiment command "enable"'],
       [['experiment', 'on'], 'Give one experiment'],
       [['experiment', '--force'], 'Unknown option "--force"'],
     ] as const) {

@@ -5,7 +5,6 @@ import {
   Crosshair,
   Gem,
   MessageSquare,
-  Mic,
   PencilRuler,
   Pipette,
   RotateCcw,
@@ -26,7 +25,6 @@ const icons = {
   check: Check,
   iterate: Gem,
   pipette: Pipette,
-  mic: Mic,
   adjust: PencilRuler,
 };
 

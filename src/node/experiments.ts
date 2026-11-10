@@ -23,7 +23,7 @@ export function readExperiments(root: string): ExperimentFlags {
     const raw = readFileSync(file, 'utf8').trim();
     return raw ? experimentFlags(JSON.parse(raw)) : {};
   } catch (cause) {
-    throw new Error(`Could not read ${file}: it should hold one JSON object such as { "dictation": true }. Fix the file or delete it.`, {
+    throw new Error(`Could not read ${file}: it should hold one JSON object such as { "styleEditor": true }. Fix the file or delete it.`, {
       cause,
     });
   }

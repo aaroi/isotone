@@ -14,8 +14,8 @@ describe('experiments', () => {
   });
 
   it('accepts a flag in code or command-line spelling, and nothing unknown', () => {
-    expect(experimentId('dictation')).toBe('dictation');
-    expect(experimentId(' Dictation ')).toBe('dictation');
+    expect(experimentId('style-editor')).toBe('styleEditor');
+    expect(experimentId(' StyleEditor ')).toBe('styleEditor');
     for (const { id } of EXPERIMENTS) {
       expect(experimentId(id)).toBe(id);
       expect(experimentId(id.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`))).toBe(id);
@@ -25,11 +25,12 @@ describe('experiments', () => {
   });
 
   it('keeps only known ids with boolean values from untrusted input', () => {
-    expect(experimentFlags({ dictation: true, teleport: true, __proto__: true })).toEqual({ dictation: true });
-    expect(experimentFlags({ dictation: 'yes' })).toEqual({});
-    expect(experimentFlags({ dictation: false })).toEqual({ dictation: false });
-    for (const junk of [null, undefined, 'dictation', ['dictation'], 1]) expect(experimentFlags(junk)).toEqual({});
-    expect(enabledExperiments({ dictation: true })).toEqual(['dictation']);
-    expect(enabledExperiments({ dictation: false })).toEqual([]);
+    expect(experimentFlags({ styleEditor: true, teleport: true, __proto__: true })).toEqual({ styleEditor: true });
+    expect(experimentFlags({ 'style-editor': true })).toEqual({ styleEditor: true });
+    expect(experimentFlags({ styleEditor: 'yes' })).toEqual({});
+    expect(experimentFlags({ styleEditor: false })).toEqual({ styleEditor: false });
+    for (const junk of [null, undefined, 'styleEditor', ['styleEditor'], 1]) expect(experimentFlags(junk)).toEqual({});
+    expect(enabledExperiments({ styleEditor: true })).toEqual(['styleEditor']);
+    expect(enabledExperiments({ styleEditor: false })).toEqual([]);
   });
 });

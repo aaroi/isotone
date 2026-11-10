@@ -194,7 +194,6 @@ export function IsotonePanel({
       floating={floating}
       touch={touch}
       shortcutLabel={shortcutLabel}
-      dictation={experimental?.dictation === true}
       adjust={
         adjust.available ? { open: adjust.open, count: adjust.count, onToggle: toggleAdjust, onReset: () => adjust.reset() } : undefined
       }

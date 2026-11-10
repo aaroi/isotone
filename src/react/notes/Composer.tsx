@@ -3,7 +3,6 @@ import { HINTS } from './hints';
 import { Icon } from '../icons';
 import { fadeIn } from '../motion';
 import { showOverflowTitle } from '../tooltips';
-import { useDictation } from './useDictation';
 import type { ComposerDraft } from './useNoteActions';
 
 interface ComposerProps {
@@ -18,8 +17,6 @@ interface ComposerProps {
   floating: boolean;
   touch: boolean;
   shortcutLabel: string;
-  /** The dictation experiment is on. */
-  dictation?: boolean;
   /** The style editor, when its experiment is on and something is pinned. */
   adjust?: { open: boolean; count: number; onToggle: () => void; onReset: () => void };
   onSend: () => void;
@@ -42,7 +39,6 @@ export const Composer = memo(function Composer({
   floating,
   touch,
   shortcutLabel,
-  dictation = false,
   adjust,
   onSend,
   onCancelEdit,
@@ -54,17 +50,8 @@ export const Composer = memo(function Composer({
   onDonePicking,
 }: ComposerProps) {
   const text = useSyncExternalStore(draft.subscribe, draft.get, draft.get);
-  // Only while the panel is open: a closed composer never holds the microphone.
-  const voice = useDictation(draft, dictation && active);
-  const stopVoice = voice.stop;
-  const said = voice.problem || notice;
   const changes = adjust?.count ?? 0;
-  const hasContext = Boolean(editing || variantTarget || targets.length || said || changes);
-  // A sent note takes the microphone with it; clearing the field by hand does not.
-  const send = () => {
-    stopVoice();
-    onSend();
-  };
+  const hasContext = Boolean(editing || variantTarget || targets.length || notice || changes);
   // Context changes the scroll-through inset; measure again when that changes
   // or a route restores the composer after its DOM was removed.
   // biome-ignore lint/correctness/useExhaustiveDependencies: hasContext changes the CSS inset used by scrollHeight.
@@ -160,7 +147,7 @@ export const Composer = memo(function Composer({
           </span>
         )}
         {/* The context strip is already a polite live region; a nested status would announce twice. */}
-        {said && <p className="isotone-notice">{said}</p>}
+        {notice && <p className="isotone-notice">{notice}</p>}
       </div>
       <div className="isotone-entry">
         <textarea
@@ -176,17 +163,15 @@ export const Composer = memo(function Composer({
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
-              send();
+              onSend();
             }
           }}
           placeholder={
-            voice.listening
-              ? 'Listening…'
-              : changes
-                ? 'Add a note, or just send…'
-                : targets.length || variantTarget
-                  ? 'Feedback on your selection…'
-                  : 'What would you change?'
+            changes
+              ? 'Add a note, or just send…'
+              : targets.length || variantTarget
+                ? 'Feedback on your selection…'
+                : 'What would you change?'
           }
           rows={1}
           className="isotone-textarea"
@@ -210,25 +195,11 @@ export const Composer = memo(function Composer({
               title="Adjust styles · experimental"
               aria-label="Adjust styles"
               aria-pressed={adjust.open}
-              className="isotone-pick isotone-mic isotone-adjust-toggle isotone-icon"
+              className="isotone-pick isotone-adjust-toggle isotone-icon"
               onMouseDown={(e) => e.preventDefault()}
               onClick={adjust.onToggle}
             >
               <Icon name="adjust" size={14} />
-            </button>
-          )}
-          {/* Beside a pin the hint needs the room, unless the microphone is on and needs its off switch. */}
-          {voice.supported && (voice.listening || !(floating && picking)) && (
-            <button
-              type="button"
-              title={voice.listening ? 'Stop dictating' : 'Dictate · experimental'}
-              aria-label="Dictate"
-              aria-pressed={voice.listening}
-              className="isotone-pick isotone-mic isotone-icon"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={voice.toggle}
-            >
-              <Icon name="mic" size={14} />
             </button>
           )}
           {floating && picking && (
@@ -242,7 +213,7 @@ export const Composer = memo(function Composer({
             disabled={!text.trim() && !changes}
             className="isotone-send"
             title={editing ? 'Save edit (Enter)' : 'Send note (Enter)'}
-            onClick={send}
+            onClick={onSend}
           >
             <Icon name="send" size={14} />
           </button>

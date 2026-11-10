@@ -5,10 +5,10 @@
  */
 
 /** Every flag there is. Adding an experiment starts here. */
-export type ExperimentId = 'dictation' | 'styleEditor';
+export type ExperimentId = 'styleEditor';
 
 export interface Experiment {
-  /** The flag: `experimental: { dictation: true }`, `isotone experiment on dictation`. */
+  /** The flag: `experimental: { styleEditor: true }`, `isotone experiment on style-editor`. */
   id: ExperimentId;
   label: string;
   /** One sentence for the person deciding whether to turn it on. */
@@ -19,13 +19,6 @@ export interface Experiment {
 
 /** Every experiment this version knows, in the order `isotone experiment` lists them. */
 export const EXPERIMENTS: readonly Experiment[] = [
-  {
-    id: 'dictation',
-    label: 'Dictation',
-    summary: 'A microphone button in the feedback composer: speak a note instead of typing it.',
-    caveat:
-      'Uses the browser’s speech recognition (Chrome, Edge, Safari with Dictation on), which may send audio to the browser vendor’s service.',
-  },
   {
     id: 'styleEditor',
     label: 'Style editor',
