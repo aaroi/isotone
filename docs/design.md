@@ -260,11 +260,11 @@ a worded key (Done, Make default, a segment, a page chip) to 97%, a swatch to
 94% and a thumbnail to 98%, over 100ms; a held slider knob grows to 112%.
 Reduced motion leaves them all still.
 
-A pointer's pick in a segmented selector or thumbnail grid sends the raised key
-from the old option to the new one in the reflow time: a key of its own
-(`keyTravel.ts`) passes under labels and pictures while the picked option's face
-waits, so text, the default dot and the chevron stay put. Keys, high contrast,
-a change from elsewhere and options of different sizes swap at once. The
+A pointer's pick in a segmented selector or thumbnail grid lands at once, since
+hover already showed where it was going; the option it left fades its raised
+face out in place over 125ms, on a key of its own (`keyFade.ts`) beneath labels
+and pictures. Keys, reduced motion, high contrast and a change from elsewhere
+swap at once. The
 defaults bar crossfades its saved message. A new pin fades in and a reference
 added to the open composer settles in from 96%, over 125ms; pins and chips
 already there when the overlay or composer appears never do. Reduced motion
@@ -320,7 +320,7 @@ Two limits are accepted rather than worked around:
 | `src/react/styles/theme.ts` | Theme resolution, observation and cleanup |
 | `src/react/motion.ts` | Motion timing and work limits |
 | `src/react/dock/viewport.ts` | Small-screen, touch and on-screen keyboard rules |
-| `src/react/dock/useDockMotion.ts`, `src/react/useLayoutMotion.ts`, `src/react/variants/keyTravel.ts` | Measured movement and interruption handling |
+| `src/react/dock/useDockMotion.ts`, `src/react/useLayoutMotion.ts`, `src/react/variants/keyFade.ts` | Measured movement and interruption handling |
 
 To add a control, choose its semantic role first (surface, well, raised action
 or selection) and reuse that recipe and an existing control class. Add a new

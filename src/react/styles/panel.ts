@@ -251,15 +251,12 @@ ${APPEARANCE_CSS}
 .isotone-thumb[aria-checked='true'],
 .isotone-key,
 .isotone-pick[aria-pressed='true'] { background: var(--iso-selected-face); box-shadow: var(--iso-selected-shadow); }
-/* A pointer's pick: the key travels beneath the options (keyTravel.ts) while the picked option's own face waits. */
+/* A pointer's pick: the option it left fades its face out in place (keyFade.ts), beneath the labels. */
 .isotone-key { position: absolute; pointer-events: none; border-radius: 999px; }
-.isotone-segs[data-key='moving'] .isotone-seg[aria-checked='true'] { background: none; box-shadow: none; }
-/* A thumbnail's slot is opaque, so in a grid the key passes over the slots and under their pictures and labels.
-   The picked thumbnail lies above it, open, so its press easing out cannot cover the key's arrival. */
+/* A thumbnail's slot is opaque, so in a grid the fading face lies over the slot and under its picture and label. */
 .isotone-grid { isolation: isolate; }
 .isotone-grid > .isotone-key { z-index: 1; border-radius: 10px; }
 .isotone-thumb img, .isotone-thumb > span, .isotone-thumb .isotone-default-dot { z-index: 1; }
-.isotone-grid[data-key='moving'] .isotone-thumb[aria-checked='true'] { z-index: 1; background: none; box-shadow: none; }
 /* The open tool lifts into a key on the rail's capsule. */
 .isotone-rail-button[aria-expanded='true']::before { background: var(--iso-key-face); box-shadow: var(--iso-key-shadow); }
 .isotone-secondary { padding: 6px 12px; font-size: 11px; font-weight: 500; white-space: nowrap; }
