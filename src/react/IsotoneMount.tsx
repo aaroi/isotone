@@ -126,6 +126,7 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
         variantsEmptyText={opts.variants === 'knobs' ? KNOBS_EMPTY_TEXT : undefined}
         defaultTab={opts.defaultTab}
         shortcut={opts.shortcut}
+        compareShortcut={opts.compareShortcut}
         updateEndpoint={opts.updateEndpoint}
         theme={opts.theme}
         experimental={experimentFlags(opts.experimental)}

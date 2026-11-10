@@ -22,6 +22,7 @@ export function mountModuleSource(
   variants: boolean,
   shortcut?: IsotoneShortcut | false,
   theme?: IsotoneTheme,
+  compareShortcut?: IsotoneShortcut | false,
   experimental: ExperimentFlags = {},
 ): string {
   const config = JSON.stringify({
@@ -29,6 +30,7 @@ export function mountModuleSource(
     updateEndpoint: UPDATE_ENDPOINT,
     key,
     shortcut,
+    compareShortcut,
     theme,
     rule,
     ...(variants ? { variants: 'overlay' } : {}),

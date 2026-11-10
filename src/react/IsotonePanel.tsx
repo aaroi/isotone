@@ -23,6 +23,7 @@ import { useNoteActions } from './notes/useNoteActions';
 import { useNotes } from './notes/useNotes';
 import { useNoteView } from './notes/useNoteView';
 import { refreshSource, useVariantsSnapshot, VariantsPanel } from './variants/VariantsView';
+import { DEFAULT_COMPARE_SHORTCUT, isUnderEscape, useCompareKey } from './variants/useCompare';
 import { useKeyboardInset } from './dock/viewport';
 
 export interface IsotonePanelProps {
@@ -43,6 +44,8 @@ export interface IsotonePanelProps {
   shortcut?: IsotoneShortcut | false;
   /** Experiments to turn on: off by default, and free to change or go away in any release. */
   experimental?: ExperimentFlags;
+  /** Held, shows every selector at its default until released. Default: Backquote. false disables it. */
+  compareShortcut?: IsotoneShortcut | false;
 }
 
 /**
@@ -62,6 +65,7 @@ export function IsotonePanel({
   defaultTab = 'notes',
   shortcut = DEFAULT_SHORTCUT,
   experimental,
+  compareShortcut = DEFAULT_COMPARE_SHORTCUT,
 }: IsotonePanelProps): ReactElement | null {
   // One page, however the URL spells it: `/about/` and `/about?tab=2` are `/about`, as for the CLI.
   const route = normalizeRoute(pageRoute);
@@ -150,6 +154,7 @@ export function IsotonePanel({
     },
   });
   const { instant, touch } = events;
+  useCompareKey(variants, compareShortcut, visible);
   /** Close everything. Focus in the dock goes back to the host control it came from, else the launcher. */
   function closeAll() {
     const inDock = focus.inDock();
@@ -284,6 +289,7 @@ export function IsotonePanel({
             onManage={notesAvailable ? actions.queueRemoval : undefined}
             pendingActions={pendingActions}
             emptyText={variantsEmptyText}
+            compareKey={isUnderEscape(compareShortcut)}
           />
         )}
         {notesAvailable && (

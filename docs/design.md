@@ -60,8 +60,19 @@ and proportions. Panels stay anchored above it; opening one never moves the pill
 or rescales another's text.
 
 The defaults bar sits at the bottom of the variants panel while a pick differs
-from its default: a count and Make default, which files a request and keeps
-every alternative (the count briefly reads “Default request saved”). A small dot
+from its default: a count, Compare and Make default, which files a request and
+keeps every alternative (the count briefly reads “Default request saved”).
+Compare is a quiet text button, never raised: held (pointer, Space or Enter, or
+the page-wide key under Escape, ` or §) it shows every instantly switchable
+selector at its default, the count reads “Showing defaults” (“Showing defaults,
+except Hero and 1 more” when some keep their pick, “Defaults, except Hero +1”
+in a bar under 260px; only the name truncates), the
+selectors that switched show their defaults and ignore presses while still
+scrolling, and `aria-pressed` turns its text to the foreground. A quick click
+reads “Hold to compare” in the count for 1.5s. The switch is instant both ways,
+with no motion. A button hold ends on release, lost capture, leaving the window
+or the panel closing; a key hold works with the panel closed and ends on keyup;
+blur or a hidden tab ends either. A small dot
 marks each source default; a range draws a tick there while the thumb is
 elsewhere. A slider's visible thumb edge sits 6px below its header like other
 controls, and range inputs use block layout.
@@ -276,11 +287,28 @@ spatial movement; hover stays brief. The launcher expands on mouse or
 hovering-pen entry, even where the primary pointer reports coarse; touch opens
 it by tap. The pill's hit surface spans its rim and the gap between icons.
 
-`motion.ts` owns the timings: 200ms entry, 125ms exit and 180ms list reflow, with
+`motion.ts` owns the timings: 200ms entry, 125ms exit, 180ms list reflow and
+150ms for a line of text changing in place, with
 `cubic-bezier(.23,1,.32,1)`. Reuse them rather than adding literals, and do not
 stagger a queue of controls.
 
-Movement uses transforms and opacity through the Web Animations API; text,
+A press answers at once. While pressed, an icon button's glyph scales to 92%,
+a worded key (Done, Make default, a segment, a page chip) to 97%, a swatch to
+94% and a thumbnail to 98%, over 100ms; a held slider knob grows to 112%.
+Reduced motion leaves them all still.
+
+A pointer's pick in a segmented selector or thumbnail grid lands at once, since
+hover already showed where it was going; the option it left fades its raised
+face out in place over 125ms, on a key of its own (`keyFade.ts`) beneath labels
+and pictures. Keys, reduced motion, high contrast and a change from elsewhere
+swap at once. The
+defaults bar crossfades its saved message. A new pin fades in and a reference
+added to the open composer settles in from 96%, over 125ms; pins and chips
+already there when the overlay or composer appears never do. Reduced motion
+keeps their fades.
+
+Movement uses transforms and opacity through the Web Animations API (the
+defaults bar's crossfade also uses a 2px blur); text,
 corners and hit targets keep their size. Read positions before writing styles,
 retarget interrupted movement, cancel on cleanup. Only the pill's own width
 transitions; never animate the size of long lists. Lists above
@@ -329,7 +357,7 @@ Two limits are accepted rather than worked around:
 | `src/react/styles/theme.ts` | Theme resolution, observation and cleanup |
 | `src/react/motion.ts` | Motion timing and work limits |
 | `src/react/dock/viewport.ts` | Small-screen, touch and on-screen keyboard rules |
-| `src/react/dock/useDockMotion.ts`, `src/react/useLayoutMotion.ts` | Measured movement and interruption handling |
+| `src/react/dock/useDockMotion.ts`, `src/react/useLayoutMotion.ts`, `src/react/variants/keyFade.ts` | Measured movement and interruption handling |
 
 To add a control, choose its semantic role first (surface, well, raised action
 or selection) and reuse that recipe and an existing control class. Add a new

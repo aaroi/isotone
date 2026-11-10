@@ -66,6 +66,8 @@ describe('the project’s experiment flags', () => {
 
   it('reaches the panel through the Vite plugin’s mount module, and is absent when nothing is on', () => {
     expect(mountModuleSource({}, '', true)).not.toContain('experimental');
-    expect(mountModuleSource({}, '', true, undefined, undefined, { styleEditor: true })).toContain('"experimental":{"styleEditor":true}');
+    expect(mountModuleSource({}, '', true, undefined, undefined, undefined, { styleEditor: true })).toContain(
+      '"experimental":{"styleEditor":true}',
+    );
   });
 });

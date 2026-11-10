@@ -232,6 +232,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
                 variantsOptions !== null,
                 options.shortcut,
                 options.theme,
+                options.compareShortcut,
                 // Read for each page, so `isotone experiment on <id>` needs a reload, not a restart.
                 resolveExperiments(server.config.root, options.experimental),
               );

@@ -13,6 +13,8 @@ export interface IsotoneViteOptions {
   theme?: IsotoneTheme;
   /** Defaults to Cmd/Ctrl+Shift+Period; customize or disable with false. */
   shortcut?: IsotoneShortcut | false;
+  /** The key held to compare picks with the defaults. Defaults to Backquote; false disables it. */
+  compareShortcut?: IsotoneShortcut | false;
   /** Where notes persist. Relative paths resolve against Vite's `root` (the
    *  directory of the app, whatever the shell's cwd), so a monorepo package
    *  started from the workspace root still writes next to its own config.

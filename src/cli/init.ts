@@ -375,7 +375,9 @@ function printHost(print: Print): void {
   for (const line of HOST_EXAMPLE) print(line ? `  ${line}` : '');
   print();
   print('onChange fires with the full selections after every change; the app renders from');
-  print("them and keeps its own defaults and URL sync. Add endpoint: '/api/isotone/notes'");
+  print('them and keeps its own defaults and URL sync. compare: true lets the reviewer hold');
+  print('Compare to see the defaults: onChange then also gets { preview: true } calls, which');
+  print("it applies but never persists. Add endpoint: '/api/isotone/notes'");
   print('for notes served by the Vite plugin, with isotone({ panel: false }) there to avoid');
   print('a second panel. With `isotone serve`, use the absolute endpoint');
   print("'http://127.0.0.1:4123/api/isotone/notes'. Set defaultTab: 'variants' when");
@@ -530,9 +532,12 @@ const HOST_EXAMPLE = [
   '',
   'const source = createVariantsSource({',
   '  axes,',
-  '  onChange: (selections) => {',
+  '  compare: true, // hold to compare; onChange keeps previews out of the URL',
+  '  onChange: (selections, change) => {',
   "    // selections is { cta: 'join' | 'start' }; render from it.",
   '    document.documentElement.dataset.cta = selections.cta;',
+  '    if (change?.preview) return; // a held Compare: show it, store nothing',
+  '    // Sync the URL or storage here, if the app does.',
   '  },',
   '});',
   '',

@@ -1,7 +1,7 @@
-import { memo, type RefObject, useLayoutEffect, useSyncExternalStore } from 'react';
+import { memo, type RefObject, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { HINTS } from './hints';
 import { Icon } from '../icons';
-import { fadeIn } from '../motion';
+import { fadeIn, settleIn } from '../motion';
 import { showOverflowTitle } from '../tooltips';
 import type { ComposerDraft } from './useNoteActions';
 
@@ -80,6 +80,21 @@ export const Composer = memo(function Composer({
     observer.observe(field);
     return () => observer.disconnect();
   }, [text, active, hasContext, fieldRef]);
+  const chips = useRef<HTMLDivElement>(null);
+  const references = [editing ? 'editing' : '', variantTarget ? 'variant' : '', ...targets.map((t) => `pin:${t.selector}`)]
+    .filter(Boolean)
+    .join('\n');
+  // A reference added while the composer shows settles in; those it mounts with (a restored draft, an
+  // opening panel, a move between the dock and the floating composer) are simply there.
+  const settled = useRef<{ references: Set<string>; active: boolean } | null>(null);
+  useLayoutEffect(() => {
+    const keys = new Set(references.split('\n'));
+    const before = settled.current;
+    settled.current = { references: keys, active };
+    if (!before?.active || !active || !chips.current) return;
+    for (const chip of chips.current.querySelectorAll<HTMLElement>(':scope > [data-reference]'))
+      if (!before.references.has(chip.dataset.reference ?? '')) settleIn(chip, 0.96);
+  }, [references, active]);
   const hints = touch ? 'touch' : 'pointer';
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: This extends the native textarea's pointer area; keyboard users focus the textarea directly.
@@ -99,9 +114,9 @@ export const Composer = memo(function Composer({
           <span>Agent asks</span> {editing.reply.text}
         </p>
       )}
-      <div className="isotone-context" aria-live="polite">
+      <div ref={chips} className="isotone-context" aria-live="polite">
         {editing && (
-          <span className="isotone-chip">
+          <span className="isotone-chip" data-reference="editing">
             Editing note
             <button type="button" aria-label="Cancel edit" title="Cancel edit" onClick={onCancelEdit}>
               <Icon name="close" size={12} />
@@ -109,7 +124,7 @@ export const Composer = memo(function Composer({
           </span>
         )}
         {variantTarget && (
-          <span className="isotone-chip">
+          <span className="isotone-chip" data-reference="variant">
             <Icon name="sliders" size={12} />
             <span onPointerOver={showOverflowTitle}>
               {variantTarget.label}
@@ -123,7 +138,7 @@ export const Composer = memo(function Composer({
           </span>
         )}
         {targets.map((target, index) => (
-          <span key={target.selector} className="isotone-chip">
+          <span key={target.selector} className="isotone-chip" data-reference={`pin:${target.selector}`}>
             <span onPointerOver={showOverflowTitle}>{target.text || target.tag}</span>
             <button
               type="button"

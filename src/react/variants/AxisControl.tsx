@@ -3,6 +3,7 @@ import { formatRangeValue, type VariantAxis, type VariantsSource } from '../../c
 import { Icon } from '../icons';
 import { GRID_COLUMNS } from '../styles/panel';
 import { showOverflowTitle } from '../tooltips';
+import { useKeyFade } from './keyFade';
 import { useSegmentLayout } from './segmentLayout';
 
 export type OpenMenu = (axis: VariantAxis, opener: HTMLButtonElement | null, optionId?: string | null) => void;
@@ -43,6 +44,7 @@ export const AxisControl = memo(function AxisControl({
   const segments = useSegmentLayout<HTMLDivElement>(
     axis.kind === 'range' || axis.kind === 'color' || thumbnails ? '' : axis.options.map((o) => o.label).join('\n'),
   );
+  const leave = useKeyFade(segments, value, axis.kind === 'range' || axis.kind === 'color' ? 0 : axis.options.length);
   const optionFrame = (id: string, optionLabel: string, className: string, child: ReactNode) => (
     <OptionFrame key={id} className={className} label={optionLabel} open={menuFor === id} onOpen={(opener) => onOpenMenu(axis, opener, id)}>
       {child}
@@ -144,7 +146,10 @@ export const AxisControl = memo(function AxisControl({
                 aria-keyshortcuts="Shift+F10"
                 tabIndex={tabbable ? 0 : -1}
                 className={`${thumbnails ? 'isotone-thumb' : 'isotone-seg'}${checked ? ' isotone-seg-on' : ''}${o.id === axis.defaultOption ? ' isotone-is-default' : ''}`}
-                onClick={() => source.setSelection(axis.id, o.id)}
+                onClick={(e) => {
+                  leave(e, o.id);
+                  source.setSelection(axis.id, o.id);
+                }}
               >
                 {thumbnails && <img src={o.image} alt="" />}
                 <span onPointerOver={showOverflowTitle}>{o.label}</span>
