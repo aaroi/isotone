@@ -117,6 +117,40 @@ describe('list motion', () => {
     expect(current.every((animation) => animation.cancel.mock.calls.length === 1)).toBe(true);
   });
 
+  it('does not animate from positions that went stale while the layout settled', async () => {
+    const observers: { run: () => void; disconnect: ReturnType<typeof vi.fn> }[] = [];
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        disconnect = vi.fn();
+        constructor(callback: () => void) {
+          observers.push({ run: callback, disconnect: this.disconnect });
+        }
+        observe() {}
+      },
+    );
+    // How far the rows have drifted since they were rendered, with no change of contents.
+    let drift = 0;
+    offsets.mockImplementation(function (this: HTMLElement) {
+      return Number(this.dataset.top ?? 0) + drift;
+    });
+    await act(async () => root.render(h(List, {})));
+    expect(animate).toHaveBeenCalledTimes(3);
+    // The panel settles after opening: thumbnails size, a row wraps, and every row ends 40px lower.
+    drift = 40;
+    observers.at(-1)?.run();
+    // The first real change (a pick) leaves the rows where they are, so nothing reflows.
+    await act(async () => root.render(h(List, { revision: 0.25 })));
+    expect(animate).toHaveBeenCalledTimes(3);
+    // A later change that does move rows still animates, from where they really were.
+    await act(async () => root.render(h(List, { revision: 12 })));
+    expect(animate).toHaveBeenCalledTimes(6);
+    expect(animate.mock.calls.at(-1)?.[0]).toEqual([{ transform: 'translateY(-11.75px)' }, { transform: 'translateY(0)' }]);
+    // Each measurement replaces its observer, and hiding the list lets go of the last.
+    await act(async () => root.render(h(List, { revision: 12, active: false })));
+    expect(observers.every((observer) => observer.disconnect.mock.calls.length >= 1)).toBe(true);
+  });
+
   it('skips geometry under reduced motion and cancels running animations when it changes', async () => {
     media.matches = true;
     await act(async () => root.render(h(List, {})));

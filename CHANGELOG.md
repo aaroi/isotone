@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **The first pick after opening Variants no longer jolts the list.** The selectors used to jump up and settle back once, on the first option you chose after a reload. The panel was animating from where each selector sat before its layout had settled.
+
 ## 1.3.4
 
 ### Fixed
