@@ -8,12 +8,25 @@ function clearPositions(positions: Map<string, Position>) {
   positions.clear();
 }
 
-/** Reflow small visible lists only when their contents change. Read before writing. */
+/**
+ * Reflow small visible lists only when their contents change. Read before writing.
+ *
+ * Positions are remembered between changes, and a remembered position is only
+ * good while the layout holds still. An item that changes size by itself (a
+ * panel still settling as it opens, a font arriving, a row wrapping) moves
+ * everything below it with no change of contents, so the next real change
+ * would animate from where things used to be: the whole list jolts once. A
+ * resize of any item therefore refreshes what is remembered, without moving
+ * anything.
+ */
 export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: unknown, active = true) {
   const previous = useRef(new Map<string, Position>());
+  const sizes = useRef<ResizeObserver | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: revision signals a content/layout change without measuring on unrelated renders.
   useLayoutEffect(() => {
     const container = ref.current;
+    sizes.current?.disconnect();
+    sizes.current = null;
     const clear = () => clearPositions(previous.current);
     if (!container || !active) {
       clear();
@@ -63,6 +76,16 @@ export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: un
     }
     for (const [key, item] of previous.current) if (!next.has(key)) item.animation?.cancel();
     previous.current = next;
+    if (typeof ResizeObserver === 'undefined') return;
+    // Layout has already run when this is called, so the reads are cheap and nothing is written.
+    const observer = new ResizeObserver(() => {
+      for (const element of elements) {
+        const item = previous.current.get(element.dataset.motionKey ?? '');
+        if (item && element.isConnected) item.top = element.offsetTop;
+      }
+    });
+    for (const element of elements) observer.observe(element);
+    sizes.current = observer;
   }, [ref, revision, active]);
   useLayoutEffect(() => {
     const media = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
@@ -72,6 +95,7 @@ export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: un
     media?.addEventListener('change', changed);
     return () => {
       media?.removeEventListener('change', changed);
+      sizes.current?.disconnect();
       clearPositions(previous.current);
     };
   }, []);
