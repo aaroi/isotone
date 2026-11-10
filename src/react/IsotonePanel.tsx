@@ -1,5 +1,4 @@
 import { FEEDBACK_STORAGE_KEY } from '../core/browser-storage';
-import { type DiagnosticsRecorder, recordDiagnostics } from '../core/diagnostics';
 import type { ExperimentFlags } from '../core/experiments';
 import type { IsotoneStoreConfig } from '../core/types';
 import { isRouteVisible, normalizeRoute, type RouteGateOptions } from '../core/routes';
@@ -85,17 +84,6 @@ export function IsotonePanel({
   useDockMotion(rootRef, visible);
   useKeyboardInset(rootRef, visible);
   const theme = useDockTheme(rootRef, visible, themePreference);
-  // The page's errors and failed requests, kept for the next note while the panel can take one.
-  const diagnostics = useRef<DiagnosticsRecorder | null>(null);
-  useEffect(() => {
-    if (!visible || !notesAvailable) return;
-    const recorder = recordDiagnostics(window, [storeCfg.endpoint ?? undefined, updateEndpoint]);
-    diagnostics.current = recorder;
-    return () => {
-      recorder.stop();
-      diagnostics.current = null;
-    };
-  }, [visible, notesAvailable, storeCfg.endpoint, updateEndpoint]);
   const dockSize = useDockSize(rootRef, `${nsKey}::dock`, { variants: variantsOpen, notes: notesOpen });
   const focus = useDockFocus(rootRef, fieldRef, fabRef, id);
   // The style editor's edits, read when a note is sent; the editor itself needs select mode, set up below.
@@ -108,7 +96,6 @@ export function IsotonePanel({
     write,
     setNotes,
     getPayload,
-    getDiagnostics: () => diagnostics.current?.recent(),
     getStyleEdits: () => styleEdits.current,
     restoreStyleEdits: (edits) => restoreEdits.current(edits),
     update,

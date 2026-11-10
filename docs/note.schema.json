@@ -57,43 +57,6 @@
         "optionId": { "type": "string" }
       }
     },
-    "diagnostics": {
-      "type": "object",
-      "description": "Trouble on the page in the five minutes before the note was written, recorded by the panel: check it first when a note reports a bug.",
-      "additionalProperties": false,
-      "properties": {
-        "errors": {
-          "type": "array",
-          "description": "Uncaught errors and unhandled promise rejections.",
-          "items": {
-            "type": "object",
-            "required": ["message", "at"],
-            "additionalProperties": false,
-            "properties": {
-              "message": { "type": "string" },
-              "source": { "type": "string", "description": "file:line as the browser served it." },
-              "at": { "type": "string", "format": "date-time" },
-              "count": { "type": "number", "description": "How many times, when more than once." }
-            }
-          }
-        },
-        "requests": {
-          "type": "array",
-          "description": "Requests answered 4xx or 5xx, and images, scripts or stylesheets that did not load. The URL has no query string.",
-          "items": {
-            "type": "object",
-            "required": ["url", "at"],
-            "additionalProperties": false,
-            "properties": {
-              "url": { "type": "string" },
-              "status": { "type": "number" },
-              "at": { "type": "string", "format": "date-time" },
-              "count": { "type": "number" }
-            }
-          }
-        }
-      }
-    },
     "styleEdits": {
       "type": "array",
       "description": "What the reviewer changed with the style editor (an experiment): exact values to make in the source, per pinned element. Follow styleHint.",

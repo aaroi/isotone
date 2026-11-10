@@ -317,7 +317,7 @@ ${APPEARANCE_CSS}
 .isotone-meta .isotone-chip { flex: 0 1 auto; min-width: 0; height: 18px; padding: 0 7px; font-size: 10px; }
 /* A lone reference gets all available space; multiple references share the row. */
 .isotone-meta .isotone-chip:not(:only-child) { max-width: 140px; }
-/* A count of page errors is short and says nothing cut off. */
+/* A count of style changes is short and says nothing cut off. */
 .isotone-meta .isotone-chip[data-whole] { flex: none; max-width: none; }
 /* The corner action floats outside the text column; its 24px hit target
    surrounds a 16px face without reserving trailing space in every row. */

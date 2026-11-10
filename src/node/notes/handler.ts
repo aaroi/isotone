@@ -13,7 +13,7 @@ import { LockBusyError, SERVER_LOCK_WAIT_MS, withFileLock } from '../fs/lock';
 import { type HandlerRequest, type HandlerResponse, jsonResponse } from '../http';
 import { notesProjectRoot, updateRequestOf } from '../update/request';
 import { noteFingerprint, notesRevision, readNotes, replyView, type StoredNote, writeNotes } from './store';
-import { diagnosticsOf, elementFields, elementOf, removalOf, variantOf, viewportOf, withinPayloadCap } from './validate';
+import { elementFields, elementOf, removalOf, variantOf, viewportOf, withinPayloadCap } from './validate';
 
 /** The endpoint path the client calls. */
 export const NOTES_ENDPOINT = '/api/isotone/notes';
@@ -93,7 +93,6 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
       variant?: unknown;
       variantAction?: unknown;
       createdAt?: unknown;
-      diagnostics?: unknown;
       styleEdits?: unknown;
     };
     // A body's `update` is never read: only the update endpoint writes one,
@@ -131,8 +130,6 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     const variant = body.variant === undefined ? undefined : variantOf(body.variant);
     const variantAction = removalOf(body.variantAction);
     if (body.variantAction !== undefined && !variantAction) return json(400, { error: 'Invalid variant action' });
-    // Recorded once, with the note: an edit says nothing new about the page then.
-    const diagnostics = diagnosticsOf(body.diagnostics);
     if (body.styleEdits !== undefined && !Array.isArray(body.styleEdits)) return json(400, { error: 'styleEdits must be a list' });
     // Omitted keeps what the note has; a list replaces it, and an empty one removes it.
     const styleEdits = styleEditsOf(body.styleEdits);
@@ -214,7 +211,6 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
       ...(elements !== undefined ? { elements, element: elements[0] ?? null } : {}),
       ...(variant !== undefined ? { variant } : {}),
       ...(variantAction ? { variantAction } : {}),
-      ...(diagnostics ? { diagnostics } : {}),
       ...(styleEdits ? { styleEdits } : {}),
     });
     writeNotes(file, notes);
@@ -237,7 +233,6 @@ function readNotesAt(file: string, rev: string): StoredNote[] {
 
 function toItem(n: StoredNote, root: string) {
   const update = updateRequestOf(n.update, { root });
-  const diagnostics = diagnosticsOf(n.diagnostics);
   const item: {
     id: string;
     route: string;
@@ -267,7 +262,6 @@ function toItem(n: StoredNote, root: string) {
     ...(n.elements !== undefined ? { elements: n.elements } : {}),
     ...(n.variant !== undefined ? { variant: n.variant } : {}),
     ...(n.variantAction !== undefined ? { variantAction: n.variantAction } : {}),
-    ...(diagnostics ? { diagnostics } : {}),
     ...(styleEditsOf(n.styleEdits) ? { styleEdits: styleEditsOf(n.styleEdits) } : {}),
     // Only the server writes an update request; a malformed one, or one whose
     // directory is outside the project, is not shown.

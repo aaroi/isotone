@@ -2,7 +2,7 @@ import { type Dispatch, type SetStateAction, useCallback, useMemo, useRef, useSt
 import { createNoteId } from '../../core/id';
 import { MAX_FEEDBACK_LENGTH } from '../../core/limits';
 import type { StyleEdit } from '../../core/style-edits';
-import type { IsotoneElement, IsotoneNote, NoteDiagnostics, VariantReference } from '../../core/types';
+import type { IsotoneElement, IsotoneNote, VariantReference } from '../../core/types';
 import type { VariantAction } from '../../core/variants';
 import type { UpdateMode } from '../dock/useDockMode';
 import { createDraftText, type DraftText, useDraft } from './useDraft';
@@ -18,8 +18,6 @@ interface NoteActionsOptions {
   write: Notes['write'];
   setNotes: Dispatch<SetStateAction<IsotoneNote[]>>;
   getPayload?: () => unknown;
-  /** The page's recent errors and failed requests, for a new note. */
-  getDiagnostics?: () => NoteDiagnostics | undefined;
   /** What the style editor holds for the pinned elements; sent with the note, which may then have no text of its own. */
   getStyleEdits?: () => StyleEdit[];
   /** Hand edits back to the style editor: a saved note's when it is edited, or those of a note that could not be saved. */
@@ -65,7 +63,6 @@ export function useNoteActions({
   write,
   setNotes,
   getPayload,
-  getDiagnostics,
   getStyleEdits,
   restoreStyleEdits,
   update,
@@ -77,8 +74,8 @@ export function useNoteActions({
   const [editing, setEditing] = useState<IsotoneNote | null>(null);
   const [notice, setNotice] = useState('');
   // Handlers read the current render here, so they stay stable and memoized children skip unrelated renders.
-  const latest = useRef({ route, getPayload, getDiagnostics, getStyleEdits, restoreStyleEdits, targets, variantTarget, editing });
-  latest.current = { route, getPayload, getDiagnostics, getStyleEdits, restoreStyleEdits, targets, variantTarget, editing };
+  const latest = useRef({ route, getPayload, getStyleEdits, restoreStyleEdits, targets, variantTarget, editing });
+  latest.current = { route, getPayload, getStyleEdits, restoreStyleEdits, targets, variantTarget, editing };
   /** Saves in flight, by the temporary id of their optimistic note. */
   const saving = useRef(new Map<string, Promise<string>>());
 
@@ -99,13 +96,11 @@ export function useNoteActions({
       setNotice(`Feedback must be at most ${MAX_FEEDBACK_LENGTH} characters.`);
       return;
     }
-    const { editing: previous, targets, variantTarget, route, getPayload, getDiagnostics } = latest.current;
-    const diagnostics = previous ? undefined : getDiagnostics?.();
+    const { editing: previous, targets, variantTarget, route, getPayload } = latest.current;
     const context = {
       elements: targets,
       variant: variantTarget,
       ...(previous?.variantAction ? { variantAction: previous.variantAction } : {}),
-      ...(diagnostics ? { diagnostics } : {}),
       // An edited note's changes are the editor's as it stands now, an emptied list included.
       ...(styleEdits.length || latest.current.editing?.styleEdits ? { styleEdits } : {}),
     };

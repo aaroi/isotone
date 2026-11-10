@@ -12,8 +12,7 @@ import { npm } from './npm.mjs';
 // raise a budget in the same change that needs it, and say why.
 // Tarball raised to 405 kB (round 2 integration, 387 kB): the shipped note
 // schema, the split Vite modules and the CLI's new guards.
-// Bundle raised to 373 kB (note evidence, 371.7 kB): the style digest of a
-// pinned element and the recorder of page errors and failed requests.
+// Bundle raised to 369 kB (368.6 kB): the style digest of a pinned element.
 // Bundle raised to 377 kB (experiments, 374.9 kB): the flag list and the
 // dictation experiment's recogniser and icon.
 // Tarball raised to 416 kB (experiments, 411 kB): the experiment command,

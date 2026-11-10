@@ -23,16 +23,6 @@ function Reply({ note }: { note: IsotoneNote }) {
   );
 }
 
-/**
- * What the panel recorded about the page with the note, as one short tag, so
- * the reviewer knows the agent gets it too. One count however it is made up:
- * the row has room for a few characters, never for two tags.
- */
-function troubleTags(note: IsotoneNote): { key: string; label: string; whole: true }[] {
-  const count = (note.diagnostics?.errors?.length ?? 0) + (note.diagnostics?.requests?.length ?? 0);
-  return count ? [{ key: 'diagnostics', label: `${count} issue${count === 1 ? '' : 's'}`, whole: true }] : [];
-}
-
 /** The style editor's changes on the note, as one short count. */
 function changeTags(note: IsotoneNote): { key: string; label: string; whole: true }[] {
   const count = countStyleChanges(note.styleEdits);
@@ -66,7 +56,6 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
         : []),
       ...elements.map((element) => ({ key: element.selector, label: element.text || element.tag })),
       ...changeTags(note),
-      ...troubleTags(note),
     ];
     return (
       <>
