@@ -7,6 +7,12 @@
 - **Buttons with words answer a press like the icon buttons do.** Done, Make default, segments and page chips sink slightly while pressed.
 - **Picks and pins settle instead of snapping.** Clicking another segment or thumbnail lands on it at once while the one you left fades out, swatches and thumbnails sink under a press, a held slider knob grows, the saved message in the defaults bar crossfades, and new pins and composer references settle into place. Keyboard changes stay instant.
 
+## 1.3.5
+
+### Fixed
+
+- **The first pick after opening Variants no longer jolts the list.** The selectors used to jump up and settle back once, on the first option you chose after a reload. The panel was animating from where each selector sat before its layout had settled.
+
 ## 1.3.4
 
 ### Fixed
