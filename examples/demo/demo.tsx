@@ -170,6 +170,9 @@ if (worst) {
 const source = createVariantsSource({
   axes,
   selections: { spacing: 'comfy' },
+  // Hold to compare. onChange applies every call; it stores nothing, so a preview (change.preview) needs no
+  // special case here. An app that keeps picks in its URL or storage skips that step when change.preview is true.
+  compare: true,
   onChange(selections) {
     document.documentElement.dataset.spacing = selections.spacing;
     document.documentElement.dataset.layout = selections.layout;
@@ -780,6 +783,7 @@ function Demo() {
               Notes sent here go to a temporary file and a pretend agent picks each one up a moment later. New project opens on press and on{' '}
               <kbd>/</kbd>, like many app menus: in select mode a click pins it without opening it, and <kbd>/</kbd> typed in the composer
               stays there. Shift-click to use the page while selecting. Selectors take arrow keys, and Shift+F10 opens an option's actions.
+              Hold the key under Escape (<kbd>`</kbd> or <kbd>§</kbd>) to see the page at its defaults.
             </p>
           )}
         </main>

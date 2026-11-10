@@ -21,12 +21,14 @@ export function mountModuleSource(
   variants: boolean,
   shortcut?: IsotoneShortcut | false,
   theme?: IsotoneTheme,
+  compareShortcut?: IsotoneShortcut | false,
 ): string {
   const config = JSON.stringify({
     endpoint: NOTES_ENDPOINT,
     updateEndpoint: UPDATE_ENDPOINT,
     key,
     shortcut,
+    compareShortcut,
     theme,
     rule,
     ...(variants ? { variants: 'overlay' } : {}),

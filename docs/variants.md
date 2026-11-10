@@ -197,6 +197,21 @@ or removing it. Keep, remove and **Make default** file a request note
 ([what each asks](agent-guide.md#requests-from-the-variants-panel)); the
 selector stays as it is until the agent changes the project.
 
+### Hold to compare
+
+While a pick differs from its default, hold **Compare** beside Make default, or
+the key under Escape (` or §) with the panel open or closed, to see the page
+with every selector at its default; let go and the picks come back as they were.
+Nothing is saved, filed or sent to the server, and the selectors that switched
+show their defaults until you let go. Only what switches instantly takes part:
+knobs, file variants switched live whose exported hooks and values match, and
+host selectors whose source [opts in](#a-host-source). A selector that needs the
+dev server or a reload keeps its pick: the bar reads “Showing defaults, except
+Hero” and Compare's tooltip says why. A quick click only says “Hold to compare”.
+`compareShortcut` on `isotone()` or `mountIsotone` picks another key
+(`{ code: 'KeyC', alt: true }`; `code` may list several), or `false` turns the
+key off.
+
 ## A host source
 
 A host with its own variant system hands the panel a `VariantsSource`. The panel
@@ -211,8 +226,11 @@ const source = createVariantsSource({
     id: 'card-radius', label: 'Card radius', kind: 'range',
     min: 0, max: 24, step: 1, defaultValue: 11, unit: 'px',
   }],
-  onChange: (selections) => {
+  compare: true, // onChange below keeps previews out of the URL
+  onChange: (selections, change) => {
     document.documentElement.style.setProperty('--card-radius', `${selections['card-radius']}px`);
+    if (change?.preview) return; // a held Compare: show it, store nothing
+    // Sync the URL or storage here, if the app does.
   },
 });
 mountIsotone({ variants: source, defaultTab: 'variants' });
@@ -223,14 +241,25 @@ mountIsotone({ variants: source, defaultTab: 'variants' });
 ```
 
 `selections` maps each axis id to a string; a range's value is a numeric string,
-and `onChange` must apply it to the app's state or styles. The axis types
+and `onChange` must apply it to the app's state or styles. With `compare: true`
+the panel offers [Compare](#hold-to-compare) for these selectors: while the
+reviewer holds it, `onChange` gets the defaults with `{ preview: true }` as its
+second argument, then the picks with `{ preview: false }`. Apply both, but keep
+a preview out of the URL, storage and any server. Without `compare: true` the
+source has no preview and Compare leaves its selectors out. The axis types
 (`VariantAxis` and the select, range and colour axes) come from `isotone/core`.
 
 A host that manages its own definitions can use the source's `manage(action)`:
 its `onManage(axes, selections, action)` callback persists edited definitions or
 rejects to leave them unchanged (filing a note never calls it). A custom source
 can expose `getError(): string | null`, notifying subscribers on change, to show
-load or update failures in the panel.
+load or update failures in the panel. To offer Compare, a custom source
+implements `preview(selections)`: show those axes' values over the stored ones
+without storing or notifying, and `preview(null)` shows the stored ones again.
+It may return the axis ids it showed, when it could not show them all. An
+optional `canPreview(axisId)` returns `true`, or `false` or a reason
+(`'switches by reloading the page'`) for an axis that cannot switch at once.
+Without `preview` the panel offers no Compare.
 
 ## How switching works
 

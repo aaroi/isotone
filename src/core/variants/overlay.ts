@@ -321,6 +321,11 @@ export interface LiveVariantSelection {
   select(next: string[]): boolean;
   subscribe(listener: () => void): () => void;
   reload(): void;
+  /** Whether switching to `next` reloads the page. */
+  needsReload?(next: string[]): boolean;
+  /** Show `next` in this tab for a moment, outside the URL and the server; `null` ends it.
+   *  False, changing nothing, when `next` would need a reload. */
+  preview?(next: string[] | null): boolean;
 }
 
 function pageLiveStore(): LiveVariantSelection | null {
@@ -365,8 +370,20 @@ export function createOverlayVariantsSource(cfg: {
     for (const l of listeners) l();
   };
   const live = cfg.live === undefined ? pageLiveStore() : cfg.live;
-  // The server's default can move the tab too (a CLI `variant use`).
-  live?.subscribe(emit);
+  // The server's default can move the tab too (a CLI `variant use`). A preview changes no selection, so
+  // re-reading every selector for it would only delay the flick.
+  let previewingLive = false;
+  live?.subscribe(() => {
+    if (!previewingLive) emit();
+  });
+  const previewLive = (next: string[] | null): boolean => {
+    previewingLive = true;
+    try {
+      return live?.preview?.(next) === true;
+    } finally {
+      previewingLive = false;
+    }
+  };
   const current = (): string[] => live?.active ?? intended ?? list?.active ?? [];
   const selects = (): SelectVariantAxis[] => (list ? overlayAxes(list, cfg.getRoute()) : []);
   const knobAxes = (): KnobAxis[] => knobsFor(list?.knobs, cfg.getRoute());
@@ -409,8 +426,15 @@ export function createOverlayVariantsSource(cfg: {
       // Storage full or blocked: the values still apply for this page view.
     }
   };
+  // A hold to compare shows these over the stored values, and stores nothing.
+  let previewing: VariantSelections | null = null;
   const applyKnobs = () => {
-    if (knobRoot) applyKnobValues(list?.knobs ?? [], knobValues, knobRoot);
+    if (knobRoot) applyKnobValues(list?.knobs ?? [], previewing ? { ...knobValues, ...previewing } : knobValues, knobRoot);
+  };
+  /** The active set with the given groups' members taken out: those groups at Default. */
+  const withoutGroups = (axisIds: string[]): string[] => {
+    const members = new Set(selects().flatMap((axis) => (axisIds.includes(axis.id) ? axis.options.map((o) => o.id) : [])));
+    return current().filter((id) => !members.has(id));
   };
   async function drainActivations(): Promise<void> {
     while (intended !== null) {
@@ -497,6 +521,24 @@ export function createOverlayVariantsSource(cfg: {
       emit();
     },
     getAxes: axes,
+    // Knobs are properties on the page, so they switch at once. A file variant does only in live mode,
+    // in this tab, when no export fixed at load differs; otherwise it is a server round trip or a reload.
+    canPreview(axisId) {
+      if (knobAxes().some((k) => k.id === axisId)) return true;
+      if (!selects().some((a) => a.id === axisId)) return false;
+      if (!live?.preview || !live.needsReload) return 'switches through the dev server';
+      return live.needsReload(withoutGroups([axisId])) ? 'switches by reloading the page' : true;
+    },
+    preview(partial) {
+      const knobIds = new Set(knobAxes().map((k) => k.id));
+      previewing = partial && Object.fromEntries(Object.entries(partial).filter(([id]) => knobIds.has(id)));
+      applyKnobs();
+      const groups = partial ? Object.keys(partial).filter((id) => !knobIds.has(id)) : [];
+      // A set the tab cannot show in place (together they would reload) stays on the picks, and says so.
+      const shown = groups.length > 0 && previewLive(withoutGroups(groups));
+      if (partial === null) previewLive(null);
+      return partial ? Object.keys(previewing ?? {}).concat(shown ? groups : []) : undefined;
+    },
     getSelections() {
       const active = new Set(current());
       const picks = Object.fromEntries(

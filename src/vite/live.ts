@@ -39,8 +39,10 @@ export interface LiveConfig {
 /** The store's public surface, also used by the panel's overlay source. */
 export interface LiveStore {
   readonly version: 1;
-  /** The selection this tab shows. */
+  /** The selection this tab has: its URL's, else the server's. */
   readonly active: string[];
+  /** What the tab shows: `active`, or a preview while the reviewer holds Compare. */
+  readonly shown: string[];
   /** The set the server rendered this page with, for hydration. Fixed for
    *  the life of the page. */
   readonly server: string[];
@@ -58,6 +60,12 @@ export interface LiveStore {
    * the new set (an SSR page renders from it).
    */
   select(next: string[]): boolean;
+  /**
+   * Show `next` for a moment without touching `active`, the URL or the
+   * server; `null` shows `active` again. False, changing nothing, when it
+   * would need a reload.
+   */
+  preview(next: string[] | null): boolean;
   /** The server's default changed. Tabs without their own pick follow it. */
   follow(next: string[]): void;
   reload(): void;
@@ -153,6 +161,7 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
   const server = cfg.active.slice();
   let active = fromUrl ?? server.slice();
   let explicit = fromUrl !== null;
+  let previewing: string[] | null = null;
   let reloading = false;
 
   // The first id in the set that has this file, as the server's
@@ -237,6 +246,9 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
     get active() {
       return active;
     },
+    get shown() {
+      return previewing ?? active;
+    },
     get server() {
       return server;
     },
@@ -263,12 +275,25 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
     select(next) {
       if (reloading) return true;
       const reloadNeeded = needsReload(active, next);
+      previewing = null;
       active = next.slice();
       explicit = next.length > 0;
       writeUrl(active);
       if (reloadNeeded) return true;
       emit();
       return false;
+    },
+    preview(next) {
+      if (reloading) return false;
+      if (next === null) {
+        if (previewing === null) return true;
+        previewing = null;
+      } else {
+        if (needsReload(active, next)) return false;
+        previewing = next.slice();
+      }
+      emit();
+      return true;
     },
     follow(next) {
       if (explicit || reloading) return;
@@ -366,7 +391,7 @@ export function liveBinder(
           const render = (props: Record<string, unknown>, ref?: unknown) => {
             const index = React.useSyncExternalStore(
               store.subscribe,
-              () => pick(store.active),
+              () => pick(store.shown),
               () => pick(store.server),
             );
             const component = values[index];
@@ -393,7 +418,7 @@ export function liveBinder(
             Object.defineProperty(wrapper, prop, {
               configurable: true,
               enumerable: true,
-              get: () => (values[pick(store.active)] as Record<string, unknown> | undefined)?.[prop],
+              get: () => (values[pick(store.shown)] as Record<string, unknown> | undefined)?.[prop],
             });
           }
           out[name] = wrapper;
