@@ -5,6 +5,7 @@
 ### Added
 
 - **Hold to compare your picks with the defaults.** In Variants, hold **Compare** beside Make default, or hold the key under Escape (` or §) with the panel open or closed, and the page shows every selector at its default; let go and your picks come back exactly as they were. Nothing is saved or filed, and the selectors show the defaults while you hold. It covers what switches instantly (knobs, live file variants, and host selectors whose `createVariantsSource` sets `compare: true`); a selector left on its pick is named in the bar. `compareShortcut` changes or turns off the key.
+- **A pinned element now tells your agent how it looks.** Each pin records the computed styles that matter (spacing, type size and weight, colours as hex, layout, radius, shadow), so a note like "too tight" or "make this bigger" comes with the values to start from. `npx isotone` prints them on a `styles:` line and `--json` has them under `elements[].styles`.
 
 ## 1.3.4
 

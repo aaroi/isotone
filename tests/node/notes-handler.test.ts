@@ -220,3 +220,26 @@ describe('the viewport', () => {
     expect(readNotes(file).every((n) => !('viewport' in n))).toBe(true);
   });
 });
+
+describe('pinned styles', () => {
+  const post = (file: string, body: Record<string, unknown>) => notesResponse(file, { method: 'POST', url: '/api/notes', body });
+
+  it("keeps a pinned element's styles, bounded, and drops what is not a CSS property", () => {
+    const file = tempFile();
+    post(file, {
+      route: '/',
+      feedback: 'too tight',
+      element: null,
+      elements: [
+        {
+          tag: 'article',
+          text: 'Card',
+          selector: '#card',
+          styles: { padding: '8px 12px', 'font-size': '14px', __proto__x: 'no', 'Not A Property': 'no', gap: 7, color: 'x'.repeat(500) },
+        },
+      ],
+    });
+    const styles = readNotes(file)[0]?.elements?.[0]?.styles;
+    expect(styles).toEqual({ padding: '8px 12px', 'font-size': '14px', color: 'x'.repeat(160) });
+  });
+});

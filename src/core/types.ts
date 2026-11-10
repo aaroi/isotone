@@ -27,6 +27,9 @@ export interface IsotoneElement {
   near?: string;
   /** Where it sat on the page when pinned, in CSS pixels from the document's corner. */
   rect?: { x: number; y: number; w: number; h: number };
+  /** How it looked when pinned: the computed styles that differ from a plain
+   *  box (spacing, type, colours as hex, layout), so "bigger" has a "from". */
+  styles?: Record<string, string>;
 }
 
 /** A durable reference to a selector or one of its options, not a DOM path. */

@@ -70,6 +70,7 @@ const element: Required<IsotoneElement> = {
   within: ['Hero'],
   near: 'Welcome',
   rect: { x: 1, y: 2, w: 3, h: 4 },
+  styles: { 'font-size': '14px', padding: '8px 16px' },
 };
 
 const variant: Required<VariantReference> = { axisId: 'hero', label: 'Hero', optionId: 'left', optionLabel: 'Left', value: '12' };
