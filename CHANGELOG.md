@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Buttons with words answer a press like the icon buttons do.** Done, Make default, segments and page chips sink slightly while pressed.
+
 ## 1.3.4
 
 ### Fixed

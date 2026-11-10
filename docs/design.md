@@ -254,6 +254,10 @@ it by tap. The pill's hit surface spans its rim and the gap between icons.
 `cubic-bezier(.23,1,.32,1)`. Reuse them rather than adding literals, and do not
 stagger a queue of controls.
 
+A press answers at once. While pressed, an icon button's glyph scales to 92%
+and a worded key (Done, Make default, a segment, a page chip) to 97%, over
+100ms. Reduced motion leaves both still.
+
 Movement uses transforms and opacity through the Web Animations API; text,
 corners and hit targets keep their size. Read positions before writing styles,
 retarget interrupted movement, cancel on cleanup. Only the pill's own width
