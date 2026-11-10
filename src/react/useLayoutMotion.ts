@@ -85,6 +85,9 @@ export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: un
       }
     });
     for (const element of elements) observer.observe(element);
+    // The list itself too: a header or a bar that grows beside the rows resizes it and shifts them.
+    // Rows that come and go arrive with a new revision, which measures and observes afresh.
+    observer.observe(container);
     sizes.current = observer;
   }, [ref, revision, active]);
   useLayoutEffect(() => {
