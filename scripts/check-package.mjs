@@ -12,7 +12,9 @@ import { npm } from './npm.mjs';
 // raise a budget in the same change that needs it, and say why.
 // Tarball raised to 405 kB (round 2 integration, 387 kB): the shipped note
 // schema, the split Vite modules and the CLI's new guards.
-const BUDGET = { bundle: 367_000, tarball: 405_000 };
+// Bundle raised to 375 kB (hold to compare, 372 kB): the Compare button, the
+// page-wide key and the previews it switches; 1.3.4 was 366 kB.
+const BUDGET = { bundle: 375_000, tarball: 405_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

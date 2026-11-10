@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **Hold to compare your picks with the defaults.** In Variants, hold **Compare** beside Make default, or hold the **`** key (under Escape) with the panel open or closed, and the page shows every selector at its default; let go and your picks come back exactly as they were. Nothing is saved or filed, and the selectors show the defaults while you hold. It covers what switches instantly (host selectors, knobs and live file variants); `compareShortcut` changes or turns off the key.
+
 ## 1.3.4
 
 ### Fixed

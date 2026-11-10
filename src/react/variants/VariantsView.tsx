@@ -7,6 +7,7 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -15,6 +16,8 @@ import type { VariantReference } from '../../core/types';
 import {
   axisDefault,
   axisSection,
+  compareAxes,
+  compareFor,
   isDirty,
   type VariantAction,
   type VariantAxis,
@@ -33,6 +36,7 @@ import { PanelClose } from '../notes/NotesPanel';
 import { useLayoutMotion } from '../useLayoutMotion';
 import { useRenderLimit } from '../useRenderLimit';
 import { showOverflowTitle } from '../tooltips';
+import { useCompareHeld } from './useCompare';
 
 export function refreshSource(source: VariantsSource): void {
   const candidate = (source as { refresh?: unknown }).refresh;
@@ -131,10 +135,26 @@ export const VariantsView = memo(function VariantsView({
   pendingActions = NO_PENDING_ACTIONS,
   emptyText = DEFAULT_EMPTY_TEXT,
 }: VariantsViewProps) {
-  const { selections, shown, sections, names, error: sourceError } = useVariantsSnapshot(source);
+  const { selections: stored, shown, sections, names, error: sourceError } = useVariantsSnapshot(source);
   useEffect(() => {
     if (active) refreshSource(source);
   }, [active, source]);
+  // While the reviewer holds Compare the controls show what the page shows, and take no picks.
+  const held = useCompareHeld(source);
+  const selections = useMemo(() => (held ? { ...stored, ...held } : stored), [stored, held]);
+  const holding = useRef(false);
+  holding.current = held !== null;
+  const guarded = useMemo<VariantsSource>(
+    () =>
+      Object.create(source, {
+        setSelection: {
+          value: (axisId: string, value: string) => {
+            if (!holding.current) source.setSelection(axisId, value);
+          },
+        },
+      }),
+    [source],
+  );
   // A closed panel renders no selectors. The body stays one more render after
   // closing, so the dock's exit snapshot still shows them.
   const lingering = useDeferredValue(active);
@@ -234,7 +254,7 @@ export const VariantsView = memo(function VariantsView({
   const renderAxis = ({ axis, label, fullLabel }: { axis: VariantAxis; label: string; fullLabel: string }) => (
     <AxisControl
       key={axis.id}
-      source={source}
+      source={guarded}
       axis={axis}
       label={label}
       fullLabel={fullLabel}
@@ -246,10 +266,11 @@ export const VariantsView = memo(function VariantsView({
     />
   );
   const colourAxis = shown.find((a) => a.id === colourOpen);
-  const dirty = isDirty(shown, selections);
+  const dirty = isDirty(shown, stored);
   // While the bar fades out, it keeps the count it had rather than reading "0 picks".
   const lastCount = useRef(0);
-  if (dirty) lastCount.current = changedCount(shown, selections);
+  if (dirty) lastCount.current = changedCount(shown, stored);
+  const comparable = compareAxes(source, shown, stored);
   const shownCount = lastCount.current;
   // The bar rises over the foot of the list: if it would cover the control just used, bring that control clear of it.
   const touched = useRef<Element | null>(null);
@@ -271,7 +292,7 @@ export const VariantsView = memo(function VariantsView({
   }, [saving]);
 
   return (
-    <div className="isotone-vars" data-saving={saving}>
+    <div className="isotone-vars" data-saving={saving} data-comparing={held !== null}>
       {source.saveDefaults && (
         // Always mounted and floating, so changing a pick never moves the selectors; it fades in once one differs.
         <div className="isotone-panel-head" data-shown={dirty}>
@@ -282,7 +303,13 @@ export const VariantsView = memo(function VariantsView({
             }}
             aria-hidden={!dirty}
           >
-            <DefaultsBar source={source} changed={shownCount} onSaved={onSaved} />
+            <DefaultsBar
+              source={source}
+              changed={shownCount}
+              onSaved={onSaved}
+              compare={active && comparable.ids.length > 0 ? (comparable.partial ? 'partial' : 'all') : null}
+              comparing={held !== null}
+            />
           </div>
         </div>
       )}
@@ -297,6 +324,11 @@ export const VariantsView = memo(function VariantsView({
         }}
         onFocusCapture={(e) => {
           touched.current = e.target as Element;
+        }}
+        onKeyDownCapture={(e) => {
+          if (!holding.current || e.key === 'Tab') return;
+          e.preventDefault();
+          e.stopPropagation();
         }}
       >
         {sourceError && (
@@ -343,7 +375,7 @@ export const VariantsView = memo(function VariantsView({
           popRef={colourPop}
           value={value(colourAxis)}
           label={colourAxis.label}
-          onChange={(hex) => source.setSelection(colourAxis.id, hex)}
+          onChange={(hex) => guarded.setSelection(colourAxis.id, hex)}
           onClose={() => closeColour()}
           style={{ top: colourTop ?? 0, visibility: colourTop === null ? 'hidden' : undefined }}
         />
@@ -351,7 +383,7 @@ export const VariantsView = memo(function VariantsView({
       {menu && menuAxis && (
         <AxisActionsDialog
           key={menu.session}
-          source={source}
+          source={guarded}
           axis={menuAxis}
           name={names.get(menuAxis.id) ?? axisSection(menuAxis)}
           value={value(menuAxis)}
@@ -450,13 +482,27 @@ function changedCount(axes: VariantAxis[], selections: VariantSelections): numbe
  * The page's changed picks and the request to make them the defaults. The
  * other alternatives stay; removing one is its own request.
  */
-function DefaultsBar({ source, changed, onSaved }: { source: VariantsSource; changed: number; onSaved?: () => void }) {
+function DefaultsBar({
+  source,
+  changed,
+  onSaved,
+  compare,
+  comparing,
+}: {
+  source: VariantsSource;
+  changed: number;
+  onSaved?: () => void;
+  /** Whether Compare shows: every changed pick switches instantly, only some do, or none. */
+  compare: 'all' | 'partial' | null;
+  comparing: boolean;
+}) {
   const [state, setState] = useState('');
   const [busy, setBusy] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
   async function run() {
-    if (busy) return;
+    // A hold shows the defaults for a moment; the request is about the picks.
+    if (busy || comparing) return;
     setBusy(true);
     setState('');
     const selections: VariantSelections = { ...source.getSelections() };
@@ -476,8 +522,9 @@ function DefaultsBar({ source, changed, onSaved }: { source: VariantsSource; cha
   return (
     <div className="isotone-save-row" aria-busy={busy}>
       <span className="isotone-save-count" role="status">
-        {state || `${picks} changed`}
+        {state || (comparing ? 'Showing defaults' : `${picks} changed`)}
       </span>
+      {compare && <CompareButton source={source} partial={compare === 'partial'} comparing={comparing} />}
       <button
         type="button"
         className="isotone-save"
@@ -488,5 +535,78 @@ function DefaultsBar({ source, changed, onSaved }: { source: VariantsSource; cha
         Make default
       </button>
     </div>
+  );
+}
+
+/** Keys on the focused button that hold, as a press would. */
+const HOLD_KEYS = new Set([' ', 'Enter']);
+
+/**
+ * Hold to show the defaults; let go to show the picks again. A pointer hold is
+ * captured, so it ends wherever the press ends, and also ends if capture is
+ * lost, the pointer leaves the window, or the button goes away (the panel
+ * closes). Space or Enter held on the button does the same. It never animates:
+ * a flick is for seeing the difference.
+ */
+function CompareButton({ source, partial, comparing }: { source: VariantsSource; partial: boolean; comparing: boolean }) {
+  const compare = compareFor(source);
+  const pointer = useRef<number | null>(null);
+  const release = useCallback(() => {
+    pointer.current = null;
+    compare.end('pointer');
+  }, [compare]);
+  // Whatever happens to the press (released elsewhere, the window left, the button unmounted), the hold ends.
+  useEffect(() => {
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerId === pointer.current) release();
+    };
+    const onOut = (e: PointerEvent) => {
+      if (pointer.current !== null && e.relatedTarget === null && e.pointerType === 'mouse') release();
+    };
+    window.addEventListener('pointerup', onUp, true);
+    window.addEventListener('pointercancel', onUp, true);
+    document.addEventListener('pointerout', onOut, true);
+    return () => {
+      window.removeEventListener('pointerup', onUp, true);
+      window.removeEventListener('pointercancel', onUp, true);
+      document.removeEventListener('pointerout', onOut, true);
+      release();
+      compare.end('button-key');
+    };
+  }, [compare, release]);
+  return (
+    <button
+      type="button"
+      className="isotone-compare"
+      aria-pressed={comparing}
+      title={partial ? 'Hold to show the defaults. Compares what can switch instantly.' : 'Hold to show the defaults'}
+      onPointerDown={(e) => {
+        // A hold ended elsewhere (blur, a hidden tab) leaves no claim on the next press.
+        if (e.button !== 0 || !compare.start('pointer')) return;
+        pointer.current = e.pointerId;
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // No capture (an old engine): the window listeners still end the hold.
+        }
+      }}
+      onPointerUp={release}
+      onPointerCancel={release}
+      onLostPointerCapture={release}
+      onContextMenu={(e) => e.preventDefault()}
+      onKeyDown={(e) => {
+        if (!HOLD_KEYS.has(e.key)) return;
+        e.preventDefault();
+        if (!e.repeat) compare.start('button-key');
+      }}
+      onKeyUp={(e) => {
+        if (!HOLD_KEYS.has(e.key)) return;
+        e.preventDefault();
+        compare.end('button-key');
+      }}
+      onBlur={() => compare.end('button-key')}
+    >
+      Compare
+    </button>
   );
 }

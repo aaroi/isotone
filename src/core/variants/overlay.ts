@@ -321,6 +321,11 @@ export interface LiveVariantSelection {
   select(next: string[]): boolean;
   subscribe(listener: () => void): () => void;
   reload(): void;
+  /** Whether switching to `next` reloads the page. */
+  needsReload?(next: string[]): boolean;
+  /** Show `next` in this tab for a moment, outside the URL and the server; `null` ends it.
+   *  False, changing nothing, when `next` would need a reload. */
+  preview?(next: string[] | null): boolean;
 }
 
 function pageLiveStore(): LiveVariantSelection | null {
@@ -409,8 +414,15 @@ export function createOverlayVariantsSource(cfg: {
       // Storage full or blocked: the values still apply for this page view.
     }
   };
+  // A hold to compare shows these over the stored values, and stores nothing.
+  let previewing: VariantSelections | null = null;
   const applyKnobs = () => {
-    if (knobRoot) applyKnobValues(list?.knobs ?? [], knobValues, knobRoot);
+    if (knobRoot) applyKnobValues(list?.knobs ?? [], previewing ? { ...knobValues, ...previewing } : knobValues, knobRoot);
+  };
+  /** The active set with the given groups' members taken out: those groups at Default. */
+  const withoutGroups = (axisIds: string[]): string[] => {
+    const members = new Set(selects().flatMap((axis) => (axisIds.includes(axis.id) ? axis.options.map((o) => o.id) : [])));
+    return current().filter((id) => !members.has(id));
   };
   async function drainActivations(): Promise<void> {
     while (intended !== null) {
@@ -497,6 +509,21 @@ export function createOverlayVariantsSource(cfg: {
       emit();
     },
     getAxes: axes,
+    // Knobs are properties on the page, so they switch at once. A file variant does only in live mode,
+    // in this tab, when no export fixed at load differs; otherwise it is a server round trip or a reload.
+    canPreview(axisId) {
+      if (knobAxes().some((k) => k.id === axisId)) return true;
+      if (!live?.preview || !live.needsReload || !selects().some((a) => a.id === axisId)) return false;
+      return !live.needsReload(withoutGroups([axisId]));
+    },
+    preview(partial) {
+      const knobIds = new Set(knobAxes().map((k) => k.id));
+      previewing = partial && Object.fromEntries(Object.entries(partial).filter(([id]) => knobIds.has(id)));
+      applyKnobs();
+      if (!live?.preview) return;
+      const groups = partial ? Object.keys(partial).filter((id) => !knobIds.has(id)) : [];
+      live.preview(groups.length > 0 ? withoutGroups(groups) : null);
+    },
     getSelections() {
       const active = new Set(current());
       const picks = Object.fromEntries(

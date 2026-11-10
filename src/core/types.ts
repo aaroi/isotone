@@ -123,6 +123,9 @@ export interface MountIsotoneOptions {
   updateEndpoint?: string;
   /** Defaults to Cmd/Ctrl+Shift+Period. false disables keyboard access. */
   shortcut?: IsotoneShortcut | false;
+  /** Held, shows every selector at its default until released. Defaults to
+   *  Backquote (the key under Escape); false disables it. */
+  compareShortcut?: IsotoneShortcut | false;
   /** The notes endpoint the dev plugin serves (or a framework preset). Omit
    *  it and the panel has no Notes tab: a production host that only wants
    *  variants passes a source and nothing else. */

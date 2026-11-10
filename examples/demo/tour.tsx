@@ -304,7 +304,10 @@ function stepContent(
         body: switched ? (
           <>
             <p>The cards on the page changed. In your own app, this switches the real thing.</p>
-            <p className="tour-hint">Spacing, colour and the sliders below work the same way.</p>
+            <p className="tour-hint">
+              Spacing, colour and the sliders below work the same way. Hold Compare{touch ? '' : ' (or the ` key)'} to see the defaults
+              again.
+            </p>
           </>
         ) : (
           <p>

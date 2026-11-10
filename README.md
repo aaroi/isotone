@@ -87,6 +87,8 @@ prompt. Isotone still never runs the agent; it only hands it the notes.
   Once you're done selecting, **Escape** moves it back into the panel.
 - **Enter** sends a note; **Shift + Enter** adds a newline.
 - Click a saved note to edit it.
+- Hold **`** (the key under Escape) or **Compare** in Variants to see the
+  page with every selector at its default; let go and your picks come back.
 
 ## Updates
 

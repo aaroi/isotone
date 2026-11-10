@@ -84,6 +84,40 @@ describe('the address bar', () => {
   });
 });
 
+describe('a hold to compare', () => {
+  it('shows another set for a moment without touching the URL, the selection or the server', () => {
+    const tab = store('/?v=nav:picker-a');
+    const seen = vi.fn();
+    tab.subscribe(seen);
+    const replace = vi.spyOn(history, 'replaceState');
+    const send = vi.fn();
+    win.__isotoneFetch = send as unknown as typeof fetch;
+    expect(tab.preview([])).toBe(true);
+    expect(tab.shown).toEqual([]);
+    expect(tab.active).toEqual(['picker-a']);
+    expect(tab.explicit).toBe(true);
+    expect(tab.preview(null)).toBe(true);
+    expect(tab.shown).toEqual(['picker-a']);
+    expect(seen).toHaveBeenCalledTimes(2);
+    // Ending a preview that is not on notifies nobody.
+    tab.preview(null);
+    expect(seen).toHaveBeenCalledTimes(2);
+    expect(here()).toBe('/?v=nav:picker-a');
+    expect(replace).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('refuses a set that needs a reload, and a pick ends the preview', () => {
+    const tab = store('/?v=hooks:hook-x,nav:picker-a');
+    tab.register('src/use-label.ts', [null, 'hook-x'], true);
+    expect(tab.preview(['picker-a'])).toBe(false);
+    expect(tab.shown).toEqual(['hook-x', 'picker-a']);
+    expect(tab.preview(['hook-x'])).toBe(true);
+    tab.select(['hook-x', 'picker-b']);
+    expect(tab.shown).toEqual(['hook-x', 'picker-b']);
+  });
+});
+
 describe('following the server', () => {
   it('ignores an unchanged set and reloads when a fixed export changes', () => {
     const reload = stubReload();

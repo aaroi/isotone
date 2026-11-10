@@ -60,8 +60,14 @@ and proportions. Panels stay anchored above it; opening one never moves the pill
 or rescales another's text.
 
 The defaults bar sits at the bottom of the variants panel while a pick differs
-from its default: a count and Make default, which files a request and keeps
-every alternative (the count briefly reads “Default request saved”). A small dot
+from its default: a count, Compare and Make default, which files a request and
+keeps every alternative (the count briefly reads “Default request saved”).
+Compare is a quiet text button, never raised: held (pointer, Space or Enter, or
+the page-wide Backquote key) it shows every instantly switchable selector at its
+default, the count reads “Showing defaults”, the selectors show the defaults and
+take no picks, and `aria-pressed` turns its text to the foreground. The switch
+is instant both ways, with no motion; release, lost capture, blur, a hidden tab
+or closing the panel all end it. A small dot
 marks each source default; a range draws a tick there while the thumb is
 elsewhere. A slider's visible thumb edge sits 6px below its header like other
 controls, and range inputs use block layout.

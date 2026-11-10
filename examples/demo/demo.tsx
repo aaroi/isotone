@@ -780,6 +780,7 @@ function Demo() {
               Notes sent here go to a temporary file and a pretend agent picks each one up a moment later. New project opens on press and on{' '}
               <kbd>/</kbd>, like many app menus: in select mode a click pins it without opening it, and <kbd>/</kbd> typed in the composer
               stays there. Shift-click to use the page while selecting. Selectors take arrow keys, and Shift+F10 opens an option's actions.
+              Hold <kbd>`</kbd> to see the page at its defaults.
             </p>
           )}
         </main>

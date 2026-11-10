@@ -197,6 +197,19 @@ or removing it. Keep, remove and **Make default** file a request note
 ([what each asks](agent-guide.md#requests-from-the-variants-panel)); the
 selector stays as it is until the agent changes the project.
 
+### Hold to compare
+
+While a pick differs from its default, hold **Compare** beside Make default, or
+the **`** key (the one under Escape) with the panel open or closed, to see the
+page with every selector at its default; let go and the picks come back as they
+were. Nothing is saved, filed or sent to the server, and the selectors show the
+defaults until you let go. Only what switches instantly takes part: host
+selectors, knobs, and file variants switched live whose exported hooks and
+values match. A file variant that needs the dev server or a reload keeps its
+pick, and Compare's tooltip says that not everything is compared.
+`compareShortcut` on `isotone()` or `mountIsotone` picks another key
+(`{ code: 'KeyC', alt: true }`), or `false` turns the key off.
+
 ## A host source
 
 A host with its own variant system hands the panel a `VariantsSource`. The panel
@@ -223,14 +236,22 @@ mountIsotone({ variants: source, defaultTab: 'variants' });
 ```
 
 `selections` maps each axis id to a string; a range's value is a numeric string,
-and `onChange` must apply it to the app's state or styles. The axis types
+and `onChange` must apply it to the app's state or styles. While the reviewer
+holds [Compare](#hold-to-compare), `onChange` gets the defaults with
+`{ preview: true }` as its second argument, then the picks with
+`{ preview: false }`: apply both, but keep a preview out of the URL and
+storage. The axis types
 (`VariantAxis` and the select, range and colour axes) come from `isotone/core`.
 
 A host that manages its own definitions can use the source's `manage(action)`:
 its `onManage(axes, selections, action)` callback persists edited definitions or
 rejects to leave them unchanged (filing a note never calls it). A custom source
 can expose `getError(): string | null`, notifying subscribers on change, to show
-load or update failures in the panel.
+load or update failures in the panel. To offer Compare, a custom source
+implements `preview(selections)`: show those axes' values over the stored ones
+without storing or notifying, and `preview(null)` shows the stored ones again.
+An optional `canPreview(axisId)` leaves out an axis that cannot switch at once.
+Without `preview` the panel offers no Compare.
 
 ## How switching works
 

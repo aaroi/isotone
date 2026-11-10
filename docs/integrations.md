@@ -58,6 +58,7 @@ isotone({
   theme: 'auto',
   file: '.isotone/notes.json', // the default
   variants: false, // optional: notes only
+  compareShortcut: false, // optional: no key for hold to compare (default Backquote)
 })
 ```
 
