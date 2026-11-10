@@ -457,14 +457,16 @@ function crossfade(node: HTMLElement | null, before: string) {
   const row = node.parentElement;
   if (!row) return;
   for (const old of row.querySelectorAll('.isotone-save-was')) old.remove();
-  const box = { left: node.offsetLeft, top: node.offsetTop, width: node.offsetWidth };
+  const at = node.getBoundingClientRect();
+  const origin = (node.offsetParent ?? row).getBoundingClientRect();
+  const box = { left: at.left - origin.left, top: at.top - origin.top, width: at.width };
   const was = document.createElement('span');
   was.className = 'isotone-save-count isotone-save-was';
   was.setAttribute('aria-hidden', 'true');
   was.textContent = before;
   Object.assign(was.style, { left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px` });
   node.after(was);
-  const timing = { duration: MOTION.swap, easing: 'ease' };
+  const timing = { duration: MOTION.swap, easing: MOTION.easeOut };
   const out = was.animate(
     [
       { opacity: 1, filter: 'blur(0)' },

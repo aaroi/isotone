@@ -280,7 +280,7 @@ export function PickOverlay({
       if (seen.has(selector) || !kept.has(selector)) continue;
       seen.add(selector);
       const box = boxes.current.get(selector);
-      if (box) settleIn(box, 1.03);
+      if (box) settleIn(box);
     }
   }, [pins, targets]);
 

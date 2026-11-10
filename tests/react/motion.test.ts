@@ -338,10 +338,7 @@ describe('arrivals', () => {
     await act(async () => root.render(overlay([pin('#one'), pin('#two')])));
     expect(animate).toHaveBeenCalledTimes(1);
     expect(settled()[0]).toBe(host.querySelectorAll('.isotone-selected')[1]);
-    expect(animate.mock.calls[0]?.[0]).toEqual([
-      { opacity: 0, transform: 'scale(1.03)' },
-      { opacity: 1, transform: 'none' },
-    ]);
+    expect(animate.mock.calls[0]?.[0]).toEqual([{ opacity: 0 }, { opacity: 1 }]);
     // A re-render, a scroll or a third pin leaves the earlier pins alone.
     await act(async () => root.render(overlay([pin('#one'), pin('#two')])));
     await act(async () => {

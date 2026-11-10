@@ -35,7 +35,7 @@ ${APPEARANCE_CSS}
   --iso-zinc-800: oklch(27.4% .006 286.033); --iso-zinc-900: oklch(21% .006 285.885);
   --iso-zinc-950: oklch(14.1% .005 285.823);
   --iso-ease-out: ${MOTION.easeOut};
-  --iso-fast: ${MOTION.exit}ms; --iso-enter: ${MOTION.enter}ms; --iso-exit: ${MOTION.exit}ms; --iso-swap: ${MOTION.swap}ms;
+  --iso-fast: ${MOTION.exit}ms; --iso-enter: ${MOTION.enter}ms; --iso-exit: ${MOTION.exit}ms;
   --iso-dock-width: min(340px, calc(100vw - 32px));
   /* The height the dock may fill: what is visible (above an on-screen keyboard,
      see viewport.ts) less the safe areas it keeps clear of. */
@@ -243,8 +243,6 @@ ${APPEARANCE_CSS}
 .isotone-save, .isotone-secondary, .isotone-picking button, .isotone-away-action { border-radius: var(--iso-control-radius); color: var(--iso-fg); background: var(--iso-control-face); box-shadow: var(--iso-control-shadow); }
 /* Sending is the one coloured control; with nothing to send it sinks to a quiet face. */
 .isotone-send { border-radius: 999px; color: var(--iso-accent-ink); background: var(--iso-accent); box-shadow: var(--iso-accent-shadow); }
-/* It eases between the quiet and the accent face, on top of the press every button has. */
-.isotone-root .isotone-send { transition: transform var(--iso-fast) var(--iso-ease-out), opacity var(--iso-fast) var(--iso-ease-out), background-color var(--iso-swap) ease, color var(--iso-swap) ease, box-shadow var(--iso-swap) ease; }
 .isotone-root .isotone-send:disabled { opacity: 1; color: var(--iso-faint); background: var(--iso-hover); box-shadow: none; }
 /* Persistent selections share the raised action material, never the recessed
    field/slot material. Keep the face and shadow together in this one rule. */

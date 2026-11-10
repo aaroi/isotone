@@ -251,7 +251,7 @@ hovering-pen entry, even where the primary pointer reports coarse; touch opens
 it by tap. The pill's hit surface spans its rim and the gap between icons.
 
 `motion.ts` owns the timings: 200ms entry, 125ms exit, 180ms list reflow and
-150ms for a colour or line of text changing in place, with
+150ms for a line of text changing in place, with
 `cubic-bezier(.23,1,.32,1)`. Reuse them rather than adding literals, and do not
 stagger a queue of controls.
 
@@ -264,13 +264,14 @@ A pointer's pick in a segmented selector or thumbnail grid sends the raised key
 from the old option to the new one in the reflow time: a key of its own
 (`keyTravel.ts`) passes under labels and pictures while the picked option's face
 waits, so text, the default dot and the chevron stay put. Keys, high contrast,
-a change from elsewhere and options of different sizes swap at once. Send eases
-between its quiet and accent faces. The defaults bar crossfades its saved
-message with a brief 2px blur. A new pin and a reference added to the open
-composer settle in over 125ms, from 103% and 96%; pins and chips already there
-when the overlay or composer appears never do. Reduced motion keeps their fades.
+a change from elsewhere and options of different sizes swap at once. The
+defaults bar crossfades its saved message. A new pin fades in and a reference
+added to the open composer settles in from 96%, over 125ms; pins and chips
+already there when the overlay or composer appears never do. Reduced motion
+keeps their fades.
 
-Movement uses transforms and opacity through the Web Animations API; text,
+Movement uses transforms and opacity through the Web Animations API (the
+defaults bar's crossfade also uses a 2px blur); text,
 corners and hit targets keep their size. Read positions before writing styles,
 retarget interrupted movement, cancel on cleanup. Only the pill's own width
 transitions; never animate the size of long lists. Lists above

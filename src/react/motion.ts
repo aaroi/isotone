@@ -3,7 +3,7 @@ export const MOTION = {
   enter: 200,
   exit: 125,
   reflow: 180,
-  /** A colour or a line of text changing in place. */
+  /** A line of text changing in place. */
   swap: 150,
   easeOut: 'cubic-bezier(.23,1,.32,1)',
 };
@@ -26,14 +26,15 @@ export function stillMotion(node: Element): boolean {
 }
 
 /**
- * Something the reviewer just added settles into place: it fades in from a
- * slightly different scale, set by the caller's `transform-origin`. Reduced
- * motion keeps the fade alone; keyboard use shows it at once.
+ * Something the reviewer just added settles into place: it fades in, from a
+ * slightly different scale when given one (about the caller's
+ * `transform-origin`). Reduced motion keeps the fade alone; keyboard use shows
+ * it at once.
  */
-export function settleIn(node: HTMLElement, scale: number) {
+export function settleIn(node: HTMLElement, scale?: number) {
   if (typeof node.animate !== 'function' || keyboardInstant(node)) return;
   node.animate(
-    reducedMotion()
+    scale === undefined || reducedMotion()
       ? [{ opacity: 0 }, { opacity: 1 }]
       : [
           { opacity: 0, transform: `scale(${scale})` },

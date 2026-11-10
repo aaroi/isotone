@@ -5,7 +5,7 @@
 ### Fixed
 
 - **Buttons with words answer a press like the icon buttons do.** Done, Make default, segments and page chips sink slightly while pressed.
-- **Picks and pins move instead of jumping.** Clicking another segment or thumbnail slides the raised key across to it, swatches and thumbnails sink under a press, a held slider knob grows, Send eases into its colour as you type, and new pins and composer references settle into place. Keyboard changes stay instant.
+- **Picks and pins move instead of jumping.** Clicking another segment or thumbnail slides the raised key across to it, swatches and thumbnails sink under a press, a held slider knob grows, the saved message in the defaults bar crossfades, and new pins and composer references settle into place. Keyboard changes stay instant.
 
 ## 1.3.4
 
