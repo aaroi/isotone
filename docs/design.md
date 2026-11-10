@@ -250,13 +250,25 @@ spatial movement; hover stays brief. The launcher expands on mouse or
 hovering-pen entry, even where the primary pointer reports coarse; touch opens
 it by tap. The pill's hit surface spans its rim and the gap between icons.
 
-`motion.ts` owns the timings: 200ms entry, 125ms exit and 180ms list reflow, with
+`motion.ts` owns the timings: 200ms entry, 125ms exit, 180ms list reflow and
+150ms for a colour or line of text changing in place, with
 `cubic-bezier(.23,1,.32,1)`. Reuse them rather than adding literals, and do not
 stagger a queue of controls.
 
-A press answers at once. While pressed, an icon button's glyph scales to 92%
-and a worded key (Done, Make default, a segment, a page chip) to 97%, over
-100ms. Reduced motion leaves both still.
+A press answers at once. While pressed, an icon button's glyph scales to 92%,
+a worded key (Done, Make default, a segment, a page chip) to 97%, a swatch to
+94% and a thumbnail to 98%, over 100ms; a held slider knob grows to 112%.
+Reduced motion leaves them all still.
+
+A pointer's pick in a segmented selector or thumbnail grid sends the raised key
+from the old option to the new one in the reflow time: a key of its own
+(`keyTravel.ts`) passes under labels and pictures while the picked option's face
+waits, so text, the default dot and the chevron stay put. Keys, high contrast,
+a change from elsewhere and options of different sizes swap at once. Send eases
+between its quiet and accent faces. The defaults bar crossfades its saved
+message with a brief 2px blur. A new pin and a reference added to the open
+composer settle in over 125ms, from 103% and 96%; pins and chips already there
+when the overlay or composer appears never do. Reduced motion keeps their fades.
 
 Movement uses transforms and opacity through the Web Animations API; text,
 corners and hit targets keep their size. Read positions before writing styles,
@@ -307,7 +319,7 @@ Two limits are accepted rather than worked around:
 | `src/react/styles/theme.ts` | Theme resolution, observation and cleanup |
 | `src/react/motion.ts` | Motion timing and work limits |
 | `src/react/dock/viewport.ts` | Small-screen, touch and on-screen keyboard rules |
-| `src/react/dock/useDockMotion.ts`, `src/react/useLayoutMotion.ts` | Measured movement and interruption handling |
+| `src/react/dock/useDockMotion.ts`, `src/react/useLayoutMotion.ts`, `src/react/variants/keyTravel.ts` | Measured movement and interruption handling |
 
 To add a control, choose its semantic role first (surface, well, raised action
 or selection) and reuse that recipe and an existing control class. Add a new

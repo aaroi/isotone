@@ -1,6 +1,17 @@
-import { type Dispatch, type RefObject, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { describeIsotoneElement, elementAsNode, resolveElementSource } from '../../core/element';
 import type { IsotoneElement } from '../../core/types';
+import { settleIn } from '../motion';
 import type { DockFocus } from './useDockFocus';
 import type { Mode, UpdateMode } from './useDockMode';
 import { useFloatingComposer } from './useFloatingComposer';
@@ -256,6 +267,22 @@ export function PickOverlay({
 }) {
   const hoverRef = useRef<HTMLDivElement>(null);
   const [pins, setPins] = useState<(Box & { selector: string })[]>([]);
+  // Pins already drawn, or already pinned when the overlay appeared: only a new pin settles in.
+  const shown = useRef<Set<string> | null>(null);
+  shown.current ??= new Set(targets.map((t) => t.selector));
+  const boxes = useRef(new Map<string, HTMLDivElement>());
+  useLayoutEffect(() => {
+    const seen = shown.current;
+    if (!seen) return;
+    const kept = new Set(targets.map((t) => t.selector));
+    for (const selector of seen) if (!kept.has(selector)) seen.delete(selector);
+    for (const { selector } of pins) {
+      if (seen.has(selector) || !kept.has(selector)) continue;
+      seen.add(selector);
+      const box = boxes.current.get(selector);
+      if (box) settleIn(box, 1.03);
+    }
+  }, [pins, targets]);
 
   useEffect(() => {
     let frame: number | undefined;
@@ -329,6 +356,10 @@ export function PickOverlay({
       {pins.map((pin) => (
         <div
           key={pin.selector}
+          ref={(node) => {
+            if (node) boxes.current.set(pin.selector, node);
+            else boxes.current.delete(pin.selector);
+          }}
           data-isotone
           className="isotone-hover isotone-selected"
           style={{ top: pin.top, left: pin.left, width: pin.width, height: pin.height }}

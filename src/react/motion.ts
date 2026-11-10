@@ -3,17 +3,43 @@ export const MOTION = {
   enter: 200,
   exit: 125,
   reflow: 180,
+  /** A colour or a line of text changing in place. */
+  swap: 150,
   easeOut: 'cubic-bezier(.23,1,.32,1)',
 };
 
 // Large review queues stay immediate instead of starting hundreds of animations.
 export const MAX_ANIMATED_ITEMS = 40;
 
+/** The reviewer is using the keyboard: what it changes changes at once. */
+export function keyboardInstant(node: Element): boolean {
+  return Boolean(node.closest('[data-instant="true"]'));
+}
+
+function reducedMotion(): boolean {
+  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 /** Keyboard use and reduced motion make the panel immediate. */
 export function stillMotion(node: Element): boolean {
-  return (
-    Boolean(node.closest('[data-instant="true"]')) ||
-    (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches)
+  return keyboardInstant(node) || reducedMotion();
+}
+
+/**
+ * Something the reviewer just added settles into place: it fades in from a
+ * slightly different scale, set by the caller's `transform-origin`. Reduced
+ * motion keeps the fade alone; keyboard use shows it at once.
+ */
+export function settleIn(node: HTMLElement, scale: number) {
+  if (typeof node.animate !== 'function' || keyboardInstant(node)) return;
+  node.animate(
+    reducedMotion()
+      ? [{ opacity: 0 }, { opacity: 1 }]
+      : [
+          { opacity: 0, transform: `scale(${scale})` },
+          { opacity: 1, transform: 'none' },
+        ],
+    { duration: MOTION.exit, easing: MOTION.easeOut },
   );
 }
 

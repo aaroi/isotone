@@ -1,7 +1,11 @@
-import { act, createElement as h, useRef } from 'react';
+import { act, createElement as h, type MouseEvent, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { IsotoneElement } from '../../src/core/types';
+import { PickOverlay } from '../../src/react/dock/picking';
 import { MAX_ANIMATED_ITEMS } from '../../src/react/motion';
+import { Composer } from '../../src/react/notes/Composer';
+import { useKeyTravel } from '../../src/react/variants/keyTravel';
 import { useDockMotion } from '../../src/react/dock/useDockMotion';
 import { useLayoutMotion } from '../../src/react/useLayoutMotion';
 
@@ -190,5 +194,205 @@ describe('dock motion', () => {
     const calls = animate.mock.calls.length;
     await act(async () => root.render(h(Dock, {})));
     expect(animate).toHaveBeenCalledTimes(calls);
+  });
+});
+
+const OPTIONS = ['a', 'b', 'c'];
+let pickFromElsewhere: (value: string) => void = () => {};
+
+/** A selector: options 100px apart in one row, or `sizes` per option. */
+function Selector({ initial = 'a', sizes = [100, 100, 100] }: { initial?: string; sizes?: number[] }) {
+  const [value, setValue] = useState(initial);
+  pickFromElsewhere = setValue;
+  const ref = useRef<HTMLDivElement>(null);
+  const travel = useKeyTravel(ref, value, OPTIONS.length);
+  return h(
+    'div',
+    { ref, className: 'isotone-segs' },
+    ...OPTIONS.map((id, i) =>
+      h(
+        'div',
+        { key: id, className: 'isotone-opt', 'data-x': i * 100, 'data-width': sizes[i] },
+        h(
+          'button',
+          {
+            type: 'button',
+            role: 'radio',
+            'aria-checked': value === id,
+            onClick: (e: MouseEvent) => {
+              travel(e, id);
+              setValue(id);
+            },
+          },
+          id,
+        ),
+      ),
+    ),
+  );
+}
+
+describe('selection key', () => {
+  let instant: HTMLDivElement;
+  beforeEach(() => {
+    instant = document.createElement('div');
+    instant.dataset.instant = 'false';
+    host.replaceWith(instant);
+    instant.append(host);
+    // An option's frame sits at its data-x; the travelling key wherever a test puts it.
+    rects.mockImplementation(function (this: HTMLElement) {
+      const key = this.classList.contains('isotone-key');
+      const x = key ? Number(this.dataset.at ?? Number.parseFloat(this.style.left)) : Number(this.dataset.x ?? 0);
+      const width = key ? Number.parseFloat(this.style.width) : Number(this.dataset.width ?? 100);
+      return { x, y: 0, left: x, top: 0, width, height: 28, right: x + width, bottom: 28, toJSON: () => ({}) };
+    });
+  });
+  afterEach(() => instant.remove());
+
+  const option = (id: string) => [...host.querySelectorAll('button')].find((b) => b.textContent === id) as HTMLButtonElement;
+  const press = (id: string, detail = 1) =>
+    act(async () => {
+      option(id).dispatchEvent(new MouseEvent('click', { bubbles: true, detail }));
+    });
+  const track = () => host.querySelector<HTMLElement>('.isotone-segs');
+
+  it('stays still on first render and travels from the old option to a pointer pick', async () => {
+    await act(async () => root.render(h(Selector, {})));
+    expect(animate).not.toHaveBeenCalled();
+    await press('c');
+    expect(animate).toHaveBeenCalledTimes(1);
+    expect(animate.mock.calls[0]?.[0]).toEqual([{ transform: 'translate(-200px, 0px)' }, { transform: 'none' }]);
+    const key = host.querySelector<HTMLElement>('.isotone-key');
+    expect(key?.getAttribute('aria-hidden')).toBe('true');
+    expect(key?.style.left).toBe('200px');
+    expect(track()?.firstElementChild).toBe(key);
+    expect(track()?.dataset.key).toBe('moving');
+    await act(async () => animations[0]?.onfinish?.());
+    expect(host.querySelector('.isotone-key')).toBeNull();
+    expect(track()?.dataset.key).toBeUndefined();
+  });
+
+  it('retargets a second pick from where the key is', async () => {
+    await act(async () => root.render(h(Selector, {})));
+    await press('b');
+    const key = host.querySelector<HTMLElement>('.isotone-key') as HTMLElement;
+    key.dataset.at = '40';
+    await press('c');
+    expect(animations[0]?.cancel).toHaveBeenCalled();
+    expect(animate.mock.calls[1]?.[0]).toEqual([{ transform: 'translate(-160px, 0px)' }, { transform: 'none' }]);
+    expect(host.querySelectorAll('.isotone-key')).toHaveLength(1);
+    // The first animation finishing late does not end the second.
+    await act(async () => animations[0]?.onfinish?.());
+    expect(host.querySelector('.isotone-key')).not.toBeNull();
+  });
+
+  it('swaps at once for keys, keyboard mode, reduced motion and options of another size', async () => {
+    await act(async () => root.render(h(Selector, {})));
+    await press('b', 0);
+    instant.dataset.instant = 'true';
+    await press('c');
+    instant.dataset.instant = 'false';
+    media.matches = true;
+    await press('a');
+    media.matches = false;
+    expect(animate).not.toHaveBeenCalled();
+    await act(async () => root.render(h(Selector, { sizes: [100, 140, 100] })));
+    await press('b');
+    expect(animate).not.toHaveBeenCalled();
+    expect(host.querySelector('.isotone-key')).toBeNull();
+  });
+
+  it('does not animate a change from elsewhere, and one cuts a travel short', async () => {
+    await act(async () => root.render(h(Selector, {})));
+    await act(async () => pickFromElsewhere('c'));
+    expect(animate).not.toHaveBeenCalled();
+    await press('a');
+    expect(host.querySelector('.isotone-key')).not.toBeNull();
+    await act(async () => pickFromElsewhere('b'));
+    expect(animations[0]?.cancel).toHaveBeenCalled();
+    expect(host.querySelector('.isotone-key')).toBeNull();
+    expect(track()?.dataset.key).toBeUndefined();
+  });
+});
+
+const pin = (selector: string) => ({ tag: 'div', text: selector, selector }) as IsotoneElement;
+
+describe('arrivals', () => {
+  beforeEach(() => {
+    for (const id of ['one', 'two', 'three']) {
+      const element = document.createElement('div');
+      element.id = id;
+      document.body.append(element);
+    }
+  });
+  afterEach(() => {
+    for (const id of ['one', 'two', 'three']) document.getElementById(id)?.remove();
+  });
+  const settled = () => animate.mock.contexts as HTMLElement[];
+
+  it('settles in only a new pin, never the ones already drawn', async () => {
+    const locate = (selector: string) => document.querySelector(selector);
+    const overlay = (targets: IsotoneElement[]) => h(PickOverlay, { picking: true, targets, locate });
+    await act(async () => root.render(overlay([pin('#one')])));
+    expect(host.querySelectorAll('.isotone-selected')).toHaveLength(1);
+    expect(animate).not.toHaveBeenCalled();
+    await act(async () => root.render(overlay([pin('#one'), pin('#two')])));
+    expect(animate).toHaveBeenCalledTimes(1);
+    expect(settled()[0]).toBe(host.querySelectorAll('.isotone-selected')[1]);
+    expect(animate.mock.calls[0]?.[0]).toEqual([
+      { opacity: 0, transform: 'scale(1.03)' },
+      { opacity: 1, transform: 'none' },
+    ]);
+    // A re-render, a scroll or a third pin leaves the earlier pins alone.
+    await act(async () => root.render(overlay([pin('#one'), pin('#two')])));
+    await act(async () => {
+      window.dispatchEvent(new Event('scroll'));
+      await new Promise((done) => requestAnimationFrame(() => done(null)));
+    });
+    expect(animate).toHaveBeenCalledTimes(1);
+    await act(async () => root.render(overlay([pin('#one'), pin('#two'), pin('#three')])));
+    expect(animate).toHaveBeenCalledTimes(2);
+    expect(settled()[1]).toBe(host.querySelectorAll('.isotone-selected')[2]);
+    // The hover preview never animates.
+    expect(settled()).not.toContain(host.querySelector('.isotone-hover:not(.isotone-selected)'));
+  });
+
+  it('settles in a chip added to the open composer, not chips it mounts with', async () => {
+    const text = { subscribe: () => () => {}, get: () => '', set: () => {} };
+    const composer = (targets: IsotoneElement[], active = true) =>
+      h(Composer, {
+        draft: { text, editing: null, variantTarget: null, targets, notice: '' },
+        fieldRef: { current: null },
+        active,
+        picking: false,
+        pickingWithPanel: false,
+        floating: false,
+        touch: false,
+        shortcutLabel: '',
+        onSend: () => {},
+        onCancelEdit: () => {},
+        onClearVariant: () => {},
+        onUnpin: () => {},
+        onFieldFocus: () => {},
+        onFieldPointerDown: () => {},
+        onTogglePicking: () => {},
+        onDonePicking: () => {},
+      } as unknown as Parameters<typeof Composer>[0]);
+    await act(async () => root.render(composer([pin('#one'), pin('#two')])));
+    expect(animate).not.toHaveBeenCalled();
+    await act(async () => root.render(composer([pin('#one'), pin('#two'), pin('#three')])));
+    expect(animate).toHaveBeenCalledTimes(1);
+    expect(settled()[0]?.textContent).toBe('#three');
+    expect(animate.mock.calls[0]?.[0]).toEqual([
+      { opacity: 0, transform: 'scale(0.96)' },
+      { opacity: 1, transform: 'none' },
+    ]);
+    // Hidden, then opened with a new chip: the panel's own entrance is enough.
+    await act(async () => root.render(composer([pin('#one')], false)));
+    await act(async () => root.render(composer([pin('#one'), pin('#two')], true)));
+    expect(animate).toHaveBeenCalledTimes(1);
+    // Reduced motion keeps the fade alone.
+    media.matches = true;
+    await act(async () => root.render(composer([pin('#one'), pin('#two'), pin('#three')])));
+    expect(animate.mock.calls[1]?.[0]).toEqual([{ opacity: 0 }, { opacity: 1 }]);
   });
 });
