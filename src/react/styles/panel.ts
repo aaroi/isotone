@@ -275,6 +275,14 @@ ${APPEARANCE_CSS}
 .isotone-vars[data-saving='true'] > .isotone-vars-body { scroll-padding-bottom: var(--iso-save-bar-h); }
 .isotone-save-row { position: relative; display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; }
 .isotone-save-count { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--iso-muted); }
+/* "Showing defaults, except <name> and 2 more": only the name gives way. */
+.isotone-save-count:has(.isotone-save-name) { display: flex; gap: .3em; }
+.isotone-save-count > span { flex: none; }
+.isotone-save-count > .isotone-save-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--iso-fg); }
+/* A narrow bar (the default dock, a phone) says the same in fewer words, so the name keeps some room. */
+.isotone-save-count { container-type: inline-size; }
+.isotone-save-count > .isotone-narrow { display: none; }
+@container (max-width: 260px) { .isotone-save-count > .isotone-wide { display: none; } .isotone-save-count > .isotone-narrow { display: inline; } }
 /* The source default, marked where the choice is made rather than only in the actions dialog. */
 .isotone-seg, .isotone-swatch { position: relative; }
 .isotone-default-dot { position: absolute; top: 4px; right: 4px; width: 4px; height: 4px; border-radius: 50%; background: var(--iso-dot); pointer-events: none; }
@@ -512,14 +520,18 @@ ${APPEARANCE_CSS}
 .isotone-root .isotone-update-ask { min-height: 28px; padding: 4px 12px; }
 .isotone-update-requested { min-height: 28px; display: flex; align-items: center; outline-offset: 2px; }
 .isotone-update-actions { display: flex; align-items: center; gap: 2px; margin: -4px 0 -4px -6px; }
-.isotone-root .isotone-update-quiet { padding: 4px 6px; border-radius: 5px; color: var(--iso-muted); font-size: 11px; background: none; box-shadow: none; }
-.isotone-update-quiet[aria-expanded='true'] { color: var(--iso-fg); }
+/* Quiet text buttons: no face, muted text that strengthens on hover, while open or while held. */
+.isotone-root :is(.isotone-update-quiet, .isotone-compare) { padding: 4px 6px; border-radius: 5px; color: var(--iso-muted); font-size: 11px; background: none; box-shadow: none; }
+.isotone-update-quiet[aria-expanded='true'], .isotone-compare[aria-pressed='true'] { color: var(--iso-fg); }
+/* Held, not clicked: a finger's press must not scroll, select text or open a callout. */
+.isotone-compare { position: relative; flex: none; white-space: nowrap; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .isotone-update-actions [role='status'] { min-width: 0; margin-left: auto; color: var(--iso-muted); font-size: 10px; text-align: right; }
 .isotone-update-command { display: grid; gap: 4px; min-width: 0; }
 .isotone-update-path { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--iso-muted); font-size: 10px; }
 .isotone-root .isotone-update-dialog input { width: 100%; padding: 6px 8px; border-radius: 5px; background: var(--iso-well); box-shadow: var(--iso-well-shadow); font-size: 11px; }
 @media (pointer: coarse) { .isotone-root .isotone-update-quiet { padding: 9px 6px; } .isotone-update-actions { margin: -9px 0 -9px -6px; } }
-@media (hover: hover) and (pointer: fine) { .isotone-update-trigger:hover, .isotone-root .isotone-update-quiet:hover { color: var(--iso-fg); } }
+@media (pointer: coarse) { .isotone-compare::after { content: ''; position: absolute; inset: -8px -2px; } }
+@media (hover: hover) and (pointer: fine) { .isotone-update-trigger:hover, .isotone-root :is(.isotone-update-quiet, .isotone-compare):hover { color: var(--iso-fg); } }
 `;
 /**
  * Put the panel's styles in `target`, once. Idempotent: a second call with the

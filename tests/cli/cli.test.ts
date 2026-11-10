@@ -1275,3 +1275,31 @@ describe('variant flags', () => {
     expect(listed.skippedKnobs[0].reason).toContain('min must be below max.');
   });
 });
+
+describe('pinned styles in the listing', () => {
+  it("prints a pin's styles on one line, and keeps them in --json", async () => {
+    const root = tempRepo();
+    writeFileSync(
+      notesAt(root),
+      JSON.stringify([
+        {
+          id: 'styles1',
+          route: '/',
+          feedback: 'too tight',
+          done: false,
+          doneAt: null,
+          createdAt: '2026-01-01T00:00:00Z',
+          element: null,
+          elements: [{ tag: 'button', text: 'Sign up', selector: '#cta', styles: { padding: '8px 16px', color: '#111111' } }],
+        },
+      ]),
+    );
+    const io = makeIo(root);
+    expect(await runCli([], io)).toBe(0);
+    expect(io.text.out).toContain('    styles: padding: 8px 16px; color: #111111');
+    const json = makeIo(root);
+    await runCli(['--json'], json);
+    const [record] = JSON.parse(json.text.out);
+    expect(record.elements[0].styles).toEqual({ padding: '8px 16px', color: '#111111' });
+  });
+});

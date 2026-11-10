@@ -221,7 +221,14 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       const mount =
         options.panel === false
           ? null
-          : mountModuleSource(options.rule ?? {}, options.key ?? '', variantsOptions !== null, options.shortcut, options.theme);
+          : mountModuleSource(
+              options.rule ?? {},
+              options.key ?? '',
+              variantsOptions !== null,
+              options.shortcut,
+              options.theme,
+              options.compareShortcut,
+            );
       servePanel(server.middlewares.use.bind(server.middlewares) as never, mount, liveScript);
     },
   } satisfies Plugin;

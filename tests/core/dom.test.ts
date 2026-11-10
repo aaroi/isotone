@@ -56,3 +56,28 @@ it('keeps the case of SVG tags, so the selector finds the element again', () => 
     expect(document.querySelector(selector)).toBe(target);
   }
 });
+
+it('records the computed styles a painted element differs by, with colours as hex', () => {
+  document.body.innerHTML =
+    '<button style="display: flex; gap: 8px; padding: 8px 16px; font-size: 14px; font-weight: 600; color: rgb(17, 17, 17); background-color: rgb(255, 0, 128); border-radius: 6px; margin: 0px; position: static; opacity: 1">Save</button>';
+  const button = document.querySelector('button') as HTMLElement;
+  button.getBoundingClientRect = () => ({ left: 10, top: 20, width: 80, height: 32 }) as DOMRect;
+  const { styles } = describeIsotoneElement(elementAsNode(button));
+  expect(styles).toMatchObject({
+    display: 'flex',
+    gap: '8px',
+    padding: '8px 16px',
+    'font-size': '14px',
+    'font-weight': '600',
+    color: '#111111',
+    'background-color': '#ff0080',
+    'border-radius': '6px',
+  });
+  // Values that say nothing are left out.
+  for (const name of ['margin', 'position', 'opacity', 'box-shadow', 'z-index']) expect(styles).not.toHaveProperty(name);
+});
+
+it('records no styles for an element that is not painted', () => {
+  document.body.innerHTML = '<p style="font-size: 20px">Hidden</p>';
+  expect(describeIsotoneElement(elementAsNode(document.querySelector('p') as Element))).not.toHaveProperty('styles');
+});

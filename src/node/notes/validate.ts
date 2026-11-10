@@ -58,8 +58,18 @@ function elementContext(value: object): Partial<IsotoneElement> {
   if (rect && typeof rect === 'object' && [rect.x, rect.y, rect.w, rect.h].every((n) => typeof n === 'number' && Number.isFinite(n))) {
     out.rect = { x: rect.x, y: rect.y, w: rect.w, h: rect.h } as NonNullable<IsotoneElement['rect']>;
   }
+  if (v.styles && typeof v.styles === 'object' && !Array.isArray(v.styles)) {
+    const entries = Object.entries(v.styles)
+      .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1] !== '' && STYLE_NAME.test(entry[0]))
+      .slice(0, 32)
+      .map(([name, text]): [string, string] => [name, cap(text, 160)]);
+    if (entries.length) out.styles = Object.fromEntries(entries);
+  }
   return out;
 }
+
+/** A CSS property name: nothing else is a key of `styles`. */
+const STYLE_NAME = /^[a-z][a-z-]{0,39}$/;
 
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
