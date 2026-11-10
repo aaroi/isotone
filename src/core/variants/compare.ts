@@ -75,7 +75,7 @@ export function compareFor(source: VariantsSource): VariantsCompare {
       for (const axis of axes) if (ids.includes(axis.id)) defaults[axis.id] = axisDefault(axis);
       let shownIds: string[] | undefined;
       try {
-        shownIds = source.preview(defaults);
+        shownIds = source.preview(defaults) ?? undefined;
       } catch {
         return false;
       }

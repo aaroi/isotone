@@ -38,7 +38,7 @@ export interface VariantsSource {
    * leaves `getSelections` as it was. Without it the panel offers no compare.
    * It may return the axis ids it showed, when it could not show them all.
    */
-  preview?: (selections: VariantSelections | null) => string[] | undefined;
+  preview?: (selections: VariantSelections | null) => string[] | void;
   /**
    * Optional: whether `preview` can show this axis instantly, in the page:
    * `true`, else `false` or why not, as a phrase ("switches by reloading the
