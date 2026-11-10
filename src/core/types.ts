@@ -109,8 +109,9 @@ export interface IsotoneStoreConfig {
 export type IsotoneTheme = 'auto' | 'light' | 'dark' | 'system';
 
 export interface IsotoneShortcut {
-  /** Physical key code, stable across keyboard layouts. Default: Period. */
-  code: string;
+  /** Physical key code (`KeyboardEvent.code`), stable across keyboard layouts,
+   *  or several that all count. Default: Period. */
+  code: string | string[];
   mod?: boolean;
   shift?: boolean;
   alt?: boolean;

@@ -36,26 +36,35 @@ export interface VariantsSource {
    * the page for a moment on top of the stored ones, and `null` to show the
    * stored ones again. A preview stores nothing, notifies no subscriber and
    * leaves `getSelections` as it was. Without it the panel offers no compare.
+   * It may return the axis ids it showed, when it could not show them all.
    */
-  preview?: (selections: VariantSelections | null) => void;
-  /** Optional: whether `preview` can show this axis instantly, in the page.
-   *  Absent, every axis can. */
-  canPreview?: (axisId: string) => boolean;
+  preview?: (selections: VariantSelections | null) => string[] | undefined;
+  /**
+   * Optional: whether `preview` can show this axis instantly, in the page:
+   * `true`, else `false` or why not, as a phrase ("switches by reloading the
+   * page"). Absent, every axis can.
+   */
+  canPreview?: (axisId: string) => boolean | string;
 }
 
 /**
  * A `VariantsSource` over plain state, for hosts that just want to hand the
  * panel an axes array and be told when a selection changes. Handles
  * subscriptions, validation and defaults. `onChange` fires after every
- * selection or reset with the full selections, and while the reviewer holds
- * Compare, with the defaults and then the picks again (`{ preview: true }`
- * on the first).
+ * selection or reset with the full selections. With `compare: true` it
+ * also fires while the reviewer holds Compare, with the defaults and then the
+ * picks again (`{ preview: true }` on the first).
  */
 export function createVariantsSource(init: {
   axes: VariantAxis[];
   selections?: VariantSelections;
-  /** `preview` is true while the reviewer holds Compare: apply the selections, but keep them out of the URL and storage. */
+  /** `change.preview` is true while the reviewer holds Compare: apply the selections, but keep them out of the URL and storage. */
   onChange?: (selections: VariantSelections, change?: { preview: boolean }) => void;
+  /**
+   * Offer hold to compare. Opt in only when `onChange` applies a
+   * `{ preview: true }` call without persisting it (URL, storage, a server).
+   */
+  compare?: boolean;
   saveDefaults?: VariantsSource['saveDefaults'];
   /** Persist edited definitions in a host's own storage, before notifying. */
   onManage?: (axes: VariantAxis[], selections: VariantSelections, action: VariantAction) => Promise<void> | void;
@@ -131,14 +140,17 @@ export function createVariantsSource(init: {
       selections = picks;
       changed();
     },
-    preview(partial) {
-      const shown = { ...selections };
-      for (const axis of axes) {
-        const value = partial?.[axis.id];
-        if (value !== undefined && isValidSelection(axis, value)) shown[axis.id] = value;
-      }
-      init.onChange?.(shown, { preview: partial !== null });
-    },
+    ...(init.compare && {
+      preview(partial: VariantSelections | null): undefined {
+        const shown = { ...selections };
+        for (const axis of axes) {
+          const value = partial?.[axis.id];
+          if (value !== undefined && isValidSelection(axis, value)) shown[axis.id] = value;
+        }
+        init.onChange?.(shown, { preview: partial !== null });
+        return undefined;
+      },
+    }),
     setSelection(axisId, value) {
       const axis = axes.find((a) => a.id === axisId);
       if (!axis || !isValidSelection(axis, value)) return;

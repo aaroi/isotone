@@ -16,6 +16,7 @@ import type { VariantReference } from '../../core/types';
 import {
   axisDefault,
   axisSection,
+  changedAxes,
   compareAxes,
   compareFor,
   isDirty,
@@ -124,6 +125,8 @@ interface VariantsViewProps {
   pendingActions?: VariantAction[];
   /** What the list says when this page has no selectors. */
   emptyText?: string;
+  /** Whether the key under Escape also holds Compare, for its tooltip. */
+  compareKey?: boolean;
 }
 
 export const VariantsView = memo(function VariantsView({
@@ -134,6 +137,7 @@ export const VariantsView = memo(function VariantsView({
   onManage,
   pendingActions = NO_PENDING_ACTIONS,
   emptyText = DEFAULT_EMPTY_TEXT,
+  compareKey = false,
 }: VariantsViewProps) {
   const { selections: stored, shown, sections, names, error: sourceError } = useVariantsSnapshot(source);
   useEffect(() => {
@@ -269,8 +273,25 @@ export const VariantsView = memo(function VariantsView({
   const dirty = isDirty(shown, stored);
   // While the bar fades out, it keeps the count it had rather than reading "0 picks".
   const lastCount = useRef(0);
-  if (dirty) lastCount.current = changedCount(shown, stored);
+  if (dirty) lastCount.current = changedAxes(shown, stored).length;
   const comparable = compareAxes(source, shown, stored);
+  const shortName = (axis: VariantAxis) => names.get(axis.id)?.label ?? axis.label;
+  // A changed selector that is not part of the hold keeps showing its pick, and the bar names it.
+  const except = held
+    ? changedAxes(shown, stored)
+        .filter((axis) => !(axis.id in held))
+        .map(shortName)
+    : [];
+  const firstSkip = comparable.skipped[0];
+  const compareTitle = [
+    `Hold to show the defaults${compareKey ? ' · or hold the key under Esc' : ''}`,
+    firstSkip &&
+      `${shortName(firstSkip.axis)} ${firstSkip.reason ?? 'cannot switch instantly'}, so it keeps its pick${
+        comparable.skipped.length > 1 ? `, as do ${comparable.skipped.length - 1} more` : ''
+      }.`,
+  ]
+    .filter(Boolean)
+    .join('. ');
   const shownCount = lastCount.current;
   // The bar rises over the foot of the list: if it would cover the control just used, bring that control clear of it.
   const touched = useRef<Element | null>(null);
@@ -307,8 +328,9 @@ export const VariantsView = memo(function VariantsView({
               source={source}
               changed={shownCount}
               onSaved={onSaved}
-              compare={active && comparable.ids.length > 0 ? (comparable.partial ? 'partial' : 'all') : null}
+              compareTitle={active && comparable.ids.length > 0 ? compareTitle : null}
               comparing={held !== null}
+              except={except}
             />
           </div>
         </div>
@@ -325,8 +347,19 @@ export const VariantsView = memo(function VariantsView({
         onFocusCapture={(e) => {
           touched.current = e.target as Element;
         }}
+        // While held, presses do nothing here; scrolling, Tab and Escape (the dock's) still work.
         onKeyDownCapture={(e) => {
-          if (!holding.current || e.key === 'Tab') return;
+          if (!holding.current || e.key === 'Tab' || e.key === 'Escape') return;
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onClickCapture={(e) => {
+          if (!holding.current) return;
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onContextMenuCapture={(e) => {
+          if (!holding.current) return;
           e.preventDefault();
           e.stopPropagation();
         }}
@@ -473,11 +506,6 @@ function SectionBlock({
   );
 }
 
-/** How many visible selectors differ from their defaults. */
-function changedCount(axes: VariantAxis[], selections: VariantSelections): number {
-  return axes.filter((a) => selections[a.id] !== undefined && selections[a.id] !== axisDefault(a)).length;
-}
-
 /**
  * The page's changed picks and the request to make them the defaults. The
  * other alternatives stay; removing one is its own request.
@@ -486,23 +514,34 @@ function DefaultsBar({
   source,
   changed,
   onSaved,
-  compare,
+  compareTitle,
   comparing,
+  except,
 }: {
   source: VariantsSource;
   changed: number;
   onSaved?: () => void;
-  /** Whether Compare shows: every changed pick switches instantly, only some do, or none. */
-  compare: 'all' | 'partial' | null;
+  /** Compare's tooltip, or null when nothing changed can be compared. */
+  compareTitle: string | null;
   comparing: boolean;
+  /** Changed selectors the hold leaves on their pick. */
+  except: string[];
 }) {
   const [state, setState] = useState('');
+  // A quick click looks like nothing happened; say how it works.
+  const [tapped, setTapped] = useState(false);
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(tapTimer.current), []);
+  const onTap = useCallback(() => {
+    setTapped(true);
+    clearTimeout(tapTimer.current);
+    tapTimer.current = setTimeout(() => setTapped(false), 1500);
+  }, []);
   const [busy, setBusy] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
   async function run() {
-    // A hold shows the defaults for a moment; the request is about the picks.
-    if (busy || comparing) return;
+    if (busy) return;
     setBusy(true);
     setState('');
     const selections: VariantSelections = { ...source.getSelections() };
@@ -522,9 +561,30 @@ function DefaultsBar({
   return (
     <div className="isotone-save-row" aria-busy={busy}>
       <span className="isotone-save-count" role="status">
-        {state || (comparing ? 'Showing defaults' : `${picks} changed`)}
+        {state ||
+          (comparing ? (
+            except.length > 0 ? (
+              <>
+                <span className="isotone-wide">Showing defaults, except</span>
+                <span className="isotone-narrow">Defaults, except</span>
+                <span className="isotone-save-name">{except[0]}</span>
+                {except.length > 1 && (
+                  <>
+                    <span className="isotone-wide">and {except.length - 1} more</span>
+                    <span className="isotone-narrow">+{except.length - 1}</span>
+                  </>
+                )}
+              </>
+            ) : (
+              'Showing defaults'
+            )
+          ) : tapped ? (
+            'Hold to compare'
+          ) : (
+            `${picks} changed`
+          ))}
       </span>
-      {compare && <CompareButton source={source} partial={compare === 'partial'} comparing={comparing} />}
+      {compareTitle && <CompareButton source={source} title={compareTitle} comparing={comparing} onTap={onTap} />}
       <button
         type="button"
         className="isotone-save"
@@ -538,6 +598,9 @@ function DefaultsBar({
   );
 }
 
+/** A press released sooner than this was a click, not a hold. */
+const TAP_MS = 250;
+
 /** Keys on the focused button that hold, as a press would. */
 const HOLD_KEYS = new Set([' ', 'Enter']);
 
@@ -548,12 +611,27 @@ const HOLD_KEYS = new Set([' ', 'Enter']);
  * closes). Space or Enter held on the button does the same. It never animates:
  * a flick is for seeing the difference.
  */
-function CompareButton({ source, partial, comparing }: { source: VariantsSource; partial: boolean; comparing: boolean }) {
+function CompareButton({
+  source,
+  title,
+  comparing,
+  onTap,
+}: {
+  source: VariantsSource;
+  title: string;
+  comparing: boolean;
+  onTap: () => void;
+}) {
   const compare = compareFor(source);
   const pointer = useRef<number | null>(null);
+  const since = useRef(0);
+  const tap = useRef(onTap);
+  tap.current = onTap;
   const release = useCallback(() => {
+    const quick = pointer.current !== null && performance.now() - since.current < TAP_MS;
     pointer.current = null;
     compare.end('pointer');
+    if (quick) tap.current();
   }, [compare]);
   // Whatever happens to the press (released elsewhere, the window left, the button unmounted), the hold ends.
   useEffect(() => {
@@ -579,11 +657,12 @@ function CompareButton({ source, partial, comparing }: { source: VariantsSource;
       type="button"
       className="isotone-compare"
       aria-pressed={comparing}
-      title={partial ? 'Hold to show the defaults. Compares what can switch instantly.' : 'Hold to show the defaults'}
+      title={title}
       onPointerDown={(e) => {
         // A hold ended elsewhere (blur, a hidden tab) leaves no claim on the next press.
         if (e.button !== 0 || !compare.start('pointer')) return;
         pointer.current = e.pointerId;
+        since.current = performance.now();
         try {
           e.currentTarget.setPointerCapture(e.pointerId);
         } catch {

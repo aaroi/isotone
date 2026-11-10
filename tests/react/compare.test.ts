@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { VariantAxis } from '../../src/core/variants';
 import { createVariantsSource, IsotonePanel } from '../../src/react/index';
-import { byText, click, container, render, setUpPanelFixture } from '../helpers/panel';
+import { byText, click, container, render, rerender, setUpPanelFixture, unmount } from '../helpers/panel';
 
 setUpPanelFixture();
 
@@ -24,10 +24,18 @@ const AXES: VariantAxis[] = [
   { kind: 'range', id: 'radius', label: 'Radius', min: 0, max: 24, step: 1, defaultValue: 11, unit: 'px' },
 ];
 
+/** The clock a press is timed by: a quick release is a tap, which teaches holding. */
+let now = 0;
+const wait = (ms: number) => {
+  now += ms;
+};
+
 async function panel(selections: Record<string, string> = { layout: 'list' }, props: Record<string, unknown> = {}) {
+  now = 0;
+  vi.spyOn(performance, 'now').mockImplementation(() => now);
   const onChange = vi.fn();
-  const saveDefaults = vi.fn(async () => {});
-  const source = createVariantsSource({ axes: AXES, selections, onChange, saveDefaults });
+  const saveDefaults = vi.fn(async (_selections: Record<string, string>) => {});
+  const source = createVariantsSource({ axes: AXES, selections, onChange, saveDefaults, compare: true });
   await render(createElement(IsotonePanel, { route: '/', store: {}, variants: source, ...props }));
   await click(container.querySelector('.isotone-fab'));
   return { source, onChange, saveDefaults };
@@ -63,7 +71,7 @@ describe('hold to compare', () => {
     if (!button) throw new Error('no Compare button');
     expect(count()).toBe('2 picks changed');
     expect(button.getAttribute('aria-pressed')).toBe('false');
-    expect(button.title).toBe('Hold to show the defaults');
+    expect(button.title).toBe('Hold to show the defaults · or hold the key under Esc');
 
     await pointer('pointerdown', button);
     expect(onChange).toHaveBeenLastCalledWith({ layout: 'grid', radius: '11' }, { preview: true });
@@ -74,18 +82,93 @@ describe('hold to compare', () => {
     expect(checked('List')).toBe('false');
     expect(container.querySelector<HTMLInputElement>('input[type=range]')?.value).toBe('11');
     expect(container.querySelector('.isotone-vars')?.getAttribute('data-comparing')).toBe('true');
-    // Controls take no picks, and Make default asks nothing, while held.
+    // Controls take no picks while held, and Make default files the picks, not what the hold shows.
     await click(byText('List'));
-    await click(byText('Make default'));
-    expect(saveDefaults).not.toHaveBeenCalled();
+    await click(byText('Grid'));
+    await act(async () => {
+      byText('Grid')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+    });
     expect(source.getSelections()).toEqual(before);
+    await click(byText('Make default'));
+    expect(saveDefaults).toHaveBeenLastCalledWith(before);
 
+    wait(400);
     await pointer('pointerup', button);
     expect(onChange).toHaveBeenLastCalledWith(before, { preview: false });
     expect(button.getAttribute('aria-pressed')).toBe('false');
-    expect(count()).toBe('2 picks changed');
+    expect(count()).toBe('Default request saved');
     expect(checked('List')).toBe('true');
     expect(source.getSelections()).toEqual(before);
+    await click(byText('Make default'));
+    expect(saveDefaults).toHaveBeenLastCalledWith(before);
+  });
+
+  it('teaches holding after a quick click, without changing the label', async () => {
+    await panel();
+    const button = compareButton() as HTMLButtonElement;
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    await pointer('pointerdown', button);
+    wait(100);
+    await pointer('pointerup', button);
+    expect(count()).toBe('Hold to compare');
+    expect(container.querySelector('.isotone-save-count')?.getAttribute('role')).toBe('status');
+    expect(button.textContent).toBe('Compare');
+    await act(async () => {
+      vi.advanceTimersByTime(1600);
+    });
+    expect(count()).toBe('1 pick changed');
+    // A real hold says nothing afterwards.
+    await pointer('pointerdown', button);
+    wait(600);
+    await pointer('pointerup', button);
+    expect(count()).toBe('1 pick changed');
+  });
+
+  it('keeps an open colour popover and action dialog through a hold, and lets Escape reach the dock', async () => {
+    const axes: VariantAxis[] = [
+      ...AXES,
+      {
+        kind: 'color',
+        id: 'accent',
+        label: 'Accent',
+        defaultColor: '#2f6f4e',
+        swatches: [{ id: 'clay', label: 'Clay', value: '#b4532a' }],
+      },
+    ];
+    const source = createVariantsSource({
+      axes,
+      selections: { layout: 'list', accent: '#123456' },
+      compare: true,
+      saveDefaults: async () => {},
+    });
+    await render(createElement(IsotonePanel, { route: '/', store: {}, variants: source }));
+    await click(container.querySelector('.isotone-fab'));
+    await click(byText('Accent: custom colour'));
+    expect(container.querySelector('.isotone-colour')).not.toBeNull();
+    await key('keydown');
+    expect(container.querySelector('.isotone-colour')).not.toBeNull();
+    await key('keyup');
+    expect(container.querySelector('.isotone-colour')).not.toBeNull();
+    expect(source.getSelections().accent).toBe('#123456');
+
+    await click(byText('Layout actions'));
+    const dialog = () => container.querySelector('.isotone-axis-menu');
+    expect(dialog()?.getAttribute('data-open')).toBe('true');
+    await key('keydown');
+    expect(dialog()?.getAttribute('data-open')).toBe('true');
+    await key('keyup');
+    expect(dialog()?.getAttribute('data-open')).toBe('true');
+    expect(source.getSelections().layout).toBe('list');
+
+    // Escape inside the selectors while held is not swallowed.
+    await click(byText('Close selector actions'));
+    await key('keydown');
+    const esc = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    await act(async () => {
+      byText('List')?.dispatchEvent(esc);
+    });
+    expect(esc.defaultPrevented).toBe(false);
+    await key('keyup');
   });
 
   it('ends on lost capture, a cancelled pointer, a release elsewhere and the panel closing; ignores other buttons', async () => {
@@ -155,14 +238,26 @@ describe('hold to compare', () => {
     expect(stray.defaultPrevented).toBe(false);
   });
 
+  it('takes the key under Escape on ISO keyboards too', async () => {
+    const { onChange } = await panel();
+    expect((await key('keydown', { code: 'IntlBackslash', key: '§' })).defaultPrevented).toBe(true);
+    expect(onChange).toHaveBeenLastCalledWith({ layout: 'grid', radius: '11' }, { preview: true });
+    await key('keyup', { code: 'IntlBackslash', key: '§' });
+    expect(onChange).toHaveBeenLastCalledWith({ layout: 'list', radius: '11' }, { preview: false });
+  });
+
   it('ignores the key while typing, with a modifier, on a repeat it did not start, or when disabled', async () => {
     const { onChange } = await panel();
     const field = document.createElement('input');
     const editable = document.createElement('div');
     editable.contentEditable = 'true';
     Object.defineProperty(editable, 'isContentEditable', { value: true });
-    document.body.append(field, editable);
-    for (const target of [field, editable]) {
+    // A field inside a host component's open shadow root.
+    const host = document.createElement('div');
+    const inner = document.createElement('textarea');
+    host.attachShadow({ mode: 'open' }).append(inner);
+    document.body.append(field, editable, host);
+    for (const target of [field, editable, inner]) {
       const event = await key('keydown', { target });
       expect(event.defaultPrevented).toBe(false);
     }
@@ -174,10 +269,43 @@ describe('hold to compare', () => {
     expect(onChange).not.toHaveBeenCalled();
     field.remove();
     editable.remove();
+    host.remove();
   });
 
-  it('can be turned off', async () => {
+  it('can be turned off or moved, and the tooltip names the key only when it is the one under Escape', async () => {
     const { onChange } = await panel({ layout: 'list' }, { compareShortcut: false });
+    expect((await key('keydown')).defaultPrevented).toBe(false);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(compareButton()?.title).toBe('Hold to show the defaults');
+    await unmount();
+    const moved = await panel({ layout: 'list' }, { compareShortcut: { code: 'KeyC', alt: true } });
+    expect((await key('keydown')).defaultPrevented).toBe(false);
+    expect((await key('keydown', { code: 'KeyC', altKey: true })).defaultPrevented).toBe(true);
+    await key('keyup', { code: 'KeyC' });
+    expect(moved.onChange).toHaveBeenLastCalledWith({ layout: 'list', radius: '11' }, { preview: false });
+    expect(compareButton()?.title).toBe('Hold to show the defaults');
+  });
+
+  it('ends a key hold when the route rule hides the dock', async () => {
+    const onChange = vi.fn();
+    const source = createVariantsSource({ axes: AXES, selections: { layout: 'list' }, onChange, compare: true });
+    await render(createElement(IsotonePanel, { route: '/', store: {}, variants: source }));
+    await key('keydown');
+    expect(onChange).toHaveBeenLastCalledWith({ layout: 'grid', radius: '11' }, { preview: true });
+    await act(async () => {
+      rerender(createElement(IsotonePanel, { route: '/login', store: {}, variants: source }));
+    });
+    expect(onChange).toHaveBeenLastCalledWith({ layout: 'list', radius: '11' }, { preview: false });
+    expect(container.querySelector('.isotone-root')).toBeNull();
+  });
+
+  it('offers no Compare for a host source that did not opt in', async () => {
+    const onChange = vi.fn();
+    const source = createVariantsSource({ axes: AXES, selections: { layout: 'list' }, onChange, saveDefaults: async () => {} });
+    await render(createElement(IsotonePanel, { route: '/', store: {}, variants: source }));
+    await click(container.querySelector('.isotone-fab'));
+    expect(count()).toBe('1 pick changed');
+    expect(compareButton()).toBeUndefined();
     expect((await key('keydown')).defaultPrevented).toBe(false);
     expect(onChange).not.toHaveBeenCalled();
   });
@@ -224,16 +352,37 @@ describe('hold to compare', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('says so when it can compare only some picks, and hides when it can compare none', async () => {
-    const base = createVariantsSource({ axes: AXES, selections: { layout: 'list', radius: '20' }, saveDefaults: async () => {} });
-    let cheap = (id: string): boolean => id === 'radius';
+  it('names what it leaves on its pick, and hides when it can compare nothing', async () => {
+    const axes: VariantAxis[] = [
+      ...AXES,
+      {
+        id: 'hero',
+        label: 'Hero > Headline',
+        options: [
+          { id: 'a', label: 'A' },
+          { id: 'b', label: 'B' },
+        ],
+        defaultOption: 'a',
+      },
+    ];
+    const base = createVariantsSource({
+      axes,
+      selections: { layout: 'list', radius: '20', hero: 'b' },
+      saveDefaults: async () => {},
+      compare: true,
+    });
+    let cheap = (id: string): boolean | string => id === 'radius' || 'switches by reloading the page';
     const source = Object.assign(base, { canPreview: (id: string) => cheap(id) });
     await render(createElement(IsotonePanel, { route: '/', store: {}, variants: source }));
     await click(container.querySelector('.isotone-fab'));
-    expect(compareButton()?.title).toBe('Hold to show the defaults. Compares what can switch instantly.');
+    expect(compareButton()?.title).toBe(
+      'Hold to show the defaults · or hold the key under Esc. Layout switches by reloading the page, so it keeps its pick, as do 1 more.',
+    );
     await pointer('pointerdown', compareButton() as HTMLButtonElement);
     expect(checked('List')).toBe('true');
     expect(container.querySelector<HTMLInputElement>('input[type=range]')?.value).toBe('11');
+    expect(count()).toBe('Showing defaults, exceptDefaults, exceptLayoutand 1 more+1');
+    expect(container.querySelector('.isotone-save-name')?.textContent).toBe('Layout');
     await pointer('pointerup', compareButton() as HTMLButtonElement);
     cheap = () => false;
     await click(byText('Grid'));

@@ -9,19 +9,33 @@ import type { VariantAxis, VariantSelections } from './axes';
 import { axisDefault, visibleAxes } from './helpers';
 import type { VariantsSource } from './source';
 
-/** What a hold would flick: the axes off their default that switch instantly, and whether some that differ cannot. */
+/** The shown axes whose pick differs from the default. */
+export function changedAxes(shown: VariantAxis[], selections: Readonly<VariantSelections>): VariantAxis[] {
+  return shown.filter((axis) => {
+    const value = selections[axis.id];
+    return value !== undefined && value !== axisDefault(axis);
+  });
+}
+
+/**
+ * What a hold would flick: the changed axes that switch instantly, and the
+ * changed ones that cannot, each with the source's reason when it gave one.
+ */
 export function compareAxes(
   source: VariantsSource,
   shown: VariantAxis[],
   selections: Readonly<VariantSelections>,
-): { ids: string[]; partial: boolean } {
-  if (!source.preview) return { ids: [], partial: false };
-  const changed = shown.filter((axis) => {
-    const value = selections[axis.id];
-    return value !== undefined && value !== axisDefault(axis);
-  });
-  const ids = changed.filter((axis) => source.canPreview?.(axis.id) ?? true).map((axis) => axis.id);
-  return { ids, partial: ids.length < changed.length };
+): { ids: string[]; skipped: { axis: VariantAxis; reason: string | null }[] } {
+  const changed = changedAxes(shown, selections);
+  if (!source.preview) return { ids: [], skipped: [] };
+  const ids: string[] = [];
+  const skipped: { axis: VariantAxis; reason: string | null }[] = [];
+  for (const axis of changed) {
+    const can = source.canPreview?.(axis.id) ?? true;
+    if (can === true) ids.push(axis.id);
+    else skipped.push({ axis, reason: typeof can === 'string' && can ? can : null });
+  }
+  return { ids, skipped };
 }
 
 /** One hold at a time, owned by whatever started it (the button, its keys, the shortcut). */
@@ -59,10 +73,23 @@ export function compareFor(source: VariantsSource): VariantsCompare {
       if (ids.length === 0) return false;
       const defaults: VariantSelections = {};
       for (const axis of axes) if (ids.includes(axis.id)) defaults[axis.id] = axisDefault(axis);
+      let shownIds: string[] | undefined;
       try {
-        source.preview(defaults);
+        shownIds = source.preview(defaults);
       } catch {
         return false;
+      }
+      // Only what the page really shows reads as the default in the panel.
+      if (Array.isArray(shownIds)) {
+        for (const id of Object.keys(defaults)) if (!shownIds.includes(id)) delete defaults[id];
+        if (Object.keys(defaults).length === 0) {
+          try {
+            source.preview(null);
+          } catch {
+            // Nothing was shown.
+          }
+          return false;
+        }
       }
       held = defaults;
       owner = holder;

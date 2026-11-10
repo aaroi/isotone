@@ -55,4 +55,4 @@ export {
   variantAppliesTo,
 } from './overlay';
 export type { KnobAxis, OverlayVariant, OverlayVariantStatus, OverlayVariantsList } from './overlay';
-export { compareAxes, compareFor } from './compare';
+export { changedAxes, compareAxes, compareFor } from './compare';

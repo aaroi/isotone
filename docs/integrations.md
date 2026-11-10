@@ -58,7 +58,7 @@ isotone({
   theme: 'auto',
   file: '.isotone/notes.json', // the default
   variants: false, // optional: notes only
-  compareShortcut: false, // optional: no key for hold to compare (default Backquote)
+  compareShortcut: false, // optional: no key for hold to compare (default: the key under Escape)
 })
 ```
 
@@ -101,7 +101,10 @@ import Script from 'next/script';
 The printed setup URL offers a copyable tag and a bookmarklet. This path has
 notes and [knobs](variants.md#knobs) from `.isotone/knobs.json` where `serve`
 runs (the Variants tool appears once it holds a valid knob; reload after the
-first). Swapping source files needs the Vite plugin or a host `VariantsSource`.
+first). Swapping source files needs the Vite plugin or a host `VariantsSource`;
+a host source built with `createVariantsSource` offers [hold to
+compare](variants.md#hold-to-compare) only with `compare: true`, once its
+`onChange` skips persisting calls marked `{ preview: true }`.
 
 `serve` prints the `panel` URL and loader `tag` for the port it listens on:
 paste them as printed, and keep a non-default port in one script such as

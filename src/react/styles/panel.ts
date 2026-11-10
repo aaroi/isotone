@@ -258,10 +258,16 @@ ${APPEARANCE_CSS}
 .isotone-vars[data-saving='true'] .isotone-vars-tail::after { content: ''; position: absolute; left: 0; top: 0; width: 1px; height: var(--iso-save-bar-h); }
 /* Keyboard focus scrolls a control clear of the bar too. */
 .isotone-vars[data-saving='true'] > .isotone-vars-body { scroll-padding-bottom: var(--iso-save-bar-h); }
-/* While Compare is held the selectors show the defaults and take no picks. */
-.isotone-vars[data-comparing='true'] > .isotone-vars-body { pointer-events: none; }
 .isotone-save-row { position: relative; display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; }
 .isotone-save-count { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--iso-muted); }
+/* "Showing defaults, except <name> and 2 more": only the name gives way. */
+.isotone-save-count:has(.isotone-save-name) { display: flex; gap: .3em; }
+.isotone-save-count > span { flex: none; }
+.isotone-save-count > .isotone-save-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--iso-fg); }
+/* A narrow bar (the default dock, a phone) says the same in fewer words, so the name keeps some room. */
+.isotone-save-count { container-type: inline-size; }
+.isotone-save-count > .isotone-narrow { display: none; }
+@container (max-width: 260px) { .isotone-save-count > .isotone-wide { display: none; } .isotone-save-count > .isotone-narrow { display: inline; } }
 /* The source default, marked where the choice is made rather than only in the actions dialog. */
 .isotone-seg, .isotone-swatch { position: relative; }
 .isotone-default-dot { position: absolute; top: 4px; right: 4px; width: 4px; height: 4px; border-radius: 50%; background: var(--iso-dot); pointer-events: none; }

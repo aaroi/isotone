@@ -17,7 +17,8 @@ export const DEFAULT_SHORTCUT: IsotoneShortcut = { code: 'Period', mod: true, sh
 /** The shortcut as the panel's hints spell it. */
 export function shortcutText(shortcut: IsotoneShortcut | false): string {
   if (!shortcut) return '';
-  const key = shortcut.code === 'Period' ? '.' : shortcut.code.replace(/^Key/, '');
+  const code = ([] as string[]).concat(shortcut.code)[0] ?? '';
+  const key = code === 'Period' ? '.' : code.replace(/^Key/, '');
   return [shortcut.mod && '⌘/Ctrl', shortcut.alt && 'Alt', shortcut.shift && 'Shift', key].filter(Boolean).join('+');
 }
 
@@ -33,8 +34,12 @@ interface DockEventsOptions {
   onLeave: () => void;
 }
 
-const matches = (e: KeyboardEvent, shortcut: IsotoneShortcut) =>
-  e.code === shortcut.code &&
+/** Whether `code` is one of the shortcut's keys. */
+export const isShortcutKey = (code: string, shortcut: IsotoneShortcut) => ([] as string[]).concat(shortcut.code).includes(code);
+
+/** The shortcut's key with exactly its modifiers. */
+export const matches = (e: KeyboardEvent, shortcut: IsotoneShortcut) =>
+  isShortcutKey(e.code, shortcut) &&
   Boolean(e.metaKey || e.ctrlKey) === Boolean(shortcut.mod) &&
   e.shiftKey === Boolean(shortcut.shift) &&
   e.altKey === Boolean(shortcut.alt);

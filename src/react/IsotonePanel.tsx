@@ -19,7 +19,7 @@ import { useNoteActions } from './notes/useNoteActions';
 import { useNotes } from './notes/useNotes';
 import { useNoteView } from './notes/useNoteView';
 import { refreshSource, useVariantsSnapshot, VariantsPanel } from './variants/VariantsView';
-import { DEFAULT_COMPARE_SHORTCUT, useCompareKey } from './variants/useCompare';
+import { DEFAULT_COMPARE_SHORTCUT, isUnderEscape, useCompareKey } from './variants/useCompare';
 import { useKeyboardInset } from './dock/viewport';
 
 export interface IsotonePanelProps {
@@ -264,6 +264,7 @@ export function IsotonePanel({
             onManage={notesAvailable ? actions.queueRemoval : undefined}
             pendingActions={pendingActions}
             emptyText={variantsEmptyText}
+            compareKey={isUnderEscape(compareShortcut)}
           />
         )}
         {notesAvailable && (

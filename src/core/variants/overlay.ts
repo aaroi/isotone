@@ -370,8 +370,20 @@ export function createOverlayVariantsSource(cfg: {
     for (const l of listeners) l();
   };
   const live = cfg.live === undefined ? pageLiveStore() : cfg.live;
-  // The server's default can move the tab too (a CLI `variant use`).
-  live?.subscribe(emit);
+  // The server's default can move the tab too (a CLI `variant use`). A preview changes no selection, so
+  // re-reading every selector for it would only delay the flick.
+  let previewingLive = false;
+  live?.subscribe(() => {
+    if (!previewingLive) emit();
+  });
+  const previewLive = (next: string[] | null): boolean => {
+    previewingLive = true;
+    try {
+      return live?.preview?.(next) === true;
+    } finally {
+      previewingLive = false;
+    }
+  };
   const current = (): string[] => live?.active ?? intended ?? list?.active ?? [];
   const selects = (): SelectVariantAxis[] => (list ? overlayAxes(list, cfg.getRoute()) : []);
   const knobAxes = (): KnobAxis[] => knobsFor(list?.knobs, cfg.getRoute());
@@ -513,16 +525,19 @@ export function createOverlayVariantsSource(cfg: {
     // in this tab, when no export fixed at load differs; otherwise it is a server round trip or a reload.
     canPreview(axisId) {
       if (knobAxes().some((k) => k.id === axisId)) return true;
-      if (!live?.preview || !live.needsReload || !selects().some((a) => a.id === axisId)) return false;
-      return !live.needsReload(withoutGroups([axisId]));
+      if (!selects().some((a) => a.id === axisId)) return false;
+      if (!live?.preview || !live.needsReload) return 'switches through the dev server';
+      return live.needsReload(withoutGroups([axisId])) ? 'switches by reloading the page' : true;
     },
     preview(partial) {
       const knobIds = new Set(knobAxes().map((k) => k.id));
       previewing = partial && Object.fromEntries(Object.entries(partial).filter(([id]) => knobIds.has(id)));
       applyKnobs();
-      if (!live?.preview) return;
       const groups = partial ? Object.keys(partial).filter((id) => !knobIds.has(id)) : [];
-      live.preview(groups.length > 0 ? withoutGroups(groups) : null);
+      // A set the tab cannot show in place (together they would reload) stays on the picks, and says so.
+      const shown = groups.length > 0 && previewLive(withoutGroups(groups));
+      if (partial === null) previewLive(null);
+      return partial ? Object.keys(previewing ?? {}).concat(shown ? groups : []) : undefined;
     },
     getSelections() {
       const active = new Set(current());
