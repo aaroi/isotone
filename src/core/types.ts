@@ -3,7 +3,9 @@
  * servers. They live in core so the Vite plugin and `isotone/serve` can
  * describe notes and the panel's options without importing React.
  */
+import type { ExperimentFlags } from './experiments';
 import type { RouteGateOptions } from './routes';
+import type { StyleEdit } from './style-edits';
 import type { UpdateRequest } from './update';
 import type { VariantsSource } from './variants';
 
@@ -48,6 +50,9 @@ export interface VariantRemoval {
 }
 
 export interface NoteContext {
+  /** What the reviewer changed with the style editor, per pinned element:
+   *  exact property values to make in the source. */
+  styleEdits?: StyleEdit[];
   /** Pending instruction: deleting its note cancels it before the agent acts. */
   variantAction?: VariantRemoval;
   elements?: IsotoneElement[];
@@ -156,4 +161,7 @@ export interface MountIsotoneOptions {
   /** Host context attached to each new note as its opaque payload — see
    *  IsotonePanelProps.getPayload. */
   getPayload?: () => unknown;
+  /** Experiments to turn on: features that are off by default and may change
+   *  or go away in any release. `isotone experiment` lists them. */
+  experimental?: ExperimentFlags;
 }

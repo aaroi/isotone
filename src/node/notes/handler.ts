@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { IsotoneElement } from '../../core/types';
 import { NOTE_ID } from '../../core/id';
+import { styleEditsOf } from '../../core/style-edits';
 import { MAX_FEEDBACK_LENGTH, MAX_NOTES, MAX_ROUTE, PAYLOAD_MAX } from '../../core/limits';
 import { updateNoteText } from '../../core/update';
 import { LockBusyError, SERVER_LOCK_WAIT_MS, withFileLock } from '../fs/lock';
@@ -92,6 +93,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
       variant?: unknown;
       variantAction?: unknown;
       createdAt?: unknown;
+      styleEdits?: unknown;
     };
     // A body's `update` is never read: only the update endpoint writes one,
     // from the server's own check, and an update note cannot be edited.
@@ -128,6 +130,9 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     const variant = body.variant === undefined ? undefined : variantOf(body.variant);
     const variantAction = removalOf(body.variantAction);
     if (body.variantAction !== undefined && !variantAction) return json(400, { error: 'Invalid variant action' });
+    if (body.styleEdits !== undefined && !Array.isArray(body.styleEdits)) return json(400, { error: 'styleEdits must be a list' });
+    // Omitted keeps what the note has; a list replaces it, and an empty one removes it.
+    const styleEdits = styleEditsOf(body.styleEdits);
     const cleanElement = element && typeof element === 'object' && !Array.isArray(element) ? elementFields(element) : null;
     const notes = readNotes(file);
     const defaultsRequest = cleanFeedback.startsWith('[set-defaults]');
@@ -159,6 +164,8 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
         } else if (existing.elements) existing.element = existing.elements[0] ?? null;
         if (variant !== undefined) existing.variant = variant;
         if (variantAction) existing.variantAction = variantAction;
+        if (styleEdits) existing.styleEdits = styleEdits;
+        else if (body.styleEdits !== undefined) delete existing.styleEdits;
         // An omitted payload leaves the stored one alone, so a host that only
         // sends it on the first save does not lose it on the next autosave.
         if (payload !== undefined) existing.payload = payload;
@@ -204,6 +211,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
       ...(elements !== undefined ? { elements, element: elements[0] ?? null } : {}),
       ...(variant !== undefined ? { variant } : {}),
       ...(variantAction ? { variantAction } : {}),
+      ...(styleEdits ? { styleEdits } : {}),
     });
     writeNotes(file, notes);
     return json(201, { id: newId });
@@ -254,6 +262,7 @@ function toItem(n: StoredNote, root: string) {
     ...(n.elements !== undefined ? { elements: n.elements } : {}),
     ...(n.variant !== undefined ? { variant: n.variant } : {}),
     ...(n.variantAction !== undefined ? { variantAction: n.variantAction } : {}),
+    ...(styleEditsOf(n.styleEdits) ? { styleEdits: styleEditsOf(n.styleEdits) } : {}),
     // Only the server writes an update request; a malformed one, or one whose
     // directory is outside the project, is not shown.
     ...(update ? { update } : {}),

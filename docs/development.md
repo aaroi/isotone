@@ -33,7 +33,7 @@ Each topic lives in one file, for one reader; other files link to it.
 | The section `init` writes | The same agent, every session | Dev-only rule, the loop, trust, where the guide is |
 | `docs/integrations.md` | Whoever wires up a host | Hosts, endpoint rules, themes, production guards |
 | `docs/variants.md` | Agent and host developer | Making file variants, knobs, sections and host sources well; how switching works, last |
-| `docs/blast.md`, `updates.md` | The person using Isotone | Blast, update checks |
+| `docs/blast.md`, `updates.md`, `experiments.md` | The person using Isotone | Blast, update checks, experiments and how to turn one on |
 | `AGENTS.md`, `docs/development.md`, `design.md`, `releasing.md`, `onboarding.md` | Maintainers | Not shipped |
 
 `tests/package/docs.test.ts` checks that shipped docs link only to shipped files
@@ -84,6 +84,26 @@ built to `dist/<name>.js`; the `isotone` binary is `dist/bin.js`. Each barrel
 in the CHANGELOG. Keep browser code out of server entries and keep React/Vite
 optional for CLI and standalone consumers. The build bundles only the icons
 used by the panel.
+
+## Experiments
+
+A feature that is not ready to be on for everyone ships as an experiment: off
+by default, turned on per project ([experiments](experiments.md)). To add one:
+
+1. Add it to `EXPERIMENTS` in `src/core/experiments.ts` (id, label, a one-sentence
+   summary, and a caveat when something leaves the machine or needs a browser).
+   That is all the CLI, the servers and the demo's bar need.
+2. Read the flag where the panel composes its parts (`IsotonePanel`'s
+   `experimental` prop) and pass a plain boolean down; components do not read
+   flags themselves.
+3. With the flag off, the feature costs nothing at runtime: no listeners, no
+   requests, no DOM. Test both states.
+4. Add its row to `docs/experiments.md`, and say "experimental" where its
+   control names itself (a tooltip is enough).
+
+An experiment follows the design language like any other part of the panel. It
+graduates by becoming the default and leaving the list; a removed flag is
+ignored, never an error.
 
 ## Local workflow
 

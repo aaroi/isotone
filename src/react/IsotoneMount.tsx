@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 
+import { experimentFlags } from '../core/experiments';
 import { createIsotoneStore } from '../core/notes-client';
 import {
   createOverlayVariantsSource,
@@ -128,6 +129,7 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
         compareShortcut={opts.compareShortcut}
         updateEndpoint={opts.updateEndpoint}
         theme={opts.theme}
+        experimental={experimentFlags(opts.experimental)}
       />,
     );
   }

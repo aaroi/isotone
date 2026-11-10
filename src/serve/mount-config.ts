@@ -1,8 +1,10 @@
+import type { ExperimentFlags } from '../core/experiments';
 import type { RouteGateOptions } from '../core/routes';
 import { VARIANTS_ENDPOINT } from '../core/variants';
 import type { IsotoneTheme, MountIsotoneOptions } from '../core/types';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
 import { UPDATE_ENDPOINT } from '../node/update/check';
+import { resolveExperiments } from '../node/experiments';
 import { readKnobs } from '../node/variants';
 
 /**
@@ -17,9 +19,11 @@ import { readKnobs } from '../node/variants';
 export function serveMountOptions(
   origin: string,
   projectRoot: string,
-  opts: { key?: string; rule?: RouteGateOptions; theme?: IsotoneTheme },
+  opts: { key?: string; rule?: RouteGateOptions; theme?: IsotoneTheme; experimental?: ExperimentFlags },
 ): MountIsotoneOptions {
   const knobs = readKnobs({ root: projectRoot }).length > 0;
+  // Read with every bundle, like the knobs: a flag set from the command line needs a reload, not a restart.
+  const experimental = resolveExperiments(projectRoot, opts.experimental);
   return {
     endpoint: `${origin}${NOTES_ENDPOINT}`,
     ...(knobs ? { variants: 'knobs' as const, variantsEndpoint: `${origin}${VARIANTS_ENDPOINT}` } : {}),
@@ -27,5 +31,6 @@ export function serveMountOptions(
     key: opts.key ?? '',
     rule: opts.rule ?? {},
     theme: opts.theme,
+    ...(Object.keys(experimental).length ? { experimental } : {}),
   };
 }

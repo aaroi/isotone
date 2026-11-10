@@ -27,7 +27,9 @@ import {
 import * as vite from 'vite';
 
 import { VARIANTS_ENDPOINT } from '../core/variants';
+import { enabledExperiments } from '../core/experiments';
 import { blastFile } from '../node/blast';
+import { resolveExperiments } from '../node/experiments';
 import { defaultNotesFile, LEGACY_NOTES_FILE, NOTES_FILE } from '../node/notes/location';
 import { ensureFileIgnored } from '../node/fs/git-exclude';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
@@ -68,7 +70,7 @@ const SPECIAL_QUERY = /[?&](raw|url|inline|no-inline|worker|sharedworker|html-pr
 /** Say where the notes go after Vite's own banner, so it is not buried under
  *  it. Portable setups fail quietly otherwise: a reviewer writes notes and the
  *  agent looks in the wrong place. */
-function announce(server: ViteDevServer, file: string, variantsDir: string | null, count: () => number): void {
+function announce(server: ViteDevServer, file: string, variantsDir: string | null, count: () => number, experimental: unknown): void {
   server.httpServer?.once('listening', () => {
     const { logger, root, server: config } = server.config;
     logger.info(`  isotone  notes → ${relative(root, file) || file}  (${NOTES_ENDPOINT})`);
@@ -76,6 +78,8 @@ function announce(server: ViteDevServer, file: string, variantsDir: string | nul
       const n = count();
       logger.info(`  isotone  variants → ${relative(root, variantsDir) || variantsDir}  (${n} variant${n === 1 ? '' : 's'})`);
     }
+    const on = enabledExperiments(resolveExperiments(root, experimental, (message) => logger.warn(`  isotone  ${message}`)));
+    if (on.length) logger.info(`  isotone  experiments on: ${on.join(', ')}`);
     const host = config?.host;
     if (host === true || (typeof host === 'string' && !isLoopback(host))) {
       logger.info('  isotone  the panel answers only this machine; other devices get the app alone');
@@ -187,7 +191,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
         const hosts = server.config.server?.allowedHosts;
         return Array.isArray(hosts) ? hosts : [];
       };
-      announce(server, file, variantsOptions ? overrides.dir : null, () => listVariants(overrides.opts).length);
+      announce(server, file, variantsOptions ? overrides.dir : null, () => listVariants(overrides.opts).length, options.experimental);
 
       const updates = startUpdateCheck(server.config.root, options.checkForUpdates !== false);
       server.httpServer?.once('close', updates.dispose);
@@ -221,14 +225,17 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       const mount =
         options.panel === false
           ? null
-          : mountModuleSource(
-              options.rule ?? {},
-              options.key ?? '',
-              variantsOptions !== null,
-              options.shortcut,
-              options.theme,
-              options.compareShortcut,
-            );
+          : () =>
+              mountModuleSource(
+                options.rule ?? {},
+                options.key ?? '',
+                variantsOptions !== null,
+                options.shortcut,
+                options.theme,
+                options.compareShortcut,
+                // Read for each page, so `isotone experiment on <id>` needs a reload, not a restart.
+                resolveExperiments(server.config.root, options.experimental),
+              );
       servePanel(server.middlewares.use.bind(server.middlewares) as never, mount, liveScript);
     },
   } satisfies Plugin;

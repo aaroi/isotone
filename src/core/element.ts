@@ -3,6 +3,7 @@
  * the agent can find it in code. Framework-free and unit-testable against
  * plain objects as well as a real DOM.
  */
+import { hexColor } from './style-edits';
 import type { IsotoneElement } from './types';
 
 /** The minimal structural surface the descriptor builder needs from a DOM
@@ -283,15 +284,6 @@ function elementContext(el: Element): Partial<IsotoneElement> {
       : {}),
     ...(styles ? { styles } : {}),
   };
-}
-
-/** `rgb(17, 17, 17)` as `#111111`, the form a stylesheet is searched for; anything else as it is. */
-function hexColor(value: string): string {
-  return value.replace(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/g, (match, r, g, b, a) => {
-    const hex = [r, g, b].map((n) => Number(n).toString(16).padStart(2, '0')).join('');
-    if (a === undefined || Number(a) === 1) return `#${hex}`;
-    return Number(a) === 0 ? 'transparent' : match;
-  });
 }
 
 /** Four sides as the shortest CSS shorthand, or nothing when all are zero. */

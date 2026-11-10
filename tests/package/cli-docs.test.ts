@@ -13,7 +13,7 @@ const guide = doc('agent-guide.md');
 
 /** Each help screen, and the shipped docs that must document it. */
 const SCREENS: [argv: string[], docs: string[]][] = [
-  [['--help'], [guide, doc('integrations.md'), doc('updates.md')]],
+  [['--help'], [guide, doc('integrations.md'), doc('updates.md'), doc('experiments.md')]],
   [
     ['variant', '--help'],
     [guide, doc('variants.md')],
@@ -21,8 +21,9 @@ const SCREENS: [argv: string[], docs: string[]][] = [
   [['blast', '--help'], [doc('blast.md')]],
   [
     ['serve', '--help'],
-    [doc('integrations.md'), doc('updates.md')],
+    [doc('integrations.md'), doc('updates.md'), doc('experiments.md')],
   ],
+  [['experiment', '--help'], [doc('experiments.md')]],
   [
     ['init', '--help'],
     [guide, doc('integrations.md')],
@@ -72,7 +73,7 @@ describe('CLI help and shipped docs', () => {
     const knownSubs = new Set([...subcommands(helpText, 'variant'), ...subcommands(helpText, 'blast')]);
     const unknown: string[] = [];
     expect(commandLines(guide).length).toBeGreaterThan(10);
-    for (const name of ['agent-guide.md', 'variants.md', 'blast.md', 'integrations.md', 'updates.md']) {
+    for (const name of ['agent-guide.md', 'variants.md', 'blast.md', 'integrations.md', 'updates.md', 'experiments.md']) {
       for (const line of commandLines(doc(name))) {
         for (const flag of flags(line)) if (!known.has(flag)) unknown.push(`${name}: ${flag} in ${line}`);
         const sub = /^isotone (variant|blast) ([a-z]+)/.exec(line);

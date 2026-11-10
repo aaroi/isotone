@@ -8,11 +8,13 @@ import { resolve } from 'node:path';
 
 import { version } from '../../package.json';
 import { BLAST } from '../core/blast';
+import { experimentId } from '../core/experiments';
 import { defaultNotesFile, NOTES_FILE } from '../node/notes/location';
 import { probeOwner, samePath, type ServerOwner } from '../node/serve-owner';
 import { DEFAULT_PORT, guardedScriptTag } from '../core/tag';
 import { runBlast } from './blast';
 import { docPath } from './docs';
+import { runExperiment } from './experiment';
 import { runInit } from './init';
 import { runNotes } from './notes';
 import { runCheckUpdate } from './update';
@@ -29,6 +31,7 @@ export async function runCli(argv: string[], ioInput: Partial<CliIO> = {}): Prom
     if (argv[0] === BLAST.command) return await runBlast(argv.slice(1), io);
     if (argv[0] === 'variant') return await runVariant(argv.slice(1), io);
     if (argv[0] === 'init') return runInit(argv.slice(1), io);
+    if (argv[0] === 'experiment' || argv[0] === 'experiments') return await runExperiment(argv.slice(1), io);
     if (isHelp(argv[0])) {
       printHelp(io);
       return 0;
@@ -77,6 +80,9 @@ function printHelp(io: CliIO): void {
   out(io, 'Endpoint and panel for a host without the Vite plugin');
   out(io, '  isotone serve --help');
   out(io);
+  out(io, 'Experiments: features that are off until you turn them on');
+  out(io, '  isotone experiment [on|off <id>]');
+  out(io);
   out(io, 'Setup and updates');
   out(io, '  isotone init [--approach overlay|host|serve] [--yes] [--json]');
   out(io, '  isotone check-update [--json] [--manager npm|pnpm|yarn]');
@@ -96,15 +102,21 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
   const { serveIsotone } = await import('../serve/index');
   if (isHelp(args[0])) {
     out(io, 'Usage: isotone serve [--port 4123] [--host 127.0.0.1] [--file <path>] [--theme auto|light|dark|system]');
-    out(io, '                     [--no-update-check | --update-note]');
+    out(io, '                     [--no-update-check | --update-note] [--experimental <id,id>]');
     out(io, 'Run it inside the repo under review, then add the printed <script> tag to the dev page.');
     out(io, '--no-update-check disables the daily background npm update check.');
     out(io, '--update-note files an update note for your agent the first time a new version appears.');
+    out(io, '--experimental turns experiments on for this run, unless `isotone experiment off` turned one off.');
     return 0;
   }
   try {
     if (
-      parseArgs(args, ['--file', '--port', '--host', '--theme'], ['--no-update-check', '--update-note'], 'npx isotone serve --help').length
+      parseArgs(
+        args,
+        ['--file', '--port', '--host', '--theme', '--experimental'],
+        ['--no-update-check', '--update-note'],
+        'npx isotone serve --help',
+      ).length
     )
       throw new Error('serve does not take positional arguments.');
   } catch (error) {
@@ -124,6 +136,15 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
     errOut(io, 'Port must be an integer between 0 and 65535.');
     return 1;
   }
+  const experimental: Record<string, boolean> = {};
+  for (const name of (valueFor(args, '--experimental') ?? '').split(',').filter(Boolean)) {
+    const id = experimentId(name);
+    if (!id) {
+      errOut(io, `No experiment called "${name}". Run \`npx isotone experiment\` to list them.`);
+      return 1;
+    }
+    experimental[id] = true;
+  }
   let served: Awaited<ReturnType<typeof serveIsotone>>;
   try {
     served = await serveIsotone({
@@ -132,6 +153,7 @@ async function runServe(args: string[], io: CliIO): Promise<number> {
       host,
       theme,
       projectRoot: io.cwd,
+      experimental,
       checkForUpdates: has(args, '--no-update-check') ? false : has(args, '--update-note') ? 'note' : true,
     });
   } catch (err) {

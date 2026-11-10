@@ -4,6 +4,7 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+import type { ExperimentFlags } from '../core/experiments';
 import type { RouteGateOptions } from '../core/routes';
 import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
 import { readBundle } from '../node/bundle';
@@ -22,6 +23,7 @@ export function mountModuleSource(
   shortcut?: IsotoneShortcut | false,
   theme?: IsotoneTheme,
   compareShortcut?: IsotoneShortcut | false,
+  experimental: ExperimentFlags = {},
 ): string {
   const config = JSON.stringify({
     endpoint: NOTES_ENDPOINT,
@@ -32,6 +34,7 @@ export function mountModuleSource(
     theme,
     rule,
     ...(variants ? { variants: 'overlay' } : {}),
+    ...(Object.keys(experimental).length ? { experimental } : {}),
   }).replace(/</g, '\\u003c');
   return `
     const start = () => {
@@ -57,12 +60,13 @@ const local = (req: IncomingMessage): boolean => isFromThisMachine(nodeRequestFa
 
 /**
  * Serve the panel to the dev server's pages: the bundle, and the scripts
- * added to every HTML navigation. `mount` is the mount module, or null when
- * the host mounts the panel itself; `head` is the live variant store, when
+ * added to every HTML navigation. `mount` builds the mount module for one
+ * navigation, so it carries the project's current experiment flags, or is null
+ * when the host mounts the panel itself; `head` is the live variant store, when
  * there is one. A device on the network gets the store, which the app's
  * modules need, but never the panel.
  */
-export function servePanel(use: Use, mount: string | null, head: (() => string) | null): void {
+export function servePanel(use: Use, mount: (() => string) | null, head: (() => string) | null): void {
   if (mount === null && head === null) return;
   if (mount !== null) {
     // A self-contained bundle keeps the panel out of the host's dependency
@@ -95,7 +99,7 @@ export function servePanel(use: Use, mount: string | null, head: (() => string) 
   });
 }
 
-function injectHtmlResponse(res: ServerResponse, code: string | null, head: () => string | null = () => null): void {
+function injectHtmlResponse(res: ServerResponse, mount: (() => string) | null, head: () => string | null = () => null): void {
   if (INJECTED.has(res)) return;
   INJECTED.add(res);
 
@@ -165,7 +169,7 @@ function injectHtmlResponse(res: ServerResponse, code: string | null, head: () =
     buffering = false;
     const body = Buffer.concat(chunks).toString('utf8');
     if (body.includes('<html') && (HEAD_OPEN.test(body) || body.includes('</body>'))) {
-      const script = code === null ? '' : `<script type="module" data-isotone-inject>${code}</script>`;
+      const script = mount === null ? '' : `<script type="module" data-isotone-inject>${mount()}</script>`;
       // Classic, not a module: it runs during parsing, before any module.
       const store = head();
       const early = store ? `<script data-isotone-live>${store.replace(/<\/script/gi, '<\\/script')}</script>` : '';

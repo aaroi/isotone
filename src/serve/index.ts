@@ -27,6 +27,7 @@ import { checkRequest, isLoopback, nodeRequestFacts, readNodeJson, sendFailure, 
 import { ensureFileIgnored } from '../node/fs/git-exclude';
 import { notesResponse, NOTES_ENDPOINT } from '../node/notes/handler';
 import { SERVER_ENDPOINT, serverOwner, urlHost } from '../node/serve-owner';
+import type { ExperimentFlags } from '../core/experiments';
 import { VARIANTS_ENDPOINT } from '../core/variants';
 import { readKnobs } from '../node/variants';
 
@@ -57,6 +58,8 @@ export interface ServeIsotoneOptions {
   rule?: RouteGateOptions;
   /** localStorage namespace for the panel. */
   key?: string;
+  /** Experiments to turn on; `.isotone/experiments.json` in the project wins over this. */
+  experimental?: ExperimentFlags;
 }
 
 export interface ServedIsotone {

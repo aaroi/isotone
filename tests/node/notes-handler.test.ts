@@ -243,3 +243,47 @@ describe('pinned styles', () => {
     expect(styles).toEqual({ padding: '8px 12px', 'font-size': '14px', color: 'x'.repeat(160) });
   });
 });
+
+describe('style edits on a note', () => {
+  const post = (file: string, body: Record<string, unknown>) => notesResponse(file, { method: 'POST', url: '/api/notes', body });
+  const edits = [{ selector: '#card', changes: [{ property: 'gap', from: '8px', to: '12px' }] }];
+
+  it('stores them bounded, keeps them when an edit omits them, replaces and removes them when it sends a list', () => {
+    const file = tempFile();
+    expect(post(file, { route: '/', feedback: 'x', element: null, styleEdits: 'nope' }).status).toBe(400);
+    const id = (
+      post(file, {
+        route: '/',
+        feedback: 'Apply',
+        element: null,
+        styleEdits: [...edits, { selector: '#bad', changes: [{ property: 'gap', from: '', to: '1px;x' }] }],
+      }).body as { id: string }
+    ).id;
+    expect(readNotes(file)[0]?.styleEdits).toEqual(edits);
+    post(file, { id, route: '/', feedback: 'Apply, please', element: null });
+    expect(readNotes(file)[0]?.styleEdits).toEqual(edits);
+    const next = [{ selector: '#card', changes: [{ property: 'gap', from: '8px', to: '16px' }] }];
+    post(file, { id, route: '/', feedback: 'Apply, please', element: null, styleEdits: next });
+    expect(readNotes(file)[0]?.styleEdits).toEqual(next);
+    const listed = notesResponse(file, { method: 'GET', url: '/api/notes' }).body as { styleEdits?: unknown }[];
+    expect(listed[0]?.styleEdits).toEqual(next);
+    post(file, { id, route: '/', feedback: 'Apply, please', element: null, styleEdits: [] });
+    expect(readNotes(file)[0]).not.toHaveProperty('styleEdits');
+  });
+
+  it('reopens a closed note when its changes are edited, and leaves a note without any as it was', () => {
+    const file = tempFile();
+    const id = (post(file, { route: '/', feedback: 'Apply', element: null, styleEdits: edits }).body as { id: string }).id;
+    updateNotes(file, (notes) => notes.map((n) => ({ ...n, done: true, doneAt: new Date().toISOString() })));
+    post(file, { id, route: '/', feedback: 'Apply', element: null });
+    expect(readNotes(file)[0]?.done).toBe(true);
+    post(file, {
+      id,
+      route: '/',
+      feedback: 'Apply',
+      element: null,
+      styleEdits: [{ selector: '#card', changes: [{ property: 'gap', from: '8px', to: '20px' }] }],
+    });
+    expect(readNotes(file)[0]?.done).toBe(false);
+  });
+});

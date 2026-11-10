@@ -57,6 +57,40 @@
         "optionId": { "type": "string" }
       }
     },
+    "styleEdits": {
+      "type": "array",
+      "description": "What the reviewer changed with the style editor (an experiment): exact values to make in the source, per pinned element. Follow styleHint.",
+      "items": {
+        "type": "object",
+        "required": ["selector", "changes"],
+        "additionalProperties": false,
+        "properties": {
+          "selector": { "type": "string", "description": "The selector of the element in elements it belongs to." },
+          "changes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["property", "from", "to"],
+              "additionalProperties": false,
+              "properties": {
+                "property": {
+                  "type": "string",
+                  "description": "A CSS property; padding-block and padding-inline are the vertical and horizontal pair."
+                },
+                "from": { "type": "string", "description": "The computed value when pinned." },
+                "to": { "type": "string" },
+                "rule": {
+                  "type": "string",
+                  "description": "Where the page sets it today, when found: a rule's selector as written, or inline. Best effort; check it."
+                },
+                "declared": { "type": "string", "description": "The value as written there, e.g. var(--space-4)." }
+              }
+            }
+          }
+        }
+      }
+    },
+    "styleHint": { "type": "string", "description": "On an open note with styleEdits: how to carry the changes into the source." },
     "payload": { "description": "Host-specific context, such as the knob values the note was written against. Any JSON value." },
     "reply": {
       "type": "object",

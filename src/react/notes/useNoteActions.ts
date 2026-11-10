@@ -1,6 +1,7 @@
 import { type Dispatch, type SetStateAction, useCallback, useMemo, useRef, useState } from 'react';
 import { createNoteId } from '../../core/id';
 import { MAX_FEEDBACK_LENGTH } from '../../core/limits';
+import type { StyleEdit } from '../../core/style-edits';
 import type { IsotoneElement, IsotoneNote, VariantReference } from '../../core/types';
 import type { VariantAction } from '../../core/variants';
 import type { UpdateMode } from '../dock/useDockMode';
@@ -17,6 +18,10 @@ interface NoteActionsOptions {
   write: Notes['write'];
   setNotes: Dispatch<SetStateAction<IsotoneNote[]>>;
   getPayload?: () => unknown;
+  /** What the style editor holds for the pinned elements; sent with the note, which may then have no text of its own. */
+  getStyleEdits?: () => StyleEdit[];
+  /** Hand edits back to the style editor: a saved note's when it is edited, or those of a note that could not be saved. */
+  restoreStyleEdits?: (edits: readonly StyleEdit[]) => void;
   update: UpdateMode;
   focusComposer: () => void;
 }
@@ -38,6 +43,9 @@ function removalText(action: VariantAction, reference: VariantReference): string
   return `Remove ${reference.label}, its selector and all alternatives.`;
 }
 
+/** The text of a note sent with style changes and no words. */
+const STYLE_ONLY_NOTE = 'Apply these style changes.';
+
 /** A note this reviewer just sent, shown before the server has saved it. */
 export const isUnsent = (note: IsotoneNote) => note.id.startsWith(UNSENT);
 const UNSENT = 'pending-';
@@ -48,15 +56,26 @@ const UNSENT = 'pending-';
  * puts things back if the server refuses. Editing or deleting a note whose
  * save is still in flight waits for its real id.
  */
-export function useNoteActions({ route, draftKey, store, write, setNotes, getPayload, update, focusComposer }: NoteActionsOptions) {
+export function useNoteActions({
+  route,
+  draftKey,
+  store,
+  write,
+  setNotes,
+  getPayload,
+  getStyleEdits,
+  restoreStyleEdits,
+  update,
+  focusComposer,
+}: NoteActionsOptions) {
   const [text] = useState(createDraftText);
   const [targets, setTargets] = useState<IsotoneElement[]>([]);
   const [variantTarget, setVariantTarget] = useState<VariantReference | null>(null);
   const [editing, setEditing] = useState<IsotoneNote | null>(null);
   const [notice, setNotice] = useState('');
   // Handlers read the current render here, so they stay stable and memoized children skip unrelated renders.
-  const latest = useRef({ route, getPayload, targets, variantTarget, editing });
-  latest.current = { route, getPayload, targets, variantTarget, editing };
+  const latest = useRef({ route, getPayload, getStyleEdits, restoreStyleEdits, targets, variantTarget, editing });
+  latest.current = { route, getPayload, getStyleEdits, restoreStyleEdits, targets, variantTarget, editing };
   /** Saves in flight, by the temporary id of their optimistic note. */
   const saving = useRef(new Map<string, Promise<string>>());
 
@@ -68,7 +87,10 @@ export function useNoteActions({ route, draftKey, store, write, setNotes, getPay
   }, [text]);
 
   const send = useCallback(() => {
-    const value = text.get().trim();
+    const styleEdits = latest.current.getStyleEdits?.() ?? [];
+    // Style changes speak for themselves; words are optional beside them.
+    const written = text.get().trim();
+    const value = written || (styleEdits.length ? STYLE_ONLY_NOTE : '');
     if (!value) return;
     if (value.length > MAX_FEEDBACK_LENGTH) {
       setNotice(`Feedback must be at most ${MAX_FEEDBACK_LENGTH} characters.`);
@@ -79,6 +101,8 @@ export function useNoteActions({ route, draftKey, store, write, setNotes, getPay
       elements: targets,
       variant: variantTarget,
       ...(previous?.variantAction ? { variantAction: previous.variantAction } : {}),
+      // An edited note's changes are the editor's as it stands now, an emptied list included.
+      ...(styleEdits.length || latest.current.editing?.styleEdits ? { styleEdits } : {}),
     };
     const noteRoute = previous?.route ?? route;
     const element = targets[0] ?? null;
@@ -112,8 +136,9 @@ export function useNoteActions({ route, draftKey, store, write, setNotes, getPay
         if (!previous) setEditing((current) => (current?.id === tempId ? { ...current, id } : current));
       } catch {
         setNotes((prev) => (previous ? prev.map((n) => (n.id === tempId ? previous : n)) : prev.filter((n) => n.id !== tempId)));
-        text.set(value);
+        text.set(written);
         setTargets(context.elements);
+        latest.current.restoreStyleEdits?.(styleEdits);
         setVariantTarget(context.variant);
         setEditing(previous);
         setNotice('Could not save. Your feedback is still here.');
@@ -131,6 +156,8 @@ export function useNoteActions({ route, draftKey, store, write, setNotes, getPay
       text.set(note.feedback);
       setTargets(note.elements ?? (note.element ? [note.element] : []));
       setVariantTarget(note.variant ?? null);
+      // Its style changes come back to the editor and the page, to change or remove like the text.
+      latest.current.restoreStyleEdits?.(note.styleEdits ?? []);
       focusComposer();
     },
     [update, text, focusComposer],

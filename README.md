@@ -76,6 +76,11 @@ Ask your agent for a [Blast session](docs/blast.md): for the time you choose, it
 keeps picking up, fixing and closing each batch of new notes without another
 prompt. Isotone still never runs the agent; it only hands it the notes.
 
+## Experiments
+
+Some features ship off by default while they are being proven. Ask your agent to
+turn one on, or run `npx isotone experiment` to see [what there is](docs/experiments.md).
+
 ## Keys
 
 - **⌘/Ctrl + Shift + .** opens Feedback in select mode. With Feedback open, it

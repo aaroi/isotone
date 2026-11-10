@@ -71,10 +71,30 @@ Schema of one record.
 | `elements` | The pinned elements, in order: `tag`, `text`, and `selector` (matches only that element on that page), with `attributes`, `component` (React components, outermost first), `source` (`file:line`, where React records it), `within` (labelled ancestors), `near` (nearby text), `rect` (`x`, `y`, `w`, `h` in page pixels) and `styles` (the computed styles it had when pinned: spacing, type, layout, colours as hex; start from these when a note says "bigger" or "tighter") where known. |
 | `variant` | The selector the note is about: `axisId`, `label`, and `optionId`, `optionLabel` or `value`. |
 | `variantAction` | A removal request from the Variants panel (see [Requests from the Variants panel](#requests-from-the-variants-panel)). |
+| `styleEdits`, `styleHint` | With the style editor experiment: the exact values the reviewer set on a pinned element, as `{ selector, changes: [{ property, from, to }] }` (see [Style changes](#style-changes)). |
 | `payload` | Host-specific context, such as the knob values or flags the note was written against. |
 | `reply` | Your question from `--reply`: `text`, `at`, and `answered: true` once the reviewer has edited the note. |
 | `update`, `updateHint` | An update note (see [Update notes](#update-notes)). |
 | `doneCommand` | On open notes: the exact, shell-quoted command that closes it. |
+
+## Style changes
+
+A reviewer with the style editor experiment on can adjust a pinned element in
+the browser and send the result. The note then lists each change under its
+element (`change: padding-block: 16px → 24px (set by ".card" as "var(--space-4)")`)
+and in `styleEdits`. The part in brackets, `rule` and `declared` in JSON, is
+where the page sets the property today as far as the browser could tell: a
+rule's selector and the value written there, or `set inline`. Check it rather
+than trust it, and prefer the project's nearest token to a raw number. The
+preview existed only in their browser, so nothing in the source has changed
+yet. Make each change the way the project styles things: the class, token,
+utility or component prop that sets the property today. `padding-block` and
+`padding-inline` are the vertical and horizontal pair, as are the `margin-`
+ones. Never add an inline style or `!important`; edit an inline style only where
+the change says it is set inline. When the rule you would edit
+styles other elements too, change it only if the note is about all of them;
+otherwise give the pinned element its own value. A note whose text is
+"Apply these style changes." has nothing else to say.
 
 ## Ask instead of guessing
 
@@ -164,6 +184,13 @@ them. Deleting a pending request cancels it.
 | `[remove-option]`, `[remove-axis]` | Remove that option, or the whole selector. |
 
 Remove a variant (`variant drop <id>`) only when asked to.
+
+## Experiments
+
+`npx isotone experiment` lists features that are off by default, and
+`npx isotone experiment on <id>` turns one on for the project; the user reloads
+the page to see it. Turn one on only when the user asks
+([details](experiments.md)).
 
 ## Blast mode
 

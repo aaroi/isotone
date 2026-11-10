@@ -16,7 +16,9 @@ import { npm } from './npm.mjs';
 // Bundle raised to 384.5 kB and tarball to 415.5 kB (382.3 and 412.8 kB; hold to compare and the style digest of a pinned element):
 // the Compare button, the page-wide key and the previews it switches, and the
 // computed styles a pin records; 1.3.4 was 366 kB.
-const BUDGET = { bundle: 384_500, tarball: 415_500 };
+// Raised again for the experiment flags and the style editor experiment (draft):
+// its fields, live preview, controls and lookup of where the page sets a property.
+const BUDGET = { bundle: 405_500, tarball: 444_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

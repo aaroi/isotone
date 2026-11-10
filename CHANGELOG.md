@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- **Experiments: try a feature before it is on for everyone.** `npx isotone experiment` lists features that ship off by default, such as the style editor below, and `npx isotone experiment on <id>` turns one on for the project; reload the page to see it, with no dev server restart. A host can also pass `experimental: { <id>: true }` to `isotone()`, `serveIsotone`, `mountIsotone` or `<IsotonePanel>`, and `isotone serve` takes `--experimental <id>`. An experiment may change or go away in any release ([details](docs/experiments.md)).
+- **Style editor (experiment).** With `styleEditor` on, a pinned element can be adjusted where it stands: open **Adjust** from the composer and change spacing, type size, weight and line height, colours, radius and opacity by typing, stepping with the arrow keys or dragging a label. The page updates as you go, and the note carries each change as an exact value (`padding-block: 16px → 24px`) for your agent to make in the source, with or without words from you. The preview is in your browser only and ends when the note is sent.
+
 ## 1.4.0
 
 ### Added

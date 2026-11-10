@@ -342,6 +342,8 @@ ${APPEARANCE_CSS}
 .isotone-meta .isotone-chip { flex: 0 1 auto; min-width: 0; height: 18px; padding: 0 7px; font-size: 10px; }
 /* A lone reference gets all available space; multiple references share the row. */
 .isotone-meta .isotone-chip:not(:only-child) { max-width: 140px; }
+/* A count of style changes is short and says nothing cut off. */
+.isotone-meta .isotone-chip[data-whole] { flex: none; max-width: none; }
 /* The corner action floats outside the text column; its 24px hit target
    surrounds a 16px face without reserving trailing space in every row. */
 .isotone-note > .isotone-x { position: absolute; right: -8px; top: -8px; width: 24px; height: 24px; isolation: isolate; opacity: .6; background: none; box-shadow: none; }
@@ -374,6 +376,7 @@ ${APPEARANCE_CSS}
 .isotone-note-hit > p { flex: 1; min-width: 0; }
 /* The note keeps most of the row; references take at most a third and shrink first. */
 .isotone-note-hit > .isotone-meta { flex: 0 1 auto; max-width: 34%; margin-top: 0; }
+.isotone-note-hit > .isotone-meta:has([data-whole]) { max-width: 46%; }
 .isotone-compose { flex: none; display: flex; flex-direction: column; }
 .isotone-input { --iso-input-padding: var(--iso-space); flex: none; min-width: 0; min-height: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; padding: var(--iso-input-padding); background: var(--iso-well); border: 1px solid var(--iso-input-border); box-shadow: var(--iso-input-shadow); border-radius: var(--iso-inner-radius); cursor: text; }
 .isotone-context:empty { display: none; }
@@ -394,12 +397,43 @@ ${APPEARANCE_CSS}
 .isotone-pick[aria-pressed='true'] { color: var(--iso-fg); }
 .isotone-pick, .isotone-send { position: relative; }
 .isotone-pick { width: 30px; height: 30px; border-radius: 999px; }
+/* The style editor's button sits against the select toggle. */
+.isotone-adjust-toggle { margin-left: -3px; }
 .isotone-send { width: 44px; height: 30px; }
 .isotone-send svg { width: 16px; height: 16px; }
 /* Keep a 28px hit area around the quieter composer faces. */
 .isotone-pick::after, .isotone-send::after { content: ''; position: absolute; inset: -2px; border-radius: inherit; }
 .isotone-send { display: grid; place-items: center; margin-left: auto; flex: none; }
 .isotone-notice { font-size: 10px; color: var(--iso-muted); }
+/* The style editor: rows of small wells above the composer, each a label that scrubs and a value. */
+/* Its own scroll area: with a colour picker open it can outgrow a short window, and the composer must stay in reach. */
+.isotone-adjust { display: flex; flex-direction: column; gap: 8px; flex: 0 1 auto; min-height: 0; max-height: min(52vh, 420px); overflow-y: auto; scrollbar-width: none; margin: 0 1px; padding: 2px 1px var(--iso-space); }
+.isotone-adjust-head { display: flex; align-items: center; gap: 6px; min-height: 24px; }
+.isotone-adjust-head > strong { font: inherit; font-weight: 450; }
+.isotone-adjust-head > small { color: var(--iso-faint); font-size: 10px; }
+.isotone-adjust-reset { margin-left: auto; height: 22px; padding: 0 8px; border-radius: 999px; color: var(--iso-muted); font-size: 11px; }
+.isotone-adjust-close { margin-left: auto; width: 22px; height: 22px; border-radius: 50%; }
+.isotone-adjust-reset + .isotone-adjust-close { margin-left: 0; }
+.isotone-adjust-group { margin: 0; padding: 0; border: 0; min-width: 0; display: grid; grid-template-columns: 46px minmax(0, 1fr); column-gap: 6px; row-gap: 8px; align-items: start; }
+.isotone-adjust-group > span { color: var(--iso-muted); font-size: 11px; line-height: 26px; }
+.isotone-adjust-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; min-width: 0; }
+.isotone-num { position: relative; display: flex; align-items: center; min-width: 0; height: 26px; border-radius: 999px; background: var(--iso-well); border: 1px solid var(--iso-input-border); box-shadow: var(--iso-input-shadow); color: var(--iso-muted); font-size: 11px; }
+.isotone-num:focus-within { outline: 2px solid var(--iso-focus); outline-offset: 1px; }
+.isotone-num[data-changed] { color: var(--iso-fg); }
+.isotone-num[data-invalid] input { color: var(--iso-danger); }
+.isotone-num-label { flex: none; padding: 0 2px 0 9px; line-height: 24px; color: var(--iso-muted); white-space: nowrap; cursor: ew-resize; user-select: none; touch-action: none; }
+.isotone-num-label[data-still] { cursor: default; }
+.isotone-num input { flex: 1; min-width: 0; width: 0; height: 24px; padding: 0 9px 0 4px; border: 0; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; text-align: right; outline: none; }
+.isotone-num input::placeholder { color: var(--iso-faint); }
+.isotone-num[data-changed] input, .isotone-num[data-changed] .isotone-num-value { padding-right: 24px; }
+.isotone-num-reset { position: absolute; right: 3px; top: 3px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; color: var(--iso-muted); }
+.isotone-num-swatch { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; height: 24px; border-radius: inherit; text-align: left; font: inherit; color: inherit; }
+.isotone-num-swatch:focus-visible { outline: none; }
+.isotone-num-swatch > i { flex: none; width: 12px; height: 12px; margin-left: auto; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--iso-line); }
+.isotone-num-swatch > i[data-empty] { background: linear-gradient(135deg, transparent 45%, var(--iso-faint) 45% 55%, transparent 55%) !important; }
+.isotone-num-swatch .isotone-num-label { cursor: inherit; }
+.isotone-num-value { flex: none; padding-right: 9px; font-variant-numeric: tabular-nums; letter-spacing: .02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 64px; }
+.isotone-adjust .isotone-colour { box-shadow: var(--iso-popup-shadow); }
 .isotone-entry { position: relative; display: flex; flex-direction: column; gap: 8px; }
 /* Select mode covers the field and says how to finish, next to the elements the user is picking. */
 .isotone-picking { position: absolute; inset: -4px; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 0 4px 0 8px; border-radius: 10px; background: var(--iso-well); cursor: default; }
@@ -413,6 +447,9 @@ ${APPEARANCE_CSS}
 /* After a pin, the composer floats beside the element on a panel surface, placed by
    IsotonePanel inside the viewport. It grows out of the point that was clicked. */
 .isotone-float { position: fixed; z-index: 2147483002; width: min(300px, calc(100vw - 16px)); padding: 6px; background: var(--iso-bg); border: 0; border-radius: var(--iso-panel-radius); box-shadow: var(--iso-panel-shadow); }
+/* The style editor's button takes a face's width from the hint, so the composer grows by as much; a screen too narrow for that keeps the hint. */
+.isotone-float:has(.isotone-adjust-toggle) { width: min(336px, calc(100vw - 16px)); }
+@media (max-width: 351px) { .isotone-float .isotone-adjust-toggle { display: none; } }
 .isotone-float-hint { flex: 1 0 auto; white-space: nowrap; font-size: 10px; color: var(--iso-muted); }
 /* Meanwhile the dock keeps the composer's slot and says where the writing went. */
 .isotone-away { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 50px; padding: 8px 8px 8px 10px; text-align: left; color: var(--iso-fg); background: var(--iso-well); border: 1px solid var(--iso-input-border); box-shadow: var(--iso-input-shadow); border-radius: var(--iso-inner-radius); }
@@ -423,10 +460,11 @@ ${APPEARANCE_CSS}
 .isotone-away-text > span { font-size: 12px; line-height: 16px; }
 .isotone-away-text > small { font-size: 10px; line-height: 14px; color: var(--iso-muted); }
 .isotone-away-action { flex: none; display: flex; align-items: center; height: 28px; padding: 0 12px; font-size: 11px; }
-.isotone-hover { position: fixed; pointer-events: none; border: 1px solid var(--iso-pick-line); background: var(--iso-pick-fill); border-radius: 5px; z-index: 2147483001; }
+/* Under the dock, inside its stacking context: an outline never draws across a panel that covers its element. */
+.isotone-hover { position: fixed; pointer-events: none; border: 1px solid var(--iso-pick-line); background: var(--iso-pick-fill); border-radius: 5px; z-index: -1; }
 .isotone-selected { border: 2px solid var(--iso-pick-line); background: var(--iso-pick-selected-fill); }
 @media (hover: hover) and (pointer: fine) {
-  .isotone-root :where(.isotone-icon:not(.isotone-x), .isotone-menu-action, .isotone-axis-label, .isotone-section-toggle):not(:disabled):not([aria-pressed='true']):hover { background: var(--iso-hover); box-shadow: var(--iso-hover-shadow); color: var(--iso-fg); }
+  .isotone-root :where(.isotone-icon:not(.isotone-x), .isotone-menu-action, .isotone-axis-label, .isotone-section-toggle, .isotone-adjust-reset, .isotone-num-reset):not(:disabled):not([aria-pressed='true']):hover { background: var(--iso-hover); box-shadow: var(--iso-hover-shadow); color: var(--iso-fg); }
   .isotone-note:not(.isotone-note-editing):hover .isotone-note-hit:not(:disabled):not([data-static]) { background: var(--iso-hover); box-shadow: var(--iso-hover-shadow); }
   .isotone-rail-button:not(:disabled):hover { color: var(--iso-fg); }
   .isotone-seg:not(:disabled):hover { color: var(--iso-fg); }

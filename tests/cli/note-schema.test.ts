@@ -90,6 +90,7 @@ function notes(root: string): [Required<StoredNote>, StoredNote] {
       createdAt: '2026-01-08T09:00:00.000Z',
       viewport: { w: 1280, h: 800 },
       payload: { knobs: { radius: 12 } },
+      styleEdits: [{ selector: '#app > button', changes: [{ property: 'padding-block', from: '8px', to: '12px' }] }],
       variant,
       variantAction,
       // Answered: the note changed since this fingerprint.

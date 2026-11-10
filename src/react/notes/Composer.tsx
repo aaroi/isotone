@@ -17,6 +17,8 @@ interface ComposerProps {
   floating: boolean;
   touch: boolean;
   shortcutLabel: string;
+  /** The style editor, when its experiment is on and something is pinned. */
+  adjust?: { open: boolean; count: number; onToggle: () => void; onReset: () => void };
   onSend: () => void;
   onCancelEdit: () => void;
   onClearVariant: () => void;
@@ -37,6 +39,7 @@ export const Composer = memo(function Composer({
   floating,
   touch,
   shortcutLabel,
+  adjust,
   onSend,
   onCancelEdit,
   onClearVariant,
@@ -47,7 +50,8 @@ export const Composer = memo(function Composer({
   onDonePicking,
 }: ComposerProps) {
   const text = useSyncExternalStore(draft.subscribe, draft.get, draft.get);
-  const hasContext = Boolean(editing || variantTarget || targets.length || notice);
+  const changes = adjust?.count ?? 0;
+  const hasContext = Boolean(editing || variantTarget || targets.length || notice || changes);
   // Context changes the scroll-through inset; measure again when that changes
   // or a route restores the composer after its DOM was removed.
   // biome-ignore lint/correctness/useExhaustiveDependencies: hasContext changes the CSS inset used by scrollHeight.
@@ -146,6 +150,17 @@ export const Composer = memo(function Composer({
             </button>
           </span>
         ))}
+        {changes > 0 && (
+          <span className="isotone-chip">
+            <Icon name="adjust" size={12} />
+            <span>
+              {changes} style change{changes === 1 ? '' : 's'}
+            </span>
+            <button type="button" aria-label="Remove style changes" title="Remove style changes" onClick={() => adjust?.onReset()}>
+              <Icon name="close" size={12} />
+            </button>
+          </span>
+        )}
         {/* The context strip is already a polite live region; a nested status would announce twice. */}
         {notice && <p className="isotone-notice">{notice}</p>}
       </div>
@@ -166,7 +181,13 @@ export const Composer = memo(function Composer({
               onSend();
             }
           }}
-          placeholder={targets.length || variantTarget ? 'Feedback on your selection…' : 'What would you change?'}
+          placeholder={
+            changes
+              ? 'Add a note, or just send…'
+              : targets.length || variantTarget
+                ? 'Feedback on your selection…'
+                : 'What would you change?'
+          }
           rows={1}
           className="isotone-textarea"
         />
@@ -183,6 +204,19 @@ export const Composer = memo(function Composer({
           >
             <Icon name="pin" size={14} />
           </button>
+          {adjust && (
+            <button
+              type="button"
+              title="Adjust styles · experimental"
+              aria-label="Adjust styles"
+              aria-pressed={adjust.open}
+              className="isotone-pick isotone-adjust-toggle isotone-icon"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={adjust.onToggle}
+            >
+              <Icon name="adjust" size={14} />
+            </button>
+          )}
           {floating && picking && (
             <span ref={fadeIn} className="isotone-float-hint">
               {HINTS.floating[hints]}
@@ -191,7 +225,7 @@ export const Composer = memo(function Composer({
           <button
             type="button"
             aria-label={editing ? 'Save edit' : 'Send note'}
-            disabled={!text.trim()}
+            disabled={!text.trim() && !changes}
             className="isotone-send"
             title={editing ? 'Save edit (Enter)' : 'Send note (Enter)'}
             onClick={onSend}

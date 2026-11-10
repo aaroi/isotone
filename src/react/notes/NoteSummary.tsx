@@ -1,11 +1,12 @@
 import { showOverflowTitle } from '../tooltips';
+import { countStyleChanges } from '../../core/style-edits';
 import type { IsotoneNote } from '../../core/types';
 import { updateNoteText } from '../../core/update';
 
 /** Pinned references and saved defaults use the same compact tag. */
-function SummaryTag({ label }: { label: string }) {
+function SummaryTag({ label, whole }: { label: string; whole?: boolean }) {
   return (
-    <span className="isotone-chip">
+    <span className="isotone-chip" data-whole={whole || undefined}>
       <span onPointerOver={showOverflowTitle}>{label}</span>
     </span>
   );
@@ -20,6 +21,12 @@ function Reply({ note }: { note: IsotoneNote }) {
       <span>Agent asks</span> {note.reply.text}
     </p>
   );
+}
+
+/** The style editor's changes on the note, as one short count. */
+function changeTags(note: IsotoneNote): { key: string; label: string; whole: true }[] {
+  const count = countStyleChanges(note.styleEdits);
+  return count ? [{ key: 'style-edits', label: `${count} change${count === 1 ? '' : 's'}`, whole: true }] : [];
 }
 
 /** Keep machine-directed requests readable without changing the agent's original text. */
@@ -38,7 +45,7 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
   if (!note.feedback.startsWith('[set-defaults]')) {
     const elements = note.elements ?? (note.element ? [note.element] : []);
     const references = [
-      ...(page ? [{ key: `page:${page}`, label: page }] : []),
+      ...(page ? [{ key: `page:${page}`, label: page, whole: false }] : []),
       ...(note.variant
         ? [
             {
@@ -48,6 +55,7 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
           ]
         : []),
       ...elements.map((element) => ({ key: element.selector, label: element.text || element.tag })),
+      ...changeTags(note),
     ];
     return (
       <>
@@ -56,7 +64,7 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
         {references.length > 0 && (
           <span className="isotone-meta">
             {references.map((reference) => (
-              <SummaryTag key={reference.key} label={reference.label} />
+              <SummaryTag key={reference.key} label={reference.label} whole={'whole' in reference && reference.whole} />
             ))}
           </span>
         )}
