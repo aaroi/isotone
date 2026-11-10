@@ -28,7 +28,7 @@ import { AxisActionsDialog } from './AxisActionsDialog';
 import { AxisControl, type OpenMenu } from './AxisControl';
 import { ColorPicker } from './ColorPicker';
 import { Icon } from '../icons';
-import { MAX_ANIMATED_ITEMS } from '../motion';
+import { keyboardInstant, MAX_ANIMATED_ITEMS, MOTION } from '../motion';
 import { PanelClose } from '../notes/NotesPanel';
 import { useLayoutMotion } from '../useLayoutMotion';
 import { useRenderLimit } from '../useRenderLimit';
@@ -447,6 +447,46 @@ function changedCount(axes: VariantAxis[], selections: VariantSelections): numbe
 }
 
 /**
+ * Crossfade a line of text that has just changed: the old words fade out over
+ * the new ones as a copy outside the live region, so the change is announced
+ * once, and both blur a little through the middle so they read as one line
+ * changing. The copy takes no room, so the bar keeps its size.
+ */
+function crossfade(node: HTMLElement | null, before: string) {
+  if (!node || typeof node.animate !== 'function' || keyboardInstant(node)) return;
+  const row = node.parentElement;
+  if (!row) return;
+  for (const old of row.querySelectorAll('.isotone-save-was')) old.remove();
+  const at = node.getBoundingClientRect();
+  const origin = (node.offsetParent ?? row).getBoundingClientRect();
+  const box = { left: at.left - origin.left, top: at.top - origin.top, width: at.width };
+  const was = document.createElement('span');
+  was.className = 'isotone-save-count isotone-save-was';
+  was.setAttribute('aria-hidden', 'true');
+  was.textContent = before;
+  Object.assign(was.style, { left: `${box.left}px`, top: `${box.top}px`, width: `${box.width}px` });
+  node.after(was);
+  const timing = { duration: MOTION.swap, easing: MOTION.easeOut };
+  const out = was.animate(
+    [
+      { opacity: 1, filter: 'blur(0)' },
+      { opacity: 0.5, filter: 'blur(2px)', offset: 0.5 },
+      { opacity: 0, filter: 'blur(2px)' },
+    ],
+    timing,
+  );
+  node.animate(
+    [
+      { opacity: 0, filter: 'blur(2px)' },
+      { opacity: 0.5, filter: 'blur(2px)', offset: 0.5 },
+      { opacity: 1, filter: 'blur(0)' },
+    ],
+    timing,
+  );
+  out.onfinish = () => was.remove();
+}
+
+/**
  * The page's changed picks and the request to make them the defaults. The
  * other alternatives stay; removing one is its own request.
  */
@@ -473,10 +513,21 @@ function DefaultsBar({ source, changed, onSaved }: { source: VariantsSource; cha
     timer.current = setTimeout(() => setState(''), 3000);
   }
   const picks = `${changed} ${changed === 1 ? 'pick' : 'picks'}`;
+  const line = state || `${picks} changed`;
+  const status = useRef<HTMLSpanElement>(null);
+  const shown = useRef(line);
+  // The saved message comes and goes as a crossfade; a count that changes with a pick swaps at once.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only the message's arrival and departure crossfade.
+  useLayoutEffect(() => {
+    if (shown.current !== line) crossfade(status.current, shown.current);
+  }, [state]);
+  useLayoutEffect(() => {
+    shown.current = line;
+  });
   return (
     <div className="isotone-save-row" aria-busy={busy}>
-      <span className="isotone-save-count" role="status">
-        {state || `${picks} changed`}
+      <span ref={status} className="isotone-save-count" role="status">
+        {line}
       </span>
       <button
         type="button"

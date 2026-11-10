@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Buttons with words answer a press like the icon buttons do.** Done, Make default, segments and page chips sink slightly while pressed.
+- **Picks and pins settle instead of snapping.** Clicking another segment or thumbnail lands on it at once while the one you left fades out, swatches and thumbnails sink under a press, a held slider knob grows, the saved message in the defaults bar crossfades, and new pins and composer references settle into place. Keyboard changes stay instant.
+
 ## 1.3.5
 
 ### Fixed
