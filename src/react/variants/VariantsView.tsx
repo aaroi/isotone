@@ -32,7 +32,7 @@ import { AxisActionsDialog } from './AxisActionsDialog';
 import { AxisControl, type OpenMenu } from './AxisControl';
 import { ColorPicker } from './ColorPicker';
 import { Icon } from '../icons';
-import { keyboardInstant, MAX_ANIMATED_ITEMS, MOTION } from '../motion';
+import { keyboardInstant, MAX_ANIMATED_ITEMS, MOTION, stillMotion } from '../motion';
 import { PanelClose } from '../notes/NotesPanel';
 import { useLayoutMotion } from '../useLayoutMotion';
 import { useRenderLimit } from '../useRenderLimit';
@@ -493,6 +493,22 @@ function SectionBlock({
   children: ReactNode;
 }) {
   const id = useId();
+  const body = useRef<HTMLDivElement>(null);
+  const wasCollapsed = useRef(collapsed);
+  // Opening a section eases its selectors in from under the header, rather than popping them in.
+  useLayoutEffect(() => {
+    const opening = wasCollapsed.current && !collapsed;
+    wasCollapsed.current = collapsed;
+    const node = body.current;
+    if (!opening || !node || typeof node.animate !== 'function' || stillMotion(node)) return;
+    node.animate(
+      [
+        { opacity: 0, transform: 'translateY(-6px)' },
+        { opacity: 1, transform: 'none' },
+      ],
+      { duration: MOTION.enter, easing: MOTION.easeOut },
+    );
+  }, [collapsed]);
   return (
     // The heading carries the structure (heading navigation, a disclosure button);
     // a region or group per section would only add landmarks to a long list.
@@ -511,7 +527,7 @@ function SectionBlock({
           <small>{count}</small>
         </button>
       </h3>
-      <div className="isotone-section-body" id={`${id}-body`} hidden={collapsed}>
+      <div ref={body} className="isotone-section-body" id={`${id}-body`} hidden={collapsed}>
         {collapsed ? null : children}
       </div>
     </div>

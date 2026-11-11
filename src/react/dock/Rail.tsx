@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { Icon } from '../icons';
 import { ringPulse } from '../motion';
+import { RollingText } from '../RollingText';
 
 const RAIL_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
 
@@ -156,7 +157,7 @@ export function Launcher({
       <Icon name="iterate" />
       {count > 0 && (
         <span className="isotone-badge" aria-hidden="true">
-          {count}
+          <RollingText text={String(count)} />
         </span>
       )}
     </button>

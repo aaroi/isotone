@@ -212,7 +212,7 @@ const NoteRow = memo(function NoteRow({
 }) {
   const remove = removeAction(note);
   return (
-    <li data-motion-key={note.id} className={`isotone-note${editing ? ' isotone-note-editing' : ''}`}>
+    <li data-motion-key={note.id} data-working={working || undefined} className={`isotone-note${editing ? ' isotone-note-editing' : ''}`}>
       {note.update ? (
         // Isotone writes an update note's text from its request, so
         // there is nothing to edit; its corner action cancels it.

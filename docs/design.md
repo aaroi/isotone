@@ -59,8 +59,10 @@ Layout constants live in `styles/panel.ts`:
 | Tool faces | 28px, with 4px between faces and around them |
 | Saved note padding | 6px vertically, 11px horizontally; background extends 1px past the composer on each side |
 
-The expanded pill is the same material stretched, keeping its lower rim, inset
-and proportions. Panels stay anchored above it; opening one never moves the pill
+The pill is glass: its face lets the page through, blurred and a little more
+saturated, under the same rim and shadow, so it sits in the host page rather than
+on it; the update notice beside it shares the glass. The expanded pill is the
+same material stretched, keeping its lower rim, inset and proportions. Panels stay anchored above it; opening one never moves the pill
 or rescales another's text.
 
 The defaults bar sits at the bottom of the variants panel while a pick differs
@@ -297,6 +299,13 @@ defaults bar crossfades its saved message. A new pin fades in and a reference
 added to the open composer settles in from 96%, over 125ms; pins and chips
 already there when the overlay or composer appears never do. Reduced motion
 keeps their fades.
+
+A figure that changes in place (a slider's value, a colour's hex, the count on
+the pill) rolls only the characters that changed, up for a larger number and down
+for a smaller one, through its own clip, over 200ms (`RollingText.tsx`). Opening a
+section eases its selectors in from 6px under the header. While an agent works on
+a note, a slow light passes along its text, quieter at rest; reduced motion keeps
+it still and quiet. Keys and reduced motion swap figures and sections at once.
 
 Scroll edges move with the scroll position rather than a clock: a band grows as
 content starts to pass under it, and a row shrinks to 96% while it crosses a band
