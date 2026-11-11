@@ -402,6 +402,8 @@ export const VariantsView = memo(function VariantsView({
           );
         })}
         {source.saveDefaults && <div className="isotone-vars-tail" aria-hidden="true" />}
+        <ScrollEdge side="top" />
+        <ScrollEdge side="bottom" />
       </div>
       {colourAxis?.kind === 'color' && (
         <ColorPicker
@@ -738,5 +740,18 @@ function CompareButton({
     >
       Compare
     </button>
+  );
+}
+
+/** Blur layers for one edge of the selectors' scroller, each a step blurrier than the last, so
+ *  content dissolves gradually where it leaves view (styles/edges.ts). */
+function ScrollEdge({ side }: { side: 'top' | 'bottom' }) {
+  return (
+    <div className={`isotone-edge isotone-edge-${side}`} aria-hidden="true">
+      <i />
+      <i />
+      <i />
+      <i />
+    </div>
   );
 }

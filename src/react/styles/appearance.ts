@@ -1,6 +1,6 @@
 /**
  * Paint only. Layout, typography, hit targets and state selectors live in panel.ts.
- * Both themes implement the same palette contract and share one Instrument
+ * Both themes implement the same palette contract and share one Soft
  * material recipe. Layout and interaction never fork with the page theme.
  *
  * Surfaces a sticky header or a fade must match are flat (`bg`, `well`), so a
@@ -30,9 +30,10 @@ const darkPalette = {
   accent: '#5f62e0',
   'accent-hover': '#6d70ea',
   'accent-shadow': 'inset 0 1px 0 #ffffff33, 0 0 0 1px #2a2c8a80, 0 1px 2px #0004',
-  // Card: inner top light, hairline, a crisp outline against the page, then a soft drop.
-  'panel-shadow':
-    'inset 0 1px 0 #ffffff17, inset 0 0 0 1px #ffffff0d, 0 0 0 1px #0009, 0 2px 4px #0004, 0 12px 24px -6px #0006, 0 32px 64px -16px #0008',
+  // Card: a crisp outline against the page, then a soft drop.
+  'panel-shadow': '0 0 0 1px #0009, 0 2px 4px #0004, 0 12px 24px -6px #0006, 0 32px 64px -16px #0008',
+  // Its inner rim, lit from above, painted into a 1px ring over the card's content (edges.ts).
+  'panel-rim': 'linear-gradient(#ffffff1f, #ffffff0d 28px)',
   'popup-shadow': 'inset 0 1px 0 #ffffff21, inset 0 0 0 1px #ffffff14, 0 0 0 1px #000b, 0 2px 4px #0005, 0 12px 32px -4px #000c',
   'rail-base': 'oklch(20% .005 286)',
   'rail-base-shadow': 'inset 0 1px 0 #ffffff17, inset 0 0 0 1px #ffffff0d, 0 0 0 1px #000c, 0 2px 4px #0005, 0 12px 28px -8px #000a',
@@ -87,6 +88,7 @@ export const PALETTES = {
     'accent-hover': '#4a4dd0',
     'accent-shadow': 'inset 0 1px 0 #ffffff33, 0 0 0 1px #4346c0, 0 1px 2px #3f42b833',
     'panel-shadow': '0 0 0 1px #00000017, 0 1px 2px #0000000d, 0 8px 24px -10px #00000029',
+    'panel-rim': 'none',
     'popup-shadow': '0 0 0 1px #0000001a, 0 2px 4px #0000000f, 0 12px 28px -8px #00000033',
     'rail-base': '#fff',
     'rail-base-shadow': '0 0 0 1px #00000017, 0 1px 2px #0000000d, 0 6px 16px -6px #00000029',
@@ -114,8 +116,8 @@ export const PALETTES = {
   },
 } satisfies Record<'dark' | 'light', Palette>;
 
-/** Instrument is the single material recipe; themes supply its lighting. */
-export const INSTRUMENT_MATERIAL = {
+/** Soft is the single material recipe; themes supply its lighting. */
+export const SOFT_MATERIAL = {
   'accent-ink': '#fff',
   'input-border': 'transparent',
   'input-shadow': 'var(--iso-well-shadow)',
@@ -143,6 +145,6 @@ function tokens(values: Record<string, string>): string {
     .join('\n');
 }
 export const APPEARANCE_CSS = `
-.isotone-root { ${tokens(PALETTES.dark)} ${tokens(INSTRUMENT_MATERIAL)} }
+.isotone-root { ${tokens(PALETTES.dark)} ${tokens(SOFT_MATERIAL)} }
 .isotone-root[data-theme='light'] { ${tokens(PALETTES.light)} color-scheme: light; }
 `;

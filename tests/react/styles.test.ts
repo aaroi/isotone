@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { INSTRUMENT_MATERIAL, PALETTES, PALETTE_TOKEN_NAMES } from '../../src/react/styles/appearance';
+import { SOFT_MATERIAL, PALETTES, PALETTE_TOKEN_NAMES } from '../../src/react/styles/appearance';
 import { PANEL_CSS } from '../../src/react/styles/panel';
 
 // Themes set root-level palette tokens only. Components and states cannot
@@ -35,7 +35,7 @@ function themeViolations(css: string): string[] {
 }
 
 describe('theme boundary', () => {
-  it('keeps themes on the same Instrument component and state rules', () => {
+  it('keeps themes on the same Soft component and state rules', () => {
     expect(themeViolations(PANEL_CSS)).toEqual([]);
   });
 
@@ -65,7 +65,7 @@ describe('theme boundary', () => {
     const paletteKeys = Object.keys(PALETTES.dark).sort();
     for (const palette of Object.values(PALETTES)) {
       expect(Object.keys(palette).sort()).toEqual(paletteKeys);
-      const values: Record<string, string> = { ...palette, ...INSTRUMENT_MATERIAL };
+      const values: Record<string, string> = { ...palette, ...SOFT_MATERIAL };
       function resolve(key: string, chain: string[] = []): void {
         if (/^zinc-(50|100|200|300|400|500|600|700|800|900|950)$/.test(key)) return;
         expect(chain, `circular token: ${key}`).not.toContain(key);

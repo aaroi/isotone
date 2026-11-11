@@ -1,6 +1,6 @@
-# Instrument design
+# Soft design
 
-Maintainer reference for Isotone's panel. Instrument is its one design: a
+Maintainer reference for Isotone's panel. Soft is its one design: a
 horizontal pill with the feedback and variants panels above it, drawn as rounded
 cards with capsule controls. Light and dark share everything but paint tokens.
 The panel is a small physical control on the host page: depth explains function,
@@ -10,7 +10,7 @@ and no decoration competes with the app.
 
 | Role | Light | Dark |
 | --- | --- | --- |
-| Panel surface | Flat white, a fine edge and a short soft shadow | Flat dark neutral, an inner top highlight, a crisp outline against the page and a long soft shadow |
+| Panel surface | Flat white, a fine edge and a short soft shadow | Flat dark neutral, a rim lit from above, a crisp outline against the page and a long soft shadow |
 | Recessed field or selector slot | Light gray fill and one crisp hairline, never a blurred inner shadow | Deeper fill shaded from above, with a faint lit lower lip |
 | Raised action or persistent selection | White face, fine edge and a small shadow | Lighter gradient face, lit top edge, quiet outline and small contact shadow |
 | Popup (action dialog, colour picker, update dialog) | The panel's surface with a stronger shadow | A step lighter than the panel, with a stronger shadow |
@@ -18,6 +18,10 @@ and no decoration competes with the app.
 
 Every surface a sticky header or fade has to match is flat, so a header never
 shows as a band over a gradient. Depth comes from edges, highlights and shadows.
+
+The rim is a 1px ring drawn over the card's content, so it reads the same all the
+way round whatever passes beneath it: an inset shadow under the content would be
+hidden by sticky headers and the defaults bar, and uncovered by an overscroll.
 
 Gray means recessed in light mode; selection means raised. A note being
 edited, selected segments, thumbnails and page chips, the picker toggle and the
@@ -234,6 +238,15 @@ A section header sticks to the top of the Variants scroll area while its
 selectors pass, until the next pushes it out. At rest its padding fills the gap
 above (sticking does not move its text) and its fade sits in the gap below,
 covering no control; scroll padding keeps focus from landing beneath it.
+
+In Variants, content leaving view dissolves: it blurs progressively and fades into
+the surface, and each row recedes a little (not with reduced motion). A stuck
+header and the defaults bar are one material with that dissolve, nearly opaque
+behind their text, rather than solid blocks beside a fade. At rest each band fills
+only the empty inset at its edge, so nothing at rest is ever blurred; once content
+can pass under it, it reaches further in. The blur steps through layers, each
+twice the last, so no faint blurred copy sits over sharp text as a glow. Every
+fade eases in and out, so neither end reads as a line. `styles/edges.ts` owns it.
 
 The textarea's top mask appears only after scrolling. Without tags the textarea
 extends through the field's top inset, which scrolls away with the text, and the

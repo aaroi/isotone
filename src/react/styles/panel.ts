@@ -1,4 +1,5 @@
 import { APPEARANCE_CSS } from './appearance';
+import { EDGES_CSS } from './edges';
 import { MOTION } from '../motion';
 
 /** One shared set of tokens and controls for the shadow-root and inline mounts. */
@@ -90,6 +91,9 @@ ${APPEARANCE_CSS}
 .isotone-root[data-tools='2'] .isotone-rail-button { width: var(--iso-rail-step); right: var(--iso-rail-end); }
 .isotone-root[data-tools='2'] .isotone-rail-button[aria-label='Variants'] { right: calc(var(--iso-rail-end) + var(--iso-rail-step)); }
 .isotone-root[data-tools='2'] .isotone-rail-button::before { inset: var(--iso-rail-key-inset) calc(var(--iso-rail-gap) / 2); }
+/* Keyboard focus rings the round key face, centred in the gap around it, not the taller hit area. */
+.isotone-root .isotone-rail-button:focus-visible { outline: none; }
+.isotone-rail-button:focus-visible::before { outline: 2px solid var(--iso-focus); outline-offset: calc(var(--iso-rail-gap) / 2 - 1px); }
 .isotone-tool-label { display: none; }
 .isotone-badge { position: absolute; right: -3px; top: -3px; pointer-events: none; display: grid; place-items: center; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: var(--iso-accent); box-shadow: 0 0 0 2px var(--iso-rail-base); color: var(--iso-accent-ink); font-size: 9px; font-weight: 600; font-variant-numeric: tabular-nums; }
 /* Panels are sections inside the dock. Only long content scrolls. */
@@ -109,7 +113,7 @@ ${APPEARANCE_CSS}
 .isotone-panel-close:hover::before { background: var(--iso-control-hover-face); }
 @media (hover: none) { .isotone-panel-close { opacity: 1; } }
 /* The defaults bar, at the foot of the variants panel while a pick differs from its default. */
-.isotone-root .isotone-vars > .isotone-panel-head { display: flex; align-items: center; gap: 8px; padding: var(--iso-space); z-index: 1; }
+.isotone-root .isotone-vars > .isotone-panel-head { display: flex; align-items: center; gap: 8px; padding: var(--iso-space); z-index: 5; }
 /* --iso-menu-max bounds a dialog squeezed above its heading, which then scrolls there; 12px stays clear below. */
 .isotone-root .isotone-axis-menu { top: var(--iso-menu-top, 6px); max-height: min(var(--iso-menu-max, 100%), calc(100% - var(--iso-menu-top, 6px) - 12px)); }
 .isotone-head-actions { display: flex; align-items: center; gap: 6px; margin-right: auto; }
@@ -119,6 +123,10 @@ ${APPEARANCE_CSS}
 .isotone-vars { min-height: min(var(--iso-menu-need, 0px), calc(var(--iso-view-height) - 76px)); }
 /* The panel no longer clips, so its corner close can overhang; the variants body clips itself. */
 .isotone-root .isotone-panel > .isotone-vars { overflow: hidden; border-radius: var(--iso-panel-radius); }
+/* One stack inside the selectors, from the back: the top scroll edge (1), open section headers (2),
+   collapsed ones (3), the bottom edge (4), the defaults bar (5), then dialogs (6, 7). Isolated, so none
+   of it rises over the panel's rim or its corner close. See edges.ts. */
+.isotone-root .isotone-panel > .isotone-vars { isolation: isolate; }
 /* A stable gutter: classic scrollbars appearing (the defaults bar adds scroll room) never narrow and re-wrap the list. */
 .isotone-vars-body { flex: 1; overflow-x: hidden; overflow-y: auto; scrollbar-gutter: stable; min-height: 0; overscroll-behavior: contain; padding: var(--iso-panel-inset); display: flex; flex-direction: column; gap: var(--iso-panel-inset); }
 /* The footer overlaps only the scroller's bottom padding: content fades beneath
@@ -141,9 +149,9 @@ ${APPEARANCE_CSS}
 .isotone-section[data-collapsed='true'] + .isotone-section[data-collapsed='true'] > .isotone-section-head { margin-top: -4px; padding-top: 4px; }
 /* An open section keeps its full backdrop so it covers content when stuck; the
    collapsed header above paints over the part that reaches into the gap. */
-.isotone-section[data-collapsed='true'] > .isotone-section-head { z-index: 2; }
+.isotone-section[data-collapsed='true'] > .isotone-section-head { z-index: 3; }
 /* Sticky offsets start inside the scroller's padding; the negative top reaches its edge. */
-.isotone-section-head { position: sticky; top: calc(0px - var(--iso-panel-inset)); z-index: 1; margin: calc(0px - var(--iso-panel-inset)) calc(0px - var(--iso-panel-inset)) -4px; padding: var(--iso-panel-inset) var(--iso-panel-inset) 0; background: var(--iso-bg); font: inherit; }
+.isotone-section-head { position: sticky; top: calc(0px - var(--iso-panel-inset)); z-index: 2; margin: calc(0px - var(--iso-panel-inset)) calc(0px - var(--iso-panel-inset)) -4px; padding: var(--iso-panel-inset) var(--iso-panel-inset) 0; background: var(--iso-bg); font: inherit; }
 .isotone-section-head::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 14px; background: linear-gradient(var(--iso-bg), transparent); pointer-events: none; }
 .isotone-section-toggle { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: calc(100% + 7px); min-height: 24px; padding: 2px 7px; margin-left: -7px; border-radius: 999px; text-align: left; color: color-mix(in oklch, var(--iso-fg) 45%, var(--iso-muted)); font-size: 11px; font-weight: 500; }
 .isotone-section-toggle > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -222,7 +230,7 @@ ${APPEARANCE_CSS}
 .isotone-picker[data-custom='true']::after { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: var(--iso-custom); box-shadow: 0 0 0 1.5px var(--iso-popup-face); }
 /* The custom colour well: recessed like a selector slot, in the panel's own materials. */
 /* The custom colour popover: the action dialog's popup material and entrance, anchored to its swatch. */
-.isotone-colour { position: absolute; left: 6px; right: 6px; z-index: 3; display: flex; flex-direction: column; gap: 10px; padding: 10px; border-radius: 14px; background: var(--iso-popup-face); box-shadow: var(--iso-popup-shadow); transform-origin: top right; transition: opacity var(--iso-enter) var(--iso-ease-out), transform var(--iso-enter) var(--iso-ease-out); }
+.isotone-colour { position: absolute; left: 6px; right: 6px; z-index: 7; display: flex; flex-direction: column; gap: 10px; padding: 10px; border-radius: 14px; background: var(--iso-popup-face); box-shadow: var(--iso-popup-shadow); transform-origin: top right; transition: opacity var(--iso-enter) var(--iso-ease-out), transform var(--iso-enter) var(--iso-ease-out); }
 @starting-style { .isotone-colour { opacity: 0; transform: translateY(-4px) scale(.97); } }
 .isotone-colour-field { position: relative; height: 112px; border-radius: 10px; cursor: crosshair; touch-action: none; background-image: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .12); }
 .isotone-colour-handle { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / .28), 0 1px 3px rgb(0 0 0 / .3); pointer-events: none; }
@@ -298,12 +306,12 @@ ${APPEARANCE_CSS}
 /* The line it replaces, fading out over the new one (VariantsView's crossfade); it takes no room. */
 .isotone-save-was { position: absolute; flex: none; pointer-events: none; }
 /* A local action sheet overlays controls, preserving every underlying position. */
-.isotone-axis-menu { position: absolute; inset: 48px 6px auto; z-index: 2; background: var(--iso-popup-face); border-radius: 14px; max-height: calc(100% - 54px); box-shadow: var(--iso-popup-shadow); display: flex; flex-direction: column; transform-origin: top left; opacity: 0; transform: translateY(-4px) scale(.97); visibility: hidden; transition: opacity var(--iso-exit) var(--iso-ease-out), transform var(--iso-exit) var(--iso-ease-out), visibility 0s var(--iso-exit); }
+.isotone-axis-menu { position: absolute; inset: 48px 6px auto; z-index: 6; background: var(--iso-popup-face); border-radius: 14px; max-height: calc(100% - 54px); box-shadow: var(--iso-popup-shadow); display: flex; flex-direction: column; transform-origin: top left; opacity: 0; transform: translateY(-4px) scale(.97); visibility: hidden; transition: opacity var(--iso-exit) var(--iso-ease-out), transform var(--iso-exit) var(--iso-ease-out), visibility 0s var(--iso-exit); }
 .isotone-axis-menu[data-open='true'] { visibility: visible; opacity: 1; transform: none; transition-delay: 0s; }
 @starting-style { .isotone-axis-menu[data-open='true'] { opacity: 0; transform: translateY(-4px) scale(.97); } }
 .isotone-menu-title { position: relative; z-index: 1; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 10px 8px 16px; }
 /* Fade the moving content into the popup's actual material. A mask preserves
-   Instrument's surface gradient and works identically in light and dark mode.
+   Soft's surface gradient and works identically in light and dark mode.
    Matching negative margin/padding preserves the first action's resting position. */
 .isotone-menu-scroll { --iso-scroll-fade-bottom: 0px; scroll-padding-block: var(--iso-space) calc(var(--iso-scroll-fade-bottom) + 6px); overflow-y: auto; overscroll-behavior: contain; flex: 1; min-height: 0; margin-top: calc(0px - var(--iso-space)); padding: var(--iso-space) 6px 6px; mask-image: linear-gradient(to bottom, transparent, #000 var(--iso-space), #000 calc(100% - var(--iso-scroll-fade-bottom)), transparent); }
 /* The last row fades out rather than being cut; a dialog that has to scroll fades longer, reading as more below. */
@@ -425,6 +433,7 @@ ${APPEARANCE_CSS}
 .isotone-away-action { flex: none; display: flex; align-items: center; height: 28px; padding: 0 12px; font-size: 11px; }
 .isotone-hover { position: fixed; pointer-events: none; border: 1px solid var(--iso-pick-line); background: var(--iso-pick-fill); border-radius: 5px; z-index: 2147483001; }
 .isotone-selected { border: 2px solid var(--iso-pick-line); background: var(--iso-pick-selected-fill); }
+${EDGES_CSS}
 @media (hover: hover) and (pointer: fine) {
   .isotone-root :where(.isotone-icon:not(.isotone-x), .isotone-menu-action, .isotone-axis-label, .isotone-section-toggle):not(:disabled):not([aria-pressed='true']):hover { background: var(--iso-hover); box-shadow: var(--iso-hover-shadow); color: var(--iso-fg); }
   .isotone-note:not(.isotone-note-editing):hover .isotone-note-hit:not(:disabled):not([data-static]) { background: var(--iso-hover); box-shadow: var(--iso-hover-shadow); }
@@ -469,7 +478,7 @@ ${APPEARANCE_CSS}
   .isotone-root[data-selecting='true'] .isotone-notes-panel > :is(.isotone-list, .isotone-pages) { display: none; }
 }
 /* A finger needs more than the drawn faces. Hit areas grow without moving
-   anything; the faces keep Instrument's geometry. */
+   anything; the faces keep Soft's geometry. */
 @media (pointer: coarse) {
   .isotone-pick::after, .isotone-send::after { inset: -8px -10px; }
   .isotone-chip button { position: relative; }
@@ -494,6 +503,9 @@ ${APPEARANCE_CSS}
   .isotone-rail-button[aria-expanded='true']::before { background: Highlight; }
   /* Its gradient is dropped here, and it floats over selectors: give it a solid face. */
   .isotone-root .isotone-vars > .isotone-panel-head { background: Canvas; }
+  /* The scroll edges are blur and tint, both dropped here; stuck headers take a solid face instead. */
+  .isotone-edge { display: none; }
+  .isotone-root .isotone-section-head { background: Canvas; }
   .isotone-rail-button[aria-expanded='true'] { color: HighlightText; }
   .isotone-swatch, .isotone-picker, .isotone-colour-field, .isotone-colour-handle, .isotone-hue { forced-color-adjust: none; }
   .isotone-swatch, .isotone-picker { box-shadow: 0 0 0 1px CanvasText; }

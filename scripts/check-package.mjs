@@ -16,7 +16,9 @@ import { npm } from './npm.mjs';
 // Bundle raised to 384.5 kB and tarball to 415.5 kB (382.3 and 412.8 kB; hold to compare and the style digest of a pinned element):
 // the Compare button, the page-wide key and the previews it switches, and the
 // computed styles a pin records; 1.3.4 was 366 kB.
-const BUDGET = { bundle: 384_500, tarball: 415_500 };
+// Bundle raised to 391.5 kB and tarball to 420 kB (389.3 and 417.5 kB; scroll edges): the layered
+// blur bands, the header and defaults-bar materials, the rim drawn over content and rows that recede.
+const BUDGET = { bundle: 391_500, tarball: 420_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

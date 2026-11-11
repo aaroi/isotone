@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+
+- **Scrolled selectors dissolve at the panel's edges.** Where content leaves view in Variants, it blurs gradually and fades into the panel, and each row recedes a little as it goes. A stuck section header and the defaults bar now float over the list as one surface with that fade, rather than solid blocks with a seam beside them. Nothing at rest is blurred, and the last selector still scrolls fully clear of the bar.
+- **The panel's edge looks the same all the way round.** In the dark theme its lit rim no longer disappears beside headers and the defaults bar, or flashes when the list bounces at the top.
+- **Keyboard focus on the pill rings the round button, not a tall box around it.**
+
 ## 1.4.1
 
 ### Fixed
