@@ -582,7 +582,8 @@ describe('review dock interactions', () => {
       expect(labels()).toEqual(['Layout', 'Before > After', 'Logo size', 'Ink', 'Links']);
       expect(headers()).toEqual(['Header', 'Footer']);
       const body = container.querySelector('.isotone-vars-body');
-      expect(Array.from(body?.children ?? []).map((el) => el.className)).toEqual([
+      // The scroll edge layers close the list; they are decoration, not selectors.
+      expect(Array.from(body?.querySelectorAll(':scope > :not(.isotone-edge)') ?? []).map((el) => el.className)).toEqual([
         'isotone-axis',
         'isotone-axis',
         'isotone-section',

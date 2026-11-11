@@ -302,14 +302,24 @@ export const VariantsView = memo(function VariantsView({
     // Used once: a pick changed some other way later must not jump to an old control.
     touched.current = null;
     if (!saving || !body || !control?.isConnected || !body.contains(control)) return;
-    const bar = body.parentElement?.querySelector<HTMLElement>(':scope > .isotone-panel-head')?.offsetHeight ?? 0;
-    const view = body.getBoundingClientRect();
-    const rect = control.getBoundingClientRect();
-    // Only a control in view that the bar would cover; one scrolled away stays where the reviewer left it.
-    if (rect.top >= view.bottom || rect.bottom <= view.top) return;
-    const covered = rect.bottom - (view.bottom - bar);
     const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (covered > 0) body.scrollBy?.({ top: covered, behavior: still ? 'auto' : 'smooth' });
+    // The bar's room at the end of the list eases in with the bar (styles/panel.ts), and a short list grows
+    // by it instead; measure once it has settled. Clear the bottom scroll edge's reach too, not just the bar.
+    const settle = setTimeout(
+      () => {
+        if (!control.isConnected) return;
+        const bar = body.parentElement?.querySelector<HTMLElement>(':scope > .isotone-panel-head')?.offsetHeight ?? 0;
+        const edge = Number.parseFloat(getComputedStyle(body).getPropertyValue('--iso-edge-length')) || 0;
+        const view = body.getBoundingClientRect();
+        const rect = control.getBoundingClientRect();
+        // Only a control in view that the bar would cover; one scrolled away stays where the reviewer left it.
+        if (rect.top >= view.bottom || rect.bottom <= view.top) return;
+        const covered = rect.bottom - (view.bottom - bar - edge);
+        if (covered > 0) body.scrollBy?.({ top: covered, behavior: still ? 'auto' : 'smooth' });
+      },
+      still ? 0 : MOTION.enter,
+    );
+    return () => clearTimeout(settle);
   }, [saving]);
 
   return (
@@ -402,6 +412,8 @@ export const VariantsView = memo(function VariantsView({
           );
         })}
         {source.saveDefaults && <div className="isotone-vars-tail" aria-hidden="true" />}
+        <ScrollEdge side="top" />
+        <ScrollEdge side="bottom" />
       </div>
       {colourAxis?.kind === 'color' && (
         <ColorPicker
@@ -738,5 +750,18 @@ function CompareButton({
     >
       Compare
     </button>
+  );
+}
+
+/** Blur layers for one edge of the selectors' scroller, each a step blurrier than the last, so
+ *  content dissolves gradually where it leaves view (styles/edges.ts). */
+function ScrollEdge({ side }: { side: 'top' | 'bottom' }) {
+  return (
+    <div className={`isotone-edge isotone-edge-${side}`} aria-hidden="true">
+      <i />
+      <i />
+      <i />
+      <i />
+    </div>
   );
 }

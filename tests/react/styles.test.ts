@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { INSTRUMENT_MATERIAL, PALETTES, PALETTE_TOKEN_NAMES } from '../../src/react/styles/appearance';
+import { SOFT_MATERIAL, PALETTES, PALETTE_TOKEN_NAMES } from '../../src/react/styles/appearance';
 import { PANEL_CSS } from '../../src/react/styles/panel';
 
 // Themes set root-level palette tokens only. Components and states cannot
@@ -35,7 +35,7 @@ function themeViolations(css: string): string[] {
 }
 
 describe('theme boundary', () => {
-  it('keeps themes on the same Instrument component and state rules', () => {
+  it('keeps themes on the same Soft component and state rules', () => {
     expect(themeViolations(PANEL_CSS)).toEqual([]);
   });
 
@@ -65,7 +65,7 @@ describe('theme boundary', () => {
     const paletteKeys = Object.keys(PALETTES.dark).sort();
     for (const palette of Object.values(PALETTES)) {
       expect(Object.keys(palette).sort()).toEqual(paletteKeys);
-      const values: Record<string, string> = { ...palette, ...INSTRUMENT_MATERIAL };
+      const values: Record<string, string> = { ...palette, ...SOFT_MATERIAL };
       function resolve(key: string, chain: string[] = []): void {
         if (/^zinc-(50|100|200|300|400|500|600|700|800|900|950)$/.test(key)) return;
         expect(chain, `circular token: ${key}`).not.toContain(key);
@@ -190,5 +190,29 @@ describe('forced colors', () => {
     ])
       expect(forced).toContain(selector);
     expect(block).toMatch(/Highlight/);
+  });
+});
+
+describe('scroll edges', () => {
+  it('grows bands and recedes rows only where scroll-driven animations exist', () => {
+    // Elsewhere animation-timeline is dropped and the animation would run on time, applying its
+    // last keyframe at once: bands at full reach, blurring the first row at rest.
+    const timelines = [...PANEL_CSS.matchAll(/(?<!\()animation-timeline:/g)].map((match) => match.index ?? 0);
+    expect(timelines.length).toBeGreaterThan(0);
+    for (const at of timelines) {
+      const opened = PANEL_CSS.lastIndexOf('@supports (animation-timeline:', at);
+      expect(opened).toBeGreaterThan(-1);
+      const between = PANEL_CSS.slice(opened, at);
+      // Still inside that block: more braces opened than closed since it began.
+      expect(between.split('{').length - 1).toBeGreaterThan(between.split('}').length - 1);
+    }
+  });
+
+  it('lets forced colours keep a solid face on stuck section headers', () => {
+    // The material that replaces a header's face must not outrank the forced-colours rule.
+    const cleared = PANEL_CSS.split('\n').filter((line) => /\.isotone-section-head \{ background: none/.test(line));
+    expect(cleared.length).toBeGreaterThan(0);
+    for (const line of cleared) expect(line.trimStart().startsWith(':where(')).toBe(true);
+    expect(PANEL_CSS).toMatch(/@media \(forced-colors: active\)[\s\S]*\.isotone-root \.isotone-section-head \{ background: Canvas; \}/);
   });
 });
