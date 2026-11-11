@@ -147,19 +147,18 @@ ${APPEARANCE_CSS}
 /* A collapsed section has nothing to stick over, so its header's backdrop only needs
    to reach the smaller gap; a full inset would cover the header above it. */
 .isotone-section[data-collapsed='true'] + .isotone-section[data-collapsed='true'] > .isotone-section-head { margin-top: -4px; padding-top: 4px; }
-/* An open section keeps its full backdrop so it covers content when stuck; the
-   collapsed header above paints over the part that reaches into the gap. */
+/* A collapsed header paints over the open one below it where its backdrop reaches into the gap
+   (see the layer order on .isotone-vars). */
 .isotone-section[data-collapsed='true'] > .isotone-section-head { z-index: 3; }
 /* Sticky offsets start inside the scroller's padding; the negative top reaches its edge. */
 .isotone-section-head { position: sticky; top: calc(0px - var(--iso-panel-inset)); z-index: 2; margin: calc(0px - var(--iso-panel-inset)) calc(0px - var(--iso-panel-inset)) -4px; padding: var(--iso-panel-inset) var(--iso-panel-inset) 0; background: var(--iso-bg); font: inherit; }
-.isotone-section-head::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 14px; background: linear-gradient(var(--iso-bg), transparent); pointer-events: none; }
+.isotone-section-head::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 14px; pointer-events: none; }
 .isotone-section-toggle { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: calc(100% + 7px); min-height: 24px; padding: 2px 7px; margin-left: -7px; border-radius: 999px; text-align: left; color: color-mix(in oklch, var(--iso-fg) 45%, var(--iso-muted)); font-size: 11px; font-weight: 500; }
 .isotone-section-toggle > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isotone-section-toggle > svg, .isotone-section-toggle > small { flex: none; }
 .isotone-section-toggle > small { color: var(--iso-faint); font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .isotone-section[data-collapsed='true'] .isotone-section-toggle > svg { transform: rotate(-90deg); }
 /* Keyboard focus reveal keeps a focused control clear of the sticky header. */
-.isotone-vars-body:has(> .isotone-section) { scroll-padding-top: 44px; }
 .isotone-axis-head { display: flex; align-items: center; justify-content: space-between; min-height: 24px; gap: 8px; margin-bottom: 6px; }
 .isotone-axis-label { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; min-height: 24px; padding: 2px 7px; margin-left: -7px; border-radius: 999px; text-align: left; }
 .isotone-axis-label, .isotone-menu-title > strong, .isotone-menu-heading > strong { font: inherit; font-weight: 450; }
@@ -270,17 +269,18 @@ ${APPEARANCE_CSS}
 .isotone-secondary { padding: 6px 12px; font-size: 11px; font-weight: 500; white-space: nowrap; }
 .isotone-save { min-height: 26px; padding: 2px 12px; font-size: 11px; white-space: nowrap; overflow: hidden; }
 .isotone-root .isotone-vars > .isotone-panel-head .isotone-head-actions { flex: 1; min-width: 0; }
-/* The defaults bar floats over the panel's foot and takes no space, so a pick never moves the selectors and an
-   untouched panel has no gap. While it shows, the list can scroll its last row clear of it (see .isotone-vars-tail). */
-.isotone-vars { --iso-save-bar-h: calc(var(--iso-space) * 3 + 26px); }
-.isotone-root .isotone-vars > .isotone-panel-head { position: absolute; left: 0; right: 0; bottom: 0; height: var(--iso-save-bar-h); min-height: 0; margin: 0; padding-top: calc(var(--iso-space) * 2); background: linear-gradient(to bottom, transparent, var(--iso-bg) calc(var(--iso-space) * 2)); transition: opacity var(--iso-enter) var(--iso-ease-out), transform var(--iso-enter) var(--iso-ease-out); }
+/* The defaults bar floats over the panel's foot, so in a list that scrolls a pick never moves the selectors,
+   and an untouched panel has no gap. While it shows, the list gains room at its end (--iso-bar-room, see
+   .isotone-vars-tail) to scroll its last row clear; a list too short to scroll grows by that room instead of
+   hiding its end under the bar. The room is a registered length (ensurePanelStyles), so it eases in and out
+   with the bar, and the bottom scroll edge (edges.ts) grows and shrinks with it. */
+.isotone-vars { --iso-save-bar-h: calc(var(--iso-space) * 3 + 26px); --iso-bar-room: 0px; transition: --iso-bar-room var(--iso-enter) var(--iso-ease-out); }
+.isotone-vars[data-saving='true'] { --iso-bar-room: calc(var(--iso-save-bar-h) - var(--iso-panel-inset)); }
+.isotone-root .isotone-vars > .isotone-panel-head { position: absolute; left: 0; right: 0; bottom: 0; height: var(--iso-save-bar-h); min-height: 0; margin: 0; padding-top: calc(var(--iso-space) * 2); transition: opacity var(--iso-enter) var(--iso-ease-out), transform var(--iso-enter) var(--iso-ease-out); }
 .isotone-root .isotone-vars > .isotone-panel-head[data-shown='false'] { opacity: 0; transform: translateY(6px); pointer-events: none; }
-/* Extends how far the list scrolls without adding to its height: an absolute box counts towards the scroller's
-   overflow but not its size. Cancels its own gap, so it costs nothing while the bar is hidden. */
-.isotone-vars-tail { position: relative; flex: none; height: 0; margin-top: calc(0px - var(--iso-panel-inset)); pointer-events: none; }
-.isotone-vars[data-saving='true'] .isotone-vars-tail::after { content: ''; position: absolute; left: 0; top: 0; width: 1px; height: var(--iso-save-bar-h); }
-/* Keyboard focus scrolls a control clear of the bar too. */
-.isotone-vars[data-saving='true'] > .isotone-vars-body { scroll-padding-bottom: var(--iso-save-bar-h); }
+/* The bar's room at the end of the list. Cancels its own gap, so it costs nothing while the bar is hidden.
+   Scroll padding, so keyboard focus lands clear of the bar and the scroll edges, is in edges.ts. */
+.isotone-vars-tail { flex: none; height: var(--iso-bar-room); margin-top: calc(0px - var(--iso-panel-inset)); pointer-events: none; }
 .isotone-save-row { position: relative; display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; }
 .isotone-save-count { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--iso-muted); }
 /* "Showing defaults, except <name> and 2 more": only the name gives way. */
@@ -313,7 +313,7 @@ ${APPEARANCE_CSS}
 /* Fade the moving content into the popup's actual material. A mask preserves
    Soft's surface gradient and works identically in light and dark mode.
    Matching negative margin/padding preserves the first action's resting position. */
-.isotone-menu-scroll { --iso-scroll-fade-bottom: 0px; scroll-padding-block: var(--iso-space) calc(var(--iso-scroll-fade-bottom) + 6px); overflow-y: auto; overscroll-behavior: contain; flex: 1; min-height: 0; margin-top: calc(0px - var(--iso-space)); padding: var(--iso-space) 6px 6px; mask-image: linear-gradient(to bottom, transparent, #000 var(--iso-space), #000 calc(100% - var(--iso-scroll-fade-bottom)), transparent); }
+.isotone-menu-scroll { --iso-scroll-fade-bottom: 0px; scroll-padding-block: var(--iso-space) calc(var(--iso-scroll-fade-bottom) + 6px); overflow-y: auto; overscroll-behavior: contain; flex: 1; min-height: 0; margin-top: calc(0px - var(--iso-space)); padding: var(--iso-space) 6px 6px; }
 /* The last row fades out rather than being cut; a dialog that has to scroll fades longer, reading as more below. */
 .isotone-menu-scroll { --iso-scroll-fade-bottom: var(--iso-space); padding-bottom: calc(var(--iso-space) + 6px); }
 .isotone-menu-scroll[data-overflow='true'] { --iso-scroll-fade-bottom: 28px; }
@@ -334,7 +334,7 @@ ${APPEARANCE_CSS}
    Cancelling margin/padding keeps the first row in place at scroll start; the
    expanded height preserves the content allowance and composer position.
    The side gutters contain the corner action and keyboard focus outlines. */
-.isotone-list { display: flex; flex-direction: column; gap: 0; flex: 0 1 auto; max-height: calc(var(--iso-list-height) + 2 * var(--iso-space) - 8px); min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; margin: calc(0px - var(--iso-space)) calc(-8px - var(--iso-note-outset)) calc(-2px - var(--iso-space)); padding: var(--iso-space) 8px; scroll-padding-block: var(--iso-space); mask-image: linear-gradient(to bottom, transparent, #000 var(--iso-space), #000 calc(100% - var(--iso-space)), transparent); }
+.isotone-list { display: flex; flex-direction: column; gap: 0; flex: 0 1 auto; max-height: calc(var(--iso-list-height) + 2 * var(--iso-space) - 8px); min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; margin: calc(0px - var(--iso-space)) calc(-8px - var(--iso-note-outset)) calc(-2px - var(--iso-space)); padding: var(--iso-space) 8px; scroll-padding-block: var(--iso-space); }
 .isotone-empty { color: var(--iso-muted); font-size: 11px; line-height: 1.7; padding: 8px; }
 .isotone-note { position: relative; flex: none; }
 .isotone-request-more { flex: none; color: var(--iso-faint); font-size: 9px; }
@@ -359,7 +359,7 @@ ${APPEARANCE_CSS}
 .isotone-pages { display: flex; flex: none; min-width: 0; border-top: 0; border-bottom: 0; border-inline: 0; gap: 4px; overflow-x: auto; overscroll-behavior: contain; margin: -3px calc(0px - var(--iso-panel-inset)) 0; padding: 3px var(--iso-panel-inset); }
 /* Scrolled notes are gone before they reach the chips: a clear band, then a longer fade.
    The matching margin and padding keep the first note's resting position. */
-.isotone-pages + .isotone-list { margin-top: -18px; padding-top: 18px; scroll-padding-top: 18px; mask-image: linear-gradient(to bottom, transparent 6px, #000 18px, #000 calc(100% - var(--iso-space)), transparent); }
+.isotone-pages + .isotone-list { margin-top: -18px; padding-top: 18px; scroll-padding-top: 18px; }
 .isotone-page { flex: 0 1 auto; display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 160px; height: 22px; padding: 0 7px; border-radius: var(--iso-control-radius); border: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--iso-line); color: color-mix(in oklch, var(--iso-fg) 40%, var(--iso-muted)); font-size: 10.5px; }
 .isotone-page > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .isotone-page small { color: var(--iso-muted); font-size: 9px; font-variant-numeric: tabular-nums; }
@@ -490,6 +490,7 @@ ${EDGES_CSS}
   .isotone-root .isotone-rail-track { transition: none; }
   .isotone-root .isotone-panel, .isotone-root .isotone-axis-menu, .isotone-root .isotone-rail-tools { transition-property: opacity, visibility; }
   .isotone-colour, .isotone-root .isotone-vars > .isotone-panel-head { transition-property: opacity; }
+  .isotone-vars { transition: none; }
   .isotone-root button { transition: opacity 125ms ease; }
   .isotone-root button:not(:disabled):active > svg, .isotone-root button:not(:disabled):active { transform: none; }
   :is(.isotone-range, .isotone-hue):active::-webkit-slider-thumb { transform: none; }
@@ -501,7 +502,7 @@ ${EDGES_CSS}
   .isotone-seg, .isotone-thumb { outline: 1px solid ButtonBorder; outline-offset: -1px; }
   .isotone-seg[aria-checked='true'], .isotone-thumb[aria-checked='true'], .isotone-note-editing .isotone-note-hit, .isotone-pick[aria-pressed='true'], .isotone-page[aria-pressed='true'] { forced-color-adjust: none; background: Highlight; color: HighlightText; }
   .isotone-rail-button[aria-expanded='true']::before { background: Highlight; }
-  /* Its gradient is dropped here, and it floats over selectors: give it a solid face. */
+  /* It floats over selectors and its material is a blur band, dropped here: give it a solid face. */
   .isotone-root .isotone-vars > .isotone-panel-head { background: Canvas; }
   /* The scroll edges are blur and tint, both dropped here; stuck headers take a solid face instead. */
   .isotone-edge { display: none; }
@@ -554,6 +555,7 @@ ${EDGES_CSS}
  * component directly.
  */
 export function ensurePanelStyles(target: Document | ShadowRoot): void {
+  registerBarRoom();
   const parent = target instanceof Document ? target.head : target;
   if (!parent || parent.querySelector(`[${MARKER}]`)) return;
   const style = (target instanceof Document ? target : target.ownerDocument).createElement('style');
@@ -563,4 +565,17 @@ export function ensurePanelStyles(target: Document | ShadowRoot): void {
   // append in the document so the panel is not undercut by later app CSS.
   if (target instanceof Document) parent.appendChild(style);
   else parent.insertBefore(style, parent.firstChild);
+}
+
+/**
+ * A registered length can transition, so the defaults bar's room eases in and out with the bar
+ * (see .isotone-vars). Registration is page-wide and reaches into shadow roots, where an
+ * `@property` rule would not. Without it the room changes at once.
+ */
+function registerBarRoom(): void {
+  try {
+    CSS.registerProperty({ name: '--iso-bar-room', syntax: '<length>', inherits: true, initialValue: '0px' });
+  } catch {
+    // Registered already, by an earlier mount or a second copy of Isotone, or not supported.
+  }
 }

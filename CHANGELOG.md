@@ -4,7 +4,8 @@
 
 ### Changed
 
-- **Scrolled selectors dissolve at the panel's edges.** Where content leaves view in Variants, it blurs gradually and fades into the panel, and each row recedes a little as it goes. A stuck section header and the defaults bar now float over the list as one surface with that fade, rather than solid blocks with a seam beside them. Nothing at rest is blurred, and the last selector still scrolls fully clear of the bar.
+- **Scrolled selectors dissolve at the panel's edges.** Where content leaves view in Variants, it blurs gradually and fades into the panel, and each row recedes a little as it goes. A stuck section header and the defaults bar now float over the list as one surface with that fade, rather than solid blocks with a seam beside them. Nothing at rest is blurred, and the last selector still scrolls fully clear of the bar. The notes list and a dialog's scrolled rows fade the same softer way.
+- **The defaults bar no longer covers a short list.** When the selectors fit without scrolling, the panel grows to make room as the bar appears, so collapsed section headers stay visible and clickable. In a list that scrolls, the bar still floats over its end and nothing moves.
 - **The panel's edge looks the same all the way round.** In the dark theme its lit rim no longer disappears beside headers and the defaults bar, or flashes when the list bounces at the top.
 - **Keyboard focus on the pill rings the round button, not a tall box around it.**
 

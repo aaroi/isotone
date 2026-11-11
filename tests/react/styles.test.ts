@@ -192,3 +192,27 @@ describe('forced colors', () => {
     expect(block).toMatch(/Highlight/);
   });
 });
+
+describe('scroll edges', () => {
+  it('grows bands and recedes rows only where scroll-driven animations exist', () => {
+    // Elsewhere animation-timeline is dropped and the animation would run on time, applying its
+    // last keyframe at once: bands at full reach, blurring the first row at rest.
+    const timelines = [...PANEL_CSS.matchAll(/(?<!\()animation-timeline:/g)].map((match) => match.index ?? 0);
+    expect(timelines.length).toBeGreaterThan(0);
+    for (const at of timelines) {
+      const opened = PANEL_CSS.lastIndexOf('@supports (animation-timeline:', at);
+      expect(opened).toBeGreaterThan(-1);
+      const between = PANEL_CSS.slice(opened, at);
+      // Still inside that block: more braces opened than closed since it began.
+      expect(between.split('{').length - 1).toBeGreaterThan(between.split('}').length - 1);
+    }
+  });
+
+  it('lets forced colours keep a solid face on stuck section headers', () => {
+    // The material that replaces a header's face must not outrank the forced-colours rule.
+    const cleared = PANEL_CSS.split('\n').filter((line) => /\.isotone-section-head \{ background: none/.test(line));
+    expect(cleared.length).toBeGreaterThan(0);
+    for (const line of cleared) expect(line.trimStart().startsWith(':where(')).toBe(true);
+    expect(PANEL_CSS).toMatch(/@media \(forced-colors: active\)[\s\S]*\.isotone-root \.isotone-section-head \{ background: Canvas; \}/);
+  });
+});

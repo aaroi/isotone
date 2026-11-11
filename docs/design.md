@@ -240,11 +240,15 @@ above (sticking does not move its text) and its fade sits in the gap below,
 covering no control; scroll padding keeps focus from landing beneath it.
 
 In Variants, content leaving view dissolves: it blurs progressively and fades into
-the surface, and each row recedes a little (not with reduced motion). A stuck
+the surface, and each row recedes a little (not with reduced motion). The notes
+list does the same more lightly, and a dialog's scrolled rows fade with the same
+eased ends. A stuck
 header and the defaults bar are one material with that dissolve, nearly opaque
 behind their text, rather than solid blocks beside a fade. At rest each band fills
-only the empty inset at its edge, so nothing at rest is ever blurred; once content
-can pass under it, it reaches further in. The blur steps through layers, each
+only the empty space at its edge, so nothing at rest is ever blurred; once content
+can pass under it, it reaches further in, and scroll padding keeps keyboard focus
+clear of that reach. The defaults bar never hides the end of a list: one that
+scrolls gains room to scroll clear of it, and one too short to scroll grows. The blur steps through layers, each
 twice the last, so no faint blurred copy sits over sharp text as a glow. Every
 fade eases in and out, so neither end reads as a line. `styles/edges.ts` owns it.
 
@@ -294,6 +298,12 @@ added to the open composer settles in from 96%, over 125ms; pins and chips
 already there when the overlay or composer appears never do. Reduced motion
 keeps their fades.
 
+Scroll edges move with the scroll position rather than a clock: a band grows as
+content starts to pass under it, and a row shrinks to 96% while it crosses a band
+(scroll-driven animations, so a browser without them shows the bands at rest and
+rows at full size; reduced motion keeps rows still). The defaults bar's room at
+the end of the list eases in and out with the bar.
+
 Movement uses transforms and opacity through the Web Animations API (the
 defaults bar's crossfade also uses a 2px blur); text,
 corners and hit targets keep their size. Read positions before writing styles,
@@ -330,6 +340,7 @@ Two limits are accepted rather than worked around:
 | --- | --- |
 | `src/react/styles/appearance.ts` | Complete light/dark palettes and the shared material recipe |
 | `src/react/styles/panel.ts` | Geometry, typography, shared control classes, state selectors and the accepted recipes (inline references, the open pill's raised key) |
+| `src/react/styles/edges.ts` | The card's rim, and every fade, blur band and receding row where scrolled content meets an edge |
 | `src/react/dock/UpdateNotice.tsx` | Update line and dialog |
 | `src/react/icons.tsx` | Icon choices, optical size and stroke |
 | `src/react/notes/NoteSummary.tsx` | Saved note summaries and their tags |

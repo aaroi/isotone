@@ -44,34 +44,40 @@ const RIM = `
 // the lightest blur ever meets sharp content. Bands reach a pixel past their edge, so rounding never
 // leaves a row of sharp content between a band and the edge it meets.
 //
-// At rest a band fills only the empty padding at its edge, so nothing at rest is ever blurred. Once
+// At rest a band fills only the empty space at its edge, so nothing at rest is ever blurred. Once
 // content can pass under it, it reaches --iso-edge-length further in over as much scrolling. The band
 // is always its full reach, edge to edge, taking no room beside the flex gap; its painted size grows.
-// The top band is last in the markup, so it changes no sibling selector, and first in the column
-// (order: -1), so it can stick to the top. At rest the bottom band's lower edge meets the end of the
-// list's scroll room: the inset, plus the defaults bar while it shows. The layers' windows run along
-// the band from its inner edge (0%) out, so the blur begins once the fade is under way.
+// Growing needs scroll-driven animations; without them a band stays at rest. The top band is last in
+// the markup, so it changes no sibling selector, and first in the column (order: -1), so it can stick
+// to the top. The bottom band's rest is the inset plus the defaults bar's room (--iso-bar-room, which
+// eases with the bar). The layers' windows run along the band from its inner edge (0%) out, so the
+// blur begins once the fade is under way.
+//
+// Scroll padding keeps keyboard focus clear of each band at its full reach.
 const BANDS = `
 .isotone-root { --iso-edge-blur: 8px; --iso-edge-length: 16px; --iso-depth-scale: .96; }
+.isotone-vars-body {
+  scroll-padding-block: calc(${INSET} + var(--iso-edge-length)) calc(${INSET} + var(--iso-bar-room) + var(--iso-edge-length));
+}
 .isotone-edge {
   --iso-edge-rest: ${INSET}; --iso-edge-reach: calc(var(--iso-edge-rest) + var(--iso-edge-length));
   position: sticky; z-index: 1; flex: none; height: var(--iso-edge-reach); margin-inline: calc(0px - ${INSET}); pointer-events: none;
   background-repeat: no-repeat; background-size: 100% var(--iso-edge-rest); mask-size: 100% var(--iso-edge-rest);
-  animation: isotone-edge-grow linear both; animation-timeline: scroll(nearest);
 }
-@keyframes isotone-edge-grow { to { background-size: 100% var(--iso-edge-reach); mask-size: 100% var(--iso-edge-reach); } }
 .isotone-edge-top {
   order: -1; top: calc(-1px - ${INSET}); margin-block: calc(0px - ${INSET}) calc(0px - var(--iso-edge-reach));
   background-image: linear-gradient(to top, ${ramp(surface, '0%', '100%')});
-  animation-range: 0 var(--iso-edge-length);
 }
-.isotone-vars { --iso-bar: 0px; }
-.isotone-vars[data-saving='true'] { --iso-bar: calc(var(--iso-save-bar-h) - ${INSET}); }
 .isotone-edge-bottom {
-  --iso-edge-rest: calc(${INSET} + var(--iso-bar)); z-index: 4;
-  bottom: calc(-1px - ${INSET}); margin-block: calc(var(--iso-bar) - var(--iso-edge-reach)) calc(0px - ${INSET} - var(--iso-bar));
+  --iso-edge-rest: calc(${INSET} + var(--iso-bar-room)); z-index: 4;
+  bottom: calc(-1px - ${INSET}); margin-block: calc(0px - var(--iso-edge-reach)) calc(0px - ${INSET});
   background-position: 0 100%; background-image: linear-gradient(to bottom, ${ramp(surface, '0%', '100%')});
-  animation-direction: reverse; animation-range: calc(100% - var(--iso-edge-length)) 100%;
+}
+@keyframes isotone-edge-grow { to { background-size: 100% var(--iso-edge-reach); mask-size: 100% var(--iso-edge-reach); } }
+@supports (animation-timeline: scroll()) {
+  .isotone-edge { animation: isotone-edge-grow linear both; animation-timeline: scroll(nearest); }
+  .isotone-edge-top { animation-range: 0 var(--iso-edge-length); }
+  .isotone-edge-bottom { animation-direction: reverse; animation-range: calc(100% - var(--iso-edge-length)) 100%; }
 }
 .isotone-edge > i {
   position: absolute; inset: 0; mask-size: inherit; mask-repeat: no-repeat;
@@ -87,21 +93,27 @@ const BANDS = `
 
 // With sections, a stuck header floats over a material instead of a solid block, as under an iOS bar:
 // content passing beneath it blurs and fades into the surface, nearly opaque behind the header's label
-// and then gradually below it. At rest the material ends at the gap under the first header. (When
-// sections lead the list, every selector is in one: loose ones come first.) Elsewhere a header stays
-// solid, and its fade below eases out instead of ending in a line. The defaults bar is the bottom
-// band's material the same way: one surface over the list, darkening and blurring toward the bottom.
+// and then gradually below it. At rest the material ends where the first selector starts: the inset,
+// the 24px toggle less the header's -4px margin, and the section's gap (--iso-head-h). When sections
+// lead the list, every selector is in one, since loose ones come first. With every section collapsed
+// there is nothing to pass beneath, and a band reaching further than the short list would make it
+// scroll, so it stays at rest. The selectors are :where()-wrapped so forced colours' solid header wins.
+// Elsewhere a header stays solid, and its fade below eases out instead of ending in a line. The
+// defaults bar is the bottom band's material the same way: one surface over the list, darkening and
+// blurring toward the bottom.
 const MATERIALS = `
+.isotone-vars-body { --iso-head-h: calc(${INSET} + 20px + var(--iso-space)); }
+.isotone-vars-body:has(> .isotone-section) { scroll-padding-top: calc(var(--iso-head-h) + var(--iso-edge-length)); }
 ${SECTIONS} > .isotone-edge-top {
-  --iso-edge-rest: 48px;
-  background-image: linear-gradient(to bottom, ${ramp(surface, '0px', '35px', true, 0.94)}, ${ramp(surface, '35px', '100%', true, 0, 0.94)});
+  --iso-edge-rest: var(--iso-head-h);
+  background-image: linear-gradient(to bottom, ${ramp(surface, '0px', 'calc(var(--iso-head-h) - 11px)', true, 0.94)}, ${ramp(surface, 'calc(var(--iso-head-h) - 11px)', '100%', true, 0, 0.94)});
 }
-${SECTIONS} .isotone-section-head { background: none; }
-${SECTIONS} .isotone-section-head::after { display: none; }
+${SECTIONS}:not(:has(> .isotone-section[data-collapsed='false'])) { --iso-edge-length: 0px; }
+:where(${SECTIONS}) .isotone-section-head { background: none; }
+:where(${SECTIONS}) .isotone-section-head::after { display: none; }
 .isotone-section-head::after { background: linear-gradient(to top, ${ramp(surface, '0%', '100%')}); }
-.isotone-root .isotone-vars > .isotone-panel-head { background: none; }
 .isotone-vars[data-saving='true'] .isotone-edge-bottom {
-  background-image: linear-gradient(to top, ${ramp(surface, '0px', 'var(--iso-bar)', true, 0.94)}, ${ramp(surface, 'var(--iso-bar)', '100%', true, 0, 0.94)});
+  background-image: linear-gradient(to top, ${ramp(surface, '0px', 'var(--iso-bar-room)', true, 0.94)}, ${ramp(surface, 'var(--iso-bar-room)', '100%', true, 0, 0.94)});
 }`;
 
 // The note list's mask fades with eased ends, with a light blur band at each; a dialog's scrolled rows
@@ -119,21 +131,22 @@ const LISTS = `
 .isotone-menu-scroll { mask-image: linear-gradient(to bottom, ${ramp(ink, '0px', 'var(--iso-space)')}, ${ramp(ink, 'calc(100% - var(--iso-scroll-fade-bottom))', '100%', true)}); }`;
 
 // Each row recedes on its own from where it meets a band, so a tall selector's lower rows stay full
-// size while its top row leaves. The timeline's insets are the bands' inner edges.
+// size while its top row leaves. The timeline's insets are the bands' inner edges. A row is animated
+// only while it crosses one: one fully in view carries no animation, so it is no stacking context,
+// and the fading key over a picked thumbnail (keyFade) still slides between its slot and picture.
 const RECEDE = `
-@keyframes isotone-recede {
-  entry 0% { scale: var(--iso-depth-scale); }
-  entry 100%, exit 0% { scale: 1; }
-  exit 100% { scale: var(--iso-depth-scale); }
-}
+@keyframes isotone-recede-in { from { scale: var(--iso-depth-scale); } }
+@keyframes isotone-recede-out { to { scale: var(--iso-depth-scale); } }
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
     .isotone-root :is(.isotone-axis > :not(.isotone-grid), .isotone-grid > *, .isotone-list > .isotone-note) {
-      animation: isotone-recede linear both;
-      animation-timeline: view(block var(--iso-recede-top, ${INSET}) var(--iso-recede-bottom, ${INSET}));
+      --iso-recede: view(block var(--iso-recede-top, ${INSET}) var(--iso-recede-bottom, ${INSET}));
+      animation: isotone-recede-in linear none, isotone-recede-out linear none;
+      animation-timeline: var(--iso-recede), var(--iso-recede);
+      animation-range: entry, exit;
     }
-    .isotone-vars-body { --iso-recede-bottom: calc(${INSET} + var(--iso-bar)); }
-    ${SECTIONS} { --iso-recede-top: 48px; }
+    .isotone-vars-body { --iso-recede-bottom: calc(${INSET} + var(--iso-bar-room)); }
+    ${SECTIONS} { --iso-recede-top: var(--iso-head-h); }
     .isotone-list { --iso-recede-top: var(--iso-space); --iso-recede-bottom: var(--iso-space); }
     .isotone-pages + .isotone-list { --iso-recede-top: 18px; }
   }

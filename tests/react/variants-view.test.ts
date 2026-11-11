@@ -202,7 +202,7 @@ describe('VariantsView', () => {
   });
 
   // The bar used to mount on the first change, growing the panel and moving every selector.
-  it('shows Save only while visible choices differ from defaults, floating so nothing moves', async () => {
+  it('shows Save only while visible choices differ from defaults, floating over the end of the list', async () => {
     const source = createVariantsSource({ axes: AXES, saveDefaults: async () => {} });
     await render(createElement(VariantsView, { source }));
     const bar = () => container.querySelector('.isotone-vars > .isotone-panel-head');
@@ -211,7 +211,7 @@ describe('VariantsView', () => {
     expect(bar()).not.toBeNull();
     expect(shown()).toBe(false);
     expect(actions()?.getAttribute('aria-hidden')).toBe('true');
-    // The list only gets room to scroll past the floating bar while it shows.
+    // The list only gets room at its end, to scroll past the floating bar, while it shows.
     const saving = () => container.querySelector('.isotone-vars')?.getAttribute('data-saving');
     expect(container.querySelector('.isotone-vars-body > .isotone-vars-tail')).not.toBeNull();
     expect(saving()).toBe('false');
