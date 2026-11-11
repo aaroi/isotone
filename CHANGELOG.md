@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.5.0
+
 ### Changed
 
 - **Scrolled selectors dissolve at the panel's edges.** Where content leaves view in Variants, it blurs gradually and fades into the panel, and each row recedes a little as it goes. A stuck section header and the defaults bar now float over the list as one surface with that fade, rather than solid blocks with a seam beside them. Nothing at rest is blurred, and the last selector still scrolls fully clear of the bar. The notes list and a dialog's scrolled rows fade the same softer way.
