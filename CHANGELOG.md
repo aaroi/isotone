@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Changed
+
+- **Figures roll into place.** When a slider's value, a colour's hex or the count on the pill changes, only the characters that changed roll, up for a larger number and down for a smaller one, the way iOS animates numbers.
+- **The pill is glass.** It blurs and lifts the colour of the page behind it, so it sits in your app rather than on top of it.
+- **Opening a section eases its selectors in** from under its header instead of popping them in.
+- **A note an agent is working on glints.** A slow light passes along its text while the agent works, beside the existing working dot.
+
 ## 1.5.0
 
 ### Changed

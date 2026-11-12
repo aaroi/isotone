@@ -5,6 +5,7 @@ import { GRID_COLUMNS } from '../styles/panel';
 import { showOverflowTitle } from '../tooltips';
 import { useKeyFade } from './keyFade';
 import { useSegmentLayout } from './segmentLayout';
+import { RollingText } from '../RollingText';
 
 export type OpenMenu = (axis: VariantAxis, opener: HTMLButtonElement | null, optionId?: string | null) => void;
 
@@ -65,7 +66,7 @@ export const AxisControl = memo(function AxisControl({
           <Icon name="chevron" size={12} />
         </button>
         {(axis.kind === 'range' || axis.kind === 'color') && (
-          <span className="isotone-axis-value">{axis.kind === 'range' ? formatRangeValue(axis, value) : value.toUpperCase()}</span>
+          <RollingText className="isotone-axis-value" text={axis.kind === 'range' ? formatRangeValue(axis, value) : value.toUpperCase()} />
         )}
       </div>
       {axis.kind === 'range' ? (

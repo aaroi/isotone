@@ -59,8 +59,10 @@ Layout constants live in `styles/panel.ts`:
 | Tool faces | 28px, with 4px between faces and around them |
 | Saved note padding | 6px vertically, 11px horizontally; background extends 1px past the composer on each side |
 
-The expanded pill is the same material stretched, keeping its lower rim, inset
-and proportions. Panels stay anchored above it; opening one never moves the pill
+The pill is glass: its face lets the page through, blurred and a little more
+saturated, under the same rim and shadow, so it sits in the host page rather than
+on it; the update notice beside it shares the glass. The expanded pill is the
+same material stretched, keeping its lower rim, inset and proportions. Panels stay anchored above it; opening one never moves the pill
 or rescales another's text.
 
 The defaults bar sits at the bottom of the variants panel while a pick differs
@@ -90,7 +92,7 @@ A section header ([naming](variants.md#sections)) is a quiet disclosure, never
 raised: chevron, name in 11px text between the foreground and muted, count in
 faint tabular figures, the axis label's hover face. Unsectioned selectors come first. A sectioned selector
 and its dialog title show the short name; controls, accessible names and notes
-keep the full one. Folding is immediate and keeps selections.
+keep the full one. Folding is immediate and keeps selections; unfolding eases the selectors in (see Motion).
 
 Saved feedback is one row per note, inline references, no gap between rows.
 Note text sits 3px outside the composer's text inset; references take at most
@@ -298,6 +300,15 @@ added to the open composer settles in from 96%, over 125ms; pins and chips
 already there when the overlay or composer appears never do. Reduced motion
 keeps their fades.
 
+A figure that changes in place (a slider's value, a colour's hex, the count on
+the pill) rolls only the characters that changed, up for a larger number and down
+for a smaller one, through its own clip, over 200ms (`RollingText.tsx`). It rolls
+whatever changed it, except Compare, which is instant both ways; a change landing
+in quick succession, as from a dragged slider, swaps at once so the figure stays readable. Opening a
+section eases its selectors in from 6px under the header. While an agent works on
+a note, a slow light passes along its text, quieter at rest; reduced motion keeps
+it still and quiet. Keys and reduced motion swap figures and sections at once.
+
 Scroll edges move with the scroll position rather than a clock: a band grows as
 content starts to pass under it, and a row shrinks to 96% while it crosses a band
 (scroll-driven animations, so a browser without them shows the bands at rest and
@@ -305,7 +316,9 @@ rows at full size; reduced motion keeps rows still). The defaults bar's room at
 the end of the list eases in and out with the bar.
 
 Movement uses transforms and opacity through the Web Animations API (the
-defaults bar's crossfade also uses a 2px blur); text,
+defaults bar's crossfade also uses a 2px blur, and a rolling figure 1.5px); a
+working note's glint moves its text's gradient, a repaint that content-visibility
+keeps to the rows in view, on the dots' shared clock; text,
 corners and hit targets keep their size. Read positions before writing styles,
 retarget interrupted movement, cancel on cleanup. Only the pill's own width
 transitions; never animate the size of long lists. Lists above

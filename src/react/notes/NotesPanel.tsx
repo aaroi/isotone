@@ -181,10 +181,17 @@ function moveNoteFocus(event: KeyboardEvent<HTMLUListElement>) {
   button?.focus();
 }
 
+/** The dot pulses, and the note's glint runs, on the clock every working note shares, so they move together. */
+function workingPulse(node: HTMLElement | null) {
+  dotPulse(node);
+  const text = node?.parentElement?.querySelector<HTMLElement>(':scope > p:not(.isotone-reply)');
+  for (const glint of text?.getAnimations?.() ?? []) glint.startTime = 0;
+}
+
 const WorkingDot = () => (
   <span
     className="isotone-working"
-    ref={dotPulse}
+    ref={workingPulse}
     role="img"
     aria-label="An agent is working on this"
     title="An agent is working on this"
@@ -212,7 +219,7 @@ const NoteRow = memo(function NoteRow({
 }) {
   const remove = removeAction(note);
   return (
-    <li data-motion-key={note.id} className={`isotone-note${editing ? ' isotone-note-editing' : ''}`}>
+    <li data-motion-key={note.id} data-working={working || undefined} className={`isotone-note${editing ? ' isotone-note-editing' : ''}`}>
       {note.update ? (
         // Isotone writes an update note's text from its request, so
         // there is nothing to edit; its corner action cancels it.

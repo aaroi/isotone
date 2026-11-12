@@ -78,7 +78,8 @@ ${APPEARANCE_CSS}
 .isotone-root[data-expanded='true'] { min-height: 44px; }
 .isotone-root[data-expanded='true'][data-open='false'][data-tools='2'] { width: var(--iso-rail-length); }
 .isotone-root[data-open='true'] { padding-bottom: calc(var(--iso-rail-size) + var(--iso-view-gap)); gap: var(--iso-view-gap); }
-.isotone-rail-track { position: absolute; right: 0; bottom: 0; width: var(--iso-rail-size); height: var(--iso-rail-size); border-radius: 999px; background: var(--iso-rail-base); border: 0; box-shadow: var(--iso-rail-base-shadow); pointer-events: auto; transition: width var(--iso-enter) var(--iso-ease-out), height var(--iso-enter) var(--iso-ease-out); }
+/* The pill is glass: it blurs and lifts the colour of the page behind it, so it sits in the host page rather than on it. */
+.isotone-rail-track { position: absolute; right: 0; bottom: 0; width: var(--iso-rail-size); height: var(--iso-rail-size); border-radius: 999px; background: color-mix(in oklch, var(--iso-rail-base) 72%, transparent); -webkit-backdrop-filter: blur(20px) saturate(1.7); backdrop-filter: blur(20px) saturate(1.7); border: 0; box-shadow: var(--iso-rail-base-shadow); pointer-events: auto; transition: width var(--iso-enter) var(--iso-ease-out), height var(--iso-enter) var(--iso-ease-out); }
 .isotone-root[data-expanded='true'][data-tools='2'] .isotone-rail-track { width: var(--iso-rail-length); }
 .isotone-fab, .isotone-rail-button { display: flex; align-items: center; justify-content: center; flex: none; width: var(--iso-rail-size); height: var(--iso-rail-size); border-radius: 999px; }
 .isotone-fab { position: relative; isolation: isolate; color: var(--iso-launcher-ink); }
@@ -95,7 +96,7 @@ ${APPEARANCE_CSS}
 .isotone-root .isotone-rail-button:focus-visible { outline: none; }
 .isotone-rail-button:focus-visible::before { outline: 2px solid var(--iso-focus); outline-offset: calc(var(--iso-rail-gap) / 2 - 1px); }
 .isotone-tool-label { display: none; }
-.isotone-badge { position: absolute; right: -3px; top: -3px; pointer-events: none; display: grid; place-items: center; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: var(--iso-accent); box-shadow: 0 0 0 2px var(--iso-rail-base); color: var(--iso-accent-ink); font-size: 9px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.isotone-badge { overflow: hidden; position: absolute; right: -5px; top: -5px; pointer-events: none; display: grid; place-items: center; min-width: 19px; height: 19px; padding: 0 3px; border: 2px solid transparent; border-radius: 10px; background: linear-gradient(var(--iso-accent), var(--iso-accent)) padding-box, color-mix(in oklch, var(--iso-rail-base) 72%, transparent) border-box; -webkit-backdrop-filter: blur(20px) saturate(1.7); backdrop-filter: blur(20px) saturate(1.7); color: var(--iso-accent-ink); font-size: 9px; font-weight: 600; font-variant-numeric: tabular-nums; }
 /* Panels are sections inside the dock. Only long content scrolls. */
 .isotone-panel { order: 0; position: relative; display: none; flex-direction: column; min-height: 0; flex: 0 1 auto; width: 100%; }
 .isotone-panel[data-open='true'] { display: flex; }
@@ -169,6 +170,11 @@ ${APPEARANCE_CSS}
 .isotone-axis-label svg { color: color-mix(in oklch, var(--iso-muted) 50%, var(--iso-faint)); transition: color var(--iso-fast) var(--iso-ease-out), transform var(--iso-fast) var(--iso-ease-out); }
 .isotone-axis-label[aria-expanded='true'] svg, .isotone-axis-label:focus-visible svg { color: var(--iso-muted); }
 .isotone-axis-value { min-width: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--iso-muted); font: 11px var(--iso-sans); font-variant-numeric: tabular-nums; }
+/* A changing figure rolls in its cell (RollingText); the value's own clip is the window it rolls through. */
+.isotone-roll { display: inline-block; position: relative; white-space: pre; }
+.isotone-roll::before, .isotone-roll-out::before { content: attr(data-c); }
+.isotone-roll-out { position: absolute; inset: 0; pointer-events: none; }
+.isotone-roll-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 /* The track's corner is a segment's half height plus the track's padding, so it stays concentric with the capsules inside:
    a full capsule on one row, a rounded card around wrapped rows. useSegmentLayout picks the layout from the labels. */
 .isotone-segs { position: relative; --iso-seg-h: 28px; --iso-seg-pad: 3px; --iso-seg-gap: 3px; display: flex; flex-wrap: wrap; gap: var(--iso-seg-gap); padding: var(--iso-seg-pad); border-radius: calc(var(--iso-seg-h) / 2 + var(--iso-seg-pad)); background: var(--iso-well); box-shadow: var(--iso-segment-track-shadow); }
@@ -369,6 +375,13 @@ ${APPEARANCE_CSS}
 /* A long list lays out only the rows in view. The placeholder is one line of text; a row keeps its height once seen. */
 .isotone-note-hit { position: relative; content-visibility: auto; contain-intrinsic-size: auto 18px; }
 .isotone-working { position: absolute; left: 3px; top: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--iso-focus); }
+/* While an agent works on a note, a slow light passes along its text, like a model thinking; the text rests a step quieter. */
+.isotone-note[data-working] .isotone-note-hit > p:not(.isotone-reply) {
+  color: transparent; -webkit-background-clip: text; background-clip: text;
+  background-image: linear-gradient(100deg, var(--iso-muted) 42%, var(--iso-fg) 50%, var(--iso-muted) 58%); background-size: 260% 100%;
+  animation: isotone-shimmer 2.6s linear infinite;
+}
+@keyframes isotone-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
 .isotone-ring { position: absolute; inset: 0; border-radius: 999px; pointer-events: none; }
 .isotone-list:empty { display: none; }
 /* A single line per note, with compact references sharing its trailing space. */
@@ -492,6 +505,7 @@ ${EDGES_CSS}
   .isotone-colour, .isotone-root .isotone-vars > .isotone-panel-head { transition-property: opacity; }
   .isotone-vars { transition: none; }
   .isotone-root button { transition: opacity 125ms ease; }
+  .isotone-note[data-working] .isotone-note-hit > p:not(.isotone-reply) { animation: none; background: none; color: var(--iso-muted); }
   .isotone-root button:not(:disabled):active > svg, .isotone-root button:not(:disabled):active { transform: none; }
   :is(.isotone-range, .isotone-hue):active::-webkit-slider-thumb { transform: none; }
   :is(.isotone-range, .isotone-hue):active::-moz-range-thumb { transform: none; }
@@ -506,6 +520,8 @@ ${EDGES_CSS}
   .isotone-root .isotone-vars > .isotone-panel-head { background: Canvas; }
   /* The scroll edges are blur and tint, both dropped here; stuck headers take a solid face instead. */
   .isotone-edge { display: none; }
+  /* The glint paints text with a gradient, which would sit over a forced selection's colours. */
+  .isotone-note[data-working] .isotone-note-hit > p:not(.isotone-reply) { animation: none; background: none; color: inherit; }
   .isotone-root .isotone-section-head { background: Canvas; }
   .isotone-rail-button[aria-expanded='true'] { color: HighlightText; }
   .isotone-swatch, .isotone-picker, .isotone-colour-field, .isotone-colour-handle, .isotone-hue { forced-color-adjust: none; }
@@ -524,7 +540,7 @@ ${EDGES_CSS}
 .isotone-notices { position: absolute; z-index: 5; bottom: 10px; right: calc(var(--iso-rail-length) + 10px); display: flex; flex-direction: row-reverse; flex-wrap: wrap-reverse; align-items: center; justify-content: flex-start; gap: 6px; width: max-content; max-width: calc(100vw - var(--iso-rail-length) - 36px); pointer-events: none; }
 .isotone-root[data-tools='1'] .isotone-notices { right: calc(var(--iso-rail-size) + 10px); max-width: calc(100vw - var(--iso-rail-size) - 36px); }
 .isotone-notices > * { pointer-events: auto; }
-.isotone-update-trigger { white-space: nowrap; color: var(--iso-muted); font-size: 10px; padding: 4px 10px; border-radius: 999px; background: var(--iso-rail-base); box-shadow: var(--iso-rail-base-shadow); }
+.isotone-update-trigger { white-space: nowrap; color: var(--iso-muted); font-size: 10px; padding: 4px 10px; border-radius: 999px; background: color-mix(in oklch, var(--iso-rail-base) 92%, transparent); -webkit-backdrop-filter: blur(20px) saturate(1.7); backdrop-filter: blur(20px) saturate(1.7); box-shadow: var(--iso-rail-base-shadow); }
 .isotone-update-dialog { position: absolute; right: calc(0px - var(--iso-rail-length) - 10px); bottom: 40px; width: min(var(--iso-dock-width), 260px); max-width: calc(100vw - 32px); max-height: calc(100dvh - 100px); overflow: auto; padding: 10px var(--iso-space) var(--iso-space); display: grid; gap: 8px; border-radius: 14px; background: var(--iso-popup-face); box-shadow: var(--iso-popup-shadow); font-size: 11px; }
 .isotone-root[data-tools='1'] .isotone-update-dialog { right: calc(0px - var(--iso-rail-size) - 10px); }
 .isotone-update-dialog .isotone-menu-title { padding: 0; background: none; }

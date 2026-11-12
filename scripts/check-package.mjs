@@ -18,7 +18,9 @@ import { npm } from './npm.mjs';
 // computed styles a pin records; 1.3.4 was 366 kB.
 // Bundle raised to 391.5 kB and tarball to 420 kB (389.3 and 417.5 kB; scroll edges): the layered
 // blur bands, the header and defaults-bar materials, the rim drawn over content and rows that recede.
-const BUDGET = { bundle: 391_500, tarball: 420_000 };
+// Bundle raised to 395 kB and tarball to 422.5 kB (393.8 and 420.8 kB; rolling figures): the component
+// that rolls changed characters, and its notes in the shipped design guide and changelog.
+const BUDGET = { bundle: 395_000, tarball: 422_500 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));
