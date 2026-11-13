@@ -474,7 +474,8 @@ function printFirstRun(print: Print, approach: Approach): void {
   } else {
     print("   `curl -H 'Accept: text/html' <page URL>` includes `data-isotone-inject`, and");
     print('   <origin>/api/isotone/variants lists the variants and knobs the panel will show.');
-    print('   <origin>/<file>?isotone=<id> serves one variant’s copy, to check that it compiles.');
+    print('   <origin>/<file>?isotone=<id> serves one variant’s copy, to check that it compiles');
+    print('   (Vite 6 and later; for a .vue file, switch to it with `variant use <id>` instead).');
   }
   print('d. Leave the dev server running and tell the user, briefly, in this order:');
   print('   - the one URL to open, and that the pill in the bottom-right corner is Isotone,');

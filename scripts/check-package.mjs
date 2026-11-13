@@ -20,7 +20,9 @@ import { npm } from './npm.mjs';
 // blur bands, the header and defaults-bar materials, the rim drawn over content and rows that recede.
 // Bundle raised to 395 kB and tarball to 422.5 kB (393.8 and 420.8 kB; rolling figures): the component
 // that rolls changed characters, and its notes in the shipped design guide and changelog.
-const BUDGET = { bundle: 395_000, tarball: 422_500 };
+// Tarball raised to 425 kB (423.2 kB; Vue components): the block and reload handling in the Vite
+// plugin, and the Vue section of the shipped variants guide and changelog.
+const BUDGET = { bundle: 395_000, tarball: 425_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

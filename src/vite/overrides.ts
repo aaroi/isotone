@@ -27,6 +27,14 @@ import type { LiveConfig } from './live';
 const COMPARES_TYPES = /\.type\s*[!=]==?|[!=]==?\s*[\w$.]+\.type\b/;
 const SCRIPT = /\.[cm]?[jt]sx?$/;
 
+/**
+ * A Vue single-file component. plugin-vue compiles one into a module per
+ * block, each answered from its own parse of the whole file, and its hot
+ * update reads the real file from disk: so a block request is left to it,
+ * and a switch reloads the page.
+ */
+export const isSingleFileComponent = (path: string): boolean => path.endsWith('.vue');
+
 /** How live mode serves one file: every version, and the names it exports. */
 export interface DispatchPlan {
   key: string;

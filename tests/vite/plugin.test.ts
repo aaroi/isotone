@@ -1327,3 +1327,254 @@ describe('project files through the dev server', () => {
     expect(notes.body).toContain('FAKE_NOTE_TEXT');
   });
 });
+
+/* ── Vue single-file components ──────────────────────────────────────── */
+
+const REAL_SFC = '<template><p class="card">real</p></template>\n<style scoped>\n.card { color: blue; }\n</style>\n';
+const COPY_SFC = '<template><p class="card">copy</p></template>\n<style scoped>\n.card { color: red; }\n</style>\n';
+
+/** `tempProject()` plus a component, `src/Card.vue`, and a stylesheet one
+ *  of its blocks could name with `src`; variant `v` copies both. */
+function vueProject(): ReturnType<typeof tempProject> & { card: string; copy: string; sheet: string } {
+  const project = tempProject();
+  const { root } = project;
+  const card = id(root, 'src', 'Card.vue');
+  const sheet = id(root, 'src', 'card.css');
+  writeFileSync(card, REAL_SFC);
+  writeFileSync(sheet, '.card { margin: 0; }\n');
+  execFileSync('git', ['add', '.'], { cwd: root });
+  execFileSync('git', ['commit', '-q', '-m', 'card'], { cwd: root });
+  createVariant({ root }, { id: 'v', label: 'V' });
+  addVariantFile({ root }, 'v', 'src/Card.vue');
+  addVariantFile({ root }, 'v', 'src/card.css');
+  const copy = id(variantDir({ root }, 'v'), 'src', 'Card.vue');
+  writeFileSync(copy, COPY_SFC);
+  writeFileSync(join(variantDir({ root }, 'v'), 'src', 'card.css'), '.card { margin: 8px; }\n');
+  return { ...project, card, copy, sheet };
+}
+
+/** A Vite 6+ environment as load() sees it, holding the component's main module. */
+interface BlockEnvironment {
+  name: string;
+  moduleGraph: { getModuleById: (id: string) => { url: string; transformResult: unknown } | undefined };
+  transformRequest: ReturnType<typeof vi.fn>;
+}
+type BlockLoad = (this: { environment?: BlockEnvironment }, id: string) => Promise<null> | { code: string } | null;
+
+describe('Vue single-file components', () => {
+  it('swaps the whole file and leaves each block to plugin-vue, which parsed that copy', () => {
+    const { root, card, sheet } = vueProject();
+    writeActive({ root }, ['v']);
+    const hooks = plugin(root, 'serve');
+    expect(hooks.load(card)?.code).toBe(COPY_SFC);
+    for (const block of [
+      '?vue&type=style&index=0&scoped=7a7a7a7a&lang.css',
+      '?vue&type=template&lang.js',
+      '?vue&type=script&setup=true&lang.ts',
+      '?vue&type=i18n&index=0&lang.json',
+      '?vue&type=style&index=0&scoped=7a7a7a7a&lang.css&t=1700000000000',
+    ]) {
+      // The whole file in a block's place compiled the component as CSS.
+      expect(hooks.load(`${card}${block}`), block).toBeNull();
+    }
+    // `<style src="./card.css">`: that block is the whole stylesheet, so its copy answers.
+    expect(hooks.load(`${sheet}?vue&type=style&index=0&src=7a7a7a7a&scoped=7a7a7a7a&lang.css`)?.code).toContain('margin: 8px');
+    // A query that only mentions vue is not a block.
+    expect(hooks.load(`${card}?vuex=1`)?.code).toBe(COPY_SFC);
+  });
+
+  it('compiles the whole component again before a block, once Vite has dropped it', async () => {
+    const { root, card } = vueProject();
+    writeActive({ root }, ['v']);
+    const load = (plugin(root, 'serve') as unknown as { load: BlockLoad }).load;
+    // An edit of the real file drops plugin-vue's parse and Vite's compiled
+    // module together; a block rebuilt on its own would then read the real file.
+    const main = { url: '/src/Card.vue', transformResult: null as unknown };
+    const environment: BlockEnvironment = {
+      name: 'client',
+      moduleGraph: { getModuleById: (m) => (m === card ? main : undefined) },
+      transformRequest: vi.fn(async () => {
+        main.transformResult = { code: '' };
+      }),
+    };
+    const block = `${card}?vue&type=style&index=0&lang.css`;
+    expect(await load.call({ environment }, block)).toBeNull();
+    expect(environment.transformRequest).toHaveBeenCalledWith('/src/Card.vue');
+    // Compiled: nothing to wait for.
+    expect(load.call({ environment }, block)).toBeNull();
+    expect(environment.transformRequest).toHaveBeenCalledTimes(1);
+    // A copy that does not compile says so on its own request; the block is still plugin-vue's.
+    main.transformResult = null;
+    environment.transformRequest.mockRejectedValueOnce(new Error('[vue/compiler-sfc] bad template'));
+    expect(await load.call({ environment }, block)).toBeNull();
+    // A component no variant tracks, and Vite 5 or a build without an environment, are left alone.
+    expect(load.call({ environment }, `${id(root, 'src', 'Other.vue')}?vue&type=style&index=0&lang.css`)).toBeNull();
+    expect(load.call({}, block)).toBeNull();
+    expect(environment.transformRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it('serves ?isotone= copies of scripts on any dev server, never of a component', () => {
+    const { root, source, card } = vueProject();
+    const hooks = plugin(root, 'serve');
+    // No React here, so no live switching: the check still serves the copy.
+    expect(hooks.load(`${source}?isotone=b`)?.code).toContain('variant b');
+    expect(hooks.load(`${source}?isotone=_base`)?.code).toContain('"real"');
+    // plugin-vue keeps one parse per file, so a component's copy would
+    // become what every tab shows; the request gets the page's file.
+    expect(hooks.load(`${card}?isotone=v`)).toBeNull();
+    // A build serves no versions.
+    expect(plugin(root, 'build').load(`${source}?isotone=b`)).toBeNull();
+  });
+
+  it('reloads the page when a component switches or its active copy changes', async () => {
+    const { root, card, copy } = vueProject();
+    const hooks = plugin(root, 'serve') as unknown as LiveHooks;
+    const server = fakeServer(root);
+    Object.assign(server.moduleGraph, { getModuleById: vi.fn() });
+    const mod = { id: card };
+    server.moduleGraph.getModulesByFile.mockImplementation((f: string) => (f === card ? new Set([mod]) : undefined));
+    hooks.configureServer(server);
+    const client = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([mod]) } };
+    const ssr = { name: 'ssr', moduleGraph: { getModulesByFile: () => new Set([mod]) } };
+    /** Vite 6 and later: each environment's hook, after a hand edit or a swap. */
+    const update = (file: string) => {
+      const browser = hooks.hotUpdate.call({ environment: client }, { file });
+      const render = hooks.hotUpdate.call({ environment: ssr }, { file });
+      return { browser, render };
+    };
+    const reloads = () => {
+      vi.advanceTimersByTime(100);
+      const sent = server.ws.send.mock.calls.filter(([m]) => m.type === 'full-reload').length;
+      server.ws.send.mockClear();
+      return sent;
+    };
+
+    await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['v'] });
+    expect(server.watcher.emit).toHaveBeenCalledWith('change', card);
+    vi.useFakeTimers();
+    try {
+      // plugin-vue would compare the real file on disk with its last parse
+      // of it and update nothing, so the page reloads instead. A server
+      // render takes the swap as it would any file's.
+      expect(update(card)).toEqual({ browser: [], render: undefined });
+      expect(reloads()).toBe(1);
+      expect(server.moduleGraph.invalidateModule).toHaveBeenCalledWith(mod);
+      // An edit of the active copy reloads too.
+      expect(update(copy).browser).toEqual([]);
+      expect(reloads()).toBe(1);
+      // An edit of the real file changes nothing the page shows.
+      expect(update(card).browser).toEqual([]);
+      expect(reloads()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // Vite 5 asks once for every environment.
+    await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: [] });
+    vi.useFakeTimers();
+    try {
+      expect(hooks.handleHotUpdate({ file: card, server })).toEqual([]);
+      expect(reloads()).toBe(1);
+      // Back on the real file, its edits are plugin-vue's again and the copy's are nothing on screen.
+      expect(hooks.handleHotUpdate({ file: card, server })).toBeUndefined();
+      expect(hooks.handleHotUpdate({ file: copy, server })).toEqual([]);
+      expect(reloads()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('Vue single-file components through the dev server', () => {
+  let vue: ViteDevServer;
+  let base: string;
+  let project: ReturnType<typeof vueProject>;
+  // A stand-in for plugin-vue: it compiles a component's main request, keeps
+  // that parse, answers each block request from it, and reads the file from
+  // disk when it has none.
+  const parses = new Map<string, string>();
+  const styleOf = (sfc: string) => /<style[^>]*>([\s\S]*?)<\/style>/.exec(sfc)?.[1] ?? '';
+
+  beforeAll(async () => {
+    project = vueProject();
+    repos.splice(repos.indexOf(project.root), 1);
+    writeFileSync(join(project.root, '.env'), 'SECRET_TOKEN=sk_live_FAKE_ENV\n');
+    createVariant({ root: project.root }, { id: 'forced' });
+    addVariantFile({ root: project.root }, 'forced', '.env', { force: true });
+    writeActive({ root: project.root }, ['v']);
+    vue = await createServer({
+      root: project.root,
+      configFile: false,
+      logLevel: 'silent',
+      server: { port: 0, host: '127.0.0.1', watch: null },
+      optimizeDeps: { noDiscovery: true, include: [] },
+      plugins: [
+        {
+          name: 'fixture:vue',
+          load(moduleId: string) {
+            const [file = '', query = ''] = moduleId.split('?');
+            if (!/(?:^|&)vue(?:&|$)/.test(query)) return null;
+            return styleOf(parses.get(file) ?? readFileSync(file, 'utf8'));
+          },
+          // Keyed by the file, whatever the query, as plugin-vue's parses are.
+          transform(code: string, moduleId: string) {
+            const [file = '', query = ''] = moduleId.split('?');
+            if (!file.endsWith('.vue') || /(?:^|&)vue(?:&|$)/.test(query)) return null;
+            parses.set(file, code);
+            return `import ${JSON.stringify(`${file}?vue&type=style&index=0&scoped=7a7a7a7a&lang.css`)};\nexport default ${JSON.stringify(code.includes('copy') ? 'copy' : 'real')};\n`;
+          },
+        },
+        isotone({ checkForUpdates: false }),
+      ],
+    });
+    await vue.listen();
+    const address = vue.httpServer?.address();
+    base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
+  });
+
+  afterAll(async () => {
+    (vue?.httpServer as import('node:http').Server | null)?.closeAllConnections?.();
+    await vue?.close();
+    rmSync(project.root, { recursive: true, force: true });
+  });
+
+  const get = async (path: string) => {
+    const res = await fetch(`${base}${path}`);
+    return { status: res.status, body: await res.text() };
+  };
+  const BLOCK = '/src/Card.vue?vue&type=style&index=0&scoped=7a7a7a7a&lang.css';
+
+  it("renders the copy's style block", async () => {
+    expect((await get('/src/Card.vue')).body).toContain('"copy"');
+    const block = await get(BLOCK);
+    expect(block.status).toBe(200);
+    expect(block.body).toContain('color: red');
+    expect(block.body).not.toContain('<template>');
+  });
+
+  it('parses the copy again for a block asked after the real file changed', async () => {
+    await get('/src/Card.vue');
+    // What an edit of the real file leaves behind: plugin-vue's parse and
+    // Vite's compiled module both gone, the browser still on the copy.
+    parses.clear();
+    const graph = vue.environments.client.moduleGraph;
+    const main = graph.getModuleById(project.card);
+    expect(main).toBeDefined();
+    if (main) graph.invalidateModule(main);
+    const block = graph.getModuleById(`${project.card}?vue&type=style&index=0&scoped=7a7a7a7a&lang.css`);
+    if (block) graph.invalidateModule(block);
+    const rebuilt = (await get(BLOCK)).body;
+    expect(rebuilt).toContain('color: red');
+    expect(rebuilt).not.toContain('color: blue');
+    expect(rebuilt).not.toContain('<template>');
+  });
+
+  it("leaves the component's parse alone for ?isotone=, and scripts' versions to the check", async () => {
+    expect((await get('/src/Card.vue?isotone=_base')).body).toContain('"copy"');
+    expect(parses.get(project.card)).toBe(COPY_SFC);
+    expect((await get('/src/Button.tsx?isotone=b')).body).toContain('variant b');
+    for (const path of ['/.env?isotone=_base', '/.env?isotone=forced', '/src/../.env?isotone=_base']) {
+      expect((await get(path)).body, path).not.toContain('FAKE_ENV');
+    }
+  });
+});

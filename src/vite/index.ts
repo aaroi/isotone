@@ -47,7 +47,7 @@ import {
 } from './live';
 import { type Gate, notesEndpoint, updateEndpoint, variantsEndpoint } from './middleware';
 import type { IsotonePlugin, IsotoneViteOptions } from './options';
-import { createOverrides } from './overrides';
+import { createOverrides, isSingleFileComponent } from './overrides';
 import { createSwitching } from './switching';
 
 export type { IsotonePlugin, IsotoneViteOptions } from './options';
@@ -64,6 +64,42 @@ const VITE_DENY = ['.env', '.env.*', '*.{crt,pem}', '**/.git/**'];
  * them and show the real file.
  */
 const SPECIAL_QUERY = /[?&](raw|url|inline|no-inline|worker|sharedworker|html-proxy)(?:[&=]|$)/;
+
+/**
+ * One block of a Vue single-file component (`Card.vue?vue&type=style&index=0…`).
+ * plugin-vue answers it from its parse of the whole file, which load() has
+ * already swapped; the whole file in its place would compile as CSS. A block
+ * kept in a file of its own (`<style src="./card.css">`, which adds `src=`) is
+ * that whole file, and is swapped as usual.
+ */
+const COMPONENT_BLOCK = /(?:^|&)vue(?:[&=]|$)/;
+const OWN_FILE = /(?:^|&)src=/;
+
+/** What load() reads of a Vite 6+ dev environment; a build has neither. */
+interface LoadEnvironment {
+  name: string;
+  moduleGraph?: { getModuleById(id: string): { url: string; transformResult: unknown } | undefined };
+  transformRequest?(url: string): Promise<unknown>;
+}
+
+/**
+ * Leave a component block to plugin-vue once it has parsed the file as load()
+ * serves it now. It keeps one parse per file and drops it when the real file
+ * changes on disk; a block asked before the whole file compiles again is then
+ * read from the real file. Under an active variant, an edit of the real file
+ * followed by a block rebuilt on its own (a stylesheet it imports changed)
+ * would show the real file's block. Compiling the whole file first restores
+ * the copy's parse. Vite 5 has no environment here and keeps that gap.
+ */
+function componentBlock(env: LoadEnvironment | undefined, path: string): Promise<null> | null {
+  const main = env?.moduleGraph?.getModuleById(path);
+  if (!main || main.transformResult || !env?.transformRequest) return null;
+  // A copy that does not compile reports that on its own request.
+  return env.transformRequest(main.url).then(
+    () => null,
+    () => null,
+  );
+}
 
 /** Say where the notes go after Vite's own banner, so it is not buried under
  *  it. Portable setups fail quietly otherwise: a reviewer writes notes and the
@@ -131,7 +167,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       // cannot find it on disk, so answer with the path the variant gives it.
       return overrides.addedFile(source, importer, () => this.resolve(source, importer, { ...opts, skipSelf: true }));
     },
-    load(id: string, opts?: { ssr?: boolean }) {
+    load(this: { environment?: LoadEnvironment }, id: string, opts?: { ssr?: boolean }) {
       if (!variantsOptions || SPECIAL_QUERY.test(id)) return null;
       if (id === RESOLVED_LIVE_MODULE) return { code: liveRuntimeModule(overrides.liveConfig(ssrHost)), map: null };
       // `?v=<hash>`, `?t=<timestamp>`, `?import`: vite's own request
@@ -139,14 +175,22 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       const path = id.replace(/[?#].*$/, '');
       if (!overrides.overridable(path)) return null;
       const query = id.slice(path.length).replace(/^\?/, '').replace(/#.*$/, '');
-      const version = switching.live ? new URLSearchParams(query).get(VERSION_QUERY) : null;
+      if (COMPONENT_BLOCK.test(query) && !OWN_FILE.test(query)) {
+        return overrides.versionsByFile().has(path) ? componentBlock(this.environment, path) : null;
+      }
+      // `?isotone=<id>`: one version of a tracked file. Live dispatchers import
+      // each version this way, and on any dev server it shows that a copy
+      // compiles. Vite 5 cannot check it against `server.fs.deny` (below), so
+      // there it means nothing. Nor for a component: plugin-vue would take
+      // that copy for the real file's parse.
+      const versioned = isDev && vite.isFileLoadingAllowed !== undefined && !isSingleFileComponent(path);
+      const version = versioned ? new URLSearchParams(query).get(VERSION_QUERY) : null;
       // Only a file some variant tracks has versions. Any other path is left
       // to Vite, whose `server.fs.deny` keeps `.env` and `.git/` out of reach;
       // answering it here would read the file around that check.
       if (version !== null && overrides.versionsByFile().has(path)) {
         // A file tracked past the secret guard (`variant add … --force`)
         // still obeys `server.fs.deny`: left to Vite, the request gets 403.
-        // Live mode needs Vite 6, which has the check.
         if (resolved && vite.isFileLoadingAllowed && !vite.isFileLoadingAllowed(resolved, path)) return null;
         const from = version === BASE_VERSION ? (existsSync(path) ? path : null) : overrides.copyOf(version, path);
         return { code: from ? readFileSync(from, 'utf8') : 'export {};\n', map: null };

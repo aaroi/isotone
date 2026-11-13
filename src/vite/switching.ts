@@ -13,7 +13,7 @@ import { ensureDirIgnored, ensureFileIgnored } from '../node/fs/git-exclude';
 import { isWithin } from '../node/fs/paths';
 import { overrideSourcePath, readVariant } from '../node/variants';
 import { ACTIVE_EVENT, BASE_VERSION, RESOLVED_LIVE_MODULE, VERSION_QUERY } from './live';
-import type { Overrides } from './overrides';
+import { isSingleFileComponent, type Overrides } from './overrides';
 
 const MANIFEST = 'variant.json';
 
@@ -42,6 +42,16 @@ export function createSwitching(overrides: Overrides) {
   // environment about one change, the browser first and the server after.
   const swapping = new Map<string, Set<string>>();
   const swapWaiters = new Set<() => void>();
+
+  /**
+   * A switch of a Vue component, or an edit of its active copy, reloads the
+   * page. plugin-vue's own hot update compares its last parse with the real
+   * file on disk, which neither changes, so it would update nothing.
+   */
+  const reloadForComponent = (): [] => {
+    reloadPage();
+    return [];
+  };
 
   const planChanged = (path: string): boolean => {
     const plan = overrides.dispatchPlan(path);
@@ -76,6 +86,7 @@ export function createSwitching(overrides: Overrides) {
         return [...(modulesOf(source) ?? [])].filter((m) => versionOfId(m.id) === hit.id);
       }
       if (!overrides.active().includes(hit.id)) return [];
+      if (client && isSingleFileComponent(source)) return reloadForComponent();
       // The browser holds the real file's URL, so the override's edit has
       // to be delivered as if the real file changed.
       return [...(modulesOf(source) ?? [])];
@@ -104,6 +115,7 @@ export function createSwitching(overrides: Overrides) {
       }
       return [...(modulesOf(path) ?? [])].filter((m) => versionOfId(m.id) === BASE_VERSION);
     }
+    if (swap && client && isSingleFileComponent(path)) return reloadForComponent();
     // Let Vite compute the swap's update as usual.
     if (swap) return undefined;
     // The real source of an overridden file: the browser is showing the

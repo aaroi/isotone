@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- **File variants of Vue components work.** A variant of a `.vue` file with `<style scoped>` used to fail with a CSS error and a blank page; each block of the copy now compiles as the real file's would. Switching one from the panel or with `variant use`, or editing the active copy, reloads the page, where it used to change nothing until a manual reload. [Vue components](docs/variants.md#vue-components) says what Vue supports.
+- **`<file>?isotone=<id>` serves the copy on any dev server on Vite 6 and later**, not only with live switching in React, so the check `init` suggests works there too. A `.vue` file is checked with `variant use <id>` instead.
+
 ## 1.5.0
 
 ### Changed
