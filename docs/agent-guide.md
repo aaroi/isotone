@@ -131,9 +131,10 @@ npx isotone variant list [<route>] [--json]        # check what the panel will s
   reviewer picks it. It refuses a stale or conflicted copy: `variant sync <id>`
   merges the real file's changes first, or `--force` lands it anyway.
 - A copy is stale once its real file changes: `variant list` shows it as STALE
-  and `--done` names it. Sync each copy the fix belongs in too.
-- `variant list --json` prints one object: `variants` (with `stale`, `missing`,
-  `conflicts` and `active`), `knobs`, and `skippedKnobs` with reasons. `--all-routes` lists
+  and `--done` names it. Sync each copy the fix belongs in too. A copy under NO
+  BASE has nothing to merge from: compare it with the real file by hand.
+- `variant list --json` prints one object: `variants` (with `stale`, `noBase`,
+  `missing`, `conflicts` and `active`), `knobs`, and `skippedKnobs` with reasons. `--all-routes` lists
   every route's variants even with a route given.
 - `variant off <id>` turns one off, `variant rm <id> <file>` stops overriding a
   file, and `variant group <id> <groupId> [--label <text>]` moves a variant into

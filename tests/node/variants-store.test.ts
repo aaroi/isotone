@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
-import { afterEach, assert, describe, expect, it } from 'vitest';
+import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
 import {
   activeConflict,
@@ -252,6 +253,7 @@ describe('sync', () => {
       merged: [],
       conflicts: [],
       unchanged: ['src/Button.tsx'],
+      blocked: {},
     });
     expect(() => promoteVariant(opts, 'v1')).toThrow(/conflict markers/);
   });
@@ -303,7 +305,134 @@ describe('sync', () => {
 
     const result = syncVariant(opts, 'v1');
     expect(result.conflicts).toEqual(['src/Button.tsx']);
+    expect(result.blocked).toEqual({ 'src/Button.tsx': 'no-base' });
     expect(readFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'utf8')).toBe(before);
+  });
+
+  it('takes the real file as the base of a copy that has none while the two are identical', () => {
+    // A copy made outside Git by Isotone 1.5.0 and earlier, never edited:
+    // nothing can be lost, so sync records a base instead of giving up.
+    const { opts } = tempRepo();
+    createVariant(opts, { id: 'v1' });
+    addVariantFile(opts, 'v1', 'src/Button.tsx');
+    const manifest = readVariant(opts, 'v1');
+    assert(manifest?.files['src/Button.tsx']);
+    manifest.files['src/Button.tsx'].base = null;
+    writeFileSync(join(variantDir(opts, 'v1'), 'variant.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+    expect(listVariants(opts)[0]?.stale).toEqual(['src/Button.tsx']);
+
+    expect(syncVariant(opts, 'v1')).toEqual({ merged: [], conflicts: [], unchanged: ['src/Button.tsx'], blocked: {} });
+    expect(readVariant(opts, 'v1')?.files['src/Button.tsx']?.base).toMatch(/^[0-9a-f]{40}$/);
+    expect(listVariants(opts)[0]?.stale).toEqual([]);
+  });
+});
+
+/** A project with no Git repository anywhere above it. */
+function tempProject(): { root: string; opts: VariantsStoreOptions } {
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'isotone-nogit-')));
+  dirs.push(root);
+  // Git must not find a repository above the temp dir either.
+  vi.stubEnv('GIT_CEILING_DIRECTORIES', dirname(root));
+  mkdirSync(join(root, 'src'), { recursive: true });
+  writeFileSync(join(root, 'src', 'Button.tsx'), 'line one\nline two\nline three\n');
+  return { root, opts: { root } };
+}
+
+/** What git would name the bytes, computed without it. */
+function sha1Blob(contents: string): string {
+  return createHash('sha1')
+    .update(`blob ${Buffer.byteLength(contents)}\0`)
+    .update(contents)
+    .digest('hex');
+}
+
+describe('outside a Git repository', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('records a base the copy is current against, kept in the variant, until the real file changes', () => {
+    const { root, opts } = tempProject();
+    createVariant(opts, { id: 'v1' });
+    addVariantFile(opts, 'v1', 'src/Button.tsx');
+    const original = 'line one\nline two\nline three\n';
+    const base = readVariant(opts, 'v1')?.files['src/Button.tsx']?.base;
+    expect(base).toBe(sha1Blob(original));
+    expect(readFileSync(join(variantDir(opts, 'v1'), '.isotone-base', base as string), 'utf8')).toBe(original);
+    expect(listVariants(opts)[0]?.stale).toEqual([]);
+
+    writeFileSync(join(root, 'src', 'Button.tsx'), 'line one\nline two\nline three, changed\n');
+    expect(listVariants(opts)[0]?.stale).toEqual(['src/Button.tsx']);
+  });
+
+  it('syncs a clean merge from the kept base, and keeps only the new base', () => {
+    const { root, opts } = tempProject();
+    createVariant(opts, { id: 'v1' });
+    addVariantFile(opts, 'v1', 'src/Button.tsx');
+    writeFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'line one\nline two\nOVERRIDE THREE\n');
+    writeFileSync(join(root, 'src', 'Button.tsx'), 'REAL ONE\nline two\nline three\n');
+
+    expect(syncVariant(opts, 'v1')).toEqual({ merged: ['src/Button.tsx'], conflicts: [], unchanged: [], blocked: {} });
+    expect(readFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'utf8')).toBe('REAL ONE\nline two\nOVERRIDE THREE\n');
+    expect(listVariants(opts)[0]?.stale).toEqual([]);
+    expect(readdirSync(join(variantDir(opts, 'v1'), '.isotone-base'))).toEqual([sha1Blob('REAL ONE\nline two\nline three\n')]);
+  });
+
+  it('writes conflict markers when both sides change a line, and advances the base', () => {
+    const { root, opts } = tempProject();
+    createVariant(opts, { id: 'v1' });
+    addVariantFile(opts, 'v1', 'src/Button.tsx');
+    writeFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'line one\nVARIANT TWO\nline three\n');
+    writeFileSync(join(root, 'src', 'Button.tsx'), 'line one\nREAL TWO\nline three\n');
+
+    const result = syncVariant(opts, 'v1');
+    expect(result.conflicts).toEqual(['src/Button.tsx']);
+    expect(result.blocked).toEqual({});
+    const copy = readFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'utf8');
+    expect(copy).toContain('<<<<<<< variant');
+    expect(copy).toContain('VARIANT TWO');
+    expect(copy).toContain('REAL TWO');
+    expect(listVariants(opts)[0]).toMatchObject({ stale: [], conflicts: ['src/Button.tsx'] });
+  });
+
+  it('still syncs a copy made before `git init`, and hands its base to Git after', () => {
+    const { root, opts } = tempProject();
+    createVariant(opts, { id: 'v1' });
+    addVariantFile(opts, 'v1', 'src/Button.tsx');
+    execFileSync('git', ['init', '-q', root]);
+    writeFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'line one\nline two\nOVERRIDE THREE\n');
+    writeFileSync(join(root, 'src', 'Button.tsx'), 'REAL ONE\nline two\nline three\n');
+
+    expect(syncVariant(opts, 'v1').merged).toEqual(['src/Button.tsx']);
+    expect(listVariants(opts)[0]?.stale).toEqual([]);
+    // The new base is in git's object store, so the variant keeps no copy.
+    expect(existsSync(join(variantDir(opts, 'v1'), '.isotone-base'))).toBe(false);
+  });
+
+  it('says Git is missing instead of merging when it is not installed', () => {
+    const { root, opts } = tempProject();
+    vi.stubEnv('PATH', '');
+    createVariant(opts, { id: 'v1' });
+    addVariantFile(opts, 'v1', 'src/Button.tsx');
+    expect(listVariants(opts)[0]?.stale).toEqual([]);
+    writeFileSync(join(root, 'src', 'Button.tsx'), 'REAL ONE\nline two\nline three\n');
+    expect(listVariants(opts)[0]?.stale).toEqual(['src/Button.tsx']);
+
+    const result = syncVariant(opts, 'v1');
+    expect(result.blocked).toEqual({ 'src/Button.tsx': 'no-git' });
+    expect(readFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'utf8')).toBe('line one\nline two\nline three\n');
+  });
+
+  it('rebases a promoted variant’s alternatives onto the landed file', () => {
+    const { root, opts } = tempProject();
+    createVariant(opts, { id: 'a', group: 'button' });
+    createVariant(opts, { id: 'b', group: 'button' });
+    addVariantFile(opts, 'a', 'src/Button.tsx');
+    addVariantFile(opts, 'b', 'src/Button.tsx');
+    writeFileSync(join(variantDir(opts, 'a'), 'src/Button.tsx'), 'promoted\n');
+
+    expect(promoteVariant(opts, 'a').rebased).toEqual(['b']);
+    expect(readFileSync(join(root, 'src', 'Button.tsx'), 'utf8')).toBe('promoted\n');
+    expect(listVariants(opts)[0]).toMatchObject({ id: 'b', stale: [] });
+    expect(readdirSync(join(variantDir(opts, 'b'), '.isotone-base'))).toEqual([sha1Blob('promoted\n')]);
   });
 });
 
@@ -643,6 +772,8 @@ describe('promoteVariant guards', () => {
     writeFileSync(join(variantDir(opts, 'nb'), 'variant.json'), `${JSON.stringify(manifest, null, 2)}\n`);
     expect(() => promoteVariant(opts, 'nb')).toThrow(/no base recorded for src\/Button\.tsx \(not a git repo when the override was made\)/);
     expect(() => promoteVariant(opts, 'nb')).not.toThrow(/changed since/);
+    // Sync has nothing to merge from, so it is not the advice.
+    expect(() => promoteVariant(opts, 'nb')).toThrow(/Compare it with the real file by hand, then promote with --force\.$/);
   });
 });
 
@@ -692,7 +823,7 @@ describe('files a variant adds', () => {
     expect(readVariant(opts, 'n')?.files['src/New.tsx']).toEqual({ base: null, added: true });
     expect(readFileSync(join(variantDir(opts, 'n'), 'src', 'New.tsx'), 'utf8')).toBe('');
     expect(listVariants(opts)[0]?.stale).toEqual([]);
-    expect(syncVariant(opts, 'n')).toEqual({ merged: [], conflicts: [], unchanged: ['src/New.tsx'] });
+    expect(syncVariant(opts, 'n')).toEqual({ merged: [], conflicts: [], unchanged: ['src/New.tsx'], blocked: {} });
 
     // Someone created the real file meanwhile: a person has to decide.
     writeFileSync(join(root, 'src', 'New.tsx'), 'export {};\n');

@@ -54,15 +54,24 @@ Variant files are the change under review, so they are committed by default and
 (`.env`, private keys, `*credentials*.json`, `*.keystore`, anything under
 `.aws/` or `.ssh/`) unless given `--force`. `variants: { ignored: true }` keeps
 the variants directory local. The active pointer, `.isotone/active.json`, is
-local and never committed. `ISOTONE_VARIANT=<id>` (a comma-separated list) bakes
+local and never committed: like the notes file, it goes into the repository's
+`.git/info/exclude` when the dev server starts and whenever the CLI runs. `ISOTONE_VARIANT=<id>` (a comma-separated list) bakes
 variants into a `vite build` for a preview.
 
 **Keeping copies current.** A copy records the version of the real file it was
-made from and reads as stale once that file moves on. `variant sync <id>` merges
-the real file's changes in, untracked files included. Where both sides changed
-the same lines the copy gets conflict markers: `sync` exits 1, `variant list`
-counts them under CONFLICTS, and the copy cannot be shown until they are
-resolved (in live mode, picking it shows the real file meanwhile).
+made from and reads as stale once that file moves on. In a Git repository that
+version is kept in Git's object store; outside one, in the variant's own
+`.isotone-base/` directory, so a project without `git init` works the same,
+before and after one. `variant sync <id>` merges the real file's changes in,
+untracked files included; it needs Git installed and says so when it is not.
+Where both sides changed the same lines the copy gets conflict markers: `sync`
+exits 1, `variant list` counts them under CONFLICTS, and the copy cannot be
+shown until they are resolved (in live mode, picking it shows the real file
+meanwhile). A copy made outside a repository by Isotone 1.5.0 or earlier has no
+recorded version: `variant list` names it under NO BASE, since nobody knows
+whether its real file changed, and `sync` cannot merge it (unless the copy still
+matches the real file). Compare it with the real file by hand, then `variant
+promote <id> --force` when it should win.
 After `variant promote <id>`, the other variants in its group stay available and
 stop reading as stale: they are alternatives to what was promoted.
 

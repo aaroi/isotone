@@ -20,6 +20,7 @@ import { notesProjectRoot, updateRequestOf } from '../node/update/request';
 import { listVariants, readActive, variantDir } from '../node/variants';
 import { latestChange, mtime, snapshot } from './changes';
 import { docPath } from './docs';
+import { excludeLocalFiles } from './local-files';
 import { oneLine, quoted, shellCommand, shellQuote, toJson, utcStamp } from './text';
 import { type CliIO, errOut, findNoteByPrefix, has, out, parseArgs, valueFor } from './util';
 
@@ -141,6 +142,7 @@ export async function runNotes(argv: string[], io: CliIO): Promise<number> {
   // An update request is checked against this notes file's project before its
   // command is printed: a hand edit cannot point an agent at another directory.
   const root = notesProjectRoot(args.file);
+  excludeLocalFiles(args.dir, args.file);
   // On stderr, so `--json` output stays one array.
   if (args.foundAbove) errOut(io, `Notes: ${relative(io.cwd, args.file)}`);
   if (args.action === '--reply') return reply(io, args, root);

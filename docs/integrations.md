@@ -49,8 +49,9 @@ If the app mounts `IsotonePanel` or `mountIsotone` itself, use
 injecting a second panel; that mount can pass
 `updateEndpoint: '/api/isotone/update'` for the [update notice](updates.md).
 
-The notes file resolves against Vite's `root`. In a monorepo, run the CLI in that
-directory or pass `--file path/to/.isotone/notes.json`. Until 1.5.0, an old
+The notes file resolves against Vite's `root`, and goes into the repository's
+`.git/info/exclude` when the dev server starts and whenever the CLI runs. In a
+monorepo, run the CLI in that directory or pass `--file path/to/.isotone/notes.json`. Until 1.5.0, an old
 `.iteration-feedback.json` in its place is moved there on first run. Options:
 
 ```ts

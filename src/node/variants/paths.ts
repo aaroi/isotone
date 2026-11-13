@@ -10,6 +10,14 @@ export function variantDir(opts: VariantsStoreOptions, id: string): string {
   return join(variantsDir(opts), id);
 }
 
+/** Inside a variant's directory: the bases git could not store, because the
+ *  copy was made or synced outside a repository. Named by blob hash. */
+export const BASES_DIR = '.isotone-base';
+
+export function baseStore(opts: VariantsStoreOptions, id: string): string {
+  return join(variantDir(opts, id), BASES_DIR);
+}
+
 /**
  * A manifest key is joined onto the variant dir and onto the project root,
  * so a key that climbs out of either (`../../x`, an absolute path, or a
@@ -18,7 +26,7 @@ export function variantDir(opts: VariantsStoreOptions, id: string): string {
  * is not a variant at all.
  */
 export function isSafeManifestKey(key: string): boolean {
-  if (!key || isAbsolute(key) || /[\\:\0]/.test(key) || key === 'variant.json') return false;
+  if (!key || isAbsolute(key) || /[\\:\0]/.test(key) || key === 'variant.json' || key.split('/')[0] === BASES_DIR) return false;
   return !key.split('/').some((segment) => !segment || segment === '.' || segment === '..' || segment === '.git');
 }
 

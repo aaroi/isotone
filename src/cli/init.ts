@@ -15,6 +15,7 @@ import { version } from '../../package.json';
 import { guardedScriptTag } from '../core/tag';
 import { DEFAULT_VARIANTS_DIR, KNOBS_FILE } from '../node/variants';
 import { docPath } from './docs';
+import { excludeLocalFiles } from './local-files';
 import { toJson } from './text';
 import { type CliIO, errOut, extractBoolFlag, extractFlag, out, parseArgs } from './util';
 
@@ -75,6 +76,7 @@ export function runInit(args: string[], io: CliIO): number {
     errOut(io, `Unknown approach "${approach}". Use host, overlay or serve.`);
     return 1;
   }
+  excludeLocalFiles(io.cwd);
   const setup: Setup = {
     host,
     approach,

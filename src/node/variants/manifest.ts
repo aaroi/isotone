@@ -6,9 +6,9 @@ import type { IsotoneElement } from '../../core/types';
 import { OVERLAY_GROUP_ID, type OverlayVariant, type OverlayVariantStatus } from '../../core/variants/overlay';
 import { writeJson } from '../fs/atomic';
 import { isWithin } from '../fs/paths';
-import { blobOf, hashFile, isGitIgnored } from './git';
+import { hashFile, isGitIgnored, recordBase } from './git';
 import { type VariantsStoreOptions, mutateVariants, variantsDir } from './options';
-import { variantDir, isValidVariantId, isSafeManifestKey, repoRelativeKey } from './paths';
+import { BASES_DIR, baseStore, variantDir, isValidVariantId, isSafeManifestKey, repoRelativeKey } from './paths';
 
 /** Env files, private keys and credentials: a copy would sit in a directory
  *  that is committed by default. `.env.example` and the like are fine. */
@@ -82,6 +82,17 @@ export function writeVariant(opts: VariantsStoreOptions, v: OverlayVariant): voi
   if (!isWithin(variantsDir(opts), dir, { realpath: true })) throw new Error('Variant directory escapes the variants tree');
   mkdirSync(dir, { recursive: true });
   writeJson(join(dir, 'variant.json'), v);
+  pruneBases(join(dir, BASES_DIR), v);
+}
+
+/** Drop the kept bases the manifest no longer names: a sync moved past
+ *  them, a file left the variant, or git holds the new base instead. */
+function pruneBases(store: string, v: OverlayVariant): void {
+  if (!existsSync(store)) return;
+  const kept = new Set(Object.values(v.files).map((entry) => entry.base));
+  const names = readdirSync(store);
+  for (const name of names) if (!kept.has(name)) rmSync(join(store, name), { force: true });
+  if (names.every((name) => !kept.has(name))) rmSync(store, { recursive: true, force: true });
 }
 
 /** The marker `git merge-file` leaves at the top of a conflicted hunk, with
@@ -99,11 +110,19 @@ export function hasConflictMarkers(file: string): boolean {
 }
 
 /** Whether a tracked file has drifted from what its override was derived
- *  from. `base: null` (never hashed, or the manifest was hand-edited to
- *  simulate an unreachable blob) counts as stale too: there's nothing to
- *  compare against, so we can't claim it's unchanged. */
+ *  from. `base: null` counts as stale too: there's nothing to compare
+ *  against, so we can't claim it's unchanged. Isotone 1.5.0 and earlier
+ *  recorded that for a copy made outside a Git repository; see {@link filesWithoutBase}. */
 export function isStale(base: string | null, currentHash: string | null): boolean {
   return base === null || currentHash === null || currentHash !== base;
+}
+
+/** The copies of `v` with no recorded base: stale only because there is
+ *  nothing to compare them with, not because their real file changed. */
+export function filesWithoutBase(v: OverlayVariant): string[] {
+  return Object.entries(v.files)
+    .filter(([, entry]) => entry.base === null && !entry.added)
+    .map(([file]) => file);
 }
 
 /** Every valid manifest, oldest first, without the per-file status that
@@ -276,7 +295,7 @@ export function addVariantFile(
       throw new Error(`${refusal}; variants are meant to be committed, so it is not copied. Ask the user before copying it with --force.`);
     mkdirSync(dirname(destAbs), { recursive: true });
     writeFileSync(destAbs, readFileSync(sourceAbs));
-    manifest.files = { ...manifest.files, [key]: { base: blobOf(sourceAbs) } };
+    manifest.files = { ...manifest.files, [key]: { base: recordBase(sourceAbs, baseStore(opts, id)) } };
     writeVariant(opts, manifest);
     return manifest;
   });
