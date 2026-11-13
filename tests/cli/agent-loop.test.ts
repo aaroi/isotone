@@ -339,6 +339,25 @@ describe('--done and variants', () => {
     expect(pickedCentered.text.out).toContain('  hero-centered (src/App.jsx): picked when the note was written');
   });
 
+  it('sends a copy with no recorded base to a comparison by hand, not to variant sync', async () => {
+    const root = repo();
+    notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000) }]);
+    expect(await runCli(['variant', 'new', 'hero-old', '--route', '/'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'add', 'hero-old', 'src/App.jsx'], captureIo(root))).toBe(0);
+    // What a copy made outside a Git repository records.
+    const manifest = join(root, '.isotone', 'variants', 'hero-old', 'variant.json');
+    const parsed = JSON.parse(readFileSync(manifest, 'utf8'));
+    parsed.files['src/App.jsx'].base = null;
+    writeFileSync(manifest, JSON.stringify(parsed));
+    write(root, 'src/App.jsx', 'export default function App() { return <button>Go</button>; }\n', Date.now() + 2000);
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    expect(io.text.out).not.toContain('variant sync hero-old');
+    expect(io.text.out).toContain(
+      'so `variant sync` cannot merge the fix. Compare each with its real file by hand:\n  hero-old (src/App.jsx)',
+    );
+  });
+
   it('names an active copy of a stylesheet whatever the note was on, since every tab follows it', async () => {
     const root = repo();
     write(root, 'src/index.css', 'body { margin: 0; }\n', Date.now() - 120_000);

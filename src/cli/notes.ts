@@ -370,11 +370,25 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
       return { variant, files, notes: fixed.map(({ note }) => note) };
     })
     .filter((v) => v.files.length);
-  if (stale.length) {
+  // A copy made outside a Git repository may record no base: it reads as stale, but `variant sync` has
+  // nothing to merge from, so it is compared by hand.
+  const unbased = (variant: (typeof variants)[number], file: string) => variant.files[file]?.base === null && !variant.files[file]?.added;
+  const syncable = stale
+    .map(({ variant, files }) => ({ id: variant.id, files: files.filter((file) => !unbased(variant, file)) }))
+    .filter((v) => v.files.length);
+  const byHand = stale
+    .map(({ variant, files }) => ({ id: variant.id, files: files.filter((file) => unbased(variant, file)) }))
+    .filter((v) => v.files.length);
+  if (syncable.length) {
     lines.push('These variants copy files changed since the note (or --working), so their copies may lack the fix:');
-    for (const { variant, files } of stale)
-      lines.push(`  ${variant.id} (${files.join(', ')}): ${shellCommand('npx', 'isotone', 'variant', 'sync', variant.id)}`);
+    for (const v of syncable) lines.push(`  ${v.id} (${v.files.join(', ')}): ${shellCommand('npx', 'isotone', 'variant', 'sync', v.id)}`);
     lines.push('Sync each one the fix belongs in too; leave a copy alone when it is the alternative itself.');
+  }
+  if (byHand.length) {
+    lines.push(
+      'These copies of files you changed have no base recorded (not a git repo when they were made), so `variant sync` cannot merge the fix. Compare each with its real file by hand:',
+    );
+    for (const v of byHand) lines.push(`  ${v.id} (${v.files.join(', ')})`);
   }
   const conflicted = relevant.filter((v) => v.conflicts?.length);
   if (conflicted.length) {
@@ -405,7 +419,7 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
     lines.push('The reviewer may be looking at one of these copies, without your fix, in place of the file you changed:');
     for (const v of showing) lines.push(`  ${v.id} (${v.files.join(', ')}): ${v.why}`);
     lines.push(
-      'Sync the fix into a copy it belongs in. Otherwise the reviewer sees it with Default picked on that selector; leave the pick to them, since `variant use` moves every tab without a pick of its own.',
+      'Sync the fix into a copy it belongs in. Otherwise the reviewer sees your fix with Default picked on that selector; leave the pick to them, since `variant use` moves every tab without a pick of its own.',
     );
   }
   return lines;

@@ -37,7 +37,8 @@ npx isotone --undone <id>          # reopen it
   note), usually because an earlier edit in a chained command failed; in Git,
   staged edits, reverts, commits and deletions count.
 - After closing, `--done` names variants on the note's route whose copies may
-  lack the fix, with the `variant sync <id>` for each, any copy with conflict
+  lack the fix, with the `variant sync <id>` for each (a copy with no base
+  recorded is compared by hand instead), any copy with conflict
   markers, and which of those copies a page may show in place of the fix: the
   option a note about that selector names, else one active in
   `.isotone/active.json`. Leave that pick to the reviewer. With `--json` that
