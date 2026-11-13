@@ -8,7 +8,8 @@ app, and pin feedback to the exact elements you want changed.
 Isotone is not an agent, an MCP server or an AI product. It is a small review
 panel inside your app during development, working with the coding agent you
 already use through a few CLI commands and a JSON file. Nothing reaches
-production.
+production unless you choose to [collect teammates' feedback](docs/feedback.md)
+there, into your own database.
 
 Try it in your browser at [isotone.vercel.app](https://isotone.vercel.app). Nothing to install.
 
@@ -75,6 +76,30 @@ built with anything that serves pages on localhost.
 Ask your agent for a [Blast session](docs/blast.md): for the time you choose, it
 keeps picking up, fixing and closing each batch of new notes without another
 prompt. Isotone still never runs the agent; it only hands it the notes.
+
+## Collect feedback from teammates
+
+Experimental. The same panel can ship in a staging, preview or production app,
+so teammates pin elements and write feedback there, signed with their name. Each
+note lands as a row in your own Postgres; no agent is involved, and what you do
+with the rows is up to you. It is one route and one mount:
+
+```ts
+// app/api/feedback/route.ts
+import { feedback } from 'isotone/feedback';
+import { postgres } from 'isotone/postgres';
+
+export const POST = feedback({ store: postgres(process.env.DATABASE_URL) });
+```
+
+```ts
+mountIsotone({ feedback: { endpoint: '/api/feedback', name: user.name } });
+```
+
+It works with any hosted Postgres from its connection URL, with a database
+client you already have, or with a store of your own. People can edit and
+delete what they wrote, and nobody else can. [Collecting feedback](docs/feedback.md)
+has the setup, the saved columns and each provider's details.
 
 ## Keys
 

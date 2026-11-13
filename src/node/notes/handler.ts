@@ -12,7 +12,7 @@ import { LockBusyError, SERVER_LOCK_WAIT_MS, withFileLock } from '../fs/lock';
 import { type HandlerRequest, type HandlerResponse, jsonResponse } from '../http';
 import { notesProjectRoot, updateRequestOf } from '../update/request';
 import { noteFingerprint, notesRevision, readNotes, replyView, type StoredNote, writeNotes } from './store';
-import { elementFields, elementOf, removalOf, variantOf, viewportOf, withinPayloadCap } from './validate';
+import { elementFields, elementOf, removalOf, variantOf, viewportOf, withinPayloadCap } from '../../core/validate';
 
 /** The endpoint path the client calls. */
 export const NOTES_ENDPOINT = '/api/isotone/notes';

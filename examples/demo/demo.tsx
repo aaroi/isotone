@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Gem, Moon, Play, Plus, Search, Sun } from 'lucide-react';
 import { createVariantsSource, IsotonePanel, type IsotoneTheme, type VariantAxis } from '../../src/react/index';
+import { type FeedbackEntry, feedback } from '../../src/feedback/index';
 import { Tour, tourSeen } from './tour';
 
 const params = new URLSearchParams(location.search);
@@ -18,6 +19,11 @@ const page = params.get('route') ?? '/';
 const stress = !screenshot && !hosted && params.get('stress') === '1';
 const session = screenshot ? capture : hosted ? 'hosted' : stress ? 'stress' : 'interactive';
 const endpoint = `/demo-notes/${session}`;
+// `?collect=1`: the panel as a deployed app mounts it for teammates. Feedback is signed and posted once to
+// the app's own route; no agent is involved and nothing is read back.
+const collect = !screenshot && params.get('collect') === '1';
+const FEEDBACK_ENDPOINT = '/demo-feedback';
+const COLLECTED_KEY = 'isotone-demo-collected';
 /** A miniature of the overview cards in one layout, used as a thumbnail. Cards are
  *  [x, y, w, h] in a 150 × 72 box; the drawing stays centred above the label the
  *  panel puts bottom left. */
@@ -182,19 +188,22 @@ const source = createVariantsSource({
       else document.documentElement.style.removeProperty(`--${id}`);
     }
   },
-  async saveDefaults(selections) {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        route: '/',
-        feedback: '[set-defaults] Use the current design settings.',
-        payload: { playground: selections },
-      }),
-    });
-    if (!response.ok) throw new Error('Could not save defaults.');
-  },
+  // "Make default" asks the agent, which the collecting demo does not have.
+  saveDefaults: collect ? undefined : saveDemoDefaults,
 });
+
+async function saveDemoDefaults(selections: Record<string, string>) {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      route: '/',
+      feedback: '[set-defaults] Use the current design settings.',
+      payload: { playground: selections },
+    }),
+  });
+  if (!response.ok) throw new Error('Could not save defaults.');
+}
 
 type DemoNote = Record<string, unknown> & {
   id: string;
@@ -415,7 +424,109 @@ async function agentStep(id: string, state: 'working' | 'done') {
   }
   window.dispatchEvent(new CustomEvent('demo:agent', { detail: { id, state } }));
 }
-if (!screenshot) runPretendAgent();
+if (!screenshot && !collect) runPretendAgent();
+
+/** The rows the demo app's "database" holds: what `save` was handed, newest first. */
+const collected = (() => {
+  let rows: FeedbackEntry[] = [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(COLLECTED_KEY) ?? '[]');
+    if (Array.isArray(saved)) rows = saved;
+  } catch {
+    /* Starts empty. */
+  }
+  const listeners = new Set<() => void>();
+  const set = (next: FeedbackEntry[]) => {
+    rows = next;
+    try {
+      localStorage.setItem(COLLECTED_KEY, JSON.stringify(rows));
+    } catch {
+      /* Kept for this visit only. */
+    }
+    for (const listener of listeners) listener();
+  };
+  return {
+    get: () => rows,
+    /** A new row, or the writer's edit of theirs in place: only the note's own key may replace it. */
+    save(entry: FeedbackEntry) {
+      const stored = rows.find((row) => row.id === entry.id);
+      if (stored && stored.keyHash !== entry.keyHash) return false;
+      set(stored ? rows.map((row) => (row === stored ? { ...entry, createdAt: stored.createdAt } : row)) : [entry, ...rows].slice(0, 50));
+    },
+    remove: (id: string, keyHash: string) => set(rows.filter((row) => row.id !== id || row.keyHash !== keyHash)),
+    clear: () => set([]),
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+})();
+
+/**
+ * The app's feedback route, answered inside the page by the real handler from
+ * `isotone/feedback`, which runs anywhere `Request` and `Response` do. A
+ * deployed app would pass `postgres(url)` as the store; here the records stay in
+ * the page so the visitor can see them.
+ */
+function serveFeedbackInPage(path: string) {
+  const handle = feedback({ store: collected, identify: () => 'sam.rivera@lumen.example' });
+  const network = window.fetch.bind(window);
+  window.fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+    return url.pathname === path ? handle(new Request(url, init)) : network(input, init);
+  };
+}
+if (collect) serveFeedbackInPage(FEEDBACK_ENDPOINT);
+
+/** What landed in the app's database, as its developer would read it. */
+function Collected() {
+  const rows = useSyncExternalStore(collected.subscribe, collected.get);
+  return (
+    <>
+      <div className="section-heading">
+        <h2>What the app's database receives</h2>
+        {rows.length > 0 && (
+          <button type="button" className="button button-ghost" onClick={collected.clear}>
+            Clear
+          </button>
+        )}
+      </div>
+      <section className="collected" aria-label="Collected feedback">
+        {rows.length === 0 && <p className="collected-empty">Send feedback from the panel and its row appears here.</p>}
+        {rows.map((row) => (
+          <article key={row.id}>
+            <p>{row.feedback}</p>
+            <small>
+              <b>{row.author}</b>
+              {row.identity && ` (${row.identity})`} · {row.route}
+              {row.elements.length > 0 && ` · on ${row.elements.map((element) => element.text || element.tag).join(', ')}`}
+            </small>
+            <small>
+              {[
+                row.viewport && `${row.viewport.w} × ${row.viewport.h}`,
+                row.browser.colorScheme,
+                row.browser.language,
+                row.browser.timezone,
+                row.selections &&
+                  Object.entries(row.selections)
+                    .map(([axis, choice]) => `${axis}: ${choice}`)
+                    .join(', '),
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </small>
+          </article>
+        ))}
+      </section>
+      <p className="demo-hint">
+        This is the panel as a deployed app mounts it for teammates. Each note is signed with the name beside Send, which the app filled in
+        from its session, and posted to the app's own route; the handler from <code>isotone/feedback</code> validates it and hands it to a
+        database. Edit or delete a note in the panel and its row follows, which only the browser that wrote it can do. Nothing is read back
+        and no agent is involved. <a href="/">Back to the agent demo</a>
+      </p>
+    </>
+  );
+}
 
 function savedTheme<T extends string>(key: string, choices: readonly T[], fallback: T): T {
   try {
@@ -455,7 +566,11 @@ function Panel({ theme }: { theme: IsotoneTheme }) {
         route={page}
         theme={theme}
         updateEndpoint={updatePreview ? updateEndpoint : screenshot || hosted ? undefined : '/api/isotone/update'}
-        store={{ endpoint, key: `isotone-public-demo-${session}` }}
+        store={
+          collect
+            ? { feedback: { endpoint: FEEDBACK_ENDPOINT, name: 'Sam Rivera', release: 'demo' }, key: 'isotone-public-demo-collect' }
+            : { endpoint, key: `isotone-public-demo-${session}` }
+        }
         variants={source}
         defaultTab="variants"
         shortcut={screenshot ? false : undefined}
@@ -639,7 +754,9 @@ function Demo() {
     screenshot ? 'auto' : savedTheme('iso-demo-panel', ['auto', 'system', 'light', 'dark'], 'auto'),
   );
   // Every first visit starts with the tour. The Tour button brings it back.
-  const [touring, setTouring] = useState(() => !screenshot && !review && !stress && (params.get('tour') === '1' || !tourSeen()));
+  const [touring, setTouring] = useState(
+    () => !screenshot && !review && !stress && !collect && (params.get('tour') === '1' || !tourSeen()),
+  );
   useEffect(() => {
     document.documentElement.dataset.theme = pageTheme;
     document.documentElement.dataset.capture = String(screenshot);
@@ -665,7 +782,13 @@ function Demo() {
             Isotone
           </a>
           <span className="demo-bar-note">
-            <span>{stress ? 'Stress test · 500 selectors and 500 notes' : 'Demo. The page below stands in for your app.'}</span>
+            <span>
+              {stress
+                ? 'Stress test · 500 selectors and 500 notes'
+                : collect
+                  ? 'Collecting feedback. The page below stands in for your deployed app.'
+                  : 'Demo. The page below stands in for your app.'}
+            </span>
           </span>
           <div className="demo-bar-actions">
             {!hosted && (
@@ -686,7 +809,10 @@ function Demo() {
                 </a>
               </>
             )}
-            <button type="button" className="button button-ghost" onClick={() => setTouring(true)} disabled={touring}>
+            <a className="button button-ghost" href={collect ? '/' : '/?collect=1'}>
+              {collect ? 'Agent demo' : 'Collect feedback'}
+            </a>
+            <button type="button" className="button button-ghost" onClick={() => setTouring(true)} disabled={touring || collect}>
               <Play size={13} />
               Tour
             </button>
@@ -782,7 +908,14 @@ function Demo() {
               </article>
             ))}
           </section>
-          {!screenshot && !hosted && (
+          {collect && <Collected />}
+          {!screenshot && !collect && (
+            <p className="demo-hint">
+              Shipping this to teammates? <a href="/?collect=1">See the panel collect signed feedback into your own database</a>, with no
+              agent involved.
+            </p>
+          )}
+          {!screenshot && !hosted && !collect && (
             <p className="demo-hint">
               Notes sent here go to a temporary file and a pretend agent picks each one up a moment later. New project opens on press and on{' '}
               <kbd>/</kbd>, like many app menus: in select mode a click pins it without opening it, and <kbd>/</kbd> typed in the composer
@@ -813,7 +946,7 @@ const mount = document.getElementById('demo');
 if (mount) createRoot(mount).render(<Demo />);
 
 // Dev-only data switch, plain chrome kept out of the panel's corner.
-if (!screenshot && !hosted) {
+if (!screenshot && !hosted && !collect) {
   const bar = document.createElement('div');
   bar.setAttribute('role', 'group');
   bar.setAttribute('aria-label', 'Demo data');

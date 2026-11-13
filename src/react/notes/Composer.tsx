@@ -3,12 +3,17 @@ import { HINTS } from './hints';
 import { Icon } from '../icons';
 import { fadeIn, settleIn } from '../motion';
 import { showOverflowTitle } from '../tooltips';
+import type { TextStore } from '../../core/feedback-client';
+import { MAX_AUTHOR } from '../../core/feedback';
 import type { ComposerDraft } from './useNoteActions';
 
 interface ComposerProps {
   /** The text, what it refers to, and the note being edited. */
   draft: ComposerDraft;
   fieldRef: RefObject<HTMLTextAreaElement | null>;
+  nameRef: RefObject<HTMLInputElement | null>;
+  /** The reviewer's name, where feedback is collected and signed; absent in development. */
+  author: TextStore | undefined;
   /** Whether the feedback panel is open; a closed one does not measure its field. */
   active: boolean;
   picking: boolean;
@@ -27,10 +32,15 @@ interface ComposerProps {
   onDonePicking: () => void;
 }
 
+/** Stands in where notes are not signed, so the hook below always has a store. */
+const UNSIGNED: TextStore = { get: () => '', set: () => {}, subscribe: () => () => {} };
+
 /** One composer, in the dock or floating beside the element being written about. */
 export const Composer = memo(function Composer({
   draft: { text: draft, editing, variantTarget, targets, notice },
   fieldRef,
+  nameRef,
+  author,
   active,
   picking,
   pickingWithPanel,
@@ -47,6 +57,9 @@ export const Composer = memo(function Composer({
   onDonePicking,
 }: ComposerProps) {
   const text = useSyncExternalStore(draft.subscribe, draft.get, draft.get);
+  const signed = author ?? UNSIGNED;
+  const name = useSyncExternalStore(signed.subscribe, signed.get, signed.get);
+  const unsigned = Boolean(author) && !name.trim();
   const hasContext = Boolean(editing || variantTarget || targets.length || notice);
   // Context changes the scroll-through inset; measure again when that changes
   // or a route restores the composer after its DOM was removed.
@@ -153,7 +166,7 @@ export const Composer = memo(function Composer({
         <textarea
           ref={fieldRef}
           value={text}
-          aria-label="Feedback for the agent"
+          aria-label={author ? 'Feedback' : 'Feedback for the agent'}
           onChange={(e) => draft.set(e.target.value)}
           onFocus={onFieldFocus}
           onPointerDown={onFieldPointerDown}
@@ -183,10 +196,34 @@ export const Composer = memo(function Composer({
           >
             <Icon name="pin" size={14} />
           </button>
-          {floating && picking && (
+          {floating && picking && !unsigned && (
             <span ref={fadeIn} className="isotone-float-hint">
               {HINTS.floating[hints]}
             </span>
+          )}
+          {/* Always shown where feedback is signed. Beside a pin there is room for it or the select hint:
+              the hint, unless the name is still missing, which sending needs. */}
+          {author && (unsigned || !(floating && picking)) && (
+            <input
+              ref={nameRef}
+              type="text"
+              name="name"
+              autoComplete="name"
+              enterKeyHint="next"
+              className="isotone-name"
+              aria-label="Your name"
+              title="Your name, saved with your feedback"
+              placeholder="Your name"
+              maxLength={MAX_AUTHOR}
+              value={name}
+              onChange={(e) => author.set(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+                e.preventDefault();
+                if (text.trim() && name.trim()) onSend();
+                else fieldRef.current?.focus();
+              }}
+            />
           )}
           <button
             type="button"

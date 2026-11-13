@@ -42,6 +42,18 @@ const SUPPORTED: Record<string, string[]> = {
   ],
   serve: ['ServeIsotoneOptions', 'ServedIsotone', 'serveIsotone'],
   vite: ['IsotonePlugin', 'IsotoneViteOptions', 'isotone', 'iteration'],
+  feedback: [
+    'FeedbackBrowser',
+    'FeedbackEntry',
+    'FeedbackOptions',
+    'FeedbackStore',
+    'PostgresClient',
+    'PostgresOptions',
+    'feedback',
+    'postgresStore',
+    'toNode',
+  ],
+  postgres: ['PostgresUrlOptions', 'postgres'],
   cli: ['CliIO', 'runCli'],
 };
 

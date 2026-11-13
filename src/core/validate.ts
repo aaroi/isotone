@@ -3,8 +3,8 @@
  * what it keeps and drops anything malformed, so a hostile or buggy page
  * cannot bloat or corrupt the notes file.
  */
-import type { IsotoneElement, VariantReference, VariantRemoval } from '../../core/types';
-import { MAX_SELECTOR, PAYLOAD_MAX } from '../../core/limits';
+import type { IsotoneElement, VariantReference, VariantRemoval } from './types';
+import { MAX_SELECTOR, PAYLOAD_MAX } from './limits';
 
 function cap(v: string, max: number): string {
   return v.slice(0, max);
@@ -21,11 +21,16 @@ export function elementOf(value: unknown): IsotoneElement | null {
 export function elementFields(value: object): IsotoneElement {
   const v = value as { tag?: unknown; text?: unknown; selector?: unknown };
   return {
-    tag: cap(String(v.tag ?? ''), 30),
-    text: cap(String(v.text ?? ''), 120),
-    selector: cap(String(v.selector ?? ''), MAX_SELECTOR),
+    tag: cap(textOf(v.tag), 30),
+    text: cap(textOf(v.text), 120),
+    selector: cap(textOf(v.selector), MAX_SELECTOR),
     ...elementContext(value),
   };
+}
+
+/** A string or number as text; anything else (an object whose `toString` would throw, say) is empty. */
+function textOf(value: unknown): string {
+  return typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '';
 }
 
 function stringList(value: unknown, count: number, length: number): string[] {
@@ -99,7 +104,8 @@ export function viewportOf(v: unknown): { w: number; h: number } | null {
 /** Whether an opaque payload is serializable and inside {@link PAYLOAD_MAX}. */
 export function withinPayloadCap(payload: unknown): boolean {
   try {
-    return Buffer.byteLength(JSON.stringify(payload), 'utf8') <= PAYLOAD_MAX;
+    const json = JSON.stringify(payload);
+    return typeof json === 'string' && new TextEncoder().encode(json).byteLength <= PAYLOAD_MAX;
   } catch {
     return false; // circular or otherwise unserializable
   }

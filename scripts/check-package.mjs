@@ -20,7 +20,10 @@ import { npm } from './npm.mjs';
 // blur bands, the header and defaults-bar materials, the rim drawn over content and rows that recede.
 // Bundle raised to 395 kB and tarball to 422.5 kB (393.8 and 420.8 kB; rolling figures): the component
 // that rolls changed characters, and its notes in the shipped design guide and changelog.
-const BUDGET = { bundle: 395_000, tarball: 422_500 };
+// Bundle raised to 402 kB and tarball to 454 kB (collecting feedback): the store that posts signed notes to a
+// host's own route, edits and deletes them with a per-note key, and the name field, which the bundle carries so
+// an app without React can collect too; the tarball also gains the `feedback` and `postgres` entries and their guide.
+const BUDGET = { bundle: 402_000, tarball: 454_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));
@@ -72,7 +75,7 @@ assert.equal(existsSync('node_modules/react'), false, 'standalone must not requi
 const require = createRequire(import.meta.url);
 assert.equal(require('isotone/package.json').name, 'isotone');
 assert.equal((await import('isotone/package.json', { with: { type: 'json' } })).default.name, 'isotone');
-for (const entry of ['react', 'core', 'serve', 'vite', 'cli']) {
+for (const entry of ['react', 'core', 'serve', 'vite', 'cli', 'feedback', 'postgres']) {
   assert.ok(require.resolve('isotone/' + entry).endsWith('.js'), entry);
 }
 for (const entry of ['core', 'serve', 'cli']) {

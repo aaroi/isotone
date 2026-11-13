@@ -73,18 +73,23 @@ const KNOBS_EMPTY_TEXT =
 
 export function mountIsotone(opts: MountIsotoneOptions): () => void {
   const getRoute = opts.getRoute ?? (() => window.location.pathname);
+  // A deployed app collecting feedback has no notes file and no agent: its
+  // notes go to the host's endpoint, and the development one is not used.
+  const collect = typeof opts.feedback === 'string' ? { endpoint: opts.feedback } : opts.feedback?.endpoint ? opts.feedback : undefined;
+  const endpoint = collect ? undefined : opts.endpoint;
   const variants =
     opts.variants === 'overlay' || opts.variants === 'knobs'
-      ? overlaySourceWithSave(getRoute, opts.endpoint, opts.key, opts.variantsEndpoint)
+      ? overlaySourceWithSave(getRoute, endpoint, opts.key, opts.variantsEndpoint)
       : opts.variants;
+  const notes = Boolean(endpoint || collect);
   // Nothing to show: no notes to write and no variants to pick. A production
   // host that forgot its source gets no empty launcher in the corner.
-  if (!opts.endpoint && !variants) return () => {};
+  if (!notes && !variants) return () => {};
   // A variants-only host whose source has no axes on this page and no way to
   // get some later (no `refresh`) would mount an empty shadow root on every
   // such page. A hosted preview site is exactly that on axis-less
   // experiments, so skip the mount rather than leave a hollow host div.
-  if (!opts.endpoint && variants && variants.getAxes().length === 0 && typeof (variants as { refresh?: unknown }).refresh !== 'function') {
+  if (!notes && variants && variants.getAxes().length === 0 && typeof (variants as { refresh?: unknown }).refresh !== 'function') {
     return () => {};
   }
 
@@ -118,7 +123,7 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
     root.render(
       <IsotonePanel
         route={getRoute()}
-        store={{ endpoint: opts.endpoint, key: opts.key }}
+        store={{ endpoint, key: opts.key, feedback: collect }}
         rule={opts.rule}
         getPayload={opts.getPayload}
         variants={variants}
