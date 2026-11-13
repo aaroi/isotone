@@ -28,7 +28,7 @@ describe('VariantsView', () => {
 
   it('shows a source’s notice quietly above the selectors, and keeps it while the panel is open', async () => {
     const base = createVariantsSource({ axes: AXES });
-    const asked = 'This link’s ?v= asks for Headline: Bold, which is not applied here.';
+    const asked = 'This link’s ?v= asks for Headline: Bold, but links don’t choose variants here.';
     // What the next refresh will find, as the overlay source settles it when its listing loads.
     let next: string | null = asked;
     let notice: string | null = null;

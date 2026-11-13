@@ -355,7 +355,8 @@ export function unappliedLinkNotice(list: OverlayVariantsList, active: string[],
     asked.push(`${splitSectionLabel(group.label, section).fullLabel}: ${member ? member.label || member.id : 'Default'}`);
   }
   if (asked.length === 0) return null;
-  return `This link’s ?v= asks for ${asked.join('; ')}, which is not applied here: a pick is shared by every tab, so the page shows the current picks. Per-tab links need live switching (React on Vite 6+).`;
+  // Stays true while the panel keeps it, even once the reviewer has picked what the link asked for.
+  return `This link’s ?v= asks for ${asked.join('; ')}, but links don’t choose variants here. Pick ${asked.length > 1 ? 'them' : 'it'} below instead; a pick shows in every tab. Per-tab links need live switching (React on Vite 6+).`;
 }
 
 function pageLiveStore(): LiveVariantSelection | null {

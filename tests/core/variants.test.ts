@@ -403,7 +403,7 @@ describe('a ?v= the overlay source does not apply', () => {
     await overlay.refresh();
     // The card group is at Default already, and `theme` is not a group here: maybe the host's own.
     expect(overlay.getNotice()).toBe(
-      'This link’s ?v= asks for Header › Hero: Split, which is not applied here: a pick is shared by every tab, so the page shows the current picks. Per-tab links need live switching (React on Vite 6+).',
+      'This link’s ?v= asks for Header › Hero: Split, but links don’t choose variants here. Pick it below instead; a pick shows in every tab. Per-tab links need live switching (React on Vite 6+).',
     );
   });
 
@@ -411,7 +411,8 @@ describe('a ?v= the overlay source does not apply', () => {
     const { overlay } = source('?v=hero:hero-split,card-highlight:card-highlight');
     await overlay.refresh();
     const notice = overlay.getNotice();
-    expect(notice).toContain('asks for Header › Hero: Split; Card.tsx: Highlight, which');
+    expect(notice).toContain('asks for Header › Hero: Split; Card.tsx: Highlight, but');
+    expect(notice).toContain('Pick them below instead;');
     overlay.setSelection('hero', 'hero-split');
     overlay.setSelection('card-highlight', 'card-highlight');
     await settle();
@@ -422,13 +423,13 @@ describe('a ?v= the overlay source does not apply', () => {
     overlay.setSelection('hero', OVERLAY_DEFAULT_OPTION);
     await settle();
     await overlay.refresh();
-    expect(overlay.getNotice()).toContain('asks for Header › Hero: Split, which');
+    expect(overlay.getNotice()).toContain('asks for Header › Hero: Split, but');
   });
 
   it('names a Default the link asks for', async () => {
     const { overlay } = source('?v=hero:default');
     await overlay.refresh();
-    expect(overlay.getNotice()).toContain('asks for Header › Hero: Default, which');
+    expect(overlay.getNotice()).toContain('asks for Header › Hero: Default, but');
   });
 
   it('says nothing without ?v=, for pairs naming no member, or with a live store that applies the link', async () => {
