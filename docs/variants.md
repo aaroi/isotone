@@ -127,6 +127,12 @@ unit appended, so the source reads it with the committed default as fallback:
 mask-image: radial-gradient(ellipse, black var(--knob-fade-from, 0%), transparent 100%);
 ```
 
+A knob's value applies only on the routes its `route` names, where its control
+is. On any other page, after a full load or a client-side navigation, its
+property and attribute come off and the source's default shows; the reviewer's
+value stays stored and returns with its route. A knob for a shared component
+that should change on every page leaves `route` out.
+
 A select knob names a style that one line of CSS or a draw call can act on. Give
 it `options` of `{ "id", "label" }` and a `defaultOption`. Its value also lands
 as `data-knob-<id>` on `<html>`, since CSS cannot branch on a custom property:
@@ -140,7 +146,8 @@ both branches in the source until someone removes one.
 
 Code that draws for itself, such as a canvas chart, reads the property and
 redraws on the `isotone:knob` event, which bubbles from `<html>` with
-`{ id, value }` (`null` when the knob returns to its default):
+`{ id, value }` (`null` when the knob returns to its default or leaves the page
+with its route):
 
 ```js
 document.addEventListener('isotone:knob', ({ detail }) => {

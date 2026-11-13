@@ -132,6 +132,56 @@ describe('mountIsotone and history', () => {
   });
 });
 
+describe('mountIsotone and route-scoped knobs', () => {
+  it('moves knob values on and off <html> as the router navigates', async () => {
+    vi.useRealTimers();
+    const knob = { kind: 'color', id: 'header-border', label: 'Header border', defaultColor: '#e5e5e5', swatches: [], route: '/pricing' };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      status: 200,
+      json: async () => (String(input).startsWith('/api/isotone/variants') ? { variants: [], active: [], knobs: [knob] } : []),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    localStorage.setItem('isotone:knobs', JSON.stringify({ 'header-border': '#f59e0b' }));
+    const tick = () =>
+      act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+    const html = document.documentElement;
+    const shown = () => html.style.getPropertyValue('--knob-header-border');
+    window.history.pushState(null, '', '/');
+
+    const off = mountIsotone({ endpoint: '/api/isotone/notes', variants: 'overlay' });
+    try {
+      await tick();
+      await tick();
+      // A full load of another route reads the listing and leaves the stored value off.
+      expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/isotone/variants'))).toBe(true);
+      expect(shown()).toBe('');
+
+      window.history.pushState(null, '', '/pricing');
+      await tick();
+      expect(shown()).toBe('#f59e0b');
+
+      window.history.pushState(null, '', '/');
+      await tick();
+      expect(shown()).toBe('');
+      expect(JSON.parse(localStorage.getItem('isotone:knobs') ?? '{}')).toEqual({ 'header-border': '#f59e0b' });
+
+      window.history.replaceState(null, '', '/pricing');
+      await tick();
+      expect(shown()).toBe('#f59e0b');
+    } finally {
+      off();
+      await tick();
+      html.style.removeProperty('--knob-header-border');
+      localStorage.removeItem('isotone:knobs');
+      window.history.replaceState(null, '', '/');
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe('mountIsotone with a cross-origin variants endpoint', () => {
   it('reads overlay knobs from the endpoint it is given, as isotone serve passes it', async () => {
     vi.useRealTimers();
