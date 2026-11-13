@@ -86,6 +86,19 @@ export function variantOf(value: unknown): VariantReference | null {
   };
 }
 
+/** A knob's id, as `.isotone/knobs.json` allows it. */
+const KNOB_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+/** Knob values by id from the browser, bounded; null when there are none. */
+export function knobsOf(value: unknown): Record<string, string> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const entries = Object.entries(value)
+    .filter((entry): entry is [string, string] => KNOB_ID.test(entry[0]) && typeof entry[1] === 'string' && entry[1] !== '')
+    .slice(0, 50)
+    .map(([id, text]): [string, string] => [id, cap(text, 200)]);
+  return entries.length ? Object.fromEntries(entries) : null;
+}
+
 /** A sane `{ w, h }` from an untrusted viewport value, else null. */
 export function viewportOf(v: unknown): { w: number; h: number } | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;

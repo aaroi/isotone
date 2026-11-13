@@ -80,6 +80,58 @@ export function describeIsotoneElement(el: NodeLike, maxDepth = 4): IsotoneEleme
 
 const IDENTIFYING_ATTRIBUTES = ['role', 'type', 'name', 'href', 'aria-label', 'title', 'alt', 'placeholder'];
 
+/**
+ * Components Next.js wraps every App Router segment in. On a page of server
+ * components they are the only client fibers above an element, and naming
+ * them would send the agent into the framework instead of the app.
+ */
+const FRAMEWORK_COMPONENTS = new Set([
+  'AppDevOverlay',
+  'AppDevOverlayErrorBoundary',
+  'AppRouter',
+  'AppRouterAnnouncer',
+  'ClientPageRoot',
+  'ClientSegmentRoot',
+  'DevRootHTTPAccessFallbackBoundary',
+  'DevRootNotFoundBoundary',
+  'ErrorBoundaryHandler',
+  'HTTPAccessFallbackBoundary',
+  'HTTPAccessFallbackErrorBoundary',
+  'HandleISRError',
+  'HistoryUpdater',
+  'HotReload',
+  'InnerLayoutRouter',
+  'InnerScrollAndFocusHandler',
+  'LayoutRouter',
+  'LoadingBoundary',
+  'MetadataBoundary',
+  'MetadataOutlet',
+  'NotFoundBoundary',
+  'NotFoundErrorBoundary',
+  'OuterLayoutRouter',
+  'OutletBoundary',
+  'PathnameContextProviderAdapter',
+  'ReactDevOverlay',
+  'RedirectBoundary',
+  'RedirectErrorBoundary',
+  'RenderFromTemplateContext',
+  'ReplaySsrOnlyErrors',
+  'RootLayoutBoundary',
+  'RuntimeStyles',
+  'ScrollAndFocusHandler',
+  'SegmentBoundaryTrigger',
+  'SegmentBoundaryTriggerNode',
+  'SegmentStateProvider',
+  'SegmentViewNode',
+  'SegmentViewStateNode',
+  'ServerInsertedHTMLProvider',
+  'ServerRoot',
+  'ViewportBoundary',
+]);
+
+/** A file served from a dependency: Vite's `/node_modules/…`, Turbopack's `/_next/static/chunks/node_modules_…`. */
+const DEPENDENCY = /node_modules/;
+
 /** Names from React's dev-mode bookkeeping on the DOM node. Absent on other
  *  frameworks and production builds, which simply leaves the fields out. */
 function reactContext(el: Element): Pick<IsotoneElement, 'component' | 'source'> {
@@ -95,7 +147,7 @@ function reactContext(el: Element): Pick<IsotoneElement, 'component' | 'source'>
   const names: string[] = [];
   let source: string | undefined;
   while (fiber && names.length < 5) {
-    if (!source && fiber._debugSource?.fileName) {
+    if (!source && fiber._debugSource?.fileName && !DEPENDENCY.test(fiber._debugSource.fileName)) {
       source = `${fiber._debugSource.fileName}:${fiber._debugSource.lineNumber ?? 0}`;
     }
     source ??= stackSource(fiber._debugStack);
@@ -103,7 +155,7 @@ function reactContext(el: Element): Pick<IsotoneElement, 'component' | 'source'>
     const named = type && typeof type !== 'string' ? (type.render ?? type.type ?? type) : null;
     const name = named?.displayName ?? named?.name;
     // Capitalized is a component; anything else is a minified or internal name.
-    if (name && /^[A-Z]/.test(name) && names[0] !== name) names.unshift(name);
+    if (name && /^[A-Z]/.test(name) && !FRAMEWORK_COMPONENTS.has(name) && names[0] !== name) names.unshift(name);
     fiber = fiber.return;
   }
   return { ...(names.length ? { component: names } : {}), ...(source ? { source } : {}) };
@@ -125,7 +177,10 @@ function stackFrame(stack: { stack?: string } | string | null | undefined): Stac
   const text = typeof stack === 'string' ? stack : stack?.stack;
   for (const frame of text?.split('\n').slice(1) ?? []) {
     const [, url, line, column] = frame.match(/(?:\(|@|\bat )((?:[a-z-]+:\/\/\/?|\/)\S+?):(\d+):(\d+)\)?\s*$/i) ?? [];
-    if (!url || /react[-_]jsx|react-dom|react\.development|\/react\/|jsx-dev-runtime|jsx-runtime/i.test(url)) continue;
+    // React's own frames, and any dependency's (a React Server Components
+    // client renders a server page from one), are not where the JSX was written.
+    if (!url || DEPENDENCY.test(url) || /react[-_]jsx|react-dom|react\.development|\/react\/|jsx-dev-runtime|jsx-runtime/i.test(url))
+      continue;
     return { url, line: Number(line), column: Number(column) };
   }
   return undefined;
@@ -249,18 +304,10 @@ function elementContext(el: Element): Partial<IsotoneElement> {
     const tag = up.localName;
     const label = up.getAttribute('aria-label');
     const test = up.getAttribute('data-testid');
-    // Only a heading above the element titles it; a later one names the next section.
-    let heading: Element | null = null;
-    try {
-      heading =
-        Array.from(up.querySelectorAll(':scope > :is(h1,h2,h3,h4,h5,h6), :scope > * > :is(h1,h2,h3,h4,h5,h6)'))
-          .filter((candidate) => candidate.compareDocumentPosition(el) & 4)
-          .pop() ?? null;
-    } catch {}
+    const heading = ownHeading(up, el);
     if (label) within.unshift(`<${tag}> labelled "${label}"`);
     else if (test) within.unshift(`<${tag} data-testid="${test}">`);
-    else if (heading && heading !== el)
-      within.unshift(`<${tag}> headed "${(heading.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 60)}"`);
+    else if (heading) within.unshift(`<${tag}> headed "${(heading.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 60)}"`);
   }
   const box = el.getBoundingClientRect();
   const view = el.ownerDocument?.defaultView;
@@ -283,6 +330,76 @@ function elementContext(el: Element): Partial<IsotoneElement> {
       : {}),
     ...(styles ? { styles } : {}),
   };
+}
+
+const HEADING = 'h1,h2,h3,h4,h5,h6';
+
+/** Text-level elements a title wrapper may hold beside its heading. Not
+ *  buttons or fields: a block with controls is a card, not a title. */
+const TEXT_LEVEL = new Set([
+  'a',
+  'abbr',
+  'b',
+  'bdi',
+  'bdo',
+  'br',
+  'cite',
+  'code',
+  'data',
+  'del',
+  'dfn',
+  'em',
+  'i',
+  'img',
+  'ins',
+  'kbd',
+  'mark',
+  'picture',
+  'q',
+  's',
+  'samp',
+  'small',
+  'source',
+  'span',
+  'strong',
+  'sub',
+  'sup',
+  'time',
+  'u',
+  'var',
+  'wbr',
+]);
+
+/**
+ * The heading that titles `up` itself, above `el`: its own last heading child
+ * before the branch holding `el`, or the heading of a title wrapper there (a
+ * `header` or `hgroup`, or a `div`/`span` holding one heading and only text).
+ * A heading inside the card or section that holds `el`, or inside a sibling
+ * card or section, titles that block, not `up`. With no clear title there is
+ * none: a missing label misleads nobody.
+ */
+function ownHeading(up: Element, el: Element): Element | null {
+  let found: Element | null = null;
+  for (const child of Array.from(up.children)) {
+    if (child === el || child.contains(el)) break;
+    const heading = child.matches(HEADING) ? child : wrappedTitle(child);
+    if (heading) found = heading;
+  }
+  return found;
+}
+
+function wrappedTitle(wrapper: Element): Element | null {
+  const tag = wrapper.localName;
+  if (tag === 'header' || tag === 'hgroup') return Array.from(wrapper.children).find((child) => child.matches(HEADING)) ?? null;
+  if (tag !== 'div' && tag !== 'span') return null;
+  const headings = wrapper.querySelectorAll(HEADING);
+  const heading = headings[0];
+  if (headings.length !== 1 || !heading) return null;
+  for (const inner of Array.from(wrapper.querySelectorAll('*'))) {
+    if (heading.contains(inner) || TEXT_LEVEL.has(inner.localName) || inner.namespaceURI === 'http://www.w3.org/2000/svg') continue;
+    return null;
+  }
+  return heading;
 }
 
 /** `rgb(17, 17, 17)` as `#111111`, the form a stylesheet is searched for; anything else as it is. */

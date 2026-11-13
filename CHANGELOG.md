@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- **A note says which knobs you had moved.** A new note records every knob on its page that sits off its default, so your agent knows the pinned element's styles show the knob's value and not the one in the source. `--json` has them under `knobs`, `npx isotone` prints a `knobs moved:` line, and the note shows them as tags in the panel.
+
+### Fixed
+
+- **A pinned element's `within` no longer borrows a card's heading.** A page or section is credited only with its own title, not with the heading of a card inside it or beside it, so a button in a "Pro" card inside a "Simple pricing" page reads as in `<main> headed "Simple pricing"` > `<section> headed "Pro"`. When a block has no clear title, none is given.
+- **Notes from Next.js server components no longer name the framework.** Next's own boundaries (`RedirectBoundary`, `SegmentViewNode` and the like) are left out of `component`, and `source` is never a file inside `node_modules`, Turbopack's `/_next/static/chunks/node_modules_…` chunks included.
+
 ## 1.5.0
 
 ### Changed

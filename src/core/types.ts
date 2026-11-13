@@ -52,6 +52,11 @@ export interface NoteContext {
   variantAction?: VariantRemoval;
   elements?: IsotoneElement[];
   variant?: VariantReference | null;
+  /** Knobs the reviewer had moved off their defaults on the note's route when
+   *  writing it, by knob id, as `.isotone/knobs.json` writes values (a range's
+   *  number without its unit). The pinned elements' `styles` include them, so
+   *  they are not the source's values. Recorded on create only. */
+  knobs?: Record<string, string>;
   /** The user's request to upgrade Isotone, built by the local server from
    *  its own update check. At most one is open at a time. */
   update?: UpdateRequest;

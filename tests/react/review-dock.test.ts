@@ -5,7 +5,7 @@
 import { act, createElement, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { VariantAction, VariantAxis } from '../../src/core/variants';
+import { createOverlayVariantsSource, type VariantAction, type VariantAxis } from '../../src/core/variants';
 import { createVariantsSource, IsotonePanel } from '../../src/react/index';
 import { VariantsView } from '../../src/react/variants/VariantsView';
 import { PANEL_CSS } from '../../src/react/styles/panel';
@@ -299,6 +299,41 @@ describe('review dock interactions', () => {
       optionLabel: 'Bold',
       value: 'a',
     });
+  });
+  it('records the knobs moved on this route with a new note, and leaves them alone on an edit', async () => {
+    const range = { kind: 'range' as const, min: 0, max: 40, step: 1, unit: 'px' };
+    const knobs = [
+      { ...range, id: 'card-radius', label: 'Card radius', defaultValue: 12 },
+      { ...range, id: 'gap', label: 'Gap', defaultValue: 8 },
+      { ...range, id: 'other-page', label: 'Elsewhere', defaultValue: 4, route: '/settings' },
+    ];
+    const posts: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: unknown, init?: RequestInit) => {
+        if (String(url).startsWith('/variants')) return { ok: true, json: async () => ({ variants: [], active: [], knobs }) };
+        if (init?.method === 'POST') {
+          posts.push(JSON.parse(String(init.body)));
+          return { ok: true, json: async () => ({ id: 'saved' }) };
+        }
+        return { ok: true, json: async () => [] };
+      }),
+    );
+    // The gap sits at its default and the other knob belongs to another page.
+    const stored = JSON.stringify({ 'card-radius': '24', gap: '8', 'other-page': '30' });
+    const storage = { getItem: () => stored, setItem() {}, removeItem() {} };
+    const source = createOverlayVariantsSource({ endpoint: '/variants', getRoute: () => '/', storage, knobRoot: null, live: null });
+    await source.refresh();
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' }, variants: source }));
+    await click(container.querySelector('.isotone-fab'));
+    await typeFeedback('Rounder still');
+    await click(byText('Send note'));
+    expect(posts[0]?.knobs).toEqual({ 'card-radius': '24' });
+    expect(container.querySelector('.isotone-note-hit')?.textContent).toContain('card-radius 24');
+    await click(container.querySelector('.isotone-note-hit'));
+    await typeFeedback('Rounder still, and softer');
+    await click(byText('Save edit'));
+    expect(posts[1]).not.toHaveProperty('knobs');
   });
   it('pins several elements in one session, toggles a duplicate off, and saves every target', async () => {
     await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));

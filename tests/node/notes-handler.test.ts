@@ -243,3 +243,21 @@ describe('pinned styles', () => {
     expect(styles).toEqual({ padding: '8px 12px', 'font-size': '14px', color: 'x'.repeat(160) });
   });
 });
+
+describe('the knobs a note was written under', () => {
+  const post = (file: string, body: Record<string, unknown>) => notesResponse(file, { method: 'POST', url: '/api/notes', body });
+
+  it('keeps them beside a host payload, through an edit, and drops what is not a knob value', () => {
+    const file = tempFile();
+    const payload = { flags: { beta: true } };
+    const knobs = { 'card-radius': '24', 'Not An Id': '1', gap: 7, empty: '', accent: '#2f6f4e' };
+    const id = (post(file, { route: '/', feedback: 'rounder', element: null, payload, knobs }).body as { id: string }).id;
+    expect(readNotes(file)[0]).toMatchObject({ payload, knobs: { 'card-radius': '24', accent: '#2f6f4e' } });
+    post(file, { id, route: '/', feedback: 'rounder still', element: null });
+    const [row] = notesResponse(file, { method: 'GET', url: '/api/notes?route=/' }).body as Array<Record<string, unknown>>;
+    expect(row).toMatchObject({ feedback: 'rounder still', payload, knobs: { 'card-radius': '24', accent: '#2f6f4e' } });
+
+    post(file, { route: '/plain', feedback: 'none moved', element: null, knobs: ['card-radius'] });
+    expect(readNotes(file).find((n) => n.route === '/plain')).not.toHaveProperty('knobs');
+  });
+});

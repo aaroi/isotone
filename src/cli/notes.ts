@@ -450,6 +450,7 @@ export function noteRecord(record: StoredNote, root: string) {
     createdAt: n.createdAt,
     viewport: n.viewport,
     payload: n.payload,
+    knobs: n.knobs,
     variant: n.variant,
     variantAction: n.variantAction,
     update: n.update,
@@ -517,6 +518,15 @@ export function printNotes(io: CliIO, rows: StoredNote[], root: string): void {
         ),
       );
     }
+    if (n.knobs && Object.keys(n.knobs).length)
+      out(
+        io,
+        `  ⊙ knobs moved: ${oneLine(
+          Object.entries(n.knobs)
+            .map(([id, value]) => `${id}=${value}`)
+            .join(', '),
+        )} (styles show these values, not the source's)`,
+      );
     const context = n.payload === undefined ? '' : describePayload(n.payload);
     if (context) out(io, `  · ${oneLine(context)}`);
     // An update note's text is Isotone's own; everything else is quoted.

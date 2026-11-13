@@ -230,6 +230,8 @@ function seedHostedNotes() {
       route,
       feedback,
       element: { tag: 'section', text, selector: '#overview-cards' },
+      // Written with a knob moved: the note says so, for the agent and in the panel.
+      ...(index === 0 ? { knobs: { 'card-padding': '24' } } : {}),
       done: false,
       doneAt: null,
       createdAt: new Date(Date.now() - (seed.length - index) * 60_000).toISOString(),

@@ -33,6 +33,11 @@
       "description": "The pinned elements, in order.",
       "items": { "$ref": "#/$defs/element" }
     },
+    "knobs": {
+      "type": "object",
+      "description": "Knobs the reviewer had moved off their defaults on this route when writing the note, by knob id, valued as .isotone/knobs.json writes them (a range's number without its unit). The pinned elements' styles show these values, not the source's: write a knob's value into the source only when the note asks for that.",
+      "additionalProperties": { "type": "string" }
+    },
     "variant": {
       "type": "object",
       "description": "The selector the note is about.",

@@ -48,6 +48,8 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
           ]
         : []),
       ...elements.map((element) => ({ key: element.selector, label: element.text || element.tag })),
+      // The knobs it was written under, tagged as a saved default's are.
+      ...Object.entries(note.knobs ?? {}).map(([id, value]) => ({ key: `knob:${id}`, label: `${id} ${value}` })),
     ];
     return (
       <>

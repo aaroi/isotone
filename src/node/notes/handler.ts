@@ -12,7 +12,7 @@ import { LockBusyError, SERVER_LOCK_WAIT_MS, withFileLock } from '../fs/lock';
 import { type HandlerRequest, type HandlerResponse, jsonResponse } from '../http';
 import { notesProjectRoot, updateRequestOf } from '../update/request';
 import { noteFingerprint, notesRevision, readNotes, replyView, type StoredNote, writeNotes } from './store';
-import { elementFields, elementOf, removalOf, variantOf, viewportOf, withinPayloadCap } from './validate';
+import { elementFields, elementOf, knobsOf, removalOf, variantOf, viewportOf, withinPayloadCap } from './validate';
 
 /** The endpoint path the client calls. */
 export const NOTES_ENDPOINT = '/api/isotone/notes';
@@ -91,6 +91,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
       elements?: unknown;
       variant?: unknown;
       variantAction?: unknown;
+      knobs?: unknown;
       createdAt?: unknown;
     };
     // A body's `update` is never read: only the update endpoint writes one,
@@ -128,6 +129,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     const variant = body.variant === undefined ? undefined : variantOf(body.variant);
     const variantAction = removalOf(body.variantAction);
     if (body.variantAction !== undefined && !variantAction) return json(400, { error: 'Invalid variant action' });
+    const knobs = knobsOf(body.knobs);
     const cleanElement = element && typeof element === 'object' && !Array.isArray(element) ? elementFields(element) : null;
     const notes = readNotes(file);
     const defaultsRequest = cleanFeedback.startsWith('[set-defaults]');
@@ -150,6 +152,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
           delete existing.variant;
           delete existing.variantAction;
           delete existing.payload;
+          delete existing.knobs;
         }
         existing.feedback = cleanFeedback;
         existing.element = cleanElement;
@@ -159,6 +162,8 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
         } else if (existing.elements) existing.element = existing.elements[0] ?? null;
         if (variant !== undefined) existing.variant = variant;
         if (variantAction) existing.variantAction = variantAction;
+        // Sent with the first save only, like the payload; a retried first save sends them again.
+        if (knobs) existing.knobs = knobs;
         // An omitted payload leaves the stored one alone, so a host that only
         // sends it on the first save does not lose it on the next autosave.
         if (payload !== undefined) existing.payload = payload;
@@ -204,6 +209,7 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
       ...(elements !== undefined ? { elements, element: elements[0] ?? null } : {}),
       ...(variant !== undefined ? { variant } : {}),
       ...(variantAction ? { variantAction } : {}),
+      ...(knobs ? { knobs } : {}),
     });
     writeNotes(file, notes);
     return json(201, { id: newId });
@@ -254,6 +260,7 @@ function toItem(n: StoredNote, root: string) {
     ...(n.elements !== undefined ? { elements: n.elements } : {}),
     ...(n.variant !== undefined ? { variant: n.variant } : {}),
     ...(n.variantAction !== undefined ? { variantAction: n.variantAction } : {}),
+    ...(n.knobs !== undefined ? { knobs: n.knobs } : {}),
     // Only the server writes an update request; a malformed one, or one whose
     // directory is outside the project, is not shown.
     ...(update ? { update } : {}),

@@ -70,6 +70,89 @@ it('does not credit the element to a heading that comes after it', () => {
   expect(describeIsotoneElement(elementAsNode(add)).within).toEqual(['<main> headed "Team"']);
 });
 
+it('credits an ancestor only with its own title, not a card inside it', () => {
+  const within = (html: string, text: string) => {
+    document.body.innerHTML = html;
+    const button = [...document.querySelectorAll('button')].find((b) => b.textContent === text);
+    if (!button) throw new Error('Missing fixture');
+    return describeIsotoneElement(elementAsNode(button)).within;
+  };
+  // The card holding the button has its own heading; the page's is the h1.
+  expect(
+    within('<main><h1>Simple pricing</h1><section class="card"><h2>Pro</h2><button>Get started</button></section></main>', 'Get started'),
+  ).toEqual(['<main> headed "Simple pricing"', '<section> headed "Pro"']);
+  expect(within('<main><div class="card"><h2>Pro</h2><button>Get started</button></div></main>', 'Get started')).toEqual([
+    '<div> headed "Pro"',
+  ]);
+  // An earlier sibling card titles itself, not the parent they share.
+  expect(
+    within(
+      '<main><div class="card"><h3>Free</h3><span>$0</span><button>Start</button></div><div class="card"><button>Get started</button></div></main>',
+      'Get started',
+    ),
+  ).toBeUndefined();
+  expect(
+    within('<main><div class="card"><h3>Free</h3><p>$0 a month</p></div><div><button>Get started</button></div></main>', 'Get started'),
+  ).toBeUndefined();
+  expect(within('<main><section><h2>Free</h2></section><div><button>Get started</button></div></main>', 'Get started')).toBeUndefined();
+  // A header, or a wrapper of one heading and text, is the parent's own title.
+  expect(
+    within('<main><header><h1>Billing</h1><nav><a href="/">Back</a></nav></header><div><button>Upgrade</button></div></main>', 'Upgrade'),
+  ).toEqual(['<main> headed "Billing"']);
+  expect(
+    within(
+      '<main><div class="title"><h2>Plans <em>2026</em></h2><small>Billed monthly</small></div><div><button>Upgrade</button></div></main>',
+      'Upgrade',
+    ),
+  ).toEqual(['<main> headed "Plans 2026"']);
+  // A header holding the element titles itself; its parent gets nothing from it.
+  expect(within('<div><header><h1>Acme</h1><button>Menu</button></header></div>', 'Menu')).toEqual(['<header> headed "Acme"']);
+});
+
+it('leaves out Next.js boundaries and sources inside dependencies', () => {
+  document.body.innerHTML = '<button>Get started</button>';
+  const button = document.querySelector('button') as Element;
+  const named = (name: string, rest: object | null) => {
+    const type = () => {};
+    Object.defineProperty(type, 'name', { value: name });
+    return { type, return: rest };
+  };
+  // A page of server components: only Next's client fibers sit above the button.
+  const chunk = '/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_cjs_abc.js';
+  const stack = ['Error: react-stack-top-frame', `    at exports.createElement (http://localhost:3000${chunk}:2093:12)`].join('\n');
+  Object.assign(button, {
+    __reactFiber$abc: {
+      type: 'button',
+      _debugStack: { stack },
+      return: named(
+        'SegmentViewNode',
+        named('InnerLayoutRouter', named('RedirectErrorBoundary', named('RedirectBoundary', named('HTTPAccessFallbackBoundary', null)))),
+      ),
+    },
+  });
+  const described = describeIsotoneElement(elementAsNode(button));
+  expect(described.component).toBeUndefined();
+  expect(described.source).toBeUndefined();
+
+  // The app's own client component still names itself and its file.
+  const own = [
+    'Error: react-stack-top-frame',
+    '    at Pricing (http://localhost:3000/_next/static/chunks/src_app_pricing_tsx_1.js:40:7)',
+  ].join('\n');
+  Object.assign(button, {
+    __reactFiber$abc: { type: 'button', _debugStack: { stack: own }, return: named('Pricing', named('SegmentViewNode', null)) },
+  });
+  expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({
+    component: ['Pricing'],
+    source: '/_next/static/chunks/src_app_pricing_tsx_1.js:40',
+  });
+  // React 18's field pointing into a dependency is no better.
+  Object.assign(button, {
+    __reactFiber$abc: { type: 'button', _debugSource: { fileName: '/app/node_modules/ui-kit/button.js', lineNumber: 4 }, return: null },
+  });
+  expect(describeIsotoneElement(elementAsNode(button)).source).toBeUndefined();
+});
+
 it('names the React components around it, skipping internal names', () => {
   document.body.innerHTML = '<button>Changes</button>';
   const button = document.querySelector('button') as Element;
@@ -163,7 +246,7 @@ it('keeps the context through the store and prints it for the agent', async () =
   const res = notesResponse(file, {
     method: 'POST',
     url: '/',
-    body: { id: 'n1', route: '/', feedback: 'hi', element, elements: [element] },
+    body: { id: 'n1', route: '/', feedback: 'hi', element, elements: [element], knobs: { 'card-radius': '24' } },
   });
   expect(res.status).toBeLessThan(300);
   const [note] = readNotes(file);
@@ -183,6 +266,7 @@ it('keeps the context through the store and prints it for the agent', async () =
     'labelled "Usage"',
     'role="tab"',
     'at: 934,292 83×35',
+    "knobs moved: card-radius=24 (styles show these values, not the source's)",
   ]) {
     expect(text).toContain(part);
   }

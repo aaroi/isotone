@@ -20,7 +20,10 @@ import { npm } from './npm.mjs';
 // blur bands, the header and defaults-bar materials, the rim drawn over content and rows that recede.
 // Bundle raised to 395 kB and tarball to 422.5 kB (393.8 and 420.8 kB; rolling figures): the component
 // that rolls changed characters, and its notes in the shipped design guide and changelog.
-const BUDGET = { bundle: 395_000, tarball: 422_500 };
+// Bundle raised to 396.5 kB and tarball to 426.5 kB (395.7 and 425.3 kB; note context): a pin's `within`
+// reads only an ancestor's own title, a note records the knobs it was written under, and Next's internal
+// boundaries are left out of `component`; with the note field in the agent guide, schema and changelog.
+const BUDGET = { bundle: 396_500, tarball: 426_500 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

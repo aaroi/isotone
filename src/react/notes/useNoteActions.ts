@@ -17,6 +17,8 @@ interface NoteActionsOptions {
   write: Notes['write'];
   setNotes: Dispatch<SetStateAction<IsotoneNote[]>>;
   getPayload?: () => unknown;
+  /** Knobs moved off their defaults on this route, recorded with each new note. */
+  getKnobs?: () => Record<string, string> | undefined;
   update: UpdateMode;
   focusComposer: () => void;
 }
@@ -48,15 +50,25 @@ const UNSENT = 'pending-';
  * puts things back if the server refuses. Editing or deleting a note whose
  * save is still in flight waits for its real id.
  */
-export function useNoteActions({ route, draftKey, store, write, setNotes, getPayload, update, focusComposer }: NoteActionsOptions) {
+export function useNoteActions({
+  route,
+  draftKey,
+  store,
+  write,
+  setNotes,
+  getPayload,
+  getKnobs,
+  update,
+  focusComposer,
+}: NoteActionsOptions) {
   const [text] = useState(createDraftText);
   const [targets, setTargets] = useState<IsotoneElement[]>([]);
   const [variantTarget, setVariantTarget] = useState<VariantReference | null>(null);
   const [editing, setEditing] = useState<IsotoneNote | null>(null);
   const [notice, setNotice] = useState('');
   // Handlers read the current render here, so they stay stable and memoized children skip unrelated renders.
-  const latest = useRef({ route, getPayload, targets, variantTarget, editing });
-  latest.current = { route, getPayload, targets, variantTarget, editing };
+  const latest = useRef({ route, getPayload, getKnobs, targets, variantTarget, editing });
+  latest.current = { route, getPayload, getKnobs, targets, variantTarget, editing };
   /** Saves in flight, by the temporary id of their optimistic note. */
   const saving = useRef(new Map<string, Promise<string>>());
 
@@ -74,11 +86,14 @@ export function useNoteActions({ route, draftKey, store, write, setNotes, getPay
       setNotice(`Feedback must be at most ${MAX_FEEDBACK_LENGTH} characters.`);
       return;
     }
-    const { editing: previous, targets, variantTarget, route, getPayload } = latest.current;
+    const { editing: previous, targets, variantTarget, route, getPayload, getKnobs } = latest.current;
+    // The knobs a new note was written under; an edit keeps the ones it has.
+    const knobs = previous ? undefined : getKnobs?.();
     const context = {
       elements: targets,
       variant: variantTarget,
       ...(previous?.variantAction ? { variantAction: previous.variantAction } : {}),
+      ...(knobs ? { knobs } : {}),
     };
     const noteRoute = previous?.route ?? route;
     const element = targets[0] ?? null;

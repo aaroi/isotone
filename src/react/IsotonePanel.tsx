@@ -2,7 +2,7 @@ import { FEEDBACK_STORAGE_KEY } from '../core/browser-storage';
 import type { IsotoneStoreConfig } from '../core/types';
 import { isRouteVisible, normalizeRoute, type RouteGateOptions } from '../core/routes';
 import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
-import type { VariantsSource } from '../core/variants';
+import { knobDelta, type KnobAxis, type VariantSelections, type VariantsSource } from '../core/variants';
 import { type ReactElement, useEffect, useId, useRef } from 'react';
 import { Composer } from './notes/Composer';
 import { AwayButton, NotesPanel } from './notes/NotesPanel';
@@ -40,6 +40,17 @@ export interface IsotonePanelProps {
   shortcut?: IsotoneShortcut | false;
   /** Held, shows every selector at its default until released. Default: Backquote. false disables it. */
   compareShortcut?: IsotoneShortcut | false;
+}
+
+/**
+ * The knobs an overlay source has moved off their defaults on this route, by
+ * id. A note written under them says so: the pinned element's styles show
+ * these values, not the source's.
+ */
+function movedKnobs(source: VariantsSource | undefined): Record<string, string> | undefined {
+  const knobs = (source as { knobs?: { axes: KnobAxis[]; values: VariantSelections } } | undefined)?.knobs;
+  const moved = knobs ? knobDelta(knobs.axes, knobs.values) : [];
+  return moved.length ? Object.fromEntries(moved.map((m) => [m.axis.id, m.value])) : undefined;
 }
 
 /**
@@ -90,6 +101,7 @@ export function IsotonePanel({
     write,
     setNotes,
     getPayload,
+    getKnobs: () => movedKnobs(variants),
     update,
     focusComposer: focus.composer,
   });
