@@ -34,7 +34,7 @@ function notes(
     createdAt: string;
     route?: string;
     viewport?: { w: number; h: number };
-    variant?: { axisId: string; label: string; optionId?: string };
+    variant?: { axisId: string; label: string; optionId?: string; value?: string };
   }[],
 ): void {
   write(
@@ -301,12 +301,16 @@ describe('--done and variants', () => {
     expect(io.text.out).not.toContain('variant use');
   });
 
-  it("goes by the option a note is about over the server's default", async () => {
+  it("goes by the option a note is about, or the pick it was written with, over the server's default", async () => {
     const root = repo();
     const about = (optionId: string) => ({ axisId: 'hero', label: 'Hero', optionId });
+    // "Feedback on this selector" names no option, only the tab's pick as `value`.
+    const picked = (value: string) => ({ axisId: 'hero', label: 'Hero', value });
     notes(root, [
       { id: 'aaaa1111', createdAt: ago(60_000), variant: about('default') },
       { id: 'bbbb2222', createdAt: ago(60_000), variant: about('hero-centered') },
+      { id: 'cccc3333', createdAt: ago(60_000), variant: picked('default') },
+      { id: 'dddd4444', createdAt: ago(60_000), variant: picked('hero-centered') },
     ]);
     for (const id of ['hero-left', 'hero-centered']) {
       expect(await runCli(['variant', 'new', id, '--route', '/', '--group', 'hero'], captureIo(root))).toBe(0);
@@ -325,6 +329,27 @@ describe('--done and variants', () => {
     expect(await runCli(['--done', 'bbbb'], onCentered)).toBe(0);
     expect(onCentered.text.out).toContain('  hero-centered (src/App.jsx): the note is about this option');
     expect(onCentered.text.out).not.toContain('hero-left (src/App.jsx): active');
+
+    const pickedDefault = captureIo(root);
+    expect(await runCli(['--done', 'cccc'], pickedDefault)).toBe(0);
+    expect(pickedDefault.text.out).not.toContain('The reviewer may be looking');
+
+    const pickedCentered = captureIo(root);
+    expect(await runCli(['--done', 'dddd'], pickedCentered)).toBe(0);
+    expect(pickedCentered.text.out).toContain('  hero-centered (src/App.jsx): picked when the note was written');
+  });
+
+  it('names an active copy of a stylesheet whatever the note was on, since every tab follows it', async () => {
+    const root = repo();
+    write(root, 'src/index.css', 'body { margin: 0; }\n', Date.now() - 120_000);
+    notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000), variant: { axisId: 'theme', label: 'Theme', value: 'default' } }]);
+    expect(await runCli(['variant', 'new', 'theme-dark', '--route', '/', '--group', 'theme'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'add', 'theme-dark', 'src/index.css'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'use', 'theme-dark'], captureIo(root))).toBe(0);
+    write(root, 'src/index.css', 'body { margin: 8px; }\n', Date.now() + 2000);
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    expect(io.text.out).toContain('  theme-dark (src/index.css): active in .isotone/active.json, which every tab follows for a stylesheet');
   });
 
   it('names copies on the route that still hold conflict markers', async () => {

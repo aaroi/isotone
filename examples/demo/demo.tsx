@@ -203,26 +203,13 @@ const tab = (() => {
 })();
 /** The tab's picks as selector values. */
 const tabPicks = (set: string[]) => Object.fromEntries(tabGroups.map((g) => [g.id, g.members.find((m) => set.includes(m)) ?? g.fallback]));
-let following = false;
 const source = createVariantsSource({
   axes,
   selections: tab ? tabPicks(tab.active) : { spacing: 'comfy' },
-  // Hold to compare. onChange applies every call; only a pick (not change.preview) reaches the tab's URL.
+  // Hold to compare. onChange applies every call; it stores nothing, so a preview (change.preview) needs no
+  // special case here. An app that keeps picks in its URL or storage skips that step when change.preview is true.
   compare: true,
-  onChange(selections, change) {
-    if (tab && !change?.preview && !following) {
-      const shown = tabPicks(tab.active);
-      const set = tabGroups.map((g) => g.id).filter((id) => shown[id] !== selections[id]);
-      if (set.length > 0) {
-        const next = tabGroups.flatMap((g) => g.members.filter((m) => m === selections[g.id]));
-        tab.select(next, set);
-        try {
-          localStorage.setItem(LATEST_PICK, JSON.stringify(next));
-        } catch {
-          /* Private mode: this tab still keeps its pick. */
-        }
-      }
-    }
+  onChange(selections) {
     document.documentElement.dataset.spacing = selections.spacing;
     document.documentElement.dataset.layout = selections.layout;
     document.documentElement.style.setProperty('--accent', selections.accent ?? null);
@@ -245,6 +232,20 @@ const source = createVariantsSource({
   },
 });
 if (tab) {
+  // A pick in Layout or Spacing pins the tab, even one it already shows (a Default it was following).
+  const choose = source.setSelection;
+  source.setSelection = (axisId, value) => {
+    choose(axisId, value);
+    if (!tabGroups.some((g) => g.id === axisId)) return;
+    const picks = source.getSelections();
+    const next = tabGroups.flatMap((g) => g.members.filter((m) => m === picks[g.id]));
+    tab.select(next, [axisId]);
+    try {
+      localStorage.setItem(LATEST_PICK, JSON.stringify(next));
+    } catch {
+      /* Private mode: this tab still keeps its pick. */
+    }
+  };
   // Another tab's pick reaches this one only while it has none of its own, as `variant use` would.
   window.addEventListener('storage', (event) => {
     if (event.key === LATEST_PICK) tab.follow(latestPick() ?? []);
@@ -252,13 +253,7 @@ if (tab) {
   tab.subscribe(() => {
     const current = source.getSelections();
     const picks = tabPicks(tab.active);
-    if (tabGroups.every((g) => current[g.id] === picks[g.id])) return;
-    following = true;
-    try {
-      source.setSelections({ ...current, ...picks });
-    } finally {
-      following = false;
-    }
+    if (tabGroups.some((g) => current[g.id] !== picks[g.id])) source.setSelections({ ...current, ...picks });
   });
 }
 

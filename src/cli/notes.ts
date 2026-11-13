@@ -26,6 +26,8 @@ import { type CliIO, errOut, findNoteByPrefix, has, out, parseArgs, valueFor } f
 const VALUE_FLAGS = ['--days', '--file', '--done', '--undone', '--working', '--reply'] as const;
 const BOOLEAN_FLAGS = ['--all', '--json', '--force'] as const;
 const ACTIONS = ['--done', '--undone', '--working', '--reply'] as const;
+/** Files live switching can serve per tab; anything else (a stylesheet) follows `.isotone/active.json` everywhere. */
+const SCRIPT = /\.[cm]?[jt]sx?$/;
 type Action = (typeof ACTIONS)[number];
 
 /**
@@ -380,15 +382,24 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
     for (const v of conflicted)
       lines.push(`  ${v.id}: ${(v.conflicts ?? []).map((file) => relative(dir, join(variantDir({ root: dir }, v.id), file))).join(', ')}`);
   }
-  // Each tab keeps its own pick in live switching, so `.isotone/active.json` may be another tab's: a note
-  // about this variant's selector says what its reviewer was on, and outranks it.
+  // Each tab keeps its own pick of a script in live switching, so `.isotone/active.json` may be another
+  // tab's: a note about this variant's selector says what its reviewer was on (the option it is about, else
+  // the pick it was written with), and outranks it. A stylesheet follows active.json in every tab.
   const groupOf = new Map(overlayGroups(variants).flatMap((group) => group.members.map((member) => [member.id, group.id] as const)));
+  const article = (fixed: unknown[]) => (fixed.length > 1 ? 'a' : 'the');
   const showing = stale.flatMap(({ variant, files, notes: fixed }) => {
-    const picks = fixed.map(({ variant: about }) => (about?.axisId === groupOf.get(variant.id) ? about?.optionId : undefined));
-    if (picks.includes(variant.id)) return [{ id: variant.id, files, why: `${fixed.length > 1 ? 'a' : 'the'} note is about this option` }];
-    if (picks.includes(undefined) && active.includes(variant.id))
-      return [{ id: variant.id, files, why: 'active in .isotone/active.json, which tabs without a pick of their own show' }];
-    return [];
+    const about = fixed.map(({ variant: ref }) => (ref?.axisId === groupOf.get(variant.id) ? ref : undefined));
+    if (about.some((ref) => ref?.optionId === variant.id))
+      return [{ id: variant.id, files, why: `${article(fixed)} note is about this option` }];
+    if (about.some((ref) => !ref?.optionId && ref?.value === variant.id))
+      return [{ id: variant.id, files, why: `picked when ${article(fixed)} note was written` }];
+    if (!active.includes(variant.id)) return [];
+    const followed = about.some((ref) => !(ref?.optionId ?? ref?.value)) ? files : files.filter((file) => !SCRIPT.test(file));
+    if (!followed.length) return [];
+    const why = followed.some((file) => SCRIPT.test(file))
+      ? 'active in .isotone/active.json, which tabs without a pick of their own show'
+      : 'active in .isotone/active.json, which every tab follows for a stylesheet';
+    return [{ id: variant.id, files: followed, why }];
   });
   if (showing.length) {
     lines.push('The reviewer may be looking at one of these copies, without your fix, in place of the file you changed:');

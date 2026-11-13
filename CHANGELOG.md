@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- **A tab on Default stays on Default.** With live switching (React on Vite 6 or later), picking Default now writes `?v=<group>:default` to the tab's URL, so you can compare Default in one tab against a variant in another; before, the Default tab quietly followed the other tab's pick. A tab you haven't picked in still follows the latest pick and `variant use`, as before.
+- **A tab on Default stays on Default.** With live switching (React on Vite 6 or later), picking Default now writes `?v=<group>:default` to the tab's URL, so you can compare Default in one tab against a variant in another; before, the Default tab quietly followed the other tab's pick. A tab you haven't picked in still follows the latest pick and `variant use`, as before, and stylesheets still follow the latest pick in every tab.
 - **`--done` no longer tells your agent to switch every tab back to Default.** After closing a note, it names a variant showing in place of the fix only when that variant copies a file the fix changed, and goes by the option the note is about before `.isotone/active.json`, which may be another tab's pick. It no longer suggests `variant use default`, which moved every tab following the default.
 
 ## 1.5.0

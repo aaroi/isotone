@@ -125,6 +125,9 @@ npx isotone variant list [<route>] [--json]        # check what the panel will s
 
 - `--group <id>` joins alternatives of one decision over different files; give
   them the note's route (`--route`).
+- `variant use` moves only tabs without a pick of their own: with live
+  switching, a tab where the reviewer picked, Default included, keeps its pick
+  ([live switching](variants.md#live-switching)). Ask them to pick it there.
 - Copy only files that export components where you can: a copied hook, helper,
   context or constant object makes every switch reload the page.
 - Describe a variant with `variant new --description`, not a comment in the copy:

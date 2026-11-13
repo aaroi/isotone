@@ -96,6 +96,12 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
   const DEFAULT = 'default';
   const groups = cfg.groups;
   const byId = new Map(groups.map((group) => [group.id, group]));
+  // A group without an explicit id is named by its members (`a+b`), so the id
+  // changes when the agent adds an alternative. A pair under the old id still
+  // belongs to the group that now holds one of those members. (A `+` typed
+  // into a URL by hand arrives as a space.)
+  const groupFor = (id: string) =>
+    byId.get(id) ?? groups.find((group) => id.split(/[+ ]/).some((member) => group.members.includes(member)));
   const listeners = new Set<() => void>();
   const files = new Map<string, { ids: (string | null)[]; pinned: boolean }>();
   const history = win.history;
@@ -129,7 +135,7 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
     for (const pair of raw.split(',')) {
       if (!pair) continue;
       const at = pair.indexOf(':');
-      const group = at < 0 ? undefined : byId.get(pair.slice(0, at));
+      const group = at < 0 ? undefined : groupFor(pair.slice(0, at));
       const value = at < 0 ? '' : pair.slice(at + 1);
       if (group && (value === DEFAULT || group.members.includes(value))) picks.set(group.id, value);
       else foreign.push(pair);

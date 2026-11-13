@@ -121,6 +121,16 @@ describe('the live store', () => {
     expect(makeStore(here(), { active: ['picker-b'] }).active).toEqual([]);
   });
 
+  it('keeps a pick whose inferred group was renamed by a new alternative', () => {
+    // `nav` was `picker-a` while it had one member: the tab stays pinned, and the next write uses the new id.
+    const tab = makeStore('/?v=picker-a:default', { active: ['picker-b'] });
+    expect(tab.explicit).toBe(true);
+    expect(tab.active).toEqual([]);
+    tab.select(['hook-x'], ['hooks']);
+    expect(here()).toBe('/?v=nav:default,hooks:hook-x');
+    expect(makeStore('/?v=picker-a%2Bpicker-x:picker-b').active).toEqual(['picker-b']);
+  });
+
   it('switches components in place and asks for a reload only for fixed exports', () => {
     const store = makeStore('/');
     const seen = vi.fn();
