@@ -26,6 +26,8 @@ const SOURCE_MAX_DEPTH = 4;
 const SOURCE_EXT = /\.(ts|tsx|js|jsx|mts|cts|html)$/;
 /** An import of an Isotone adapter, or the loader tag `isotone serve` prints. */
 const INTEGRATION = /['"]isotone\/(?:vite|react|server|serve)['"]|\/isotone\.js\b/;
+/** A host-owned variants source: built with the helpers, or typed as one. */
+const HOST_SOURCE = /\b(?:createVariantsSource|combineVariantsSources)\s*\(|\bVariantsSource\b/;
 /** The Vite plugin's name before 1.3, still accepted as a deprecated alias. */
 const OLD_PLUGIN = /\biteration\s*\(/;
 /** The section `init` owns in AGENTS.md lies between these; nothing else is touched. */
@@ -232,11 +234,18 @@ interface Sources {
   integration: string[];
   /** A Vite config that still calls `iteration()`, or null. */
   rename: string | null;
+  /** Files that build or type a host's own `VariantsSource`. */
+  hostSources: string[];
+}
+
+/** The project files with the app's own selectors, which no command can read. */
+export function hostSourceFiles(cwd: string): string[] {
+  return scanSources(cwd).hostSources;
 }
 
 /** One look at the configs at the top and the source trees, for {@link Sources}. */
 function scanSources(cwd: string): Sources {
-  const found: Sources = { hostOwnedAxes: false, integration: [], rename: null };
+  const found: Sources = { hostOwnedAxes: false, integration: [], rename: null, hostSources: [] };
   for (const name of safeReaddir(cwd)) {
     if (!/^(?:vite|react-router|next)\.config\.|\.html$/.test(name)) continue;
     const text = safeRead(join(cwd, name));
@@ -260,6 +269,7 @@ function walkSources(cwd: string, dir: string, depthLeft: number, found: Sources
     const text = safeRead(join(cwd, path));
     if ((entry.name === 'meta.ts' && text.includes('defaultOption')) || text.includes('useVariant(')) found.hostOwnedAxes = true;
     if (INTEGRATION.test(text)) found.integration.push(path);
+    if (HOST_SOURCE.test(text)) found.hostSources.push(path);
   }
 }
 
@@ -318,10 +328,10 @@ function printSetup(print: Print, setup: Setup): void {
   }
   if (setup.existing) printExisting(print, setup.existing, setup.rename);
   else if (setup.approach === 'overlay') printOverlay(print, setup.host);
-  else if (setup.approach === 'host') printHost(print);
+  else if (setup.approach === 'host') printHost(print, setup.host);
   else printServe(print, setup);
   print();
-  if (setup.firstRun) printFirstRun(print, setup.approach);
+  if (setup.firstRun) printFirstRun(print, setup.approach, setup.host);
   else {
     print('This project already has variants or knobs, so there is no first run to do.');
     print('Tell the user the URL to open and that the pill in the corner is Isotone.');
@@ -366,22 +376,38 @@ function printOverlay(print: Print, host: Host): void {
   print('file and .isotone/active.json from Git (in .git/info/exclude).');
 }
 
-function printHost(print: Print): void {
+/** Where the panel's notes and knobs come from beside a host source: the Vite plugin, else `isotone serve`. */
+function hostEndpoint(host: Host): string {
+  return host === 'vite' ? '/api/isotone/notes' : 'http://127.0.0.1:4123/api/isotone/notes';
+}
+
+function printHost(print: Print, host: Host): void {
   print('Setup (host)');
   print('Your app owns the variant state; the panel is a view over it. Mount it on the client,');
   print('in development only, after the page mounts. Keep the returned disposer and call it');
   print('on unmount or HMR cleanup. Direct imports require react and react-dom.');
+  if (host === 'next') {
+    print("In Next, mount from a 'use client' component rendered once in the root layout, and");
+    print("import('isotone/react') inside its effect behind process.env.NODE_ENV === 'development'.");
+  }
   print();
   for (const line of HOST_EXAMPLE) print(line ? `  ${line}` : '');
   print();
   print('onChange fires with the full selections after every change; the app renders from');
   print('them and keeps its own defaults and URL sync. compare: true lets the reviewer hold');
   print('Compare to see the defaults: onChange then also gets { preview: true } calls, which');
-  print("it applies but never persists. Add endpoint: '/api/isotone/notes'");
-  print('for notes served by the Vite plugin, with isotone({ panel: false }) there to avoid');
-  print('a second panel. With `isotone serve`, use the absolute endpoint');
-  print("'http://127.0.0.1:4123/api/isotone/notes'. Set defaultTab: 'variants' when");
-  print('reviewers come for the controls first.');
+  print('it applies but never persists.');
+  print();
+  if (host === 'vite') {
+    print("Add isotone({ panel: false }) to vite.config's plugins for the endpoints without a");
+    print(`second panel, and pass endpoint: '${hostEndpoint(host)}' to mountIsotone.`);
+  } else {
+    print('Run `npx isotone serve` in this directory and leave it running, and pass');
+    print(`endpoint: '${hostEndpoint(host)}' to mountIsotone.`);
+  }
+  print('With the endpoint the panel files notes, Make default turns the picks into a note');
+  print(`for you, and knobs from ${KNOBS_FILE}${host === 'vite' ? ' and file variants' : ''} show beside the app’s selectors.`);
+  print("Set defaultTab: 'variants' when reviewers come for the controls first.");
 }
 
 function printServe(print: Print, setup: Setup): void {
@@ -439,7 +465,7 @@ function printServe(print: Print, setup: Setup): void {
  * within minutes, then a short message that teaches the panel by naming
  * what was made. The real design stays as it is until the user picks.
  */
-function printFirstRun(print: Print, approach: Approach): void {
+function printFirstRun(print: Print, approach: Approach, host: Host): void {
   print('First run: do this now, unless the user asked for something else');
   print('Show the user what Isotone does on the page they care about (the main page if');
   print('they named none). Leave the real design as it is; everything below is opt-in.');
@@ -466,12 +492,20 @@ function printFirstRun(print: Print, approach: Approach): void {
     print('b. Add one range or colour axis, and apply both in onChange so each visibly');
     print('   changes the page.');
   }
-  print('c. Check: `npx isotone variant list <route>` lists what you made and names any');
-  print('   knob the panel would skip. Without a browser, confirm the panel is live:');
-  if (approach === 'serve') {
+  if (approach === 'host') {
+    // The CLI reads files, not the app: say so rather than pass a check that cannot see the selectors.
+    print('c. Check: the CLI cannot read the app’s own selectors (`variant list` shows only');
+    print('   knobs and file variants), so only the page shows them. Without a browser,');
+    print('   typecheck the file that mounts the panel and confirm its endpoint answers:');
+    print(`   \`curl ${host === 'vite' ? '<origin>' : 'http://127.0.0.1:4123'}/api/isotone/notes\` returns JSON.`);
+  } else if (approach === 'serve') {
+    print('c. Check: `npx isotone variant list <route>` lists what you made and names any');
+    print('   knob the panel would skip. Without a browser, confirm the panel is live:');
     print('   the page HTML has the tag, and `curl http://127.0.0.1:4123/api/isotone/variants`');
     print('   returns the knobs the panel will show.');
   } else {
+    print('c. Check: `npx isotone variant list <route>` lists what you made and names any');
+    print('   knob the panel would skip. Without a browser, confirm the panel is live:');
     print("   `curl -H 'Accept: text/html' <page URL>` includes `data-isotone-inject`, and");
     print('   <origin>/api/isotone/variants lists the variants and knobs the panel will show.');
     print('   <origin>/<file>?isotone=<id> serves one variant’s copy, to check that it compiles.');

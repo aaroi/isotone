@@ -9,7 +9,7 @@
  */
 export type { IsotoneElement, IsotoneNote, NoteContext, NoteReply, VariantReference, VariantRemoval } from './types';
 export type { RouteGateOptions } from './routes';
-export { createVariantsSource } from './variants';
+export { combineVariantsSources, createVariantsSource } from './variants';
 export type {
   ColorSwatch,
   ColorVariantAxis,

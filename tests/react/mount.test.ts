@@ -18,7 +18,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { mountIsotone } from '../../src/react/index';
+import { createVariantsSource, mountIsotone } from '../../src/react/index';
 import { serveMountOptions } from '../../src/serve/mount-config';
 
 beforeEach(() => {
@@ -251,6 +251,156 @@ describe('the panel isotone serve mounts', () => {
     expect(empty).toContain('No knobs on this page yet');
     expect(empty).toContain('.isotone/knobs.json');
     expect(empty).not.toContain('variants');
+    await panel.off();
+  });
+});
+
+describe('a host source beside the knobs of the server that answers notes', () => {
+  const notesEndpoint = 'http://127.0.0.1:4123/api/isotone/notes';
+  const knob = { kind: 'range', id: 'card-radius', label: 'Card radius', min: 0, max: 24, step: 1, defaultValue: 12, unit: 'px' };
+  const axes = [
+    {
+      id: 'cta',
+      label: 'Hero > Call to action',
+      defaultOption: 'join',
+      options: [
+        { id: 'join', label: 'Join the waitlist' },
+        { id: 'start', label: 'Get started' },
+      ],
+    },
+  ];
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+    document.documentElement.removeAttribute('style');
+  });
+
+  /** Mount `options` with fetch answering knobs, a moved knob in storage, and the panel open on Variants. */
+  async function mountWithKnobs(options: Parameters<typeof mountIsotone>[0]) {
+    vi.useRealTimers();
+    localStorage.setItem('isotone:knobs', JSON.stringify({ 'card-radius': '16' }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => (String(input).includes('/api/isotone/variants') ? { variants: [], active: [], knobs: [knob] } : []),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const tick = () =>
+      act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+    const off = mountIsotone(options);
+    await tick();
+    const shadow = Array.from(document.querySelectorAll('[data-isotone="root"]')).at(-1)?.shadowRoot;
+    if (!shadow) throw new Error('no shadow root');
+    const click = async (el: Element | null | undefined) => {
+      await act(async () => {
+        el?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      await tick();
+    };
+    await click(shadow.querySelector('.isotone-fab'));
+    await click(shadow.querySelector('.isotone-rail-button[aria-label=Variants]'));
+    const button = (text: string) => Array.from(shadow.querySelectorAll('button')).find((b) => b.textContent?.trim() === text);
+    const posted = () =>
+      (fetchMock.mock.calls as unknown as [RequestInfo | URL, RequestInit?][])
+        .filter((c) => String(c[0]) === String(options.endpoint) && c[1]?.method === 'POST')
+        .map((c) => JSON.parse(String(c[1]?.body)) as Record<string, unknown>)
+        // The store retries a first post under its id; one request is one note.
+        .filter((note, i, all) => all.findIndex((other) => other.feedback === note.feedback) === i);
+    return {
+      shadow,
+      fetchMock,
+      click,
+      button,
+      posted,
+      tick,
+      off: async () => {
+        off();
+        await tick();
+      },
+    };
+  }
+
+  it('lists both, compares both, and files every pick in one note', async () => {
+    const onChange = vi.fn();
+    const source = createVariantsSource({ axes, onChange, compare: true });
+    const panel = await mountWithKnobs({ endpoint: notesEndpoint, variants: source });
+    // The knobs come from the same server as the notes.
+    expect(panel.fetchMock.mock.calls.map((c) => String(c[0]))).toContain('http://127.0.0.1:4123/api/isotone/variants');
+    // Unsectioned first, as the panel always orders them.
+    expect(Array.from(panel.shadow.querySelectorAll('.isotone-axis-label')).map((el) => el.textContent)).toEqual([
+      'Card radius',
+      'Call to action',
+    ]);
+    expect(document.documentElement.style.getPropertyValue('--knob-card-radius')).toBe('16px');
+
+    await panel.click(panel.button('Get started'));
+    expect(onChange).toHaveBeenLastCalledWith({ cta: 'start' });
+    // The bar appears for a host source with no saveDefaults of its own, with Compare in it.
+    expect(panel.shadow.querySelector('.isotone-vars > .isotone-panel-head')?.getAttribute('data-shown')).toBe('true');
+    expect(panel.button('Compare')).toBeDefined();
+    expect(panel.shadow.querySelector('.isotone-save-count')?.textContent).toBe('2 picks changed');
+
+    // The key under Escape shows both at their defaults, and puts both back.
+    const key = (type: string) =>
+      act(async () => {
+        document.body.dispatchEvent(new KeyboardEvent(type, { code: 'Backquote', key: '`', bubbles: true, composed: true }));
+      });
+    await key('keydown');
+    expect(onChange).toHaveBeenLastCalledWith({ cta: 'join' }, { preview: true });
+    expect(document.documentElement.style.getPropertyValue('--knob-card-radius')).toBe('');
+    await key('keyup');
+    expect(onChange).toHaveBeenLastCalledWith({ cta: 'start' }, { preview: false });
+    expect(document.documentElement.style.getPropertyValue('--knob-card-radius')).toBe('16px');
+
+    await panel.click(panel.button('Make default'));
+    expect(panel.posted()).toEqual([
+      expect.objectContaining({
+        route: '/',
+        feedback: '[set-defaults] App selectors: Hero › Call to action → Get started (cta). Knobs: Card radius 16px (card-radius).',
+        payload: { variants: 'default', selectors: 'cta:start', knobs: 'card-radius:16' },
+      }),
+    ]);
+    await panel.off();
+  });
+
+  it('lets a host that saves its own defaults save them, and files only the knobs', async () => {
+    const saveDefaults = vi.fn(async (_selections: Record<string, string>) => {});
+    const source = createVariantsSource({ axes, selections: { cta: 'start' }, saveDefaults });
+    const panel = await mountWithKnobs({ endpoint: notesEndpoint, variants: source });
+    await panel.click(panel.button('Make default'));
+    expect(saveDefaults).toHaveBeenCalledWith({ cta: 'start' });
+    expect(panel.posted()).toEqual([
+      expect.objectContaining({
+        feedback: '[set-defaults] Knobs: Card radius 16px (card-radius).',
+        payload: { variants: 'default', knobs: 'card-radius:16' },
+      }),
+    ]);
+
+    // With no knob moved, the host's own request is the only one.
+    localStorage.clear();
+    await panel.off();
+    const quiet = await mountWithKnobs({ endpoint: notesEndpoint, variants: source });
+    localStorage.clear();
+    await quiet.click(quiet.button('Default'));
+    await quiet.click(quiet.button('Get started'));
+    expect(quiet.shadow.querySelector('.isotone-save-count')?.textContent).toBe('2 picks changed');
+    await quiet.off();
+  });
+
+  it('reads no knobs beside a notes endpoint that is not an Isotone server, and still files the host’s picks', async () => {
+    const source = createVariantsSource({ axes, selections: { cta: 'start' } });
+    const panel = await mountWithKnobs({ endpoint: '/review/notes', variants: source });
+    expect(panel.fetchMock.mock.calls.some((c) => String(c[0]).includes('/api/isotone/variants'))).toBe(false);
+    expect(Array.from(panel.shadow.querySelectorAll('.isotone-axis-label')).map((el) => el.textContent)).toEqual(['Call to action']);
+    await panel.click(panel.button('Make default'));
+    expect(panel.posted()).toEqual([
+      expect.objectContaining({
+        feedback: '[set-defaults] App selectors: Hero › Call to action → Get started (cta).',
+        payload: { selectors: 'cta:start' },
+      }),
+    ]);
     await panel.off();
   });
 });

@@ -82,8 +82,8 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
         .map((s) => s.trim())
         .filter(Boolean))
         tags.push({ name: 'variant', value });
-    if (typeof payload.knobs === 'string')
-      for (const pair of payload.knobs.split(',')) {
+    for (const list of [payload.selectors, payload.knobs])
+      for (const pair of typeof list === 'string' ? list.split(',') : []) {
         const at = pair.indexOf(':');
         if (at > 0) tags.push({ name: pair.slice(0, at).trim(), value: pair.slice(at + 1).trim() });
       }
