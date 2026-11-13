@@ -4,7 +4,7 @@
 
 ### Added
 
-- **Isotone tells you whether a pick stays in its tab.** `init` names how picks switch in your project and what would change it: per tab, with `?v=` links, in a React app on Vite 6 or later; shared by every tab on Vite 5 or without React; knobs only with `isotone serve`. `init --json` has it as `switching`, and the first run has the agent pass it on. Knob values are per browser, shared by its tabs, in every setup, and the README, the variants guide and the agent guide now say so.
+- **Isotone tells you whether a pick stays in its tab.** `init` names how picks switch in your project and what would change it: per tab, with `?v=` links, in a React app on Vite 6 or later; shared by every tab on Vite 5 or without React; knobs only with `isotone serve`. `init --json` has it as `switching`, and the first run has the agent pass it on. The variants guide has a table of what each setup does, including that knob values stay in the browser and never travel in a link.
 - **The Variants panel says when a link's `?v=` isn't applied.** Where picks are shared by every tab, a link that asks for other variants used to show the current ones without a word; the panel now names what the link asked for.
 - **`variant new`, `add`, `use` and `list` warn when nothing will serve file variants**, as in a Next.js app or a Vite config without `isotone/vite`, and point to knobs or your app's own `VariantsSource`. `variant --help` says file variants need the Vite plugin.
 

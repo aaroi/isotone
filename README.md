@@ -20,11 +20,9 @@ segmented choices, colour swatches or sliders, and switching one updates the
 live page. **Make default** files your picks for the agent to apply, or leave feedback
 on a single option.
 
-In a React app on Vite 6 or later each tab keeps its own picks in its address
-(`?v=`), so a link opens the same variants. With other setups a pick changes every
-open tab, and the panel says when a link's `?v=` isn't applied. Knob values stay in
-your browser, shared by its tabs. `init` says which applies to your project
-([details](docs/variants.md#per-tab-or-shared)).
+Whether a pick stays in its tab, with a `?v=` link that shares it, or changes every
+open tab depends on your setup; `init` says which, and knob values stay in your
+browser ([details](docs/variants.md#per-tab-or-shared)).
 
 ![The Variants panel with thumbnail, segmented, colour and range selectors above the feedback notes](https://raw.githubusercontent.com/aaroi/isotone/main/docs/assets/preview.png)
 

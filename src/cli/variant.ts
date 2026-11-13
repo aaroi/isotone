@@ -4,7 +4,7 @@
  * I/O beyond the filesystem and `git`, so there is nothing here to await.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 import { knobsFor, overlayGroups, splitSectionLabel, variantAppliesTo } from '../core/variants';
 import { isRouteModule, scanExports } from '../node/variants/exports';
@@ -166,7 +166,7 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
     }
   }
   const knobs = knobReport(io, opts, scope);
-  if (variants.length) warnUnserved(io);
+  if (variants.length) warnUnserved(io, opts);
 
   if (has(args, '--json')) {
     out(
@@ -352,7 +352,7 @@ function cmdNew(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
       variant.group ? ` in group ${variant.group}` : ''
     }${variant.section ? ` in section "${variant.section}"` : ''}`,
   );
-  warnUnserved(io);
+  warnUnserved(io, opts);
   return 0;
 }
 
@@ -367,28 +367,34 @@ function cmdAdd(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
   out(io, create ? `created ${files.length} new file(s) in "${id}"` : `added ${files.length} file(s) to "${id}"`);
   if (!create) for (const file of files) warnNoHotSwap(io, file);
   warnOverlaps(io, opts, id);
-  warnUnserved(io);
+  warnUnserved(io, opts);
   return 0;
 }
 
 /**
  * The store takes a variant anywhere, but only the Vite plugin serves one: in
  * a Next app, or under `isotone serve`, the panel lists nothing while the CLI
- * reports success. Said on stderr, so `--json` output stays parseable.
+ * reports success. Said on stderr, so `--json` output stays parseable. Only
+ * Next is certain: a sibling dev server can serve this project's variants
+ * (`variants: { root }`), so the rest say "may".
  */
-function warnUnserved(io: CliIO): void {
-  const { loaded, viteConfig } = vitePlugin(io.cwd);
+function warnUnserved(io: CliIO, opts: VariantsStoreOptions): void {
+  // `--dir <app>/.isotone/variants` holds another project's variants; any other directory, we cannot tell.
+  const dir = opts.dir ? resolve(opts.root, opts.dir) : null;
+  const root = dir === null ? opts.root : basename(dirname(dir)) === '.isotone' ? dirname(dirname(dir)) : null;
+  if (root === null) return;
+  const { loaded, viteConfig } = vitePlugin(root);
   if (loaded) return;
   const alternatives = 'Use knobs in .isotone/knobs.json, or the app’s own VariantsSource (npx isotone init --approach host).';
-  if (viteConfig) {
-    errOut(
-      io,
-      `warning: ${viteConfig} does not import isotone/vite, so no dev server serves file variants from here and the panel will not show them. \`npx isotone init\` prints the plugin line.`,
-    );
-  } else if (detectHost(io.cwd) === 'next') {
+  if (detectHost(root) === 'next') {
     errOut(
       io,
       `warning: file variants need the Vite plugin (isotone/vite), and Next.js does not run it, so the panel will not show them. ${alternatives}`,
+    );
+  } else if (viteConfig) {
+    errOut(
+      io,
+      `warning: ${viteConfig} does not import isotone/vite, so the panel may not show file variants from here. \`npx isotone init\` prints the plugin line.`,
     );
   } else {
     errOut(
@@ -484,7 +490,7 @@ function cmdUse(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOp
     return `active: "${id}"${describeActive(readActive(opts), id)}`;
   });
   out(io, message);
-  warnUnserved(io);
+  warnUnserved(io, opts);
   return 0;
 }
 

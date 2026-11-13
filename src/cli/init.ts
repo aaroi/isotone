@@ -84,7 +84,7 @@ export function runInit(args: string[], io: CliIO): number {
     // An explicit --approach asks for that setup, even over an existing one.
     existing: approachArg === undefined && sources.integration.length ? sources.integration : null,
     rename: sources.rename,
-    switching: switchingFor(io.cwd, approach),
+    switching: switchingFor(io.cwd, approach, host),
   };
   const instructions: string[] = [];
   printSetup((line = '') => instructions.push(line), setup);
@@ -180,13 +180,14 @@ interface Setup {
  */
 interface Switching {
   mode: 'per-tab' | 'shared' | 'unknown' | 'knobs' | 'host';
-  react: boolean;
+  why: ReturnType<typeof viteSwitching>['why'];
   vite: number | null;
 }
 
-function switchingFor(cwd: string, approach: Approach): Switching {
-  if (approach === 'overlay') return viteSwitching(cwd);
-  return { mode: approach === 'serve' ? 'knobs' : 'host', react: false, vite: null };
+/** Overlay without Vite serves no file variants, so only knobs switch. */
+function switchingFor(cwd: string, approach: Approach, host: Host): Switching {
+  if (approach === 'overlay' && host === 'vite') return viteSwitching(cwd);
+  return { mode: approach === 'host' ? 'host' : 'knobs', why: null, vite: null };
 }
 
 /* ── detection ────────────────────────────────────────────────────────── */
@@ -416,8 +417,8 @@ function printServe(print: Print, setup: Setup): void {
 
 /** Knob values never reach the server or a link, whatever switches file variants. */
 const KNOBS_PER_BROWSER = [
-  'Knob values are per browser (localStorage) and never in a link: a page shows them as',
-  'the last tab in that browser to move one left them.',
+  'Knob values stay in the browser (localStorage), never in a link: a page loads the',
+  'values last saved there, and a move saves that tab’s whole set over them.',
 ];
 
 /**
@@ -425,7 +426,24 @@ const KNOBS_PER_BROWSER = [
  * that. Live mode, the per-tab one, needs React on Vite 6 or later: the plugin
  * decides it when the dev server starts, by the same rule as `viteSwitching`.
  */
-function printSwitching(print: Print, { mode, react, vite }: Switching): void {
+function printSwitching(print: Print, { mode, why, vite }: Switching): void {
+  const shared = {
+    'no-react': [
+      'Switching: shared by every tab. Without React the plugin swaps whole files, so a pick',
+      'changes every open tab and links carry no ?v=. Per-tab ?v= links need React on Vite 6',
+      'or later, or the app’s own VariantsSource that syncs the URL (--approach host).',
+    ],
+    'old-vite': [
+      `Switching: shared by every tab. On Vite ${vite} the plugin swaps whole files, so a pick`,
+      'changes every open tab and links carry no ?v=. Vite 6 or later makes picks per tab,',
+      'in each tab’s URL as ?v=<group>:<variant>.',
+    ],
+    'live-off': [
+      'Switching: shared by every tab. `variants: { live: false }` in vite.config swaps whole',
+      'files, so a pick changes every open tab and links carry no ?v=. Without it, picks are',
+      'per tab, in each tab’s URL as ?v=<group>:<variant>.',
+    ],
+  }[why ?? 'no-react'];
   const lines = {
     'per-tab': [
       'Switching: per tab. A file-variant pick goes into that tab’s URL as ?v=<group>:<variant>,',
@@ -434,19 +452,7 @@ function printSwitching(print: Print, { mode, react, vite }: Switching): void {
       'every pick across tabs instead.',
       ...KNOBS_PER_BROWSER,
     ],
-    shared: react
-      ? [
-          `Switching: shared by every tab. On Vite ${vite ?? 5} the plugin swaps whole files, so a pick`,
-          'changes every open tab and links carry no ?v=. Vite 6 or later makes picks per tab,',
-          'in each tab’s URL as ?v=<group>:<variant>.',
-          ...KNOBS_PER_BROWSER,
-        ]
-      : [
-          'Switching: shared by every tab. Without React the plugin swaps whole files, so a pick',
-          'changes every open tab and links carry no ?v=. Per-tab ?v= links need React on Vite 6',
-          'or later, or the app’s own VariantsSource that syncs the URL (--approach host).',
-          ...KNOBS_PER_BROWSER,
-        ],
+    shared: [...shared, ...KNOBS_PER_BROWSER],
     unknown: [
       'Switching: per tab on Vite 6 or later, where a pick goes into that tab’s URL as',
       '?v=<group>:<variant>; on Vite 5 a pick changes every open tab. The installed Vite',
@@ -454,13 +460,14 @@ function printSwitching(print: Print, { mode, react, vite }: Switching): void {
       ...KNOBS_PER_BROWSER,
     ],
     knobs: [
-      'Switching: knobs only, per browser (localStorage) and never in a link: a page shows',
-      'them as the last tab in that browser to move one left them. For picks kept per tab',
+      'Switching: knobs only, since no Vite dev server serves file variants here. Their values',
+      'stay in the browser (localStorage), never in a link: a page loads the values last',
+      'saved there, and a move saves that tab’s whole set over them. For picks kept per tab',
       'in the URL, use the app’s own VariantsSource (--approach host).',
     ],
     host: [
-      'Switching: the app’s own. Picks are per tab when onChange keeps them in the URL, and',
-      'shared by every tab when it keeps them anywhere else.',
+      'Switching: the app’s own. Picks live wherever onChange keeps them; kept in the URL,',
+      'each tab has its own and a link carries them.',
     ],
   }[mode];
   for (const line of lines) print(line);
@@ -471,7 +478,7 @@ const FIRST_RUN_SWITCHING: Record<Switching['mode'], string | null> = {
   'per-tab': 'that each tab keeps its own picks in its URL (?v=), so a link shows the same;',
   shared: 'that a pick changes every open tab, so links carry no picks here;',
   unknown: 'whether a pick stays in its tab or changes every tab (Switching above);',
-  knobs: 'that knob values stay in their browser, shared by its tabs and never in a link;',
+  knobs: 'that knob values stay in their browser, never in a link;',
   host: null,
 };
 

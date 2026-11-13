@@ -20,10 +20,10 @@ import { npm } from './npm.mjs';
 // blur bands, the header and defaults-bar materials, the rim drawn over content and rows that recede.
 // Bundle raised to 395 kB and tarball to 422.5 kB (393.8 and 420.8 kB; rolling figures): the component
 // that rolls changed characters, and its notes in the shipped design guide and changelog.
-// Tarball raised to 428.5 kB (426.7 kB; 1.5.0 shipped at 421.9 kB; per tab or shared): init's
-// switching paragraph, the variant commands' warning, the panel's note on an unapplied ?v=, and
-// the guides and changelog that state it. The bundle grew 1.2 kB and stays inside its budget.
-const BUDGET = { bundle: 395_000, tarball: 428_500 };
+// Bundle raised to 396.5 kB and tarball to 428.5 kB (395.1 and 427.4 kB; 1.5.0 shipped at 393.8 and
+// 421.9 kB; per tab or shared): the panel's note on a link's unapplied ?v=, settled as the panel opens,
+// init's switching paragraph, the variant commands' warning, and the guides and changelog that state it.
+const BUDGET = { bundle: 396_500, tarball: 428_500 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

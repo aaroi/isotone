@@ -355,7 +355,7 @@ export function unappliedLinkNotice(list: OverlayVariantsList, active: string[],
     asked.push(`${splitSectionLabel(group.label, section).fullLabel}: ${member ? member.label || member.id : 'Default'}`);
   }
   if (asked.length === 0) return null;
-  return `This link’s ?v= asks for ${asked.join('; ')}, which is not applied here: a pick is shared by every tab, so the page shows the current picks. Per-tab links need React on Vite 6 or later.`;
+  return `This link’s ?v= asks for ${asked.join('; ')}, which is not applied here: a pick is shared by every tab, so the page shows the current picks. Per-tab links need live switching (React on Vite 6+).`;
 }
 
 function pageLiveStore(): LiveVariantSelection | null {
@@ -523,8 +523,8 @@ export function createOverlayVariantsSource(cfg: {
       });
   }
   const search = cfg.getSearch ?? (() => (typeof location === 'undefined' ? '' : location.search));
-  // Settled when the listing loads (the panel opening), not on each pick: a notice coming and
-  // going above the selectors would move them under the reviewer's pointer.
+  // Settled when the listing loads, not on each pick: a notice coming and going above the
+  // selectors would move them under the reviewer's pointer. The view keeps it while open.
   let notice: string | null = null;
   return {
     getError: () => error,

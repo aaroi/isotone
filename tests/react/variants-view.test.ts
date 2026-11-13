@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { VariantAxis } from '../../src/core/variants';
 import { createVariantsSource } from '../../src/react/index';
 import { VariantsView } from '../../src/react/variants/VariantsView';
-import { AXES, byText, click, container, labels, render, renderRemaining, setUpPanelFixture } from '../helpers/panel';
+import { AXES, byText, click, container, labels, render, renderRemaining, rerender, setUpPanelFixture } from '../helpers/panel';
 
 setUpPanelFixture();
 
@@ -26,28 +26,45 @@ describe('VariantsView', () => {
     expect(container.querySelector('[role=alert]')).toBeNull();
   });
 
-  it('shows a source’s notice quietly above the selectors, apart from its errors', async () => {
+  it('shows a source’s notice quietly above the selectors, and keeps it while the panel is open', async () => {
     const base = createVariantsSource({ axes: AXES });
-    let notice: string | null = 'This link’s ?v= asks for Headline: Bold, but here a pick is shared by every tab.';
+    const asked = 'This link’s ?v= asks for Headline: Bold, which is not applied here.';
+    // What the next refresh will find, as the overlay source settles it when its listing loads.
+    let next: string | null = asked;
+    let notice: string | null = null;
     let listener = () => {};
     const source = {
       ...base,
       getNotice: () => notice,
-      subscribe: (next: () => void) => {
-        listener = next;
-        return base.subscribe(next);
+      refresh: async () => {
+        notice = next;
+        listener();
+      },
+      subscribe: (fn: () => void) => {
+        listener = fn;
+        return base.subscribe(fn);
       },
     };
     await render(createElement(VariantsView, { source }));
-    const shown = container.querySelector('.isotone-vars-notice');
-    expect(shown?.getAttribute('role')).toBe('status');
-    expect(shown?.textContent).toBe(notice);
+    const shown = () => container.querySelector('.isotone-vars-notice');
+    // The opening's refresh brings it in, as a status rather than an alert.
+    expect(shown()?.getAttribute('role')).toBe('status');
+    expect(shown()?.textContent).toBe(asked);
     expect(container.querySelector('[role=alert]')).toBeNull();
     // Above the selectors, so it is read before them.
-    expect(shown?.compareDocumentPosition(container.querySelector('[role=radiogroup]') as Node)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    notice = null;
-    await act(async () => listener());
-    expect(container.querySelector('.isotone-vars-notice')).toBeNull();
+    expect(shown()?.compareDocumentPosition(container.querySelector('[role=radiogroup]') as Node)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+    // A pick that matches the link, then another refresh (Feedback opening): the selectors stay where they were.
+    next = null;
+    await click(byText('Bold'));
+    await act(async () => source.refresh());
+    expect(shown()?.textContent).toBe(asked);
+
+    // Closed and opened again, the opening's own refresh settles it, over what the source said before it.
+    await act(async () => rerender(createElement(VariantsView, { source, active: false })));
+    notice = asked;
+    await act(async () => rerender(createElement(VariantsView, { source, active: true })));
+    expect(shown()).toBeNull();
   });
 
   it('opens an option-scoped dialog from the more button or a right click without changing the selection', async () => {

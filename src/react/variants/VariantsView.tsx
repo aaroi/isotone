@@ -39,9 +39,17 @@ import { useRenderLimit } from '../useRenderLimit';
 import { showOverflowTitle } from '../tooltips';
 import { useCompareHeld } from './useCompare';
 
-export function refreshSource(source: VariantsSource): void {
+/** Re-read a source that can (the overlay one); settles, never rejects, once it has. */
+export function refreshSource(source: VariantsSource): Promise<void> {
   const candidate = (source as { refresh?: unknown }).refresh;
-  if (typeof candidate === 'function') void Promise.resolve(candidate.call(source)).catch(() => {});
+  return typeof candidate === 'function' ? Promise.resolve(candidate.call(source)).then(noop, noop) : Promise.resolve();
+}
+
+const noop = () => {};
+
+/** Not part of the source contract: the overlay source has it, for a link's `?v=` it does not apply. */
+function readNotice(source: VariantsSource): string | null {
+  return (source as { getNotice?: () => string | null }).getNotice?.() ?? null;
 }
 
 /** What the panel draws from a source: read once per change and shared by every view of it. */
@@ -53,8 +61,6 @@ export interface VariantsSnapshot {
   /** Each shown axis's name, without and with its section. */
   names: Map<string, VariantSection['axes'][number]>;
   error: string | null;
-  /** Something the reviewer should know about what the page shows, such as a link's `?v=` it does not apply. */
-  notice: string | null;
 }
 
 interface SnapshotStore {
@@ -72,13 +78,11 @@ function takeSnapshot(source: VariantsSource): VariantsSnapshot {
     sections,
     names: new Map(sections.flatMap((section) => section.axes).map((entry) => [entry.axis.id, entry])),
     error: source.getError?.() ?? null,
-    // Not part of the source contract: the overlay source has it.
-    notice: (source as { getNotice?: () => string | null }).getNotice?.() ?? null,
   };
 }
 
 const stores = new WeakMap<VariantsSource, SnapshotStore>();
-const EMPTY: VariantsSnapshot = { selections: {}, shown: [], sections: [], names: new Map(), error: null, notice: null };
+const EMPTY: VariantsSnapshot = { selections: {}, shown: [], sections: [], names: new Map(), error: null };
 const NO_SOURCE: SnapshotStore = { subscribe: () => () => {}, read: () => EMPTY };
 
 /**
@@ -143,9 +147,20 @@ export const VariantsView = memo(function VariantsView({
   emptyText = DEFAULT_EMPTY_TEXT,
   compareKey = false,
 }: VariantsViewProps) {
-  const { selections: stored, shown, sections, names, error: sourceError, notice } = useVariantsSnapshot(source);
+  const { selections: stored, shown, sections, names, error: sourceError } = useVariantsSnapshot(source);
+  // Settled by each opening's own refresh and kept until the panel closes: a notice coming or going
+  // while the reviewer picks (or when Feedback opening refreshes the source) would move the selectors.
+  const [notice, setNotice] = useState<string | null>(() => readNotice(source));
   useEffect(() => {
-    if (active) refreshSource(source);
+    if (!active) return;
+    let open = true;
+    setNotice(readNotice(source));
+    void refreshSource(source).then(() => {
+      if (open) setNotice(readNotice(source));
+    });
+    return () => {
+      open = false;
+    };
   }, [active, source]);
   // While the reviewer holds Compare the controls show what the page shows, and take no picks.
   const held = useCompareHeld(source);

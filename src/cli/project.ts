@@ -13,29 +13,37 @@ export type Host = 'vite' | 'next' | 'other';
 /** Config files at the top that can hold a Vite plugin: Vite's own and those of frameworks built on it. */
 const CONFIG_FILE = /^[\w-]+\.config\.[cm]?[jt]s$/;
 const VITE_PLUGIN = /['"]isotone\/vite['"]/;
+/** The plugin's `variants: { live: false }`, which turns per-tab switching off. */
+const LIVE_OFF = /\blive\s*:\s*false\b/;
 
+/** Next first: a Next app may keep a `vite.config` for Vitest, which serves no pages. */
 export function detectHost(cwd: string): Host {
   const files = safeReaddir(cwd);
   const has = (prefix: string) => files.some((f) => f === prefix || f.startsWith(`${prefix}.`));
-  if (has('vite.config') || has('react-router.config')) return 'vite';
-  if (has('next.config')) return 'next';
   const deps = declaredDependencies(cwd);
-  if (deps.next) return 'next';
-  if (deps.vite) return 'vite';
+  if (has('next.config') || deps.next) return 'next';
+  if (has('vite.config') || has('react-router.config') || deps.vite) return 'vite';
   return 'other';
 }
 
 /**
- * How the Vite plugin will switch file variants here. Per tab (live mode) needs
- * React and Vite 6 or later, the same test the plugin makes when the dev server
- * starts; `unknown` is a React project whose Vite version cannot be read.
+ * How the Vite plugin will switch file variants here, by the test it makes when
+ * the dev server starts: per tab (live mode) needs React, Vite 6 or later and
+ * no `live: false`. `why` says what makes it shared; `unknown` is a React
+ * project whose Vite version cannot be read.
  */
-export function viteSwitching(cwd: string): { mode: 'per-tab' | 'shared' | 'unknown'; react: boolean; vite: number | null } {
+export function viteSwitching(cwd: string): {
+  mode: 'per-tab' | 'shared' | 'unknown';
+  why: 'no-react' | 'old-vite' | 'live-off' | null;
+  vite: number | null;
+} {
   const deps = declaredDependencies(cwd);
-  const react = typeof deps.react === 'string';
   const vite = viteMajor(cwd, deps.vite);
-  const mode = !react ? 'shared' : vite === null ? 'unknown' : vite >= 6 ? 'per-tab' : 'shared';
-  return { mode, react, vite };
+  if (typeof deps.react !== 'string') return { mode: 'shared', why: 'no-react', vite };
+  if (vite !== null && vite < 6) return { mode: 'shared', why: 'old-vite', vite };
+  const configs = safeReaddir(cwd).filter((name) => name.startsWith('vite.config.') && CONFIG_FILE.test(name));
+  if (configs.some((name) => LIVE_OFF.test(safeRead(join(cwd, name))))) return { mode: 'shared', why: 'live-off', vite };
+  return { mode: vite === null ? 'unknown' : 'per-tab', why: null, vite };
 }
 
 /**

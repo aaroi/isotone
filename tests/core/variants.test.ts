@@ -403,7 +403,7 @@ describe('a ?v= the overlay source does not apply', () => {
     await overlay.refresh();
     // The card group is at Default already, and `theme` is not a group here: maybe the host's own.
     expect(overlay.getNotice()).toBe(
-      'This link’s ?v= asks for Header › Hero: Split, which is not applied here: a pick is shared by every tab, so the page shows the current picks. Per-tab links need React on Vite 6 or later.',
+      'This link’s ?v= asks for Header › Hero: Split, which is not applied here: a pick is shared by every tab, so the page shows the current picks. Per-tab links need live switching (React on Vite 6+).',
     );
   });
 
