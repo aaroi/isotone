@@ -211,7 +211,8 @@ describe('VariantsView', () => {
     expect(bar()).not.toBeNull();
     expect(shown()).toBe(false);
     expect(actions()?.getAttribute('aria-hidden')).toBe('true');
-    // The list only gets room at its end, to scroll past the floating bar, while it shows.
+    // The list keeps room at its end for the floating bar either way; only the bar's material follows it.
+    // tests/browser/variants-layout.test.ts measures that nothing moves.
     const saving = () => container.querySelector('.isotone-vars')?.getAttribute('data-saving');
     expect(container.querySelector('.isotone-vars-body > .isotone-vars-tail')).not.toBeNull();
     expect(saving()).toBe('false');

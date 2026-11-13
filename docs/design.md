@@ -67,7 +67,9 @@ or rescales another's text.
 
 The defaults bar sits at the bottom of the variants panel while a pick differs
 from its default: a count, Compare and Make default, which files a request and
-keeps every alternative (the count briefly reads “Default request saved”).
+keeps every alternative (the count briefly reads “Default request saved”). The
+panel keeps the bar's room at its foot whenever it can show the bar, so the bar
+coming or going never resizes the panel or moves a control under the pointer.
 Compare is a quiet text button, never raised: held (pointer, Space or Enter, or
 the page-wide key under Escape, ` or §) it shows every instantly switchable
 selector at its default, the count reads “Showing defaults” (“Showing defaults,
@@ -249,8 +251,9 @@ header and the defaults bar are one material with that dissolve, nearly opaque
 behind their text, rather than solid blocks beside a fade. At rest each band fills
 only the empty space at its edge, so nothing at rest is ever blurred; once content
 can pass under it, it reaches further in, and scroll padding keeps keyboard focus
-clear of that reach. The defaults bar never hides the end of a list: one that
-scrolls gains room to scroll clear of it, and one too short to scroll grows. The blur steps through layers, each
+clear of that reach. The defaults bar never hides the end of a list: the list
+keeps room at its end for the bar, and the bottom band at rest spans that room,
+so the bar only ever covers content already fading out. The blur steps through layers, each
 twice the last, so no faint blurred copy sits over sharp text as a glow. Every
 fade eases in and out, so neither end reads as a line. `styles/edges.ts` owns it.
 
@@ -312,8 +315,8 @@ it still and quiet. Keys and reduced motion swap figures and sections at once.
 Scroll edges move with the scroll position rather than a clock: a band grows as
 content starts to pass under it, and a row shrinks to 96% while it crosses a band
 (scroll-driven animations, so a browser without them shows the bands at rest and
-rows at full size; reduced motion keeps rows still). The defaults bar's room at
-the end of the list eases in and out with the bar.
+rows at full size; reduced motion keeps rows still). The defaults bar's material
+over the list eases in and out with the bar; the room it floats in stays put.
 
 Movement uses transforms and opacity through the Web Animations API (the
 defaults bar's crossfade also uses a 2px blur, and a rolling figure 1.5px); a

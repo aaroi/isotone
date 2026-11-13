@@ -275,16 +275,17 @@ ${APPEARANCE_CSS}
 .isotone-secondary { padding: 6px 12px; font-size: 11px; font-weight: 500; white-space: nowrap; }
 .isotone-save { min-height: 26px; padding: 2px 12px; font-size: 11px; white-space: nowrap; overflow: hidden; }
 .isotone-root .isotone-vars > .isotone-panel-head .isotone-head-actions { flex: 1; min-width: 0; }
-/* The defaults bar floats over the panel's foot, so in a list that scrolls a pick never moves the selectors,
-   and an untouched panel has no gap. While it shows, the list gains room at its end (--iso-bar-room, see
-   .isotone-vars-tail) to scroll its last row clear; a list too short to scroll grows by that room instead of
-   hiding its end under the bar. The room is a registered length (ensurePanelStyles), so it eases in and out
-   with the bar, and the bottom scroll edge (edges.ts) grows and shrinks with it. */
-.isotone-vars { --iso-save-bar-h: calc(var(--iso-space) * 3 + 26px); --iso-bar-room: 0px; transition: --iso-bar-room var(--iso-enter) var(--iso-ease-out); }
-.isotone-vars[data-saving='true'] { --iso-bar-room: calc(var(--iso-save-bar-h) - var(--iso-panel-inset)); }
+/* The defaults bar floats over the panel's foot, in room the list keeps for it whenever the view can show it
+   (--iso-bar-room, see .isotone-vars-tail): a short list ends clear of the bar, a long one scrolls its last row
+   clear, and the bar coming or going never resizes the bottom-anchored panel, so no selector moves under the
+   pointer. Only the bar's material over the list (--iso-bar-veil, edges.ts) eases in and out with it; it is a
+   registered length (ensurePanelStyles), so it can transition. */
+.isotone-vars { --iso-save-bar-h: calc(var(--iso-space) * 3 + 26px); --iso-bar-room: 0px; --iso-bar-veil: 0px; transition: --iso-bar-veil var(--iso-enter) var(--iso-ease-out); }
+.isotone-vars:has(> .isotone-panel-head) { --iso-bar-room: calc(var(--iso-save-bar-h) - var(--iso-panel-inset)); }
+.isotone-vars[data-saving='true'] { --iso-bar-veil: var(--iso-bar-room); }
 .isotone-root .isotone-vars > .isotone-panel-head { position: absolute; left: 0; right: 0; bottom: 0; height: var(--iso-save-bar-h); min-height: 0; margin: 0; padding-top: calc(var(--iso-space) * 2); transition: opacity var(--iso-enter) var(--iso-ease-out), transform var(--iso-enter) var(--iso-ease-out); }
 .isotone-root .isotone-vars > .isotone-panel-head[data-shown='false'] { opacity: 0; transform: translateY(6px); pointer-events: none; }
-/* The bar's room at the end of the list. Cancels its own gap, so it costs nothing while the bar is hidden.
+/* The bar's room at the end of the list. It cancels its own gap, so the room is exactly the bar's overlap.
    Scroll padding, so keyboard focus lands clear of the bar and the scroll edges, is in edges.ts. */
 .isotone-vars-tail { flex: none; height: var(--iso-bar-room); margin-top: calc(0px - var(--iso-panel-inset)); pointer-events: none; }
 .isotone-save-row { position: relative; display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; }
@@ -571,7 +572,7 @@ ${EDGES_CSS}
  * component directly.
  */
 export function ensurePanelStyles(target: Document | ShadowRoot): void {
-  registerBarRoom();
+  registerBarVeil();
   const parent = target instanceof Document ? target.head : target;
   if (!parent || parent.querySelector(`[${MARKER}]`)) return;
   const style = (target instanceof Document ? target : target.ownerDocument).createElement('style');
@@ -584,13 +585,13 @@ export function ensurePanelStyles(target: Document | ShadowRoot): void {
 }
 
 /**
- * A registered length can transition, so the defaults bar's room eases in and out with the bar
+ * A registered length can transition, so the defaults bar's material eases in and out with the bar
  * (see .isotone-vars). Registration is page-wide and reaches into shadow roots, where an
- * `@property` rule would not. Without it the room changes at once.
+ * `@property` rule would not. Without it the material changes at once.
  */
-function registerBarRoom(): void {
+function registerBarVeil(): void {
   try {
-    CSS.registerProperty({ name: '--iso-bar-room', syntax: '<length>', inherits: true, initialValue: '0px' });
+    CSS.registerProperty({ name: '--iso-bar-veil', syntax: '<length>', inherits: true, initialValue: '0px' });
   } catch {
     // Registered already, by an earlier mount or a second copy of Isotone, or not supported.
   }
