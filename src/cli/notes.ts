@@ -418,8 +418,9 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
   if (showing.length) {
     lines.push('The reviewer may be looking at one of these copies, without your fix, in place of the file you changed:');
     for (const v of showing) lines.push(`  ${v.id} (${v.files.join(', ')}): ${v.why}`);
+    const stylesheet = showing.some((v) => v.files.some((file) => !SCRIPT.test(file)));
     lines.push(
-      'Sync the fix into a copy it belongs in. Otherwise the reviewer sees your fix with Default picked on that selector; leave the pick to them, since `variant use` moves every tab without a pick of its own.',
+      `Sync the fix into a copy it belongs in. Otherwise the reviewer sees your fix with Default picked on that selector${stylesheet ? ' (a stylesheet: once Default is the latest pick in any tab)' : ''}; leave the pick to them, since \`variant use\` moves every tab without a pick of its own.`,
     );
   }
   return lines;

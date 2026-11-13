@@ -369,6 +369,8 @@ describe('--done and variants', () => {
     const io = captureIo(root);
     expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
     expect(io.text.out).toContain('  theme-dark (src/index.css): active in .isotone/active.json, which every tab follows for a stylesheet');
+    // A tab already on Default still shows the copy until Default is the latest pick.
+    expect(io.text.out).toContain('(a stylesheet: once Default is the latest pick in any tab)');
   });
 
   it('names copies on the route that still hold conflict markers', async () => {
