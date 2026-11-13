@@ -154,6 +154,8 @@ describe('`variant add` on a file that cannot hot-swap', () => {
 
   it('stays quiet for a file of components', async () => {
     const root = tempRepo();
+    // A project the plugin serves, so nothing else has a warning to give.
+    writeFileSync(join(root, 'vite.config.ts'), "import { isotone } from 'isotone/vite';\nexport default { plugins: [isotone()] };\n");
     writeFileSync(join(root, 'src', 'Chart.tsx'), 'export function Chart() {}\nexport default Chart;\n');
     await runCli(['variant', 'new', 'v'], sink(root));
     const add = sink(root);

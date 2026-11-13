@@ -26,6 +26,30 @@ describe('VariantsView', () => {
     expect(container.querySelector('[role=alert]')).toBeNull();
   });
 
+  it('shows a source’s notice quietly above the selectors, apart from its errors', async () => {
+    const base = createVariantsSource({ axes: AXES });
+    let notice: string | null = 'This link’s ?v= asks for Headline: Bold, but here a pick is shared by every tab.';
+    let listener = () => {};
+    const source = {
+      ...base,
+      getNotice: () => notice,
+      subscribe: (next: () => void) => {
+        listener = next;
+        return base.subscribe(next);
+      },
+    };
+    await render(createElement(VariantsView, { source }));
+    const shown = container.querySelector('.isotone-vars-notice');
+    expect(shown?.getAttribute('role')).toBe('status');
+    expect(shown?.textContent).toBe(notice);
+    expect(container.querySelector('[role=alert]')).toBeNull();
+    // Above the selectors, so it is read before them.
+    expect(shown?.compareDocumentPosition(container.querySelector('[role=radiogroup]') as Node)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    notice = null;
+    await act(async () => listener());
+    expect(container.querySelector('.isotone-vars-notice')).toBeNull();
+  });
+
   it('opens an option-scoped dialog from the more button or a right click without changing the selection', async () => {
     const source = createVariantsSource({ axes: AXES });
     const onManage = vi.fn(async () => {});

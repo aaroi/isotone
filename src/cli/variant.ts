@@ -35,6 +35,7 @@ import { mutateVariants } from '../node/variants/options';
 import { repoRelativeKey } from '../node/variants/paths';
 import { docPath } from './docs';
 import { findNotesFile } from './notes';
+import { detectHost, vitePlugin } from './project';
 import { toJson } from './text';
 import { type CliIO, errOut, extractFlag, findNoteByPrefix, has, out, parseArgs, printTable, valueFor } from './util';
 
@@ -134,6 +135,9 @@ function printVariantHelp(io: CliIO): void {
   out(io);
   out(io, 'Options: --dir <path> (default .isotone/variants), --file <path> (notes file for --note)');
   out(io);
+  out(io, 'File variants need the Vite plugin (isotone/vite). With `isotone serve` or another dev');
+  out(io, 'server, use knobs in .isotone/knobs.json, or the app’s own VariantsSource.');
+  out(io);
   out(io, 'Variants that override the same file are alternatives of one selector without a');
   out(io, '--group; use one when the alternatives touch different files.');
   out(io, 'With more than a few selectors on a page, give each a section: --section "Header",');
@@ -162,6 +166,7 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
     }
   }
   const knobs = knobReport(io, opts, scope);
+  if (variants.length) warnUnserved(io);
 
   if (has(args, '--json')) {
     out(
@@ -347,6 +352,7 @@ function cmdNew(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
       variant.group ? ` in group ${variant.group}` : ''
     }${variant.section ? ` in section "${variant.section}"` : ''}`,
   );
+  warnUnserved(io);
   return 0;
 }
 
@@ -361,7 +367,35 @@ function cmdAdd(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
   out(io, create ? `created ${files.length} new file(s) in "${id}"` : `added ${files.length} file(s) to "${id}"`);
   if (!create) for (const file of files) warnNoHotSwap(io, file);
   warnOverlaps(io, opts, id);
+  warnUnserved(io);
   return 0;
+}
+
+/**
+ * The store takes a variant anywhere, but only the Vite plugin serves one: in
+ * a Next app, or under `isotone serve`, the panel lists nothing while the CLI
+ * reports success. Said on stderr, so `--json` output stays parseable.
+ */
+function warnUnserved(io: CliIO): void {
+  const { loaded, viteConfig } = vitePlugin(io.cwd);
+  if (loaded) return;
+  const alternatives = 'Use knobs in .isotone/knobs.json, or the app’s own VariantsSource (npx isotone init --approach host).';
+  if (viteConfig) {
+    errOut(
+      io,
+      `warning: ${viteConfig} does not import isotone/vite, so no dev server serves file variants from here and the panel will not show them. \`npx isotone init\` prints the plugin line.`,
+    );
+  } else if (detectHost(io.cwd) === 'next') {
+    errOut(
+      io,
+      `warning: file variants need the Vite plugin (isotone/vite), and Next.js does not run it, so the panel will not show them. ${alternatives}`,
+    );
+  } else {
+    errOut(
+      io,
+      `warning: file variants need the Vite plugin (isotone/vite), and no config in this directory imports it, so the panel may not show them. ${alternatives}`,
+    );
+  }
 }
 
 /** Say up front what would otherwise look like a page that reloads for no
@@ -450,6 +484,7 @@ function cmdUse(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOp
     return `active: "${id}"${describeActive(readActive(opts), id)}`;
   });
   out(io, message);
+  warnUnserved(io);
   return 0;
 }
 

@@ -6,8 +6,7 @@
  * `.isotone/variants/README.md`.
  */
 import { BLAST, BLAST_CLI } from '../core/blast';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import type { Dirent } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
 
 import { version } from '../../package.json';
@@ -15,10 +14,10 @@ import { version } from '../../package.json';
 import { guardedScriptTag } from '../core/tag';
 import { DEFAULT_VARIANTS_DIR, KNOBS_FILE } from '../node/variants';
 import { docPath } from './docs';
+import { detectHost, type Host, safeRead, safeReaddir, safeReaddirent, viteSwitching } from './project';
 import { toJson } from './text';
 import { type CliIO, errOut, extractBoolFlag, extractFlag, out, parseArgs } from './util';
 
-type Host = 'vite' | 'next' | 'other';
 type Approach = 'host' | 'overlay' | 'serve';
 
 const SOURCE_ROOTS = ['src', 'app', 'lib', 'experiments', 'components', 'pages', 'public'];
@@ -85,6 +84,7 @@ export function runInit(args: string[], io: CliIO): number {
     // An explicit --approach asks for that setup, even over an existing one.
     existing: approachArg === undefined && sources.integration.length ? sources.integration : null,
     rename: sources.rename,
+    switching: switchingFor(io.cwd, approach),
   };
   const instructions: string[] = [];
   printSetup((line = '') => instructions.push(line), setup);
@@ -102,6 +102,7 @@ export function runInit(args: string[], io: CliIO): number {
         approach,
         recommended,
         reason,
+        switching: setup.switching.mode,
         writes: yes ? [...('next' in agents ? ['AGENTS.md'] : []), ...(approach === 'overlay' ? ['.isotone/variants/README.md'] : [])] : [],
         agents: agents.status,
         integration: setup.existing ? (setup.rename ? 'rename' : 'present') : 'missing',
@@ -169,25 +170,26 @@ interface Setup {
   existing: string[] | null;
   /** A Vite config that still calls `iteration()`. */
   rename: string | null;
+  switching: Switching;
+}
+
+/**
+ * How picks switch with this setup: file variants per tab (in the tab's URL)
+ * or shared by every tab (`.isotone/active.json`), knobs only, or the app's
+ * own. `unknown` is React on a Vite whose version cannot be read.
+ */
+interface Switching {
+  mode: 'per-tab' | 'shared' | 'unknown' | 'knobs' | 'host';
+  react: boolean;
+  vite: number | null;
+}
+
+function switchingFor(cwd: string, approach: Approach): Switching {
+  if (approach === 'overlay') return viteSwitching(cwd);
+  return { mode: approach === 'serve' ? 'knobs' : 'host', react: false, vite: null };
 }
 
 /* ── detection ────────────────────────────────────────────────────────── */
-
-function detectHost(cwd: string): Host {
-  const files = safeReaddir(cwd);
-  const has = (prefix: string) => files.some((f) => f === prefix || f.startsWith(`${prefix}.`));
-  if (has('vite.config') || has('react-router.config')) return 'vite';
-  if (has('next.config')) return 'next';
-  try {
-    const pkg = JSON.parse(safeRead(join(cwd, 'package.json')));
-    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-    if (deps.next) return 'next';
-    if (deps.vite) return 'vite';
-  } catch {
-    /* A manifest is optional for static HTML projects. */
-  }
-  return 'other';
-}
 
 /** The App Router root layout or the Pages Router `_app`, whichever exists. */
 function detectNextEntry(cwd: string): string | null {
@@ -263,30 +265,6 @@ function walkSources(cwd: string, dir: string, depthLeft: number, found: Sources
   }
 }
 
-function safeReaddir(dir: string): string[] {
-  try {
-    return readdirSync(dir);
-  } catch {
-    return [];
-  }
-}
-
-function safeReaddirent(dir: string): Dirent[] {
-  try {
-    return readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-}
-
-function safeRead(file: string): string {
-  try {
-    return readFileSync(file, 'utf8');
-  } catch {
-    return '';
-  }
-}
-
 /* ── printing ─────────────────────────────────────────────────────────── */
 
 type Print = (line?: string) => void;
@@ -321,7 +299,9 @@ function printSetup(print: Print, setup: Setup): void {
   else if (setup.approach === 'host') printHost(print);
   else printServe(print, setup);
   print();
-  if (setup.firstRun) printFirstRun(print, setup.approach);
+  printSwitching(print, setup.switching);
+  print();
+  if (setup.firstRun) printFirstRun(print, setup.approach, setup.switching.mode);
   else {
     print('This project already has variants or knobs, so there is no first run to do.');
     print('Tell the user the URL to open and that the pill in the corner is Isotone.');
@@ -434,12 +414,73 @@ function printServe(print: Print, setup: Setup): void {
   print('the Vite plugin, or a host-owned VariantsSource (--approach host).');
 }
 
+/** Knob values never reach the server or a link, whatever switches file variants. */
+const KNOBS_PER_BROWSER = [
+  'Knob values are per browser (localStorage) and never in a link: a page shows them as',
+  'the last tab in that browser to move one left them.',
+];
+
+/**
+ * Whether a pick stays in its tab or changes every tab, and what would change
+ * that. Live mode, the per-tab one, needs React on Vite 6 or later: the plugin
+ * decides it when the dev server starts, by the same rule as `viteSwitching`.
+ */
+function printSwitching(print: Print, { mode, react, vite }: Switching): void {
+  const lines = {
+    'per-tab': [
+      'Switching: per tab. A file-variant pick goes into that tab’s URL as ?v=<group>:<variant>,',
+      'so a copied link opens the same variants and two tabs can differ; tabs without ?v=',
+      'follow .isotone/active.json. `isotone({ variants: { live: false } })` would share',
+      'every pick across tabs instead.',
+      ...KNOBS_PER_BROWSER,
+    ],
+    shared: react
+      ? [
+          `Switching: shared by every tab. On Vite ${vite ?? 5} the plugin swaps whole files, so a pick`,
+          'changes every open tab and links carry no ?v=. Vite 6 or later makes picks per tab,',
+          'in each tab’s URL as ?v=<group>:<variant>.',
+          ...KNOBS_PER_BROWSER,
+        ]
+      : [
+          'Switching: shared by every tab. Without React the plugin swaps whole files, so a pick',
+          'changes every open tab and links carry no ?v=. Per-tab ?v= links need React on Vite 6',
+          'or later, or the app’s own VariantsSource that syncs the URL (--approach host).',
+          ...KNOBS_PER_BROWSER,
+        ],
+    unknown: [
+      'Switching: per tab on Vite 6 or later, where a pick goes into that tab’s URL as',
+      '?v=<group>:<variant>; on Vite 5 a pick changes every open tab. The installed Vite',
+      'version could not be read.',
+      ...KNOBS_PER_BROWSER,
+    ],
+    knobs: [
+      'Switching: knobs only, per browser (localStorage) and never in a link: a page shows',
+      'them as the last tab in that browser to move one left them. For picks kept per tab',
+      'in the URL, use the app’s own VariantsSource (--approach host).',
+    ],
+    host: [
+      'Switching: the app’s own. Picks are per tab when onChange keeps them in the URL, and',
+      'shared by every tab when it keeps them anywhere else.',
+    ],
+  }[mode];
+  for (const line of lines) print(line);
+}
+
+/** What the first run's message says about switching, so the user is not left to find out. */
+const FIRST_RUN_SWITCHING: Record<Switching['mode'], string | null> = {
+  'per-tab': 'that each tab keeps its own picks in its URL (?v=), so a link shows the same;',
+  shared: 'that a pick changes every open tab, so links carry no picks here;',
+  unknown: 'whether a pick stays in its tab or changes every tab (Switching above);',
+  knobs: 'that knob values stay in their browser, shared by its tabs and never in a link;',
+  host: null,
+};
+
 /**
  * The agent's first loop: something real to switch on the user's own page
  * within minutes, then a short message that teaches the panel by naming
  * what was made. The real design stays as it is until the user picks.
  */
-function printFirstRun(print: Print, approach: Approach): void {
+function printFirstRun(print: Print, approach: Approach, switching: Switching['mode']): void {
   print('First run: do this now, unless the user asked for something else');
   print('Show the user what Isotone does on the page they care about (the main page if');
   print('they named none). Leave the real design as it is; everything below is opt-in.');
@@ -480,6 +521,7 @@ function printFirstRun(print: Print, approach: Approach): void {
   print('   - the one URL to open, and that the pill in the bottom-right corner is Isotone,');
   print('     a development-only panel (nothing ships to production);');
   print('   - what you made: open Variants and switch them on the live page;');
+  if (FIRST_RUN_SWITCHING[switching]) print(`   - ${FIRST_RUN_SWITCHING[switching]}`);
   print('   - in one line: ⌘/Ctrl + Shift + . (or the pin button), click an element, type');
   print('     the change and press Enter, then say “check my Isotone notes”;');
   print('   - that Make default in the panel turns their picks into a note for you;');

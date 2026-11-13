@@ -174,6 +174,7 @@ describe('--help', () => {
     expect(variant.text.out).toContain('variant off <id>');
     expect(variant.text.out).toContain('variant group <id> <groupId>');
     expect(variant.text.out).toContain('variant use default [<groupId>]');
+    expect(variant.text.out).toContain('File variants need the Vite plugin (isotone/vite).');
     const init = makeIo(root);
     expect(await runCli(['init', '--help'], init)).toBe(0);
     expect(init.text.out).toContain('--approach <name>');
@@ -271,6 +272,76 @@ describe('variant', () => {
     expect(await runCli(['variant', 'promote', 'bold-cta'], io)).toBe(0);
     expect(io.text.out).toContain('promoted "bold-cta"');
     expect(existsSync(join(root, '.isotone/variants/bold-cta'))).toBe(false);
+  });
+
+  it('warns new, add, use and list when Next.js will not serve file variants, and names knobs and a host source', async () => {
+    const root = tempRepo();
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ dependencies: { next: '16.0.0', react: '19.0.0' } }));
+    writeFileSync(join(root, 'next.config.ts'), 'export default {};\n');
+    commit(root, 'app/Hero.tsx', 'export const Hero = () => null;\n');
+    for (const argv of [
+      ['variant', 'new', 'hero-a'],
+      ['variant', 'add', 'hero-a', 'app/Hero.tsx'],
+      ['variant', 'use', 'hero-a'],
+      ['variant', 'use', 'default'],
+      ['variant', 'list'],
+    ]) {
+      const io = makeIo(root);
+      // Still a success: the variant is stored, it is only not shown.
+      expect(await runCli(argv, io), argv.join(' ')).toBe(0);
+      expect(io.text.err, argv.join(' ')).toContain('Next.js does not run it, so the panel will not show them');
+      expect(io.text.err).toContain(
+        'Use knobs in .isotone/knobs.json, or the app’s own VariantsSource (npx isotone init --approach host).',
+      );
+    }
+    // On stderr, so the listing an agent parses stays JSON.
+    const json = makeIo(root);
+    expect(await runCli(['variant', 'list', '--json'], json)).toBe(0);
+    expect(JSON.parse(json.text.out).variants[0]).toMatchObject({ id: 'hero-a', active: false });
+    expect(json.text.err).toContain('Next.js does not run it');
+  });
+
+  it('warns when the Vite config does not import the plugin, and says nothing once it does', async () => {
+    const root = tempRepo();
+    writeFileSync(join(root, 'vite.config.ts'), "import react from '@vitejs/plugin-react';\nexport default { plugins: [react()] };\n");
+    const before = makeIo(root);
+    expect(await runCli(['variant', 'new', 'hero-a'], before)).toBe(0);
+    expect(before.text.err).toContain('warning: vite.config.ts does not import isotone/vite');
+    expect(before.text.err).toContain('`npx isotone init` prints the plugin line');
+
+    writeFileSync(
+      join(root, 'vite.config.ts'),
+      "import react from '@vitejs/plugin-react';\nimport { isotone } from 'isotone/vite';\nexport default { plugins: [react(), isotone()] };\n",
+    );
+    for (const argv of [
+      ['variant', 'new', 'hero-b'],
+      ['variant', 'use', 'hero-b'],
+      ['variant', 'list'],
+    ]) {
+      const io = makeIo(root);
+      expect(await runCli(argv, io)).toBe(0);
+      expect(io.text.err, argv.join(' ')).toBe('');
+    }
+    // A framework config that wraps Vite (Nuxt, Astro) counts as well.
+    const nuxt = tempRepo();
+    writeFileSync(
+      join(nuxt, 'nuxt.config.ts'),
+      "import { isotone } from 'isotone/vite';\nexport default { vite: { plugins: [isotone()] } };\n",
+    );
+    const io = makeIo(nuxt);
+    expect(await runCli(['variant', 'new', 'hero-c'], io)).toBe(0);
+    expect(io.text.err).toBe('');
+  });
+
+  it('warns, more softly, where no config here imports the plugin', async () => {
+    const io = makeIo(tempRepo());
+    expect(await runCli(['variant', 'new', 'hero-a'], io)).toBe(0);
+    expect(io.text.err).toContain('no config in this directory imports it, so the panel may not show them');
+    expect(io.text.err).toContain('--approach host');
+    // Nothing to warn about while there are no variants yet.
+    const empty = makeIo(tempRepo());
+    expect(await runCli(['variant', 'list'], empty)).toBe(0);
+    expect(empty.text.err).toBe('');
   });
 
   it('adds and removes a tracked file', async () => {
@@ -873,6 +944,99 @@ describe('init', () => {
     const code = await runCli(['init', '--approach', 'bogus'], io);
     expect(code).toBe(1);
     expect(io.text.err).toContain('Unknown approach');
+  });
+});
+
+describe('init names how picks switch', () => {
+  /** A project with this package.json and, when given, an installed Vite of that version. */
+  function project(files: Record<string, string>, pkg: Record<string, unknown>, installedVite?: string): string {
+    const root = tempRepo();
+    writeFileSync(join(root, 'package.json'), JSON.stringify(pkg));
+    for (const [name, text] of Object.entries(files)) writeFileSync(join(root, name), text);
+    if (installedVite) {
+      mkdirSync(join(root, 'node_modules/vite'), { recursive: true });
+      writeFileSync(join(root, 'node_modules/vite/package.json'), JSON.stringify({ name: 'vite', version: installedVite }));
+    }
+    return root;
+  }
+  const viteConfig = { 'vite.config.ts': 'export default {};\n' };
+  const react = { react: '^19.0.0', 'react-dom': '^19.0.0' };
+
+  async function init(root: string, ...args: string[]): Promise<{ text: string; json: Record<string, unknown> }> {
+    const io = makeIo(root);
+    expect(await runCli(['init', ...args], io)).toBe(0);
+    const json = makeIo(root);
+    expect(await runCli(['init', '--json', ...args], json)).toBe(0);
+    return { text: io.text.out, json: JSON.parse(json.text.out) };
+  }
+
+  it('says React on Vite 6 or later keeps picks per tab, in ?v= links, and what shares them', async () => {
+    const { text, json } = await init(project(viteConfig, { devDependencies: { ...react, vite: '^8.0.0' } }, '8.1.0'));
+    expect(json.switching).toBe('per-tab');
+    expect(text).toContain('Switching: per tab.');
+    expect(text).toContain('?v=<group>:<variant>');
+    expect(text).toContain('`isotone({ variants: { live: false } })` would share');
+    expect(text).toContain('Knob values are per browser (localStorage) and never in a link');
+    // The first run has the agent pass it on.
+    expect(text).toContain('- that each tab keeps its own picks in its URL (?v=)');
+  });
+
+  it('says React on Vite 5 shares picks across every tab, from the installed version over the declared one', async () => {
+    const { text, json } = await init(project(viteConfig, { devDependencies: { ...react, vite: '^6.0.0' } }, '5.4.11'));
+    expect(json.switching).toBe('shared');
+    expect(text).toContain('Switching: shared by every tab. On Vite 5 the plugin swaps whole files');
+    expect(text).toContain('links carry no ?v=. Vite 6 or later makes picks per tab');
+    expect(text).toContain('- that a pick changes every open tab, so links carry no picks here;');
+    expect(text).not.toContain('Switching: per tab');
+  });
+
+  it('reads the declared Vite range when nothing is installed yet', async () => {
+    const five = await init(project(viteConfig, { devDependencies: { ...react, vite: '~5.4.0' } }));
+    expect(five.json.switching).toBe('shared');
+    const seven = await init(project(viteConfig, { devDependencies: { ...react, vite: '>=7' } }));
+    expect(seven.json.switching).toBe('per-tab');
+    // A workspace or catalog reference names no version.
+    const unknown = await init(project(viteConfig, { devDependencies: { ...react, vite: 'catalog:' } }));
+    expect(unknown.json.switching).toBe('unknown');
+    expect(unknown.text).toContain('Switching: per tab on Vite 6 or later');
+    expect(unknown.text).toContain('version could not be read');
+  });
+
+  it('says a host without React shares picks across every tab, whatever its Vite', async () => {
+    const { text, json } = await init(
+      project(viteConfig, { dependencies: { vue: '^3.5.0' }, devDependencies: { vite: '^8.0.0' } }, '8.0.0'),
+    );
+    expect(json.switching).toBe('shared');
+    expect(text).toContain('Switching: shared by every tab. Without React the plugin swaps whole files');
+    expect(text).toContain('Per-tab ?v= links need React on Vite 6');
+    expect(text).toContain('VariantsSource that syncs the URL (--approach host)');
+  });
+
+  it('says a serve setup has knobs only, kept per browser, and points to a host source for links', async () => {
+    const { text, json } = await init(
+      project({ 'next.config.ts': 'export default {};\n' }, { dependencies: { ...react, next: '16.0.0' } }),
+    );
+    expect(json.switching).toBe('knobs');
+    expect(text).toContain('Switching: knobs only, per browser (localStorage) and never in a link');
+    expect(text).toContain('use the app’s own VariantsSource (--approach host)');
+    expect(text).toContain('- that knob values stay in their browser, shared by its tabs and never in a link;');
+    expect(text).not.toContain('?v=<group>');
+  });
+
+  it('says a host source switches as the app does', async () => {
+    const { text, json } = await init(project({}, {}), '--approach', 'host');
+    expect(json.switching).toBe('host');
+    expect(text).toContain('Switching: the app’s own.');
+  });
+
+  it('names the mode for a project that is already set up', async () => {
+    const root = project(
+      { 'vite.config.ts': "import { isotone } from 'isotone/vite';\nexport default { plugins: [isotone()] };\n" },
+      { devDependencies: { ...react, vite: '^5.4.0' } },
+    );
+    const { text } = await init(root);
+    expect(text).toContain('Already set up: vite.config.ts loads Isotone.');
+    expect(text).toContain('Switching: shared by every tab. On Vite 5');
   });
 });
 

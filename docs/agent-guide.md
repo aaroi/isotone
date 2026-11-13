@@ -138,6 +138,14 @@ npx isotone variant list [<route>] [--json]        # check what the panel will s
 - `variant off <id>` turns one off, `variant rm <id> <file>` stops overriding a
   file, and `variant group <id> <groupId> [--label <text>]` moves a variant into
   a group. `--dir <path>` points every subcommand at another variants directory.
+- Picks are per tab, in the page's `?v=`, only with React on Vite 6 or later;
+  elsewhere a pick changes every open tab and a `?v=` link is not applied. Knob
+  values stay in the reviewer's browser, shared by its tabs. `init` prints which
+  applies: tell the user, so they do not expect links to carry picks
+  ([per tab or shared](variants.md#per-tab-or-shared)).
+- File variants need the Vite plugin. Under `isotone serve` (Next.js and other dev
+  servers) the panel never shows them, and the `variant` commands warn: use knobs,
+  or the app's own `VariantsSource`.
 - `npx isotone variant --help` lists every subcommand; [Variants](variants.md)
   covers groups, live switching and host needs.
 

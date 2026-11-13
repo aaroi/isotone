@@ -53,6 +53,8 @@ export interface VariantsSnapshot {
   /** Each shown axis's name, without and with its section. */
   names: Map<string, VariantSection['axes'][number]>;
   error: string | null;
+  /** Something the reviewer should know about what the page shows, such as a link's `?v=` it does not apply. */
+  notice: string | null;
 }
 
 interface SnapshotStore {
@@ -70,11 +72,13 @@ function takeSnapshot(source: VariantsSource): VariantsSnapshot {
     sections,
     names: new Map(sections.flatMap((section) => section.axes).map((entry) => [entry.axis.id, entry])),
     error: source.getError?.() ?? null,
+    // Not part of the source contract: the overlay source has it.
+    notice: (source as { getNotice?: () => string | null }).getNotice?.() ?? null,
   };
 }
 
 const stores = new WeakMap<VariantsSource, SnapshotStore>();
-const EMPTY: VariantsSnapshot = { selections: {}, shown: [], sections: [], names: new Map(), error: null };
+const EMPTY: VariantsSnapshot = { selections: {}, shown: [], sections: [], names: new Map(), error: null, notice: null };
 const NO_SOURCE: SnapshotStore = { subscribe: () => () => {}, read: () => EMPTY };
 
 /**
@@ -139,7 +143,7 @@ export const VariantsView = memo(function VariantsView({
   emptyText = DEFAULT_EMPTY_TEXT,
   compareKey = false,
 }: VariantsViewProps) {
-  const { selections: stored, shown, sections, names, error: sourceError } = useVariantsSnapshot(source);
+  const { selections: stored, shown, sections, names, error: sourceError, notice } = useVariantsSnapshot(source);
   useEffect(() => {
     if (active) refreshSource(source);
   }, [active, source]);
@@ -374,6 +378,11 @@ export const VariantsView = memo(function VariantsView({
           e.stopPropagation();
         }}
       >
+        {notice && (
+          <p className="isotone-vars-notice" role="status">
+            {notice}
+          </p>
+        )}
         {sourceError && (
           <p className="isotone-danger" role="alert">
             {sourceError}
