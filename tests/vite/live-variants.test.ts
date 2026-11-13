@@ -80,9 +80,45 @@ describe('the live store', () => {
     store.select(['hook-x', 'picker-a']);
     expect(location.search).toBe('?tab=2&v=headline:b,nav:picker-a,hooks:hook-x');
     expect(location.hash).toBe('#top');
+    // Back to Default everywhere: the tab says so, rather than following the server again.
     store.select([]);
-    expect(location.search).toBe('?tab=2&v=headline:b');
-    expect(store.explicit).toBe(false);
+    expect(location.search).toBe('?tab=2&v=headline:b,nav:default,hooks:default');
+    expect(store.explicit).toBe(true);
+  });
+
+  it('keeps a tab on Default while another tab picks a variant', () => {
+    // Tab A followed the server onto picker-a, then the reviewer picked Default there.
+    const a = makeStore('/pricing', { active: ['picker-a'] });
+    a.select([], ['nav']);
+    expect(here()).toBe('/pricing?v=nav:default');
+    // Tab B's pick becomes the server's default, which reaches tab A too.
+    a.follow(['picker-b']);
+    expect(a.active).toEqual([]);
+    expect(a.explicit).toBe(true);
+  });
+
+  it('pins Default the reviewer picks where the tab already showed it', () => {
+    const tab = makeStore('/');
+    tab.select([], ['hooks']);
+    expect(here()).toBe('/?v=hooks:default');
+    tab.follow(['hook-x']);
+    expect(tab.active).toEqual([]);
+  });
+
+  it('keeps a Default from ?v= when another group is picked, and drops it when its own group is', () => {
+    const tab = makeStore('/?v=nav:default', { active: ['picker-a'] });
+    expect(tab.explicit).toBe(true);
+    tab.select(['hook-x'], ['hooks']);
+    expect(here()).toBe('/?v=nav:default,hooks:hook-x');
+    tab.select(['hook-x', 'picker-b'], ['nav']);
+    expect(here()).toBe('/?v=nav:picker-b,hooks:hook-x');
+  });
+
+  it('still names a group when a pick leaves nothing to write, so a reload keeps the tab', () => {
+    const tab = makeStore('/');
+    tab.select([]);
+    expect(here()).toBe('/?v=nav:default');
+    expect(makeStore(here(), { active: ['picker-b'] }).active).toEqual([]);
   });
 
   it('switches components in place and asks for a reload only for fixed exports', () => {

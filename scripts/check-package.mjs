@@ -20,7 +20,9 @@ import { npm } from './npm.mjs';
 // blur bands, the header and defaults-bar materials, the rim drawn over content and rows that recede.
 // Bundle raised to 395 kB and tarball to 422.5 kB (393.8 and 420.8 kB; rolling figures): the component
 // that rolls changed characters, and its notes in the shipped design guide and changelog.
-const BUDGET = { bundle: 395_000, tarball: 422_500 };
+// Tarball raised to 424 kB (423.0 kB; Default pinned per tab): the live store keeping `<group>:default`
+// in `?v=`, the `--done` hint's per-note variant context, and their notes in the shipped docs.
+const BUDGET = { bundle: 395_000, tarball: 424_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

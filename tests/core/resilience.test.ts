@@ -445,11 +445,16 @@ describe('overlay source over a live tab', () => {
     // The tab's own selection wins over the server's default.
     expect(source.getSelections().g).toBe('default');
     source.setSelection('g', 'a');
-    expect(live.select).toHaveBeenCalledWith(['a']);
+    expect(live.select).toHaveBeenCalledWith(['a'], ['g']);
     expect(source.getSelections().g).toBe('a');
     await settle();
     expect(posts).toEqual([['a']]);
     expect(live.reload).not.toHaveBeenCalled();
+    // Default names its selector too, so the tab can keep it while another tab picks.
+    source.setSelection('g', 'default');
+    expect(live.select).toHaveBeenLastCalledWith([], ['g']);
+    source.reset();
+    expect(live.select).toHaveBeenLastCalledWith([], ['g']);
   });
 
   it('reloads once the server has the set, when the tab cannot switch in place', async () => {

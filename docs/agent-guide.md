@@ -38,8 +38,10 @@ npx isotone --undone <id>          # reopen it
   staged edits, reverts, commits and deletions count.
 - After closing, `--done` names variants on the note's route whose copies may
   lack the fix, with the `variant sync <id>` for each, any copy with conflict
-  markers, and any variant showing in place of the real file. With `--json`
-  that goes to stderr; stdout stays one array.
+  markers, and which of those copies a page may show in place of the fix: the
+  option a note about that selector names, else one active in
+  `.isotone/active.json`. Leave that pick to the reviewer. With `--json` that
+  goes to stderr; stdout stays one array.
 - A unique id prefix is enough. `--working`, `--done` and `--undone` take
   several ids (`a1 b2` or `a1,b2`); either all change or none do.
 - A route is a pattern: `/items` is that page, `/items/*` also every page under

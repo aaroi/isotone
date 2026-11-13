@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Gem, Moon, Play, Plus, Search, Sun } from 'lucide-react';
 import { createVariantsSource, IsotonePanel, type IsotoneTheme, type VariantAxis } from '../../src/react/index';
+import { type LiveStore, liveStore } from '../../src/vite/live';
 import { Tour, tourSeen } from './tour';
 
 const params = new URLSearchParams(location.search);
@@ -167,13 +168,61 @@ if (worst) {
     'Nothing',
   ]);
 }
+/**
+ * Card layout and spacing belong to the tab, as file variants do with live switching in a Vite app, through
+ * the same store: a pick, Default included, goes into `?v=` and stays with the tab, so two tabs can compare.
+ * A tab without one follows the latest pick made in any tab, which this browser keeps in place of the dev
+ * server's `.isotone/active.json`.
+ */
+const LATEST_PICK = 'isotone-demo-active';
+const tabGroups = screenshot
+  ? []
+  : axes.flatMap((axis) =>
+      (axis.id === 'layout' || axis.id === 'spacing') && 'options' in axis
+        ? [{ id: axis.id, fallback: axis.defaultOption, members: axis.options.map((o) => o.id).filter((id) => id !== axis.defaultOption) }]
+        : [],
+    );
+function latestPick(): string[] | null {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(LATEST_PICK) ?? 'null');
+    return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : null;
+  } catch {
+    return null;
+  }
+}
+const tab = (() => {
+  if (tabGroups.length === 0) return null;
+  // The dev server's plugin puts its own store on the page, for file variants this demo has none of; leave it there.
+  const page = window as Window & { __isotoneLive?: LiveStore };
+  const plugin = page.__isotoneLive;
+  delete page.__isotoneLive;
+  const store = liveStore(page, { groups: tabGroups, active: latestPick() ?? ['comfy'], ssr: false, endpoint: '' });
+  if (plugin) page.__isotoneLive = plugin;
+  else delete page.__isotoneLive;
+  return store;
+})();
+/** The tab's picks as selector values. */
+const tabPicks = (set: string[]) => Object.fromEntries(tabGroups.map((g) => [g.id, g.members.find((m) => set.includes(m)) ?? g.fallback]));
+let following = false;
 const source = createVariantsSource({
   axes,
-  selections: { spacing: 'comfy' },
-  // Hold to compare. onChange applies every call; it stores nothing, so a preview (change.preview) needs no
-  // special case here. An app that keeps picks in its URL or storage skips that step when change.preview is true.
+  selections: tab ? tabPicks(tab.active) : { spacing: 'comfy' },
+  // Hold to compare. onChange applies every call; only a pick (not change.preview) reaches the tab's URL.
   compare: true,
-  onChange(selections) {
+  onChange(selections, change) {
+    if (tab && !change?.preview && !following) {
+      const shown = tabPicks(tab.active);
+      const set = tabGroups.map((g) => g.id).filter((id) => shown[id] !== selections[id]);
+      if (set.length > 0) {
+        const next = tabGroups.flatMap((g) => g.members.filter((m) => m === selections[g.id]));
+        tab.select(next, set);
+        try {
+          localStorage.setItem(LATEST_PICK, JSON.stringify(next));
+        } catch {
+          /* Private mode: this tab still keeps its pick. */
+        }
+      }
+    }
     document.documentElement.dataset.spacing = selections.spacing;
     document.documentElement.dataset.layout = selections.layout;
     document.documentElement.style.setProperty('--accent', selections.accent ?? null);
@@ -195,6 +244,23 @@ const source = createVariantsSource({
     if (!response.ok) throw new Error('Could not save defaults.');
   },
 });
+if (tab) {
+  // Another tab's pick reaches this one only while it has none of its own, as `variant use` would.
+  window.addEventListener('storage', (event) => {
+    if (event.key === LATEST_PICK) tab.follow(latestPick() ?? []);
+  });
+  tab.subscribe(() => {
+    const current = source.getSelections();
+    const picks = tabPicks(tab.active);
+    if (tabGroups.every((g) => current[g.id] === picks[g.id])) return;
+    following = true;
+    try {
+      source.setSelections({ ...current, ...picks });
+    } finally {
+      following = false;
+    }
+  });
+}
 
 type DemoNote = Record<string, unknown> & {
   id: string;

@@ -10,7 +10,7 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { MAX_REPLY_LENGTH } from '../core/limits';
 import { matchRoute } from '../core/routes';
 import { updateNoteText } from '../core/update';
-import { variantAppliesTo } from '../core/variants';
+import { overlayGroups, variantAppliesTo } from '../core/variants';
 import { blastFile, touchSession } from '../node/blast';
 import { realPath } from '../node/fs/paths';
 import { noteFingerprint, readNotes, replyView, type StoredNote, updateNotes } from '../node/notes/store';
@@ -341,8 +341,10 @@ function refuseUnfixed(args: NotesArgs, root: string): void {
 /**
  * After a fix: the variants on the fixed notes' routes that copy a file this
  * fix changed (it changed after `--working`, or after the note was written),
- * and those showing instead of the real files. Either way the reviewer will
- * not see the fix on the page.
+ * so their copies may lack the fix, and which of those a page may show in
+ * place of the fix. A note about a selector names the option its reviewer was
+ * on; otherwise `.isotone/active.json` is the guess, though it is only what a
+ * tab without a pick of its own shows. The pick stays the reviewer's.
  */
 function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]): string[] {
   if (!notes.length) return [];
@@ -355,15 +357,21 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
     return [];
   }
   const relevant = variants.filter((v) => notes.some(({ note }) => variantAppliesTo(v.route, note.route)));
-  const changedFor = (v: (typeof variants)[number]) =>
-    v.stale.filter((file) =>
-      notes.some(({ note, since }) => variantAppliesTo(v.route, note.route) && (mtime(join(dir, file)) ?? 0) > since),
-    );
+  const changed = (file: string, since: number) => (mtime(join(dir, file)) ?? 0) > since;
   const lines: string[] = [];
-  const stale = relevant.map((v) => ({ id: v.id, files: changedFor(v) })).filter((v) => v.files.length);
+  const stale = relevant
+    .map((variant) => {
+      const fixed = notes.filter(
+        ({ note, since }) => variantAppliesTo(variant.route, note.route) && variant.stale.some((f) => changed(f, since)),
+      );
+      const files = variant.stale.filter((file) => fixed.some(({ since }) => changed(file, since)));
+      return { variant, files, notes: fixed.map(({ note }) => note) };
+    })
+    .filter((v) => v.files.length);
   if (stale.length) {
     lines.push('These variants copy files changed since the note (or --working), so their copies may lack the fix:');
-    for (const v of stale) lines.push(`  ${v.id} (${v.files.join(', ')}): ${shellCommand('npx', 'isotone', 'variant', 'sync', v.id)}`);
+    for (const { variant, files } of stale)
+      lines.push(`  ${variant.id} (${files.join(', ')}): ${shellCommand('npx', 'isotone', 'variant', 'sync', variant.id)}`);
     lines.push('Sync each one the fix belongs in too; leave a copy alone when it is the alternative itself.');
   }
   const conflicted = relevant.filter((v) => v.conflicts?.length);
@@ -372,10 +380,21 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
     for (const v of conflicted)
       lines.push(`  ${v.id}: ${(v.conflicts ?? []).map((file) => relative(dir, join(variantDir({ root: dir }, v.id), file))).join(', ')}`);
   }
-  const showing = relevant.filter((v) => active.includes(v.id));
+  // Each tab keeps its own pick in live switching, so `.isotone/active.json` may be another tab's: a note
+  // about this variant's selector says what its reviewer was on, and outranks it.
+  const groupOf = new Map(overlayGroups(variants).flatMap((group) => group.members.map((member) => [member.id, group.id] as const)));
+  const showing = stale.flatMap(({ variant, files, notes: fixed }) => {
+    const picks = fixed.map(({ variant: about }) => (about?.axisId === groupOf.get(variant.id) ? about?.optionId : undefined));
+    if (picks.includes(variant.id)) return [{ id: variant.id, files, why: `${fixed.length > 1 ? 'a' : 'the'} note is about this option` }];
+    if (picks.includes(undefined) && active.includes(variant.id))
+      return [{ id: variant.id, files, why: 'active in .isotone/active.json, which tabs without a pick of their own show' }];
+    return [];
+  });
   if (showing.length) {
+    lines.push('The reviewer may be looking at one of these copies, without your fix, in place of the file you changed:');
+    for (const v of showing) lines.push(`  ${v.id} (${v.files.join(', ')}): ${v.why}`);
     lines.push(
-      `Active now, so the page shows ${showing.length === 1 ? 'its copy' : 'their copies'} instead of the real file: ${showing.map((v) => v.id).join(', ')}. \`npx isotone variant use default\` shows the real files.`,
+      'Sync the fix into a copy it belongs in. Otherwise the reviewer sees it with Default picked on that selector; leave the pick to them, since `variant use` moves every tab without a pick of its own.',
     );
   }
   return lines;

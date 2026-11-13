@@ -317,8 +317,9 @@ function overlayHint(v: OverlayVariantStatus): string {
  */
 export interface LiveVariantSelection {
   readonly active: string[];
-  /** Switch the tab; true when the page has to reload to show it. */
-  select(next: string[]): boolean;
+  /** Switch the tab and keep it there, `groups` (those the reviewer set) at
+   *  Default included; true when the page has to reload to show it. */
+  select(next: string[], groups?: string[]): boolean;
   subscribe(listener: () => void): () => void;
   reload(): void;
   /** Whether switching to `next` reloads the page. */
@@ -471,8 +472,9 @@ export function createOverlayVariantsSource(cfg: {
       live.reload();
     }
   }
-  function activate(active: string[]): void {
-    if (live?.select(active)) reloadAfterPost = true;
+  /** `groups`: the selectors the reviewer set, which the tab keeps even at Default. */
+  function activate(active: string[], groups: string[]): void {
+    if (live?.select(active, groups)) reloadAfterPost = true;
     intended = active;
     revision++;
     error = null;
@@ -565,13 +567,16 @@ export function createOverlayVariantsSource(cfg: {
       const members = new Set(axis.options.map((o) => o.id));
       const next = current().filter((id) => !members.has(id));
       if (value !== OVERLAY_DEFAULT_OPTION) next.push(value);
-      activate(next);
+      activate(next, [axis.id]);
     },
     reset() {
       knobValues = {};
       persistKnobs();
       applyKnobs();
-      activate([]);
+      activate(
+        [],
+        selects().map((axis) => axis.id),
+      );
     },
     subscribe(listener) {
       listeners.add(listener);

@@ -281,11 +281,16 @@ becomes one binding, decided in the browser:
 
 The selection belongs to the tab: a pick goes into the URL as
 `?v=<group>:<variant>` (the host-variant grammar), kept through client-side
-navigation, so a copied link opens the same variant and two tabs can compare. It
-also goes to `.isotone/active.json`, which tabs without `?v=` and the agent
-follow. Every version of a dispatched file loads, so a copy runs even while off:
-a global stylesheet it imports applies everywhere, and a syntax error in it
-breaks pages importing the real file.
+navigation, so a copied link opens the same variant and two tabs can compare.
+Picking Default writes `?v=<group>:default`, so a tab on Default stays there
+while another tab tries a variant. Each pick also goes to `.isotone/active.json`,
+which the agent reads and a tab without `?v=` follows: a fresh tab opens on the
+latest pick, and `variant use` switches it. Once you pick in a tab, it keeps its
+pick; open the page without `?v=` to follow again.
+
+Every version of a dispatched file loads, so a copy runs even while off: a
+global stylesheet it imports applies everywhere, and a syntax error in it breaks
+pages importing the real file.
 
 ### Whole-file switching
 
