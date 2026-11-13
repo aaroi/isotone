@@ -273,6 +273,17 @@ describe('review dock interactions', () => {
     expect(selecting()).toBe('true');
     expect(container.querySelector('.isotone-notes-panel')?.getAttribute('data-open')).toBe('true');
   });
+  it('takes the shortcut from an automated key event that carries only the key', async () => {
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
+    // What browser automation dispatches for ⌘⇧.: a key, no code.
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: '.', code: '', metaKey: true, shiftKey: true, bubbles: true, cancelable: true }),
+      );
+      await new Promise((r) => requestAnimationFrame(r));
+    });
+    expect(container.querySelector('.isotone-notes-panel')?.getAttribute('data-open')).toBe('true');
+  });
   it('attaches an option reference and keeps variants visible while writing', async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: 'saved' }) }));
     await render(

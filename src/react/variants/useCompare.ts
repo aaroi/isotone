@@ -52,7 +52,7 @@ export function useCompareKey(source: VariantsSource | undefined, shortcut: Isot
     let down = false;
     const onKeyDown = (e: KeyboardEvent) => {
       const shortcut = latest.current;
-      if (!shortcut || !isShortcutKey(e.code, shortcut)) return;
+      if (!shortcut || !isShortcutKey(e, shortcut)) return;
       if (down) {
         // Repeats of the held key change nothing and type nothing.
         e.preventDefault();
@@ -67,7 +67,7 @@ export function useCompareKey(source: VariantsSource | undefined, shortcut: Isot
     };
     const onKeyUp = (e: KeyboardEvent) => {
       const shortcut = latest.current;
-      if (!down || !shortcut || !isShortcutKey(e.code, shortcut)) return;
+      if (!down || !shortcut || !isShortcutKey(e, shortcut)) return;
       down = false;
       e.preventDefault();
       e.stopImmediatePropagation();

@@ -1,13 +1,13 @@
 /** Landing a variant over the real files, and dropping one. */
 
 import { randomUUID } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { overlayGroups, type OverlayVariant } from '../../core/variants/overlay';
 import { readActive, writeActive } from './active';
 import { blobOf, currentBlob } from './git';
 import { readVariant, writeVariant, readVariants, listVariants } from './manifest';
-import { type VariantsStoreOptions, mutateVariants } from './options';
+import { type VariantsStoreOptions, mutateVariants, variantsDir } from './options';
 import { variantDir, isValidVariantId } from './paths';
 
 /**
@@ -23,7 +23,7 @@ export function promoteVariant(
   id: string,
   { force = false }: { force?: boolean } = {},
 ): { files: string[]; rebased: string[] } {
-  return mutateVariants(opts, () => {
+  const result = mutateVariants(opts, () => {
     // Checked before the manifest read so the rmSync below can never be
     // handed a directory the id escaped into.
     if (!isValidVariantId(id)) throw new Error(`Invalid variant id "${id}"`);
@@ -68,6 +68,8 @@ export function promoteVariant(
       );
     return { files, rebased: rebaseSiblings(opts, siblings, landed) };
   });
+  removeIfEmpty(opts);
+  return result;
 }
 
 /**
@@ -142,4 +144,18 @@ export function dropVariant(opts: VariantsStoreOptions, id: string): void {
         active.filter((a) => a !== id),
       );
   });
+  removeIfEmpty(opts);
+}
+
+/**
+ * The variants directory goes with its last variant. Only once the lock is
+ * released, and only when empty: `rmdir` refuses a directory holding anything,
+ * whether a README, a variant or another writer's lock.
+ */
+function removeIfEmpty(opts: VariantsStoreOptions): void {
+  try {
+    rmdirSync(variantsDir(opts));
+  } catch {
+    /* Not empty, or already gone. */
+  }
 }

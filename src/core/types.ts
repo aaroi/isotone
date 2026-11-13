@@ -28,7 +28,8 @@ export interface IsotoneElement {
   /** Where it sat on the page when pinned, in CSS pixels from the document's corner. */
   rect?: { x: number; y: number; w: number; h: number };
   /** How it looked when pinned: the computed styles that differ from a plain
-   *  box (spacing, type, colours as hex, layout), so "bigger" has a "from". */
+   *  box (spacing, type, layout, and colours: hex when opaque `rgb()`, else as
+   *  the browser reports them, like `oklch(…)`), so "bigger" has a "from". */
   styles?: Record<string, string>;
 }
 

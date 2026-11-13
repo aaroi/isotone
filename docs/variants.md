@@ -172,6 +172,8 @@ count. Screen readers, notes and saved defaults keep the full name,
   Unsectioned selectors come first; sections follow in order of their first
   selector, and selectors keep their order inside them.
 - A `showWhen` selector without its own section joins its parent's.
+- A selector without a section that is named after one, such as a file variant
+  group labelled `Pricing card` beside a `Pricing card > Accent` knob, joins it.
 - Sections are display text only: IDs, `?v=` links and `selections` do not change.
 
 An explicit `section` field overrides the prefix, and the label shows as
