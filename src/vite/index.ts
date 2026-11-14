@@ -31,6 +31,7 @@ import { VARIANTS_ENDPOINT } from '../core/variants';
 import { blastFile } from '../node/blast';
 import { defaultNotesFile, LEGACY_NOTES_FILE, NOTES_FILE } from '../node/notes/location';
 import { ensureFileIgnored } from '../node/fs/git-exclude';
+import { isWithin } from '../node/fs/paths';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
 import { autoUpdateNote } from '../node/update/note';
@@ -69,21 +70,23 @@ const SPECIAL_QUERY = /[?&](raw|url|inline|no-inline|worker|sharedworker|html-pr
 /**
  * Whether the dev server would serve `path` itself. A copy is served only
  * where the real file would be, so `server.fs.deny` (`.env`, keys, `.git/`,
- * Isotone's own files) refuses a copy as it refuses the file, even one
- * tracked past the secret guard with `variant add … --force`. Vite 6 and
- * later answer with their own check. Vite 5's takes the server from 5.4.19
- * and is missing before it, so there Vite's own deny matcher answers (it
- * ignores case, as Vite does). Without either, no copy is served while
- * `server.fs.strict` is on.
+ * Isotone's own files) and `server.fs.allow` refuse a copy as they refuse the
+ * file, even one tracked past the secret guard with `variant add … --force`.
+ * Vite 6 and later answer with their own check. Vite 5's takes the server
+ * from 5.4.19 and is missing before it, so there its steps are taken here
+ * with its own deny matcher (which ignores case); without that matcher no
+ * copy is served while `server.fs.strict` is on.
  */
 function servableBy(server: ViteDevServer): (path: string) => boolean {
-  const { strict } = server.config.server.fs;
+  const { strict, allow } = server.config.server.fs;
   if (server.environments !== undefined && typeof vite.isFileLoadingAllowed === 'function') {
     return (path) => vite.isFileLoadingAllowed(server.config, path);
   }
-  const denied = (server as { _fsDenyGlob?: (path: string) => boolean })._fsDenyGlob;
-  if (typeof denied === 'function') return (path) => !strict || !denied(path);
-  return () => !strict;
+  const vite5 = server as { _fsDenyGlob?: (path: string) => boolean; moduleGraph: { safeModulesPath?: Set<string> } };
+  const denied = vite5._fsDenyGlob;
+  if (typeof denied !== 'function') return () => !strict;
+  return (path) =>
+    !strict || (!denied(path) && (vite5.moduleGraph.safeModulesPath?.has(path) === true || allow.some((dir) => isWithin(dir, path))));
 }
 
 /** Say where the notes go after Vite's own banner, so it is not buried under

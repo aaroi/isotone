@@ -434,7 +434,7 @@ interface FakeServer {
   config: {
     root: string;
     logger: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> };
-    server: { fs: { strict: boolean; deny: string[] } };
+    server: { fs: { strict: boolean; deny: string[]; allow?: string[] } };
   };
   httpServer: null;
   middlewares: { use: ReturnType<typeof vi.fn> };
@@ -661,7 +661,7 @@ describe('a copy where the real file is refused', () => {
       // Vite 5's own deny matcher, which ignores case.
       _fsDenyGlob: (path: string) => /(?:^|\/)\.env(?:\..*)?$|\.(?:crt|pem)$|\/\.git\/|\/\.isotone\//i.test(path),
     });
-    server.config.server.fs = { strict: true, deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/.isotone/**'] };
+    server.config.server.fs = { strict: true, allow: [root], deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/.isotone/**'] };
     hooks.configureServer(server);
     expect(hooks.load(env)).toBeNull();
     expect(hooks.load(`${env}?import`)).toBeNull();
@@ -672,10 +672,16 @@ describe('a copy where the real file is refused', () => {
     // loads without the check, keeps the swap.
     expect(hooks.load(source)?.code).toContain('variant b');
     expect(hooks.load(env, { ssr: true })?.code).toContain('FAKE_ENV');
+    // Nor a copy outside `server.fs.allow`, where Vite refuses the real file.
+    const narrow = plugin(root, 'serve');
+    const narrowServer = Object.assign(fakeServer(root), { _fsDenyGlob: () => false });
+    narrowServer.config.server.fs = { strict: true, allow: [id(root, 'lib')], deny: [] };
+    narrow.configureServer(narrowServer);
+    expect(narrow.load(source)).toBeNull();
     // A Vite 5 without that matcher serves no copy while the check is on.
     const bare = plugin(root, 'serve');
     const strictServer = fakeServer(root);
-    strictServer.config.server.fs = { strict: true, deny: [] };
+    strictServer.config.server.fs = { strict: true, allow: [root], deny: [] };
     bare.configureServer(strictServer);
     expect(bare.load(source)).toBeNull();
     // `server.fs.strict: false` turns Vite's check off, and Isotone's with it.
