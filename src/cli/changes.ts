@@ -14,8 +14,7 @@
  * Any change counts, not only one near the note: a fix often lands away from
  * the element's own component (a stylesheet, a token, a parent), so a check
  * by path would refuse real fixes and teach agents to pass `--force`. Instead
- * `--done` names the files it counted ({@link snapshotChanges}, else
- * {@link changedSince}), so an unrelated
+ * `--done` names the files it counted ({@link changedSince}), so an unrelated
  * edit (another agent's, the user's) is seen for what it is.
  */
 import { execFileSync } from 'node:child_process';
@@ -31,26 +30,12 @@ const MAX_FILES = 20_000;
 const MAX_HASHED_BYTES = 4 * 1024 * 1024;
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'out', 'coverage']);
 
-/** Past this many files a snapshot keeps its fingerprint only, so a note stays small; `--done` then goes by modification times to name them. */
-const MAX_RECORDED = 200;
-
-/**
- * The work tree as `--working` saw it: one fingerprint to compare, and what
- * names the files a change touched, HEAD's commit and each file's own
- * fingerprint (null past {@link MAX_RECORDED}).
- */
-export interface Snapshot {
-  hash: string;
-  head: string | null;
-  files: Record<string, string> | null;
-}
-
 /**
  * A short fingerprint of the Git work tree that contains `root`, and of the
  * files under `own`, leaving out the paths `ignore` excludes; null outside Git
  * or past {@link MAX_FILES}.
  */
-export function snapshot(root: string, ignore: (file: string) => boolean, own: string[] = []): Snapshot | null {
+export function snapshot(root: string, ignore: (file: string) => boolean, own: string[] = []): string | null {
   const top = gitTop(root);
   if (!top) return null;
   const status = git(top, ['status', '--porcelain=v2', '-z', '--branch', '--no-renames', '--untracked-files=all']);
@@ -58,59 +43,21 @@ export function snapshot(root: string, ignore: (file: string) => boolean, own: s
   const entries = status.split('\0').filter(Boolean);
   if (entries.length > MAX_FILES) return null;
   const hash = createHash('sha256');
-  const files: Record<string, string> = {};
-  let head: string | null = null;
-  const add = (abs: string, line: string) => {
-    hash.update(`${line}\n`);
-    files[abs] = createHash('sha256').update(line).digest('hex').slice(0, 16);
-  };
   for (const entry of entries.sort()) {
     if (entry.startsWith('# ')) {
       // Of the headers only HEAD matters: a commit is a change.
-      if (entry.startsWith('# branch.oid ')) {
-        hash.update(`${entry}\n`);
-        const oid = entry.slice('# branch.oid '.length);
-        head = /^[0-9a-f]+$/.test(oid) ? oid : null;
-      }
+      if (entry.startsWith('# branch.oid ')) hash.update(`${entry}\n`);
       continue;
     }
     const abs = join(top, statusPath(entry));
     if (ignore(abs)) continue;
     // The entry carries the index's hash, so staging an edit changes it too.
-    add(abs, `${entry}\0${contents(abs)}`);
+    hash.update(`${entry}\0${contents(abs)}\n`);
   }
   const managed = filesUnder(own);
   if (managed === null) return null;
-  for (const abs of managed) if (!ignore(abs)) add(abs, `own ${abs}\0${contents(abs)}`);
-  return {
-    hash: hash.digest('hex').slice(0, 32),
-    head,
-    files: Object.keys(files).length > MAX_RECORDED ? null : files,
-  };
-}
-
-/**
- * The files whose state differs between two snapshots, absolute and sorted:
- * those either one saw with another fingerprint or not at all, and those the
- * commits between their HEADs touched. Null when either kept no file list.
- */
-export function snapshotChanges(
-  root: string,
-  ignore: (file: string) => boolean,
-  before: Omit<Snapshot, 'hash'>,
-  after: Snapshot,
-): string[] | null {
-  if (!before.files || !after.files) return null;
-  const found = new Set<string>();
-  for (const file of new Set([...Object.keys(before.files), ...Object.keys(after.files)]))
-    if (before.files[file] !== after.files[file]) found.add(file);
-  const top = gitTop(root);
-  if (top && before.head && after.head && before.head !== after.head) {
-    const diff = git(top, ['diff', '--name-only', '-z', before.head, after.head]);
-    if (diff === null) return null;
-    for (const file of diff.split('\0').filter(Boolean)) if (!ignore(join(top, file))) found.add(join(top, file));
-  }
-  return found.size > MAX_FILES ? null : [...found].sort();
+  for (const abs of managed) if (!ignore(abs)) hash.update(`own ${abs}\0${contents(abs)}\n`);
+  return hash.digest('hex').slice(0, 32);
 }
 
 /** The path in a `git status --porcelain=v2 --no-renames` entry: after 8 fields, 10 for a conflict, 1 untracked. */
@@ -171,9 +118,11 @@ function projectChange(root: string, ignore: (file: string) => boolean): number 
 }
 
 /**
- * The files a change since `since` came from, as {@link latestChange} sees
- * them: modified after it (under `root` or `own`), deleted, or in a commit
- * made since. Absolute and sorted; null past {@link MAX_FILES}, as there.
+ * The files a change since `since` came from, as {@link latestChange} and a
+ * {@link snapshot} see them: modified after it (under `root` or `own`),
+ * deleted, or in a commit made since. Absolute and sorted; null past
+ * {@link MAX_FILES}, as there. A staged-only change shows in neither
+ * modification times nor commits, so a snapshot can differ while this is empty.
  */
 export function changedSince(root: string, ignore: (file: string) => boolean, own: string[], since: number): string[] | null {
   const found = new Set<string>();

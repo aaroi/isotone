@@ -80,7 +80,8 @@ export function runInit(args: string[], io: CliIO): number {
 
   const host = detectHost(io.cwd);
   const sources = scanSources(io.cwd);
-  const [recommended, reason] = recommend(host, sources, overlaySetUp(io.cwd));
+  // Only the Vite plugin serves file variants: elsewhere a leftover variants folder sets up nothing.
+  const [recommended, reason] = recommend(host, sources, host === 'vite' && overlaySetUp(io.cwd));
   const approach = approachArg ?? recommended;
   if (!isApproach(approach)) {
     errOut(io, `Unknown approach "${approach}". Use host, overlay or serve.`);
@@ -258,8 +259,22 @@ function installCommand(cwd: string): string | null {
   }
 }
 
-/** A Vite plugin call that injects no panel: the endpoints for an app that mounts its own. */
-const PANEL_OFF = /\bisotone\s*\(\s*\{[^)]*\bpanel\s*:\s*false\b/;
+/**
+ * Whether every `isotone(...)` call in a config passes `panel: false`, the
+ * endpoints for an app that mounts its own panel. Each call is read to its
+ * matching parenthesis, so nested calls in its options do not cut it short.
+ */
+function panelOff(text: string): boolean {
+  const calls = [...text.matchAll(/\bisotone\s*\(/g)].map((match) => {
+    let depth = 0;
+    for (let i = (match.index ?? 0) + match[0].length - 1; i < text.length; i++) {
+      if (text[i] === '(') depth++;
+      else if (text[i] === ')' && --depth === 0) return text.slice(match.index, i + 1);
+    }
+    return text.slice(match.index);
+  });
+  return calls.length > 0 && calls.every((call) => /\bpanel\s*:\s*false\b/.test(call));
+}
 
 /**
  * Whether file variants are set up here: a variant made, or the Vite plugin
@@ -270,7 +285,7 @@ function overlaySetUp(cwd: string): boolean {
   return safeReaddir(cwd).some((name) => {
     if (!/^[\w-]+\.config\.[cm]?[jt]s$/.test(name)) return false;
     const text = safeRead(join(cwd, name));
-    return /['"]isotone\/vite['"]/.test(text) && !PANEL_OFF.test(text);
+    return /['"]isotone\/vite['"]/.test(text) && !panelOff(text);
   });
 }
 
@@ -324,15 +339,29 @@ function variantsNeed(cwd: string): string[][] {
   const biome = files.find((name) => name === 'biome.json' || name === 'biome.jsonc');
   if (biome && !BIOME_LINT_OFF.test(safeRead(join(cwd, biome)))) {
     // Biome 1 ignores through files.ignore; 2 through a negated files.includes.
-    lint(
-      [biome],
-      (biomeMajor(cwd) ?? (/schemas\/1\./.test(safeRead(join(cwd, biome))) ? 1 : 2)) === 1
-        ? `in ${biome}, add ".isotone/**" to files.ignore.`
-        : `in ${biome}, give files "includes": ["**", "!.isotone"], keeping any patterns there.`,
-    );
+    const text = safeRead(join(cwd, biome));
+    const includes = biomeIncludes(text);
+    if ((biomeMajor(cwd) ?? (/schemas\/1\./.test(text) ? 1 : 2)) === 1) lint([biome], `in ${biome}, add ".isotone/**" to files.ignore.`);
+    else if (!includes) lint([biome], `in ${biome}, give files "includes": ["**", "!.isotone"].`);
+    // Patterns such as "src/**" never reach .isotone.
+    else if (includes.some((glob) => /^(?:\*|\.isotone\b)/.test(glob))) lint([biome], `in ${biome}, add "!.isotone" to files.includes.`);
   }
   if (ignores.length) steps.push(['Keep linters off variant copies, whose imports resolve from the real file:', ...ignores]);
   return steps;
+}
+
+/** The patterns of Biome's `files.includes`, or null when it has none (Biome then takes every file). */
+function biomeIncludes(text: string): string[] | null {
+  const files = /"files"\s*:\s*\{/.exec(text);
+  if (!files) return null;
+  let depth = 0;
+  let end = files.index + files[0].length - 1;
+  for (; end < text.length; end++) {
+    if (text[end] === '{') depth++;
+    else if (text[end] === '}' && --depth === 0) break;
+  }
+  const list = /"includes"\s*:\s*\[([^\]]*)\]/.exec(text.slice(files.index, end));
+  return list ? [...(list[1] ?? '').matchAll(/"([^"]*)"/g)].map((m) => m[1] ?? '') : null;
 }
 
 /** The CSS file that imports Tailwind, from the project; '' when none is found. */

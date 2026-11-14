@@ -18,7 +18,7 @@ import { defaultNotesFile, NOTES_FILE } from '../node/notes/location';
 import { foreignServers } from '../node/serve-owner';
 import { notesProjectRoot, updateRequestOf } from '../node/update/request';
 import { filesWithoutBase, hasGit, listVariants, NO_GIT_SYNC, readActive, variantDir } from '../node/variants';
-import { changedSince, latestChange, mtime, type Snapshot, snapshot, snapshotChanges } from './changes';
+import { changedSince, latestChange, mtime, snapshot } from './changes';
 import { docPath } from './docs';
 import { excludeLocalFiles } from './local-files';
 import { fileVariantSwitching } from './project';
@@ -34,15 +34,10 @@ type Action = (typeof ACTIONS)[number];
 
 /**
  * `workingSnapshot` is the work tree's fingerprint when `--working` ran
- * (`./changes`), with `workingHead` and `workingFiles` to name what changed
- * since: the CLI's own fields, read only while `workingAt` is set and never
- * printed.
+ * (`./changes`): the CLI's own field, read only while `workingAt` is set and
+ * never printed.
  */
-type TrackedNote = StoredNote & {
-  workingSnapshot?: string;
-  workingHead?: string | null;
-  workingFiles?: Record<string, string> | null;
-};
+type TrackedNote = StoredNote & { workingSnapshot?: string };
 
 interface NotesArgs {
   file: string;
@@ -218,10 +213,9 @@ function flip(io: CliIO, args: NotesArgs, action: Exclude<Action, '--reply'>, ro
         if (action === '--working') {
           if (note.done) throw new Error(`[${shortId(note)}] is done; reopen it with --undone before working on it.`);
           changed.push({ note, already: false, since: 0 });
-          stopWorking(note);
           note.workingAt = now;
-          if (started)
-            Object.assign(note as TrackedNote, { workingSnapshot: started.hash, workingHead: started.head, workingFiles: started.files });
+          if (started) (note as TrackedNote).workingSnapshot = started;
+          else delete (note as TrackedNote).workingSnapshot;
           continue;
         }
         const done = action === '--done';
@@ -266,11 +260,9 @@ function flip(io: CliIO, args: NotesArgs, action: Exclude<Action, '--reply'>, ro
   return 0;
 }
 
-function stopWorking(note: TrackedNote): void {
+function stopWorking(note: StoredNote): void {
   delete note.workingAt;
-  delete note.workingSnapshot;
-  delete note.workingHead;
-  delete note.workingFiles;
+  delete (note as TrackedNote).workingSnapshot;
 }
 
 /** When the agent started on a note: `--working`, or else when it was written. */
@@ -329,32 +321,17 @@ function refuseUnfixed(io: CliIO, args: NotesArgs, root: string): string[] {
   if (!targets.length) return [];
   const ignore = isBookkeeping(args.file);
   const own = managedFiles(args.file, root);
-  let current: Snapshot | null | undefined;
+  let current: string | null | undefined;
   let latest: number | undefined;
-  /** Whether the snapshot decided it, and so names what changed. */
-  const bySnapshot = (n: TrackedNote) => {
-    if (!n.workingAt || !n.workingSnapshot) return false;
-    if (current === undefined) current = snapshot(root, ignore, own);
-    return current !== null;
-  };
   const unfixed = targets.filter((n: TrackedNote) => {
-    if (bySnapshot(n)) return current?.hash === n.workingSnapshot;
+    if (n.workingAt && n.workingSnapshot) {
+      if (current === undefined) current = snapshot(root, ignore, own);
+      if (current !== null) return current === n.workingSnapshot;
+    }
     latest ??= latestChange(root, ignore, own);
     return latest <= since(n);
   });
-  if (!unfixed.length) {
-    // The files the decision rests on: what the content snapshot saw change, else modification times.
-    const counted = new Set<string>();
-    for (const n of targets as TrackedNote[]) {
-      const files =
-        (bySnapshot(n) && current
-          ? snapshotChanges(root, ignore, { head: n.workingHead ?? null, files: n.workingFiles ?? null }, current)
-          : null) ?? changedSince(root, ignore, own, since(n));
-      if (files === null) return countedLine(io, targets, null);
-      for (const file of files) counted.add(file);
-    }
-    return countedLine(io, targets, [...counted].sort());
-  }
+  if (!unfixed.length) return countedLine(io, targets, changedSince(root, ignore, own, Math.min(...targets.map(since))));
   const lines = unfixed.map((n) => {
     const at =
       n.workingAt && Date.parse(n.workingAt) >= Date.parse(n.createdAt)
@@ -377,7 +354,7 @@ function countedLine(io: CliIO, notes: StoredNote[], files: string[] | null): st
   const working = notes.filter((n) => n.workingAt).length;
   const from = working === notes.length ? '--working' : working ? '--working or the note' : 'the note';
   const whose = notes.length === 1 ? 'its fix' : 'their fixes';
-  // Too many files to list, or (by modification times) a change only Git's index records.
+  // Too many files to name.
   if (files === null) return [`Counted as ${whose}: a change since ${from}.`];
   if (!files.length) return [`Counted as ${whose}: a staged or committed change since ${from}.`];
   // Named from where the agent runs, the way Git names the files (macOS's /var is /private/var).

@@ -7,7 +7,7 @@
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import type { Dirent } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 
 export type Host = 'vite' | 'next' | 'other';
 
@@ -214,36 +214,9 @@ export function safeRead(file: string): string {
  * with React, `whole` without), or not at all (`none`: Next runs no Vite plugin).
  */
 export function fileVariantSwitching(root: string): 'live' | 'whole-react' | 'whole' | 'none' {
-  if (detectHost(root) === 'next') return servedBySibling(root) ? 'live' : 'none';
+  if (detectHost(root) === 'next') return 'none';
   const { loaded, viteConfig } = vitePlugin(root);
   if (!loaded && viteConfig === null) return 'live';
   const { mode, why } = viteSwitching(root);
   return mode !== 'shared' ? 'live' : why === 'no-react' ? 'whole' : 'whole-react';
-}
-
-/** Past this many entries beside the project, it is not a workspace's packages: a temporary or home directory. */
-const MAX_SIBLINGS = 200;
-/** `variants: { root: '../app' }` and the like: a path a config hands the plugin. */
-const ROOT_OPTION = /\broot\s*:\s*['"]([^'"]+)['"]/g;
-
-/**
- * Whether a Vite config in a sibling directory loads the plugin with
- * `variants: { root }` naming this one, so its dev server serves these variants.
- */
-function servedBySibling(root: string): boolean {
-  const target = resolve(root);
-  // Siblings that share a dev server sit in one repository (a monorepo), below its root.
-  if (safeReaddir(target).includes('.git')) return false;
-  const parent = dirname(target);
-  const entries = safeReaddirent(parent);
-  if (entries.length > MAX_SIBLINGS) return false;
-  return entries.some((entry) => {
-    if (!entry.isDirectory() || join(parent, entry.name) === target || entry.name === 'node_modules') return false;
-    const dir = join(parent, entry.name);
-    return safeReaddir(dir).some((name) => {
-      if (!name.startsWith('vite.config.') || !CONFIG_FILE.test(name)) return false;
-      const code = readCode(join(dir, name));
-      return VITE_PLUGIN.test(code) && [...code.matchAll(ROOT_OPTION)].some((m) => resolve(dir, m[1] ?? '') === target);
-    });
-  });
 }

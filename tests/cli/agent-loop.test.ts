@@ -99,19 +99,17 @@ describe('--done waits for the fix to land', () => {
     expect(await runCli(['--done', 'bbbb', '--json'], json)).toBe(0);
     expect(JSON.parse(json.text.out)).toHaveLength(1);
     // From where the agent runs; a variant is one change; past five, a count.
-    // README.md changed before --working, so the snapshot leaves it out.
-    expect(json.text.err).toContain(
-      'Counted as its fix, changed since --working: ../.isotone/variants/hero-a/, a.css, b.css, c.css, d.css and 2 more.',
-    );
-    // After --working the content snapshot decides, and names what it saw change: a staged edit
-    // of a file written before is a change no modification time shows.
-    write(root, 'src/staged.css', 'a {}\n', Date.now() - 120_000);
-    notes(root, [{ id: 'dddd4444', createdAt: ago(60_000) }]);
-    expect(await runCli(['--working', 'dddd'], captureIo(root))).toBe(0);
-    execFileSync('git', ['add', 'src/staged.css'], { cwd: root });
-    const staged = captureIo(root);
+    expect(json.text.err).toContain('Counted as its fix, changed since --working: ../.isotone/variants/hero-a/, ../README.md, a.css,');
+    expect(json.text.err).toContain('b.css, c.css and 3 more.');
+    // A staged edit of a file written before is a change no modification time names.
+    const fresh = repo();
+    write(fresh, 'src/staged.css', 'a {}\n', Date.now() - 120_000);
+    notes(fresh, [{ id: 'dddd4444', createdAt: ago(60_000) }]);
+    expect(await runCli(['--working', 'dddd'], captureIo(fresh))).toBe(0);
+    execFileSync('git', ['add', 'src/staged.css'], { cwd: fresh });
+    const staged = captureIo(fresh);
     expect(await runCli(['--done', 'dddd'], staged)).toBe(0);
-    expect(staged.text.out).toContain('Counted as its fix, changed since --working: src/staged.css.');
+    expect(staged.text.out).toContain('Counted as its fix: a staged or committed change since --working.');
 
     // --force counts nothing.
     notes(root, [{ id: 'cccc3333', createdAt: ago(60_000) }]);

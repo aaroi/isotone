@@ -37,8 +37,7 @@ npx isotone --undone <id>          # reopen it
   note), usually because an earlier edit in a chained command failed; in Git,
   staged edits, reverts, commits and deletions count. Any file counts, since a
   fix often lands outside the pinned component, so it names the files it
-  counted (after `--working`, those whose content changed since): when none of
-  them is your fix (another agent's or the user's edit),
+  counted: when none of them is your fix (another agent's or the user's edit),
   reopen the note with `--undone`. Run `--working` when you start, so earlier
   edits are not counted.
 - After closing, `--done` names variants on the note's route whose copies may

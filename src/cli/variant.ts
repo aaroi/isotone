@@ -480,8 +480,8 @@ function warnUnserved(io: CliIO, opts: VariantsStoreOptions, args: string[] = []
   const { loaded, viteConfig } = vitePlugin(root);
   if (loaded) return;
   if (detectHost(root) === 'next') {
-    // A forced `new` or `use` was just refused with this; a sibling Vite server may serve them.
-    if (has(args, '--force') || fileVariantSwitching(root) !== 'none') return;
+    // A forced `new` or `use` was just refused with this.
+    if (has(args, '--force')) return;
     errOut(
       io,
       `warning: file variants need the Vite plugin (isotone/vite), and Next.js does not run it, so the panel will not show them. ${alternatives(root)}`,

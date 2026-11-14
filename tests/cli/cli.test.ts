@@ -345,25 +345,6 @@ describe('variant', () => {
     expect(own.text.err).toContain('or a selector in the app’s own VariantsSource (app/Review.tsx).');
   });
 
-  it('lets a Next.js app whose variants a sibling Vite dev server serves make them', async () => {
-    const monorepo = tempRepo();
-    const next = join(monorepo, 'apps/next');
-    const web = join(monorepo, 'apps/web');
-    mkdirSync(next, { recursive: true });
-    mkdirSync(web, { recursive: true });
-    writeFileSync(join(next, 'package.json'), JSON.stringify({ dependencies: { next: '16.0.0', react: '19.0.0' } }));
-    writeFileSync(join(next, 'next.config.ts'), 'export default {};\n');
-    const io = makeIo(next);
-    expect(await runCli(['variant', 'new', 'hero-a'], io)).toBe(1);
-    writeFileSync(
-      join(web, 'vite.config.ts'),
-      "import { isotone } from 'isotone/vite';\nexport default { plugins: [isotone({ variants: { root: '../next' } })] };\n",
-    );
-    const served = makeIo(next);
-    expect(await runCli(['variant', 'new', 'hero-a'], served)).toBe(0);
-    expect(served.text.err).toBe('');
-  });
-
   it('warns when the Vite config does not import the plugin, and says nothing once it does', async () => {
     const root = tempRepo();
     writeFileSync(join(root, 'vite.config.ts'), "import react from '@vitejs/plugin-react';\nexport default { plugins: [react()] };\n");
@@ -1371,7 +1352,7 @@ describe('init fits the setup to what the project already has', () => {
     expect(text).toContain('In app/styles/app.css, after @import "tailwindcss", add:');
     expect(text).toContain('     @source "../../.isotone/variants/**/*.{ts,tsx}";');
     expect(text).toContain(
-      '3. Keep linters off variant copies, whose imports resolve from the real file:\n   in eslint.config.js, add { ignores: [\'.isotone/**\'] } as an entry of its own.\n   in biome.json, give files "includes": ["**", "!.isotone"], keeping any patterns there.',
+      '3. Keep linters off variant copies, whose imports resolve from the real file:\n   in eslint.config.js, add { ignores: [\'.isotone/**\'] } as an entry of its own.\n   in biome.json, give files "includes": ["**", "!.isotone"].',
     );
     expect(text).toContain('4. Start or restart the dev server');
 
@@ -1399,6 +1380,14 @@ describe('init fits the setup to what the project already has', () => {
     expect(await init(biome)).toContain('in biome.json, add ".isotone/**" to files.ignore.');
     writeFileSync(join(biome, 'biome.json'), '{ "linter": { "enabled": false } }\n');
     expect(await init(biome)).not.toContain('Keep linters off');
+    // Biome 2 with includes of its own: added to them, and only when they reach .isotone.
+    const own = project(
+      { 'vite.config.ts': 'export default {};\n', 'biome.json': '{ "files": { "includes": ["**/*.ts", "!dist"] } }\n' },
+      { devDependencies: { vite: '^7.0.0', '@biomejs/biome': '^2.2.0' } },
+    );
+    expect(await init(own)).toContain('in biome.json, add "!.isotone" to files.includes.');
+    writeFileSync(join(own, 'biome.json'), '{ "files": { "includes": ["src/**"] } }\n');
+    expect(await init(own)).not.toContain('Keep linters off');
     // A legacy .eslintrc already skips dot-directories.
     const legacy = project({ 'vite.config.ts': 'export default {};\n', '.eslintrc.json': '{}\n' }, { devDependencies: { vite: '^7.0.0' } });
     expect(await init(legacy)).not.toContain('Keep linters off');
@@ -1465,12 +1454,26 @@ describe('init fits the setup to what the project already has', () => {
       pkg,
     );
     expect(await init(made)).toContain('Recommended: overlay');
-    // The plugin for its endpoints only, beside the app's own mount, is a host setup.
+    // The plugin for its endpoints only, beside the app's own mount, is a host setup, however its options read.
     const host = project(
-      { ...files, 'vite.config.ts': "import { isotone } from 'isotone/vite';\nexport default { plugins: [isotone({ panel: false })] };\n" },
+      {
+        ...files,
+        'vite.config.ts':
+          "import { resolve } from 'node:path';\nimport { isotone } from 'isotone/vite';\nexport default { plugins: [isotone({ file: resolve(__dirname, 'n.json'), panel: false })] };\n",
+      },
       pkg,
     );
     expect(await init(host)).toContain('Recommended: host — this app already has its own VariantsSource (src/Review.tsx)');
+    // A variants folder left in a Next app sets up nothing: its own source is still the recommendation.
+    const next = project(
+      {
+        'next.config.ts': 'export default {};\n',
+        'src/Review.tsx': files['src/Review.tsx'],
+        '.isotone/variants/hero-a/variant.json': '{}',
+      },
+      { dependencies: { next: '16.0.0', ...react } },
+    );
+    expect(await init(next)).toContain('Recommended: host — this app already has its own VariantsSource (src/Review.tsx)');
   });
 });
 
