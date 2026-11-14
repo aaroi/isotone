@@ -1515,11 +1515,20 @@ describe('variants kept outside .isotone', () => {
     type Config = (c: { root?: string; server?: { fs?: { deny?: string[] } } }) => { server: { fs: { deny: string[] } } };
     const deny = (options: IsotoneViteOptions, root: string) =>
       (isotone(options) as unknown as { config: Config }).config({ root }).server.fs.deny;
-    // Glob characters in the path match literally (Windows reads a backslash as a separator).
-    const dir = id(resolve('/work/My App (copy)'), 'variants');
-    const literal = process.platform === 'win32' ? dir : dir.replace(/[()]/g, '\\$&');
-    expect(deny({ variants: { dir: 'variants' } }, '/work/My App (copy)')).toContain(`${literal}/**`);
+    // Glob characters in the path match literally.
+    const dir = id(resolve('/work/My App (copy) | v2'), 'variants');
+    expect(deny({ variants: { dir: 'variants' } }, '/work/My App (copy) | v2')).toContain(`${dir.replace(/[()|]/g, '\\$&')}/**`);
     expect(deny({ variants: { dir: resolve('/elsewhere/alts') } }, '/work/app')).toContain(`${id(resolve('/elsewhere/alts'))}/**`);
+    // A directory that is a symlink is denied where it leads, too.
+    if (process.platform !== 'win32') {
+      const app = realpathSync.native(mkdtempSync(join(tmpdir(), 'isotone-link-dir-')));
+      repos.push(app);
+      mkdirSync(join(app, 'real-alts'));
+      symlinkSync(join(app, 'real-alts'), join(app, 'alts'));
+      expect(deny({ variants: { dir: 'alts' } }, app)).toEqual(
+        expect.arrayContaining([`${id(app, 'alts')}/**`, `${id(app, 'real-alts')}/**`]),
+      );
+    }
     // A directory holding the app itself is never denied: it would deny the app.
     expect(deny({ variants: { dir: resolve('/work') } }, '/work/app').filter((glob) => glob.includes('work'))).toEqual([]);
     // The default directory is under `.isotone/`, which is denied already.

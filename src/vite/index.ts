@@ -31,7 +31,7 @@ import { VARIANTS_ENDPOINT } from '../core/variants';
 import { blastFile } from '../node/blast';
 import { defaultNotesFile, LEGACY_NOTES_FILE, NOTES_FILE } from '../node/notes/location';
 import { ensureFileIgnored } from '../node/fs/git-exclude';
-import { isWithin, realPath } from '../node/fs/paths';
+import { canonicalPath, isWithin } from '../node/fs/paths';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
 import { autoUpdateNote } from '../node/update/note';
@@ -91,26 +91,29 @@ function servableBy(server: ViteDevServer): (path: string) => boolean {
 
 /**
  * `server.fs.deny` globs for a variants directory outside `.isotone/`, which
- * Vite matches against absolute paths: under the root as configured, and as
- * the filesystem resolves it, since module ids are canonical and static
- * files are not.
+ * Vite matches against absolute paths: as configured, under the root as
+ * configured, and as the filesystem resolves either, since module ids are
+ * canonical and static files are not, and the directory may be a symlink.
  */
 function variantsDirGlobs(viteRoot: string, setup: { root?: string; dir?: string }): string[] {
+  const roots = [viteRoot, canonical(viteRoot)];
   const dirs = new Set<string>();
-  for (const base of [viteRoot, canonical(viteRoot)]) {
-    dirs.add(normalizePath(variantsDir({ root: resolve(base, setup.root ?? '.'), ...(setup.dir ? { dir: setup.dir } : {}) })));
+  for (const base of roots) {
+    const dir = variantsDir({ root: resolve(base, setup.root ?? '.'), ...(setup.dir ? { dir: setup.dir } : {}) });
+    dirs.add(normalizePath(dir));
+    dirs.add(normalizePath(canonical(dir)));
   }
-  // Glob characters in the path itself match literally; picomatch reads a
-  // backslash as a separator on Windows, where such names are rare.
-  const literal = (path: string) => (process.platform === 'win32' ? path : path.replace(/[*?{}()[\]!+@]/g, '\\$&'));
-  // A directory holding the app itself would deny the whole app.
-  return [...dirs].filter((dir) => !isWithin(dir, viteRoot)).map((dir) => `${literal(dir)}/**`);
+  // Glob characters in the path itself match literally, on Windows too.
+  const literal = (path: string) => path.replace(/[*?{}()[\]!+@|^$]/g, '\\$&');
+  // A directory holding the app itself, however spelled, would deny the whole app.
+  return [...dirs].filter((dir) => !roots.some((root) => isWithin(dir, root))).map((dir) => `${literal(dir)}/**`);
 }
 
-/** The filesystem's own spelling of `path`, or `path` when it does not exist yet. */
+/** The filesystem's own spelling of `path`, through any symlink, for a path
+ *  that may not exist yet; `path` itself when it cannot be read. */
 function canonical(path: string): string {
   try {
-    return realPath(path);
+    return canonicalPath(path);
   } catch {
     return path;
   }
