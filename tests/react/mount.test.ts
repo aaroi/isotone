@@ -494,7 +494,9 @@ describe('a host source beside the knobs of the server that answers notes', () =
     expect(knobValue('--knob-card-radius')).toBe('');
     expect(Array.from(panel.shadow.querySelectorAll('.isotone-axis-label')).map((el) => el.textContent)).toEqual(['Card radius']);
     expect(panel.button('Sharp')).toBeDefined();
-    expect(panel.shadow.querySelector('.isotone-vars-notice')?.textContent).toBe(
+    // One short line, explained in full on hover or focus.
+    expect(panel.shadow.querySelector('.isotone-notice-line')?.textContent).toBe('A knob is left out');
+    expect(panel.shadow.querySelector('.isotone-notice-detail')?.textContent).toBe(
       'Left out of .isotone/knobs.json: card-radius, since one of the app’s own selectors has this id, so the panel shows only that selector. Give the knob its own id.',
     );
     // The stored value is kept, for when the knob gets an id of its own.

@@ -288,6 +288,8 @@ describe('hold to compare', () => {
     expect(onChange).not.toHaveBeenCalled();
     expect(compareButton()?.title).toBe('Hold to show the defaults');
     await unmount();
+    // A new tab: the same one would reopen Variants as it was.
+    sessionStorage.clear();
     const moved = await panel({ layout: 'list' }, { compareShortcut: { code: 'KeyC', alt: true } });
     expect((await key('keydown')).defaultPrevented).toBe(false);
     expect((await key('keydown', { code: 'KeyC', altKey: true })).defaultPrevented).toBe(true);

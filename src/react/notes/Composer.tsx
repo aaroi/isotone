@@ -1,7 +1,7 @@
 import { memo, type RefObject, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { HINTS } from './hints';
 import { Icon } from '../icons';
-import { fadeIn, settleIn } from '../motion';
+import { fadeIn, MOTION, settleIn, stillMotion } from '../motion';
 import { showOverflowTitle } from '../tooltips';
 import type { TextStore } from '../../core/feedback-client';
 import { MAX_AUTHOR } from '../../core/feedback';
@@ -28,6 +28,7 @@ interface ComposerProps {
   onUnpin: (selector: string) => void;
   onFieldFocus: () => void;
   onFieldPointerDown: () => void;
+  onFieldInput: () => void;
   onTogglePicking: () => void;
   onDonePicking: () => void;
 }
@@ -53,6 +54,7 @@ export const Composer = memo(function Composer({
   onUnpin,
   onFieldFocus,
   onFieldPointerDown,
+  onFieldInput,
   onTogglePicking,
   onDonePicking,
 }: ComposerProps) {
@@ -65,10 +67,15 @@ export const Composer = memo(function Composer({
   const hasContext = Boolean(editing || variantTarget || targets.length || notice);
   // Context changes the scroll-through inset; measure again when that changes
   // or a route restores the composer after its DOM was removed.
+  // A note opened for editing, or put back, swaps the field's whole text: its height eases to the new one.
+  const shownEdit = useRef<string | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: hasContext changes the CSS inset used by scrollHeight.
   useLayoutEffect(() => {
     const field = fieldRef.current;
     if (!field || !active) return;
+    const was = field.style.height;
+    const swapped = shownEdit.current !== (editing?.id ?? null);
+    shownEdit.current = editing?.id ?? null;
     // An empty field needs no layout read, so opening the panel does not force one.
     const resize = () => {
       if (!field.value) {
@@ -81,6 +88,8 @@ export const Composer = memo(function Composer({
       field.dataset.scrolled = String(field.scrollTop > 0);
     };
     resize();
+    if (swapped && was && was !== field.style.height && !stillMotion(field) && typeof field.animate === 'function')
+      field.animate([{ height: was }, { height: field.style.height }], { duration: MOTION.enter, easing: MOTION.easeOut });
     if (typeof ResizeObserver === 'undefined') return;
     let width: number | undefined;
     const observer = new ResizeObserver(([entry]) => {
@@ -169,7 +178,10 @@ export const Composer = memo(function Composer({
           ref={fieldRef}
           value={text}
           aria-label={author ? 'Feedback' : 'Feedback for the agent'}
-          onChange={(e) => draft.set(e.target.value)}
+          onChange={(e) => {
+            draft.set(e.target.value);
+            onFieldInput();
+          }}
           onFocus={onFieldFocus}
           onPointerDown={onFieldPointerDown}
           onScroll={(event) => {

@@ -1,7 +1,9 @@
 import {
   type HTMLAttributes,
   memo,
+  type MouseEvent,
   type ReactNode,
+  type RefObject,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -23,6 +25,7 @@ import {
   type VariantAction,
   type VariantAxis,
   type VariantSection,
+  type VariantNotice,
   type VariantSelections,
   type VariantsSource,
   sectionAxes,
@@ -35,6 +38,7 @@ import { Icon } from '../icons';
 import { keyboardInstant, MAX_ANIMATED_ITEMS, MOTION, stillMotion } from '../motion';
 import { PanelClose } from '../notes/NotesPanel';
 import { useLayoutMotion } from '../useLayoutMotion';
+import { pointerResting, releaseOnLeave, whileSettling } from '../dock/useHoverHold';
 import { useRenderLimit } from '../useRenderLimit';
 import { showOverflowTitle } from '../tooltips';
 import { useCompareHeld } from './useCompare';
@@ -47,8 +51,235 @@ export function refreshSource(source: VariantsSource): Promise<void> {
 
 const noop = () => {};
 
-function readNotice(source: VariantsSource): string | null {
-  return source.getNotice?.() ?? null;
+function readNotice(source: VariantsSource): VariantNotice | null {
+  const notice = source.getNotice?.() ?? null;
+  return typeof notice === 'string' ? { text: notice } : notice;
+}
+
+/**
+ * A source's notice: one quiet line, and its explanation in the popup material over the selectors on
+ * hover or keyboard focus (a tap focuses it), so revealing it moves nothing. The line is described by
+ * the explanation for screen readers.
+ */
+function SourceNotice({ notice: { text, detail } }: { notice: VariantNotice }) {
+  const id = useId();
+  return (
+    <p className="isotone-vars-notice" role="status">
+      {detail ? (
+        <>
+          <button type="button" className="isotone-notice-line" aria-describedby={id}>
+            {text}
+          </button>
+          <span id={id} role="tooltip" className="isotone-notice-detail">
+            {detail}
+          </span>
+        </>
+      ) : (
+        text
+      )}
+    </p>
+  );
+}
+
+/**
+ * The panel sits on the pill, so it keeps its bottom edge whatever opens above it. When it has to give up
+ * room, as Feedback opens or grows over a long list, it gives it from its top edge and the list scrolls by
+ * as much, so every control in view stays where it was; given room back, it scrolls back. While the
+ * pointer rests on the dock, a change it cannot absorb that way (Feedback closing over a list at its top,
+ * a section folding or unfolding) waits: the panel keeps its height, and takes its new one, easing, once
+ * the pointer leaves or a resize handle is taken up. A resize the reviewer drags, an open dialog or a
+ * panel still unfolding is left alone.
+ */
+function useSteadyBody(
+  bodyRef: RefObject<HTMLDivElement | null>,
+  active: boolean,
+  besideFeedback: boolean,
+  folds: unknown,
+  /** The section toggle just pressed and where it was, so a fold leaves it where it was. */
+  anchor: RefObject<{ toggle: Element; top: number } | null>,
+) {
+  const seen = useRef({ height: 0, scroll: 0, content: 0 });
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    const panel = body?.closest<HTMLElement>('.isotone-panel');
+    const root = body?.closest<HTMLElement>('.isotone-root');
+    if (!active || !body || !panel || !root || typeof ResizeObserver === 'undefined') return;
+    // Read after the browser's own layout, in the observer, so opening never forces one. The panel's
+    // sizes, so an easing height is followed exactly; the foot within a pixel, as offsets round.
+    let last: { height: number; content: number; foot: number } | null = null;
+    // The scroll kept to the fraction, as the browser rounds what it is set to: frame after frame of an
+    // easing edge would otherwise drift by the rounding. Anything else that scrolls resets it.
+    let exact = body.scrollTop;
+    const scrolled = () => {
+      seen.current.scroll = body.scrollTop;
+    };
+    const observer = new ResizeObserver(() => {
+      const now = {
+        height: panel.getBoundingClientRect().height,
+        content: body.scrollHeight,
+        // Layout offsets, so a panel still moving into place reads where it will rest.
+        foot: root.offsetHeight - panel.offsetTop - panel.offsetHeight,
+      };
+      const before = last;
+      last = now;
+      const steady = before && Math.abs(now.foot - before.foot) <= 1;
+      if (steady && root.dataset.resizing !== 'true' && !body.hasAttribute('inert'))
+        if (!panel.querySelector('.isotone-colour')) {
+          // The scroll the list would have, even past its top while the panel's edge passes the list's.
+          const shown = Math.min(Math.max(exact, 0), body.scrollHeight - body.clientHeight);
+          exact = (Math.abs(body.scrollTop - shown) < 1 ? exact : body.scrollTop) + before.height - now.height;
+          body.scrollTop = exact;
+        }
+      seen.current = { height: panel.getBoundingClientRect().height, scroll: body.scrollTop, content: body.scrollHeight };
+    });
+    observer.observe(body);
+    observer.observe(panel);
+    body.addEventListener('scroll', scrolled, { passive: true });
+    return () => {
+      observer.disconnect();
+      body.removeEventListener('scroll', scrolled);
+    };
+  }, [bodyRef, active]);
+  const wasBeside = useRef(besideFeedback);
+  const wasFolds = useRef(folds);
+  useLayoutEffect(() => {
+    const panel = bodyRef.current?.closest<HTMLElement>('.isotone-panel');
+    const root = panel?.closest<HTMLElement>('.isotone-root');
+    const closed = wasBeside.current && !besideFeedback;
+    const folded = wasFolds.current !== folds;
+    wasBeside.current = besideFeedback;
+    wasFolds.current = folds;
+    const { height, scroll, content } = seen.current;
+    const body = bodyRef.current;
+    // A toggle pressed while its header was held at the top of the list would be carried off with its
+    // section: the list scrolls by as much, so the toggle stays under the pointer.
+    const keepToggle = () => {
+      const pressed = anchor.current;
+      anchor.current = null;
+      if (folded && pressed?.toggle.isConnected && body) body.scrollTop += pressed.toggle.getBoundingClientRect().top - pressed.top;
+    };
+    if (!(closed || folded) || !active || !panel || !root || !body || !height) {
+      if (folded) keepToggle();
+      return;
+    }
+    // Room after the list, so the scroll is never clamped while the panel changes size: what a fold took
+    // out, or, as Feedback closes, room for all it gives back. The scroll stays where it was.
+    const base = getComputedStyle(body).paddingBottom;
+    const room = Number.parseFloat(getComputedStyle(root).maxHeight) || innerHeight;
+    const slack = Math.max(0, folded ? content - body.scrollHeight : scroll + room - body.scrollHeight);
+    if (slack > 0) {
+      body.style.paddingBottom = `calc(${base} + ${slack}px)`;
+      body.scrollTop = scroll;
+    }
+    keepToggle();
+    // The panel's new size, in one ease. Room Feedback gave back is eased by the dock, the list scrolling
+    // by as much, and the room after the list goes once it lands. Room a fold took out goes gliding, the
+    // panel following it in the layout while the dock stands aside.
+    const settle = (eased: boolean) => {
+      // From the height that shows: a held one, unless the layout gave the hold no say (a narrow window).
+      const from = panel.style.getPropertyValue('--iso-variants-hold') ? panel.getBoundingClientRect().height : height;
+      panel.style.removeProperty('--iso-variants-hold');
+      const glide = eased && !stillMotion(body) && typeof panel.animate === 'function';
+      const clear = () => body.style.removeProperty('padding-bottom');
+      if (!glide) return clear();
+      // One ease, driven here, with the dock standing aside. Room a fold took out goes gliding, and the
+      // panel follows it in the layout. Otherwise the panel grows (room Feedback gave back, a section
+      // unfolded) from the height it showed to the one its list needs, read without any room after the list
+      // and then the scroll put back with room enough, the list scrolling by as much as it grows.
+      let ease: Animation;
+      if (folded && slack > 0) {
+        clear();
+        ease = body.animate([{ paddingBottom: `calc(${base} + ${slack}px)` }, { paddingBottom: base }], {
+          duration: MOTION.reflow,
+          easing: MOTION.easeOut,
+        });
+      } else {
+        const scrolled = body.scrollTop;
+        clear();
+        const to = panel.getBoundingClientRect().height;
+        if (to - from < 0.5) return;
+        const room = Math.max(0, scrolled + to - body.scrollHeight);
+        // The ease first, so the scroll is put back at the height that shows, where it fits. It holds its
+        // last frame until the room is gone, so no frame shows the panel with room and no limit.
+        const grow = panel.animate([{ maxHeight: `${from}px` }, { maxHeight: `${to}px` }], {
+          duration: MOTION.reflow,
+          easing: MOTION.easeOut,
+          fill: 'forwards',
+        });
+        grow.addEventListener('finish', () => {
+          clear();
+          grow.cancel();
+        });
+        ease = grow;
+        if (room > 0) body.style.paddingBottom = `calc(${base} + ${room}px)`;
+        body.scrollTop = scrolled;
+      }
+      // The room goes before the dock, standing aside until now, reads where the panel landed.
+      ease.addEventListener('finish', clear);
+      ease.addEventListener('cancel', clear);
+      whileSettling(root, ease);
+    };
+    // Only a pointer resting on the dock is kept from moving: the panel keeps its height until it leaves.
+    // A finger, or the keyboard, gets the new size at once, eased.
+    if (!pointerResting(root)) {
+      settle(true);
+      return;
+    }
+    panel.style.setProperty('--iso-variants-hold', `${height}px`);
+    return releaseOnLeave(root, settle);
+  }, [bodyRef, active, besideFeedback, folds, anchor]);
+}
+
+/**
+ * A reload, such as a variant switch on a host that reloads, comes back to the same place in the list,
+ * so the selector being compared is still under the pointer. The place is kept from the list's foot, which
+ * sits on the pill and so does not move, whatever height Feedback above it comes back with, and held
+ * while the dock settles (the list arriving in chunks, Feedback loading its notes) until the reviewer
+ * scrolls or presses in the list. Only a panel open as it mounts, which is one a reload restored, does so.
+ */
+function useKeptScroll(bodyRef: RefObject<HTMLDivElement | null>, active: boolean, key: string | undefined) {
+  const atMount = useRef(active);
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    if (!active) atMount.current = false;
+    if (!key || !active || !body) return;
+    const save = () => {
+      try {
+        sessionStorage.setItem(key, String(Math.round(body.scrollTop + body.clientHeight)));
+      } catch {
+        /* Blocked storage only costs the position. */
+      }
+    };
+    window.addEventListener('pagehide', save);
+    let want = 0;
+    try {
+      if (atMount.current) want = Number(sessionStorage.getItem(key)) || 0;
+    } catch {
+      /* The list starts at the top. */
+    }
+    const hold = () => {
+      if (want > body.clientHeight) body.scrollTop = want - body.clientHeight;
+    };
+    const observer = want && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(hold) : undefined;
+    observer?.observe(body);
+    for (const child of want ? body.children : []) observer?.observe(child);
+    hold();
+    const presses = ['wheel', 'pointerdown', 'keydown', 'touchstart'];
+    let holding = Boolean(observer);
+    const release = () => {
+      holding = false;
+      observer?.disconnect();
+      for (const type of presses) body.removeEventListener(type, release);
+    };
+    for (const type of presses) body.addEventListener(type, release, { passive: true });
+    return () => {
+      // A remount in the same document comes back to where the list is now, not where the last unload left
+      // it; while the place is still held, that is the place being held.
+      if (!holding && body.clientHeight) save();
+      release();
+      window.removeEventListener('pagehide', save);
+    };
+  }, [bodyRef, active, key]);
 }
 
 /** What the panel draws from a source: read once per change and shared by every view of it. */
@@ -134,6 +365,10 @@ interface VariantsViewProps {
   emptyText?: string;
   /** Whether the key under Escape also holds Compare, for its tooltip. */
   compareKey?: boolean;
+  /** Where the list keeps its scroll position across a reload of the tab (`sessionStorage`). */
+  scrollKey?: string;
+  /** Feedback is open above: room it gives back is taken only as the list can absorb it. */
+  besideFeedback?: boolean;
 }
 
 export const VariantsView = memo(function VariantsView({
@@ -145,11 +380,13 @@ export const VariantsView = memo(function VariantsView({
   pendingActions = NO_PENDING_ACTIONS,
   emptyText = DEFAULT_EMPTY_TEXT,
   compareKey = false,
+  scrollKey,
+  besideFeedback = false,
 }: VariantsViewProps) {
   const { selections: stored, shown, sections, names, error: sourceError } = useVariantsSnapshot(source);
   // Settled by each opening's own refresh and kept until the panel closes: a notice coming or going
   // while the reviewer picks (or when Feedback opening refreshes the source) would move the selectors.
-  const [notice, setNotice] = useState<string | null>(() => readNotice(source));
+  const [notice, setNotice] = useState<VariantNotice | null>(() => readNotice(source));
   useEffect(() => {
     if (!active) return;
     let open = true;
@@ -190,8 +427,14 @@ export const VariantsView = memo(function VariantsView({
   let left = useRenderLimit(active || lingering, expandedCount, FIRST_AXES);
   let stopped = false;
   const bodyRef = useRef<HTMLDivElement | null>(null);
-  // A long list arrives in chunks and is past the size that animates anyway.
-  useLayoutMotion(bodyRef, shown, active && shown.length <= MAX_ANIMATED_ITEMS);
+  // A long list arrives in chunks and is past the size that animates anyway. A fold reflows the rows after
+  // it too, so they glide into place rather than jump.
+  const reflow = useMemo(() => [shown, collapsed], [shown, collapsed]);
+  // First, so a fold keeps the scroll where it was before the rows after it are measured.
+  const foldAnchor = useRef<{ toggle: Element; top: number } | null>(null);
+  useSteadyBody(bodyRef, active, besideFeedback, collapsed, foldAnchor);
+  useLayoutMotion(bodyRef, reflow, active && shown.length <= MAX_ANIMATED_ITEMS);
+  useKeptScroll(bodyRef, active, scrollKey);
 
   // The action dialog: which selector, which option, and each opening's own session.
   const [menu, setMenu] = useState<{ axisId: string; optionId: string | null; session: number } | null>(null);
@@ -273,9 +516,11 @@ export const VariantsView = memo(function VariantsView({
     };
   }, [colourOpen]);
 
+  let eager = FIRST_AXES;
   const renderAxis = ({ axis, label, fullLabel }: { axis: VariantAxis; label: string; fullLabel: string }) => (
     <AxisControl
       key={axis.id}
+      eager={eager-- > 0}
       source={guarded}
       axis={axis}
       label={label}
@@ -393,11 +638,7 @@ export const VariantsView = memo(function VariantsView({
           e.stopPropagation();
         }}
       >
-        {notice && (
-          <p className="isotone-vars-notice" role="status">
-            {notice}
-          </p>
-        )}
+        {notice && <SourceNotice notice={notice} />}
         {sourceError && (
           <p className="isotone-danger" role="alert">
             {sourceError}
@@ -423,13 +664,14 @@ export const VariantsView = memo(function VariantsView({
               sectionKey={section.key}
               count={section.axes.length}
               collapsed={folded}
-              onToggle={() =>
+              onToggle={(event) => {
+                foldAnchor.current = { toggle: event.currentTarget, top: event.currentTarget.getBoundingClientRect().top };
                 setCollapsed((previous) => {
                   const next = new Set(previous);
                   if (!next.delete(section.key)) next.add(section.key);
                   return next;
-                })
-              }
+                });
+              }}
             >
               {axes.map(renderAxis)}
             </SectionBlock>
@@ -513,7 +755,7 @@ function SectionBlock({
   sectionKey: string;
   count: number;
   collapsed: boolean;
-  onToggle: () => void;
+  onToggle: (event: MouseEvent<HTMLButtonElement>) => void;
   children: ReactNode;
 }) {
   const id = useId();

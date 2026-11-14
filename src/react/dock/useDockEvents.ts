@@ -24,6 +24,8 @@ export function shortcutText(shortcut: IsotoneShortcut | false): string {
 
 interface DockEventsOptions {
   rootRef: RefObject<HTMLElement | null>;
+  /** Start without motion until the first key or pointer, as panels a reload restored are simply there. */
+  still?: boolean;
   visible: boolean;
   shortcut: IsotoneShortcut | false;
   /** The shortcut was pressed, anywhere on the page. */
@@ -85,10 +87,10 @@ export const matches = (e: KeyboardEvent, shortcut: IsotoneShortcut) =>
  * pointer), the global shortcut, Escape, and the fence that keeps the dock's
  * own events from the host.
  */
-export function useDockEvents({ rootRef, visible, shortcut, onShortcut, onEscape, onLeave }: DockEventsOptions) {
+export function useDockEvents({ rootRef, visible, shortcut, onShortcut, onEscape, onLeave, still = false }: DockEventsOptions) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
-  const [instant, setInstant] = useState(false);
+  const [instant, setInstant] = useState(still);
   // Hints follow the last pointer used, so a hybrid device gets the right words.
   const [touch, setTouch] = useState(prefersTouch);
   const latest = useRef({ shortcut, onShortcut, onEscape, onLeave });

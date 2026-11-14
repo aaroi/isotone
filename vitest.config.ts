@@ -29,7 +29,15 @@ export default defineConfig({
     globalSetup: ['tests/helpers/bundle-setup.ts'],
     projects: [
       { test: { ...timeouts, name: 'node', include: ['tests/**/*.test.ts'], exclude: dom, environment: 'node' } },
-      { test: { ...timeouts, name: 'jsdom', include: dom, environment: 'jsdom', setupFiles: ['tests/helpers/dom-storage.ts'] } },
+      {
+        test: {
+          ...timeouts,
+          name: 'jsdom',
+          include: dom,
+          environment: 'jsdom',
+          setupFiles: ['tests/helpers/dom-storage.ts', 'tests/helpers/dom-setup.ts'],
+        },
+      },
     ],
     coverage: {
       provider: 'v8',

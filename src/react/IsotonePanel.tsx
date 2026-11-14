@@ -12,7 +12,7 @@ import { useDockTheme } from './styles/theme';
 import { UpdateNotice } from './dock/UpdateNotice';
 import { DEFAULT_SHORTCUT, shortcutText, useDockEvents } from './dock/useDockEvents';
 import { type Surface, useDockFocus } from './dock/useDockFocus';
-import { CLOSED, useDockMode } from './dock/useDockMode';
+import { CLOSED, restoredMode, useDockMemory, useDockMode } from './dock/useDockMode';
 import { useDockMotion } from './dock/useDockMotion';
 import { useDockSize } from './dock/useDockSize';
 import { useNoteActions } from './notes/useNoteActions';
@@ -74,7 +74,12 @@ export function IsotonePanel({
   // One page, however the URL spells it: `/about/` and `/about?tab=2` are `/about`, as for the CLI.
   const route = normalizeRoute(pageRoute);
   const nsKey = storeCfg.key ?? FEEDBACK_STORAGE_KEY;
-  const [mode, update] = useDockMode();
+  // Collecting in a deployed app: notes are signed and go to the host's own store, and no agent reads or changes them.
+  const collecting = Boolean(storeCfg.feedback);
+  const notesAvailable = Boolean(storeCfg.endpoint) || collecting;
+  const memoryKey = `${nsKey}::panels`;
+  // A reload, such as a variant switch on a host that reloads, comes back to the panels that were open.
+  const [mode, update] = useDockMode(() => restoredMode(memoryKey, route, { notes: notesAvailable, variants: Boolean(variants) }));
   const { notesOpen, variantsOpen, expanded, picking, pickingWithPanel, anchor } = mode;
   const floating = anchor !== null;
   const open = notesOpen || variantsOpen;
@@ -84,10 +89,7 @@ export function IsotonePanel({
   const floatRef = useRef<HTMLDivElement>(null);
   const fabRef = useRef<HTMLButtonElement>(null);
   const id = useId();
-
-  // Collecting in a deployed app: notes are signed and go to the host's own store, and no agent reads or changes them.
-  const collecting = Boolean(storeCfg.feedback);
-  const notesAvailable = Boolean(storeCfg.endpoint) || collecting;
+  const memory = useDockMemory(memoryKey, route, mode);
   const variantsAvailable = useVariantsSnapshot(variants).shown.length > 0;
   const visible = isRouteVisible(route, rule) && (notesAvailable || variantsAvailable || variantsOpen);
   const { store, notes, setNotes, clock, load: loadNotes, write } = useNotes(storeCfg, visible);
@@ -114,11 +116,16 @@ export function IsotonePanel({
   const shortcutLabel = shortcutText(shortcut);
 
   // The handlers below go to plain elements or through refs, so they need no memoizing.
-  /** The pointer and the shortcut start selecting; Enter or Space on a focused button goes to the field. */
-  const startFeedback = (select: boolean) => {
-    update((m) => ({ notesOpen: true, ...(select ? { picking: true, pickingWithPanel: !m.notesOpen } : {}) }));
-    if (select) focus.cancel();
-    else focus.composer();
+  /**
+   * Open Feedback in select mode, however it is opened: a click, Enter or Space on a face, or the shortcut.
+   * The caret waits in the note field under the select-mode cover, so whatever is typed next ends
+   * selecting and lands there. A finger gets no caret, so no on-screen keyboard rises over the page it is
+   * about to tap.
+   */
+  const startFeedback = () => {
+    update((m) => ({ notesOpen: true, picking: true, pickingWithPanel: !m.notesOpen }));
+    if (events.touch) focus.cancel();
+    else focus.openComposer();
   };
   /** Close one panel. Focus inside it goes to its rail button, or the launcher once the rail folds away. */
   const closePanel = (panel: Surface) => {
@@ -138,6 +145,8 @@ export function IsotonePanel({
   const events = useDockEvents({
     rootRef,
     visible,
+    // Panels open at mount were restored: they and their contents are simply there, with no entrance.
+    still: open,
     shortcut,
     onLeave: () => update({ expanded: false }),
     onShortcut: () => {
@@ -147,7 +156,7 @@ export function IsotonePanel({
       else {
         if (!mode.notesOpen && !mode.variantsOpen) focus.remember();
         update({ expanded: true });
-        startFeedback(true);
+        startFeedback();
       }
     },
     onEscape: () => {
@@ -177,6 +186,10 @@ export function IsotonePanel({
   useEffect(() => {
     loadNotes();
   }, [notesOpen, variantsOpen, route, loadNotes]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the moment the dock opens.
+  useEffect(() => {
+    if (open) focus.opened();
+  }, [open]);
   // The Variants view refreshes its source as it opens. Feedback refreshes it too, for the selectors its notes
   // name, and so does a mount while it is empty: a network-backed source starts that way.
   // biome-ignore lint/correctness/useExhaustiveDependencies: these moments only.
@@ -212,6 +225,7 @@ export function IsotonePanel({
       data-expanded={railOpen}
       data-tools={tools}
       data-instant={instant}
+      data-touch={touch}
       data-notes-open={notesOpen}
       data-selecting={picking || floating}
       data-working={working > 0}
@@ -249,43 +263,22 @@ export function IsotonePanel({
             count={count}
             working={working}
             shortcutLabel={shortcutLabel}
-            onClick={(event) => {
+            onClick={() => {
               if (open) closeAll();
               else if (expanded) update({ expanded: false });
               else {
                 focus.remember();
                 update({ expanded: true });
-                if ((defaultTab === 'variants' || !notesAvailable) && variantsAvailable) update({ variantsOpen: true });
-                else startFeedback(event.detail > 0);
+                // The tool used last in this tab, else the host's choice.
+                if (((memory.current.last ?? defaultTab) === 'variants' || !notesAvailable) && variantsAvailable)
+                  update({ variantsOpen: true });
+                else startFeedback();
               }
             }}
           />
         }
       >
-        {variants && (
-          <RailButton
-            icon="sliders"
-            label="Variants"
-            controls={`${id}-variants`}
-            open={variantsOpen}
-            onClick={() => (variantsOpen ? closePanel('variants') : update({ variantsOpen: true, expanded: false }))}
-          />
-        )}
-        {variants && (
-          <VariantsPanel
-            id={`${id}-variants`}
-            resizeHandle={dockSize.handle('variants')}
-            onClose={() => closePanel('variants')}
-            source={variants}
-            active={variantsOpen}
-            onFeedback={notesAvailable ? actions.referVariant : undefined}
-            onSaved={loadNotes}
-            onManage={notesAvailable && !collecting ? actions.queueRemoval : undefined}
-            pendingActions={pendingActions}
-            emptyText={variantsEmptyText}
-            compareKey={isUnderEscape(compareShortcut)}
-          />
-        )}
+        {/* Variants sits on the pill and Feedback above it, so writing a note never moves a selector. */}
         {notesAvailable && (
           <NotesPanel
             id={`${id}-notes`}
@@ -302,6 +295,32 @@ export function IsotonePanel({
             }
           />
         )}
+        {variants && (
+          <VariantsPanel
+            id={`${id}-variants`}
+            resizeHandle={dockSize.handle('variants')}
+            onClose={() => closePanel('variants')}
+            source={variants}
+            active={variantsOpen}
+            onFeedback={notesAvailable ? actions.referVariant : undefined}
+            onSaved={loadNotes}
+            onManage={notesAvailable && !collecting ? actions.queueRemoval : undefined}
+            pendingActions={pendingActions}
+            emptyText={variantsEmptyText}
+            compareKey={isUnderEscape(compareShortcut)}
+            scrollKey={`${memoryKey}::scroll`}
+            besideFeedback={notesOpen}
+          />
+        )}
+        {variants && (
+          <RailButton
+            icon="sliders"
+            label="Variants"
+            controls={`${id}-variants`}
+            open={variantsOpen}
+            onClick={() => (variantsOpen ? closePanel('variants') : update({ variantsOpen: true, expanded: false }))}
+          />
+        )}
         {notesAvailable && (
           <RailButton
             icon="message"
@@ -309,11 +328,11 @@ export function IsotonePanel({
             count={count}
             controls={`${id}-notes`}
             open={notesOpen}
-            onClick={(event) => {
+            onClick={() => {
               if (notesOpen) closePanel('notes');
               else {
                 update({ expanded: false });
-                startFeedback(event.detail > 0);
+                startFeedback();
               }
             }}
           />

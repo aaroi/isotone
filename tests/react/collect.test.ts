@@ -32,7 +32,6 @@ const panel = (feedback: { endpoint: string; name?: string; release?: string }, 
 
 async function open() {
   await act(async () => container.querySelector<HTMLButtonElement>('.isotone-fab')?.click());
-  // Opened by a key, the composer has focus; a click would start select mode.
   const field = container.querySelector('textarea');
   const name = container.querySelector<HTMLInputElement>('.isotone-name');
   if (!field) throw new Error('Missing feedback composer');
@@ -159,7 +158,8 @@ it('keeps the name field beside a pin while a name is still missing, and the sel
   });
   document.body.append(target);
   try {
-    await act(async () => container.querySelector<HTMLButtonElement>('.isotone-pick')?.click());
+    // A click on the pill opens Feedback in select mode.
+    expect(container.querySelector('.isotone-picking')).not.toBeNull();
     document.elementFromPoint = () => target;
     await act(async () => {
       for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'])
@@ -175,6 +175,8 @@ it('keeps the name field beside a pin while a name is still missing, and the sel
     // Typed a letter at a time, the field stays under the cursor until the reviewer leaves it.
     await act(async () => name.focus());
     for (const typed of ['G', 'Gr', 'Grace']) {
+      // Select mode is still on beside a pin: a key in the name is the name's, not the note's.
+      await press(name, typed.slice(-1));
       await type(name, typed);
       expect(floating.querySelector('.isotone-name')).toBe(name);
       expect(document.activeElement).toBe(name);

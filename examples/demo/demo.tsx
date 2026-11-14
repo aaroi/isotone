@@ -715,7 +715,7 @@ function Panel({ theme }: { theme: IsotoneTheme }) {
 
 /** Select mode mid-flow: one card pinned and a note being typed. */
 function pinScene(shadow: ShadowRoot | null | undefined) {
-  // A pointer click on Feedback starts select mode by itself, and pressing the button again would end it.
+  // Opening Feedback leaves select mode off; the crosshair starts it (pressing it again would end it).
   if (shadow?.querySelector<HTMLElement>('.isotone-root')?.dataset.selecting !== 'true')
     shadow?.querySelector<HTMLButtonElement>('[aria-label="Select elements"]')?.click();
   const first = document.querySelector<HTMLElement>('#overview-cards article');
@@ -1054,7 +1054,8 @@ if (!screenshot && !hosted && !collect) {
   bar.setAttribute('role', 'group');
   bar.setAttribute('aria-label', 'Demo data');
   bar.style.cssText =
-    'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:10;display:flex;gap:2px;padding:2px;border-radius:8px;background:#e4e4e7;font:12px system-ui,sans-serif;box-shadow:0 1px 2px #0002';
+    // On a phone it sits above the dock's row, where the update notice beside the pill would cover it.
+    `position:fixed;${matchMedia('(max-width: 640px)').matches ? 'left:16px;bottom:76px' : 'left:50%;bottom:16px;transform:translateX(-50%)'};z-index:10;display:flex;gap:2px;padding:2px;border-radius:8px;background:#e4e4e7;font:12px system-ui,sans-serif;box-shadow:0 1px 2px #0002`;
   for (const [value, text] of [
     [null, 'Demo data'],
     ['worst', 'Worst case'],

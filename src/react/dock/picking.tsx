@@ -47,6 +47,7 @@ interface PickerContext {
 }
 
 const MAX_PINS = 50;
+const EDIT_KEYS = /^(Backspace|Delete|Arrow\w+|Home|End|Page(Up|Down))$/;
 
 const isPanelElement = (node: EventTarget | null) => node instanceof Element && Boolean(node.closest('[data-isotone]'));
 
@@ -146,9 +147,18 @@ function usePicker(context: PickerContext) {
         if (!e.repeat) toggleTarget(el);
         return;
       }
+      // A text field of the dock's own beside the composer, such as the name on collected feedback, keeps
+      // its keys: a name is typed where it is, and Enter there is the field's. Escape still ends selecting.
+      const own = e.composedPath().find((node): node is Element => node instanceof Element);
+      if (e.key !== 'Escape' && own?.matches('input[type="text"]') && own.closest('[data-isotone]')) return;
       // The composer is covered while selecting. Typing a character finishes
       // selecting and lands in the composer, unless the page has an input focused.
-      const typing = e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey && !e.isComposing;
+      // In the field itself, a key that edits or moves the caret finishes it too, so no edit is unseen.
+      const typing =
+        (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey && !e.isComposing) ||
+        ((EDIT_KEYS.test(e.key) || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a')) &&
+          fieldRef.current !== null &&
+          e.composedPath().includes(fieldRef.current));
       if (typing) {
         const el = e.composedPath().find((node): node is Element => node instanceof Element);
         if (el && !el.closest('[data-isotone]') && el.closest('input, textarea, select, [contenteditable]')) return;
@@ -157,6 +167,9 @@ function usePicker(context: PickerContext) {
         return;
       }
       if (e.key !== 'Escape' && e.key !== 'Enter') return;
+      // Escape or Enter in a field on the page (closing its menu, submitting its form) is the page's.
+      const source = e.composedPath().find((node): node is Element => node instanceof Element);
+      if (source && !source.closest('[data-isotone]') && source.closest('input, textarea, select, [contenteditable]')) return;
       // The floating composer is not covered, so Enter there sends what is written.
       const field = fieldRef.current;
       if (e.key === 'Enter' && anchored && field && !e.shiftKey && field.value.trim() && e.composedPath().includes(field)) return;
@@ -207,6 +220,9 @@ interface SelectModeOptions {
 export function useSelectMode({ mode, update, focus, rootRef, fieldRef, floatRef, targets, setTargets, touch }: SelectModeOptions) {
   // The dock keeps the composer's height while it floats, so the panel stays put.
   const slotHeight = useRef(0);
+  // Read by the field's input handler, which stays the same across renders so typing commits only the text.
+  const selecting = useRef(mode.picking);
+  selecting.current = mode.picking;
   const locate = usePicker({
     picking: mode.picking,
     rootRef,
@@ -228,6 +244,21 @@ export function useSelectMode({ mode, update, focus, rootRef, fieldRef, floatRef
     },
   });
   useFloatingComposer(floatRef, rootRef, mode.anchor, locate);
+  // Selecting is for the page. A press anywhere in the dock but the feedback panel and its composer
+  // (Variants, the pill, a notice) ends it, keeping the pins, so the next click on the page after a pick
+  // in Variants follows a link rather than pinning it. Focus passing through the dock does not: Tab and
+  // Shift+Tab are how the keyboard reaches the page to pin with Space.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!mode.picking || !root) return;
+    const away = (event: Event) => {
+      const target = event.composedPath()[0];
+      if (target instanceof Element && root.contains(target) && !target.closest('.isotone-notes-panel, .isotone-float'))
+        update({ picking: false });
+    };
+    root.addEventListener('pointerdown', away, true);
+    return () => root.removeEventListener('pointerdown', away, true);
+  }, [mode.picking, rootRef, update]);
   /** Stop selecting and write: the composer keeps what was pinned. */
   const done = useCallback(() => {
     update({ picking: false });
@@ -240,6 +271,11 @@ export function useSelectMode({ mode, update, focus, rootRef, fieldRef, floatRef
         if (!focus.pinning()) update({ picking: false });
       },
       onFieldPointerDown: () => update({ picking: false }),
+      // Text that reaches the field without a key event first (pasted, dictated or sent by automation) ends
+      // selecting too, as typing does, so it never sits unseen under the cover.
+      onFieldInput: () => {
+        if (selecting.current) update({ picking: false });
+      },
       onTogglePicking: () => {
         focus.cancel();
         update((m) => ({ picking: !m.picking, pickingWithPanel: false }));

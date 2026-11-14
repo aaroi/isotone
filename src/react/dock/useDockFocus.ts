@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useEffect, useMemo, useRef } from 'react';
+import { type RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 
 export type Surface = 'notes' | 'variants';
 
@@ -28,16 +28,81 @@ export function useDockFocus(
   id: string,
 ) {
   const previous = useRef<HTMLElement | null>(null);
+  // Whether the dock was last opened from the keyboard; a pointer opening gets its focus back without a ring.
+  const byKey = useRef(false);
   const frame = useRef(0);
   // Focusing the composer after a pin must not leave select mode.
   const pinning = useRef(false);
+  // A move asked for as a panel opens lands with the commit that shows its target, before the next key
+  // can arrive: a frame later, text typed during the entrance had nowhere to go. The frame is the fallback
+  // for an update that changes nothing and so commits nothing.
+  const pending = useRef<(() => void) | null>(null);
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
+  // Moving about the dock by keyboard, or activating something without a pointer (a screen reader in
+  // browse mode), after a pointer opening counts as a keyboard opening: Escape then returns focus.
+  // Typing in a field does not.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const navigated = (event: Event) => {
+      const target = event.target as Element;
+      if (event.type === 'click') byKey.current ||= (event as MouseEvent).detail === 0;
+      else if ((event as KeyboardEvent).key === 'Tab' || !target.closest?.('textarea, input'))
+        byKey.current ||= (event as KeyboardEvent).key !== 'Escape';
+    };
+    root.addEventListener('keydown', navigated, true);
+    root.addEventListener('click', navigated, true);
+    return () => {
+      root.removeEventListener('keydown', navigated, true);
+      root.removeEventListener('click', navigated, true);
+    };
+  });
 
-  const cancel = useCallback(() => cancelAnimationFrame(frame.current), []);
-  const later = useCallback((move: () => void) => {
+  const cancel = useCallback(() => {
     cancelAnimationFrame(frame.current);
-    frame.current = requestAnimationFrame(move);
+    pending.current = null;
   }, []);
+  // A move asked for earlier never takes focus back from a control on the page the reviewer turned to
+  // meanwhile, such as an input clicked while the panel slid in.
+  const unlessLeft = useCallback(
+    (move: () => void) => {
+      const before = document.activeElement;
+      return () => {
+        const now = document.activeElement;
+        const root = rootRef.current;
+        const shadow = root?.getRootNode();
+        const host = shadow instanceof ShadowRoot ? shadow.host : null;
+        const left = now !== before && now instanceof HTMLElement && now !== document.body && now !== host && !root?.contains(now);
+        if (!left) move();
+      };
+    },
+    [rootRef],
+  );
+  const later = useCallback(
+    (move: () => void) => {
+      cancelAnimationFrame(frame.current);
+      pending.current = null;
+      frame.current = requestAnimationFrame(unlessLeft(move));
+    },
+    [unlessLeft],
+  );
+  const flush = useCallback(() => {
+    const move = pending.current;
+    pending.current = null;
+    move?.();
+  }, []);
+  useLayoutEffect(() => {
+    if (!pending.current) return;
+    cancelAnimationFrame(frame.current);
+    flush();
+  });
+  const atCommit = useCallback(
+    (move: () => void) => {
+      later(flush);
+      pending.current = unlessLeft(move);
+    },
+    [later, flush, unlessLeft],
+  );
 
   /** Whether focus is in the dock, so closing it should put focus somewhere sensible. */
   const inDock = useCallback(() => {
@@ -73,6 +138,20 @@ export function useDockFocus(
       remember,
       launcher,
       composer: () => later(() => fieldRef.current?.focus()),
+      /**
+       * The caret in the note field of a panel that is opening, as it shows. While selecting it waits there
+       * under the select-mode cover, so whatever is typed next ends selecting and lands in the field.
+       */
+      openComposer: () =>
+        atCommit(() => {
+          pinning.current = true;
+          fieldRef.current?.focus({ preventScroll: true });
+          pinning.current = false;
+        }),
+      /** Note how the dock was opened, as it opens. */
+      opened: () => {
+        byKey.current = lastInputWasKey;
+      },
       /** Focus the composer beside a fresh pin without leaving select mode. */
       composerWhilePicking: () =>
         later(() => {
@@ -82,14 +161,18 @@ export function useDockFocus(
         }),
       /** Whether the composer is taking focus for a pin, which keeps select mode on. */
       pinning: () => pinning.current,
-      /** Return focus after everything closes: to the host control it came from, else the launcher. */
+      /**
+       * Return focus after everything closes: to the host control it came from, else the launcher. Opened
+       * with the pointer, the dock lets focus go instead, so the pill folds back with no ring on a face.
+       */
       restore: () => {
         cancel();
-        if (previous.current?.isConnected) previous.current.focus();
-        else launcher();
+        if (previous.current?.isConnected) previous.current.focus({ focusVisible: byKey.current } as FocusOptions);
+        else if (byKey.current) launcher();
+        else ((rootRef.current?.getRootNode() as ShadowRoot | Document | undefined)?.activeElement as HTMLElement | null)?.blur();
       },
     }),
-    [cancel, inDock, remember, launcher, later, fieldRef],
+    [cancel, inDock, remember, launcher, later, atCommit, fieldRef, rootRef],
   );
 }
 

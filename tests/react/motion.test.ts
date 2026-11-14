@@ -81,7 +81,15 @@ function List({ count = 3, revision = 0, noise = '', active = true, instant = fa
   );
 }
 
-function Dock({ open = true, count = 3, noise = '', visible = true, instant = false, mounted = true }) {
+function Dock({
+  open = true,
+  count = 3,
+  noise = '',
+  visible = true,
+  instant = false,
+  mounted = true,
+  top = undefined as number | undefined,
+}) {
   const ref = useRef<HTMLDivElement>(null);
   useDockMotion(ref, visible);
   return h(
@@ -90,7 +98,7 @@ function Dock({ open = true, count = 3, noise = '', visible = true, instant = fa
     mounted &&
       h(
         'section',
-        { className: 'isotone-panel', 'data-open': open, id: 'panel' },
+        { className: 'isotone-panel', 'data-open': open, id: 'panel', 'data-top': top },
         h('span', null, noise),
         ...Array.from({ length: count }, (_, i) =>
           h('button', { type: 'button', key: i, id: `item-${i}`, 'data-motion-key': i }, String(i)),
@@ -112,6 +120,8 @@ describe('list motion', () => {
     expect(animate).toHaveBeenCalledTimes(3);
     await act(async () => root.render(h(List, { noise: 'Typing elsewhere' })));
     expect(offsets).toHaveBeenCalledTimes(3);
+    // The browser reports the list laid out; only then are its positions trusted for a reflow.
+    await act(async () => resize());
     const first = [...animations];
     await act(async () => root.render(h(List, { revision: 12 })));
     expect(first.every((animation) => animation.cancel.mock.calls.length === 1)).toBe(true);
@@ -183,6 +193,7 @@ describe('dock motion', () => {
 
   it('cleans exit snapshots on rapid reopening, animation completion and unmount', async () => {
     await act(async () => root.render(h(Dock, {})));
+    await act(async () => resize());
     await act(async () => root.render(h(Dock, { open: false })));
     let ghost = host.querySelector<HTMLElement>('.isotone-exit');
     expect(ghost?.getAttribute('aria-hidden')).toBe('true');
@@ -206,6 +217,7 @@ describe('dock motion', () => {
   it('never clones large collections and removes animations for detached panels', async () => {
     const clone = vi.spyOn(HTMLElement.prototype, 'cloneNode');
     await act(async () => root.render(h(Dock, { count: MAX_ANIMATED_ITEMS + 1 })));
+    await act(async () => resize());
     await act(async () => root.render(h(Dock, { count: MAX_ANIMATED_ITEMS + 1, open: false })));
     expect(clone).not.toHaveBeenCalled();
     expect(offsets).not.toHaveBeenCalled();
@@ -215,8 +227,21 @@ describe('dock motion', () => {
     expect(animation?.cancel).toHaveBeenCalled();
   });
 
+  it('shows a panel open at mount where it rests, even when the dock is styled after the first measure', async () => {
+    // Before the theme's stylesheet lands the panel lies far below its place; the observer reports it styled.
+    await act(async () => root.render(h(Dock, { top: 1000 })));
+    await act(async () => root.render(h(Dock, { top: 20 })));
+    await act(async () => resize());
+    expect(animate).not.toHaveBeenCalled();
+    // Once settled, a real move animates.
+    await act(async () => root.render(h(Dock, { top: 60 })));
+    await act(async () => resize());
+    expect(animate).toHaveBeenCalledTimes(1);
+  });
+
   it('honors instant mode and removes a running exit on reduced-motion changes', async () => {
     await act(async () => root.render(h(Dock, { instant: true })));
+    await act(async () => resize());
     expect(animate).not.toHaveBeenCalled();
     await act(async () => root.render(h(Dock, { instant: false, open: false })));
     expect(host.querySelector('.isotone-exit')).not.toBeNull();

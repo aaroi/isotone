@@ -45,11 +45,27 @@ import { npm } from './npm.mjs';
 // for Turbopack, webpack and variant copies, checked against the page's downloads, Vue components,
 // selectors without classes, sources relative to the app, and their docs.
 // #72, #73, #75 and #76 folded into #71: bundle 409.6 kB, tarball 483.2 kB.
-// Bundle raised to 418 kB and tarball to 516.5 kB (416.9 and 515.1 kB; collecting feedback): the store that
-// posts signed notes to a host's own route, edits and deletes them with a per-note key, and the name field,
-// which the bundle carries so an app without React can collect too; the tarball also gains the `feedback`
-// and `postgres` entries and their guide.
-const BUDGET = { bundle: 418_000, tarball: 516_500 };
+// Bundle raised to 408.5 kB and tarball to 466 kB (407.8 and 464.9 kB over #71; panel entry): the tab's
+// remembered panels and Variants scroll, the caret placed as Feedback opens, select mode ending at
+// Variants, the list that yields room from its top and holds its height as room returns, the line by
+// the pill for a link's unapplied ?v=, and their changelog and README notes.
+// Bundle raised to 410 kB and tarball to 468 kB (409.1 and 466.8 kB; panels never jump): heights that
+// ease together, a panel unfolding beside another, focus let go after a pointer-opened dock closes,
+// and their changelog notes.
+// Bundle raised to 410.5 kB (410.1 kB; notices): a source's notice as one line with its explanation in a
+// popup, in place of the line by the pill.
+// Bundle raised to 414.5 kB and tarball to 472 kB (413.7 and 471.3 kB; still under the pointer): panels that hold their height while the
+// pointer rests on the dock, a fold that keeps its toggle in place, a panel revealed from its foot, and the
+// scroll-aware reflow.
+// Bundle raised to 416.5 kB and tarball to 474.5 kB (416.2 and 473.8 kB; one ease): a hold that lets go in
+// one ease and covers any change of Feedback's contents, no hold for a finger, and a reveal that keeps the
+// gap to the panel above.
+// Panel entry (#74) over 1.6.1: bundle 424 kB and tarball 500.5 kB (423.5 and 500.0 kB).
+// Collecting feedback over 1.7.0: bundle 432 kB and tarball 532 kB (431.3 and 531.1 kB): the store that posts signed notes to a
+// host's own route, edits and deletes them with a per-note key, and the name field, which the bundle
+// carries so an app without React can collect too; the tarball also gains the `feedback` and `postgres`
+// entries and their guide.
+const BUDGET = { bundle: 432_000, tarball: 532_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

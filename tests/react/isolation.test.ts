@@ -115,14 +115,34 @@ it('leaves an Escape pressed in a host input to the host', async () => {
   await act(async () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
   });
+  // Also once the frames after it have passed: nothing comes back for the focus.
+  await frame();
+  await frame();
   expect($('.isotone-notes-panel').dataset.open).toBe('true');
   expect(document.activeElement).toBe(input);
-  // Escape in the dock still closes it.
+  // Escape in the dock is the panel's: the first ends selecting, the next closes Feedback.
+  for (const open of ['true', 'false']) {
+    await act(async () => {
+      $('textarea').focus();
+      $('textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
+    });
+    expect($('.isotone-notes-panel').dataset.open).toBe(open);
+  }
+  expect($('[aria-label="Select elements"]').getAttribute('aria-pressed')).toBe('false');
+});
+
+it('never takes focus back from a host input clicked while the panel opens', async () => {
+  await render();
+  const input = document.getElementById('host-input') as HTMLInputElement;
   await act(async () => {
-    $('textarea').focus();
-    $('textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
+    $('.isotone-fab').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, detail: 1 }));
+    // Before the frame that places the caret in the note field.
+    input.focus();
   });
-  expect($('.isotone-notes-panel').dataset.open).toBe('false');
+  await frame();
+  await frame();
+  expect($('.isotone-notes-panel').dataset.open).toBe('true');
+  expect(document.activeElement).toBe(input);
 });
 
 it('swallows presses on the page while selecting, unless Shift is held', async () => {
@@ -188,11 +208,14 @@ it('returns focus after a pointer close without asking for a focus ring, and wit
 it('never drops focus to the page body when Escape closes a panel opened from the launcher', async () => {
   await render();
   document.getElementById('host-button')?.focus();
+  // Opened from the keyboard: Enter on the launcher.
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
   await openFeedback();
-  await act(async () => {
-    $('textarea').focus();
-    $('textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
-  });
+  // The first Escape ends select mode, which opening started; the second closes.
+  for (let i = 0; i < 2; i++)
+    await act(async () => {
+      $('textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
+    });
   await frame();
   expect($('.isotone-notes-panel').dataset.open).toBe('false');
   expect(document.activeElement).toBe(host);

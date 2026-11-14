@@ -222,8 +222,8 @@ describe('the overlay notice beside a host source', () => {
       const host = createVariantsSource({ axes: [LAYOUT], onChange: () => {} });
       const combined = combineVariantsSources(host, overlay);
       await (combined as { refresh?: () => Promise<void> }).refresh?.();
-      expect(overlay.getNotice()).toContain('asks for Hero: Split');
-      expect(combined.getNotice?.()).toBe(overlay.getNotice());
+      expect(detailOf(overlay.getNotice())).toContain('asks for Hero: Split');
+      expect(combined.getNotice?.()).toEqual(overlay.getNotice());
       // A host source alone has no notice to give.
       expect(combineVariantsSources(host).getNotice).toBeUndefined();
     } finally {
@@ -231,3 +231,8 @@ describe('the overlay notice beside a host source', () => {
     }
   });
 });
+
+/** A notice's full explanation, whichever shape the source gives it in. */
+function detailOf(notice: string | { detail?: string } | null | undefined) {
+  return typeof notice === 'string' ? notice : notice?.detail;
+}
