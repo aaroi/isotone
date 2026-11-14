@@ -65,11 +65,11 @@ window.settle = async () => {
 };
 window.panel = () => root().querySelector('.isotone-variants-panel');
 window.body = () => root().querySelector('.isotone-vars-body');
-// Where every control in the panel sits, to the tenth of a pixel.
+// Where every control in the panel sits, and how wide, to the tenth of a pixel.
 window.layout = () =>
   [panel(), ...panel().querySelectorAll('[role=radio], .isotone-section-toggle')].map((node) => {
     const rect = node.getBoundingClientRect();
-    return [Math.round(rect.left * 10) / 10, Math.round(rect.top * 10) / 10];
+    return [Math.round(rect.left * 10) / 10, Math.round(rect.top * 10) / 10, Math.round(rect.width * 10) / 10];
   });
 // The centre of an option, by selector index and option label.
 window.option = (index, label) => {
@@ -144,6 +144,17 @@ describe.skipIf(!binary)('Variants controls stay put (headless Chrome)', () => {
     await chrome.eval('settle()');
     expect(await chrome.eval('body().scrollHeight > body().clientHeight')).toBe(true);
     await expectSteady(11);
+  });
+
+  it('a list scrolled midway, with rows crossing its foot, neither moves nor rescales a row', async () => {
+    await open(1024, 768, 12);
+    const index = await chrome.eval<number>(`(async () => {
+      body().scrollTop = (body().scrollHeight - body().clientHeight) / 2;
+      await settle();
+      const top = body().getBoundingClientRect().top + 80;
+      return [...panel().querySelectorAll('.isotone-axis')].findIndex((axis) => axis.getBoundingClientRect().top > top);
+    })()`);
+    await expectSteady(index);
   });
 
   it('with the bar hidden, the bottom band rests in the inset, so no control at rest is blurred', async () => {
