@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- **A variant's copy of a secret file is never served.** A variant that copied `.env`, or another file Vite's `server.fs.deny` refuses, with `variant add --force` served that copy to anyone requesting `/.env` while the variant was active. The dev server now serves a copy only where it would serve the real file.
+- **A variant's copy of a secret file is never served.** A variant that copied `.env`, or another file Vite's `server.fs.deny` refuses, with `variant add --force` served that copy to anyone requesting `/.env` while the variant was active. The dev server now serves a copy only where it would serve the real file, and never at the copy's own path, even when `variants.dir` puts the copies outside `.isotone/`.
 
 ## 1.5.0
 

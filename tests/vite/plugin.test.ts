@@ -1457,3 +1457,89 @@ describe.each([
     for (const path of SECRET_PATHS) expect(await body(path), path).not.toMatch(/FAKE_COPY/);
   });
 });
+
+/* ── a variants directory outside .isotone ────────────────────────────── */
+
+describe('variants kept outside .isotone', () => {
+  let dev: ViteDevServer;
+  let base: string;
+  let project: string;
+  const store = (root: string) => ({ root, dir: 'variants' });
+
+  beforeAll(async () => {
+    project = tempGitRepo('isotone-vite-dir-', repos);
+    repos.splice(repos.indexOf(project), 1);
+    mkdirSync(join(project, 'src'), { recursive: true });
+    writeFileSync(join(project, 'src', 'Button.tsx'), 'export const label = "real";\n');
+    writeFileSync(join(project, '.env'), 'SECRET_TOKEN=sk_live_FAKE_REAL\n');
+    execFileSync('git', ['add', 'src'], { cwd: project });
+    execFileSync('git', ['commit', '-q', '-m', 'init'], { cwd: project });
+    createVariant(store(project), { id: 'f' });
+    addVariantFile(store(project), 'f', 'src/Button.tsx');
+    addVariantFile(store(project), 'f', '.env', { force: true });
+    writeFileSync(join(project, 'variants', 'f', 'src', 'Button.tsx'), 'export const label = "FAKE_COPY_BUTTON";\n');
+    writeFileSync(join(project, 'variants', 'f', '.env'), 'SECRET_TOKEN=sk_live_FAKE_COPY_ENV\n');
+    writeActive(store(project), ['f']);
+    dev = await createServer({
+      root: project,
+      configFile: false,
+      logLevel: 'silent',
+      server: { port: 0, host: '127.0.0.1', watch: null },
+      optimizeDeps: { noDiscovery: true, include: [] },
+      plugins: [isotone({ checkForUpdates: false, variants: { dir: 'variants' } })],
+    });
+    await dev.listen();
+    const address = dev.httpServer?.address();
+    base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
+  });
+
+  afterAll(async () => {
+    (dev?.httpServer as import('node:http').Server | null)?.closeAllConnections?.();
+    await dev?.close();
+    rmSync(project, { recursive: true, force: true });
+  });
+
+  const get = (path: string): Promise<{ status: number; body: string }> =>
+    new Promise((done, fail) => {
+      const req = httpRequest(`${base}${path}`, { agent: false }, (res) => {
+        let text = '';
+        res.on('data', (chunk) => (text += chunk));
+        res.on('end', () => done({ status: res.statusCode ?? 0, body: text }));
+      });
+      req.on('error', fail);
+      req.path = path;
+      req.end();
+    });
+
+  it('denies the directory itself to Vite, spelled as a literal path', () => {
+    type Config = (c: { root?: string; server?: { fs?: { deny?: string[] } } }) => { server: { fs: { deny: string[] } } };
+    const deny = (options: IsotoneViteOptions, root: string) =>
+      (isotone(options) as unknown as { config: Config }).config({ root }).server.fs.deny;
+    // Glob characters in the path match literally (Windows reads a backslash as a separator).
+    const dir = id(resolve('/work/My App (copy)'), 'variants');
+    const literal = process.platform === 'win32' ? dir : dir.replace(/[()]/g, '\\$&');
+    expect(deny({ variants: { dir: 'variants' } }, '/work/My App (copy)')).toContain(`${literal}/**`);
+    expect(deny({ variants: { dir: resolve('/elsewhere/alts') } }, '/work/app')).toContain(`${id(resolve('/elsewhere/alts'))}/**`);
+    // The default directory is under `.isotone/`, which is denied already.
+    expect(deny({}, '/work/app').filter((glob) => glob.includes('work'))).toEqual([]);
+  });
+
+  it('never hands out a copy at its own path, only in place of the real file', async () => {
+    for (const path of [
+      '/variants/f/.env',
+      '/variants/f/.env?import',
+      '/variants/f/src/Button.tsx',
+      '/variants/f/src/Button.tsx?import',
+      '/variants/f/src/Button.tsx?raw',
+      `/@fs${project}/variants/f/src/Button.tsx`,
+      `/@fs${project}/variants/f/.env`,
+      '/variants/f/variant.json',
+      '/variants/f/variant.json?import',
+      '/.env',
+    ]) {
+      expect((await get(path)).body, path).not.toMatch(/FAKE_/);
+    }
+    // In place of the real file, the copy is served as usual.
+    expect((await get('/src/Button.tsx')).body).toContain('FAKE_COPY_BUTTON');
+  });
+});

@@ -31,11 +31,11 @@ import { VARIANTS_ENDPOINT } from '../core/variants';
 import { blastFile } from '../node/blast';
 import { defaultNotesFile, LEGACY_NOTES_FILE, NOTES_FILE } from '../node/notes/location';
 import { ensureFileIgnored } from '../node/fs/git-exclude';
-import { isWithin } from '../node/fs/paths';
+import { isWithin, realPath } from '../node/fs/paths';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
 import { autoUpdateNote } from '../node/update/note';
-import { listVariants } from '../node/variants';
+import { listVariants, variantsDir } from '../node/variants';
 import { isLoopback } from '../node/http';
 import { mountModuleSource, servePanel } from './html-inject';
 import {
@@ -89,6 +89,32 @@ function servableBy(server: ViteDevServer): (path: string) => boolean {
     !strict || (!denied(path) && (vite5.moduleGraph.safeModulesPath?.has(path) === true || allow.some((dir) => isWithin(dir, path))));
 }
 
+/**
+ * `server.fs.deny` globs for a variants directory outside `.isotone/`, which
+ * Vite matches against absolute paths: under the root as configured, and as
+ * the filesystem resolves it, since module ids are canonical and static
+ * files are not.
+ */
+function variantsDirGlobs(viteRoot: string, setup: { root?: string; dir?: string }): string[] {
+  const dirs = new Set<string>();
+  for (const base of [viteRoot, canonical(viteRoot)]) {
+    dirs.add(normalizePath(variantsDir({ root: resolve(base, setup.root ?? '.'), ...(setup.dir ? { dir: setup.dir } : {}) })));
+  }
+  // Glob characters in the path itself match literally; picomatch reads a
+  // backslash as a separator on Windows, where such names are rare.
+  const literal = (path: string) => (process.platform === 'win32' ? path : path.replace(/[*?{}()[\]!+@]/g, '\\$&'));
+  return [...dirs].map((dir) => `${literal(dir)}/**`);
+}
+
+/** The filesystem's own spelling of `path`, or `path` when it does not exist yet. */
+function canonical(path: string): string {
+  try {
+    return realPath(path);
+  } catch {
+    return path;
+  }
+}
+
 /** Say where the notes go after Vite's own banner, so it is not buried under
  *  it. Portable setups fail quietly otherwise: a reviewer writes notes and the
  *  agent looks in the wrong place. */
@@ -127,10 +153,13 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
     enforce: 'pre',
     // Isotone's own files are read through its endpoints, never as static
     // files: keep Vite's file server from handing them out.
-    config(config: { server?: { fs?: { deny?: string[] } } }) {
+    config(config: { root?: string; server?: { fs?: { deny?: string[] } } }) {
       // The default notes file and its Blast session are under `.isotone/`.
       const notes = options.file === undefined ? LEGACY_NOTES_FILE : basename(options.file);
       const own = [`**/${notes}`, `**/${basename(blastFile(notes))}`, '**/.isotone/**'];
+      // Variants kept elsewhere (`variants.dir`): a copy is served only in
+      // place of its real file, through load()'s check, never at its own path.
+      if (variantsOptions?.dir) own.push(...variantsDirGlobs(resolve(config.root ?? '.'), variantsOptions));
       // Vite concatenates a plugin's array with the user's.
       return { server: { fs: { deny: config.server?.fs?.deny ? own : [...VITE_DENY, ...own] } } };
     },
