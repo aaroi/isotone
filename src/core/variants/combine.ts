@@ -13,7 +13,8 @@ import type { VariantsSource } from './source';
  * shows each source's part through its own `preview`, `canPreview` asks the
  * owner (no `preview` there means no), `getError` is the first source's error,
  * `refresh` refreshes them all, and `saveDefaults` calls each source's own
- * with that source's picks, in order. `reset` resets every source.
+ * with that source's picks, in order. `reset` resets every source. The overlay
+ * source's `getNotice` (a link's `?v=` it does not apply) passes through.
  */
 export function combineVariantsSources(...sources: VariantsSource[]): VariantsSource {
   return combineSources(sources);
@@ -131,6 +132,14 @@ export function combineSources(sources: VariantsSource[]): VariantsSource & { di
       // A source with nothing on this page has nothing to save.
       for (const [source, part] of parts) await source.saveDefaults?.(part);
     };
+  // Not part of the source contract: the overlay source's note on a link's `?v=` it does not apply,
+  // which the panel reads off whatever source it is given.
+  const notices = sources.filter((source) => typeof (source as { getNotice?: unknown }).getNotice === 'function') as (VariantsSource & {
+    getNotice(): string | null;
+  })[];
+  if (notices.length)
+    (combined as { getNotice?: () => string | null }).getNotice = () =>
+      notices.reduce<string | null>((notice, source) => notice ?? source.getNotice(), null);
   if (sources.some((source) => typeof (source as { refresh?: unknown }).refresh === 'function'))
     combined.refresh = async () => {
       await Promise.all(sources.map((source) => (source as { refresh?: () => unknown }).refresh?.()));

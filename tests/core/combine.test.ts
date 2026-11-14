@@ -199,3 +199,37 @@ describe('combineVariantsSources', () => {
     expect(() => combined.manage?.({ action: 'keep-default', axisId: 'radius' })).toThrow('cannot be changed');
   });
 });
+
+// #63's panel note on a link's unapplied `?v=` with #64's combined source: the panel reads
+// `getNotice` off the source it is given, which beside a host source is the combined one.
+describe('the overlay notice beside a host source', () => {
+  it("passes the overlay's note on a link's ?v= through the combined source", async () => {
+    const list = {
+      variants: [
+        { id: 'hero-split', label: 'Split', group: 'hero', groupLabel: 'Hero', files: {}, createdAt: '', stale: [], missing: [] },
+      ],
+      active: [],
+      knobs: [],
+    } as unknown as OverlayVariantsList;
+    vi.stubGlobal('fetch', async () => ({ ok: true, status: 200, json: async () => list }));
+    try {
+      const overlay = createOverlayVariantsSource({
+        endpoint: '/api/isotone/variants',
+        getRoute: () => '/',
+        storage: null,
+        knobRoot: null,
+        live: null,
+        getSearch: () => '?v=hero:hero-split',
+      });
+      const host = createVariantsSource({ axes: [LAYOUT], onChange: () => {} });
+      const combined = combineVariantsSources(host, overlay) as VariantsSource & { getNotice?: () => string | null };
+      await (combined as { refresh?: () => Promise<void> }).refresh?.();
+      expect(overlay.getNotice()).toContain('asks for Hero: Split');
+      expect(combined.getNotice?.()).toBe(overlay.getNotice());
+      // A host source alone has no notice to give.
+      expect((combineVariantsSources(host) as { getNotice?: unknown }).getNotice).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
