@@ -326,7 +326,7 @@ names the one it finds:
 | React on Vite 6 or later | Per tab, in the tab's URL ([live](#live-switching)); CSS and files served whole follow every tab | Opens those variants |
 | Vite 5, Vue, Svelte or another host without React, or `variants: { live: false }` | Shared by every tab and browser, through `.isotone/active.json` ([whole files](#whole-file-switching)) | Not applied; the Variants panel says so |
 | `isotone serve` (Next.js, other dev servers) | None: only the Vite plugin serves them, and the `variant` commands warn | — |
-| A host `VariantsSource` | The app's own: per tab when it keeps picks in the URL | The app's own |
+| A host `VariantsSource` | The app's own: per tab when it keeps picks in the URL. File variants listed beside it ([on Vite](#beside-knobs-and-file-variants)) switch as in the rows above | The app's own selectors as the app decides; file variants as above |
 
 Knob values stay in the browser in every setup: the panel keeps them in
 `localStorage` (`isotone:knobs`, per origin), never in the URL, so a link does not

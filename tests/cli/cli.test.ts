@@ -1153,6 +1153,8 @@ describe('init names how picks switch', () => {
     const { text, json } = await init(project({}, {}), '--approach', 'host');
     expect(json.switching).toBe('host');
     expect(text).toContain('Switching: the app’s own.');
+    // #64 lists knobs beside a host source: their values stay per browser there too.
+    expect(text).toContain('a knob’s\nvalue stays in the browser (localStorage), never in a link.');
   });
 
   it('names the mode for a project that is already set up', async () => {
