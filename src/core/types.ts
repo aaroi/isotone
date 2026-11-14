@@ -5,7 +5,7 @@
  */
 import type { RouteGateOptions } from './routes';
 import type { UpdateRequest } from './update';
-import type { VariantsSource } from './variants';
+import type { VariantSelections, VariantsSource } from './variants';
 
 /** A UI element picked with the panel's selector mode. */
 export interface IsotoneElement {
@@ -53,6 +53,9 @@ export interface NoteContext {
   variantAction?: VariantRemoval;
   elements?: IsotoneElement[];
   variant?: VariantReference | null;
+  /** The panel's selectors that sat off their defaults on the note's route
+   *  when it was sent: what the page showed then, not the defaults. */
+  selections?: VariantSelections;
   /** The user's request to upgrade Isotone, built by the local server from
    *  its own update check. At most one is open at a time. */
   update?: UpdateRequest;

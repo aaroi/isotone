@@ -33,6 +33,13 @@
       "description": "The pinned elements, in order.",
       "items": { "$ref": "#/$defs/element" }
     },
+    "selections": {
+      "type": "object",
+      "description": "The panel's selectors that sat off their defaults on this route, by axis id: a range's number without its unit, a colour's hex, or the chosen option's id. The page showed these when the note was sent; the pinned elements' styles were read when each was pinned. Write a value into the source only when the note asks for that.",
+      "maxProperties": 32,
+      "propertyNames": { "pattern": "^[a-zA-Z0-9][\\w.+-]{0,199}$" },
+      "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 64 }
+    },
     "variant": {
       "type": "object",
       "description": "The selector the note is about.",

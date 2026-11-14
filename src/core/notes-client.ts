@@ -101,6 +101,7 @@ function createLocalNotes(key: string) {
         delete existing.variant;
         delete existing.variantAction;
         delete existing.payload;
+        delete existing.selections;
       }
       existing.feedback = feedback;
       existing.element = element;
@@ -170,6 +171,7 @@ function createBacklogSync(endpoint: string | null, local: LocalNotes): () => Pr
             ...(item.elements !== undefined ? { elements: item.elements } : {}),
             ...(item.variant !== undefined ? { variant: item.variant } : {}),
             ...(item.variantAction !== undefined ? { variantAction: item.variantAction } : {}),
+            ...(item.selections !== undefined ? { selections: item.selections } : {}),
             ...(item.payload !== undefined ? { payload: item.payload } : {}),
             ...(item.viewport ? { viewport: item.viewport } : {}),
           }),

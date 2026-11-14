@@ -333,6 +333,8 @@ function seedHostedNotes() {
       route,
       feedback,
       element: { tag: 'section', text, selector: '#overview-cards' },
+      // Filed with a selector moved: the note says so, for the agent and in the panel.
+      ...(index === 0 ? { selections: { 'card-padding': '24' } } : {}),
       done: false,
       doneAt: null,
       createdAt: new Date(Date.now() - (seed.length - index) * 60_000).toISOString(),
@@ -380,7 +382,7 @@ function serveNotesInPage(path: string) {
     const feedback = String(body.feedback ?? '').trim();
     if (!body.route || !feedback) return reply(400, { error: 'route and feedback are required' });
     const fields = Object.fromEntries(
-      ['element', 'elements', 'variant', 'variantAction', 'payload', 'viewport']
+      ['element', 'elements', 'variant', 'variantAction', 'payload', 'viewport', 'selections']
         .filter((key) => body[key] !== undefined)
         .map((key) => [key, body[key]]),
     );

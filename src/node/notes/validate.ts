@@ -86,6 +86,23 @@ export function variantOf(value: unknown): VariantReference | null {
   };
 }
 
+/**
+ * The selections a note was filed under, from the browser: at most 32, each an
+ * axis id (an overlay group without a name joins its members' ids with `+`)
+ * and a value of up to 64 printable characters. Anything else is dropped; null
+ * when nothing is left.
+ */
+export function selectionsOf(value: unknown): Record<string, string> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const entries = Object.entries(value)
+    .filter(
+      (entry): entry is [string, string] =>
+        /^[a-z0-9][\w.+-]{0,199}$/i.test(entry[0]) && typeof entry[1] === 'string' && /^[^\p{Cc}]{1,64}$/u.test(entry[1]),
+    )
+    .slice(0, 32);
+  return entries.length ? Object.fromEntries(entries) : null;
+}
+
 /** A sane `{ w, h }` from an untrusted viewport value, else null. */
 export function viewportOf(v: unknown): { w: number; h: number } | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;

@@ -80,55 +80,144 @@ export function describeIsotoneElement(el: NodeLike, maxDepth = 4): IsotoneEleme
 
 const IDENTIFYING_ATTRIBUTES = ['role', 'type', 'name', 'href', 'aria-label', 'title', 'alt', 'placeholder'];
 
-/** Names from React's dev-mode bookkeeping on the DOM node. Absent on other
- *  frameworks and production builds, which simply leaves the fields out. */
-function reactContext(el: Element): Pick<IsotoneElement, 'component' | 'source'> {
-  type Fiber = {
-    type?: unknown;
-    return?: Fiber | null;
-    _debugSource?: { fileName?: string; lineNumber?: number };
-    _debugStack?: { stack?: string } | string | null;
-  };
-  type Named = { displayName?: string; name?: string; render?: Named; type?: Named };
-  const key = Object.keys(el).find((name) => name.startsWith('__reactFiber$'));
-  let fiber: Fiber | null | undefined = key ? (el as unknown as Record<string, Fiber | null>)[key] : null;
-  const names: string[] = [];
-  let source: string | undefined;
-  while (fiber && names.length < 5) {
-    if (!source && fiber._debugSource?.fileName) {
-      source = `${fiber._debugSource.fileName}:${fiber._debugSource.lineNumber ?? 0}`;
-    }
-    source ??= stackSource(fiber._debugStack);
-    const type = fiber.type as Named | string | null | undefined;
-    const named = type && typeof type !== 'string' ? (type.render ?? type.type ?? type) : null;
-    const name = named?.displayName ?? named?.name;
-    // Capitalized is a component; anything else is a minified or internal name.
-    if (name && /^[A-Z]/.test(name) && names[0] !== name) names.unshift(name);
-    fiber = fiber.return;
-  }
-  return { ...(names.length ? { component: names } : {}), ...(source ? { source } : {}) };
+/**
+ * What React's dev build knows about who made a node: a fiber, or a server
+ * component's info (`{ name, env }`), each with its owner and the stack where
+ * its element was created.
+ */
+interface Made {
+  type?: unknown;
+  name?: string;
+  displayName?: string;
+  _debugOwner?: Made | null;
+  owner?: Made | null;
+  _debugSource?: { fileName?: string; lineNumber?: number } | null;
+  _debugStack?: { stack?: string } | string | null;
+  debugStack?: { stack?: string } | string | null;
 }
 
 interface StackFrame {
   url: string;
   line: number;
   column: number;
+  legacy?: true;
+}
+
+/** Code that is not the app's: a dependency, or minified code vendored into the app. */
+const NOT_APP = /node_modules|\.min\.[cm]?js(?:[?#:]|$)/;
+
+/** Receivers V8 prints before a method that are the runtime's, never a component. */
+const BUILT_IN = new Set(['Object', 'Array', 'Module', 'Function', 'Promise', 'Proxy']);
+
+/**
+ * The component a stack frame's function name stands for: `Pricing`,
+ * `Module.Pricing` and Firefox's `Pricing/<` and `Pricing<` (an anonymous
+ * function inside it, or assigned to it) are `Pricing`; a class's
+ * `Card.render` is `Card`, and a bare `render` (Firefox, Safari) is `render`,
+ * for the caller to name from the fiber. A built-in receiver
+ * (`Object.render`) and a lower-case name are nothing.
+ */
+function frameComponent(raw: string | undefined): string | undefined {
+  const name = raw?.replace(/^async\*/, '').replace(/[/<].*$/, '');
+  if (!name) return undefined;
+  if (name === 'render') return name;
+  const parts = name.split('.');
+  const method = parts.pop() ?? '';
+  const receiver = parts.pop();
+  const found = method === 'render' ? receiver : method;
+  return found && /^[A-Z]/.test(found) && !BUILT_IN.has(found) ? found : undefined;
 }
 
 /**
- * React 19 dropped `_debugSource`; its `_debugStack` is an Error created where
- * the JSX ran. The first frame outside React's own runtime is that callsite, in
- * the module the dev server served: Vite, Next and webpack name the source file
- * with a query or loader prefix, at the transformed line.
+ * Where a node's element was written, and the component whose code wrote it.
+ * React 18 records the place as `_debugSource`. React 19 records a creation
+ * stack: its first frame is the call that made the element (`jsxDEV`,
+ * `createElement`, `cloneElement`, or the server-component client replaying
+ * the server's stack), and its last before React's bottom frame is the
+ * function React called to render: the component. The first app frame after
+ * the factory is the place. When React called a dependency (a library calling
+ * a render prop or a column's `render`, or wrapping the app's component as
+ * MobX's `observer` does), `onStack` holds the components the app's frames
+ * name, for the caller to check the fiber against.
  */
-function stackFrame(stack: { stack?: string } | string | null | undefined): StackFrame | undefined {
-  const text = typeof stack === 'string' ? stack : stack?.stack;
-  for (const frame of text?.split('\n').slice(1) ?? []) {
-    const [, url, line, column] = frame.match(/(?:\(|@|\bat )((?:[a-z-]+:\/\/\/?|\/)\S+?):(\d+):(\d+)\)?\s*$/i) ?? [];
-    if (!url || /react[-_]jsx|react-dom|react\.development|\/react\/|jsx-dev-runtime|jsx-runtime/i.test(url)) continue;
-    return { url, line: Number(line), column: Number(column) };
+function callsite(node: Made): { at: StackFrame; name?: string; onStack?: (string | undefined)[] } | undefined {
+  const legacy = node._debugSource;
+  if (legacy?.fileName) {
+    return NOT_APP.test(legacy.fileName)
+      ? undefined
+      : { at: { url: legacy.fileName, line: legacy.lineNumber ?? 0, column: 0, legacy: true } };
   }
-  return undefined;
+  const stack = node._debugStack ?? node.debugStack;
+  const frames: (StackFrame & { name?: string })[] = [];
+  for (const text of (typeof stack === 'string' ? stack : stack?.stack)?.split('\n') ?? []) {
+    if (/react[_-]stack[_-]bottom[_-]frame/.test(text)) break;
+    const [, url, line, column] = text.match(/(?:\(|@|\bat )((?:[a-z-]+:\/\/\/?|\/)\S+?):(\d+):(\d+)\)?\s*$/i) ?? [];
+    const name = text.match(/^\s*at\s+(?:async\s+)?(?:new\s+)?([^\s(]+)\s+\(/)?.[1] ?? text.match(/^\s*([^@\s]+)@/)?.[1];
+    if (url) frames.push({ url, line: Number(line), column: Number(column), name });
+  }
+  const app = frames.slice(1).filter((frame) => !NOT_APP.test(frame.url));
+  const render = frames.length > 1 ? frames[frames.length - 1] : undefined;
+  const at = app[0];
+  if (!at) return undefined;
+  if (render && !NOT_APP.test(render.url)) return { at, name: frameComponent(render.name) };
+  return { at, onStack: app.map((frame) => frameComponent(frame.name)) };
+}
+
+/** A fiber's component name, where the stack names no function: React 18, or a bare `render`. */
+function typeName(node: Made | null | undefined): string | undefined {
+  const type = node?.type as { displayName?: string; name?: string; render?: Made; type?: Made } | string | undefined;
+  if (!type || typeof type === 'string') return node?.name;
+  const inner = type.render ?? type.type ?? type;
+  return type.displayName ?? inner.displayName ?? inner.name;
+}
+
+/** Whether a fiber is a class component, whose render Firefox and Safari print as a bare `render`. */
+const isClass = (node: Made | null | undefined) =>
+  Boolean((node?.type as { prototype?: { isReactComponent?: unknown } } | undefined)?.prototype?.isReactComponent);
+
+/**
+ * The components whose code wrote the element, outermost first, and the line
+ * that wrote it. For the element and each of its owners (who rendered what,
+ * not parents, so layout providers stay out), the component React called to
+ * write it names that level, when the app wrote it. Nodes a library made are
+ * passed, so an app component a router, a framework, a `Slot` or a list
+ * renders is still named. `source` is the first app frame. Absent on other
+ * frameworks and production builds, which leaves the fields out.
+ */
+function reactOwners(el: Element): { names: string[]; at?: StackFrame } {
+  const key = Object.keys(el).find((name) => name.startsWith('__reactFiber$'));
+  let node: Made | null | undefined = key ? (el as unknown as Record<string, Made | null>)[key] : null;
+  const names: string[] = [];
+  let at: StackFrame | undefined;
+  for (let depth = 0; node && depth < 64; depth++) {
+    const owner = node._debugOwner ?? node.owner;
+    const made = callsite(node);
+    if (made) {
+      // React's replay of a server component's stack names the server bundle, not a source file.
+      if (!/^(?:about|rsc):/.test(made.at.url)) at ??= made.at;
+      // React 18 names no function, and a bare `render` is a class's: the owner's type names them.
+      // A library that wraps the app's component (MobX's `observer`) is named for it, when the
+      // app's own frame on the stack is that component; a table's `Cell` calling a column is not.
+      const wrapped = made.onStack && typeName(owner);
+      const name =
+        made.at.legacy || (made.name === 'render' && isClass(owner))
+          ? typeName(owner)
+          : made.onStack
+            ? wrapped && made.onStack.includes(wrapped)
+              ? wrapped
+              : undefined
+            : made.name;
+      // Capitalized is a component; anything else is a minified or internal name.
+      if (name && /^[A-Z]/.test(name) && !names.includes(name) && names.length < 5) names.unshift(name);
+    }
+    node = owner;
+  }
+  return { names, at };
+}
+
+function reactContext(el: Element): Pick<IsotoneElement, 'component' | 'source'> {
+  const { names, at } = reactOwners(el);
+  return { ...(names.length ? { component: names } : {}), ...(at ? { source: `${sourcePath(at.url)}:${at.line}` } : {}) };
 }
 
 /** A served module URL as the source path it stands for. */
@@ -143,11 +232,6 @@ function sourcePath(location: string): string {
   } catch {}
   return path.replace(/^\.\//, '');
 }
-
-const stackSource = (stack: Parameters<typeof stackFrame>[0]) => {
-  const frame = stackFrame(stack);
-  return frame && `${sourcePath(frame.url)}:${frame.line}`;
-};
 
 const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
@@ -192,15 +276,8 @@ function mapPosition(mappings: string, line: number, column: number): { source: 
  * than what `describeIsotoneElement` already recorded.
  */
 export async function resolveElementSource(el: Element): Promise<string | undefined> {
-  type Fiber = { return?: Fiber | null; _debugSource?: unknown; _debugStack?: Parameters<typeof stackFrame>[0] };
-  const key = Object.keys(el).find((name) => name.startsWith('__reactFiber$'));
-  let fiber: Fiber | null | undefined = key ? (el as unknown as Record<string, Fiber | null>)[key] : null;
-  let frame: StackFrame | undefined;
-  for (; fiber && !frame; fiber = fiber.return) {
-    if (fiber._debugSource) return undefined;
-    frame = stackFrame(fiber._debugStack);
-  }
-  if (!frame || !/^https?:/.test(frame.url)) return undefined;
+  const frame = reactOwners(el).at;
+  if (!frame || frame.legacy || !/^https?:/.test(frame.url)) return undefined;
   try {
     const code = await (await fetch(frame.url)).text();
     const reference = code.match(/\/\/[#@] sourceMappingURL=(\S+)\s*$/)?.[1];
@@ -220,6 +297,9 @@ export async function resolveElementSource(el: Element): Promise<string | undefi
     return undefined;
   }
 }
+
+/** Text as one short line, for a label. */
+const oneLine = (text: string | null | undefined) => (text ?? '').trim().replace(/\s+/g, ' ').slice(0, 60);
 
 /** Everything about a pinned element that says which one it is, for the agent
  *  reading the note later and without the page open. */
@@ -247,20 +327,17 @@ function elementContext(el: Element): Partial<IsotoneElement> {
     }
     if (within.length === 4) continue;
     const tag = up.localName;
-    const label = up.getAttribute('aria-label');
+    // A label the page names explicitly comes first: the elements it points at, then its own text.
+    const labelledBy = (up.getAttribute('aria-labelledby') ?? '')
+      .split(/\s+/)
+      .map((id) => (id ? (up.getRootNode() as Document | ShadowRoot).getElementById?.(id)?.textContent : ''))
+      .join(' ');
+    const label = oneLine(labelledBy) || oneLine(up.getAttribute('aria-label'));
     const test = up.getAttribute('data-testid');
-    // Only a heading above the element titles it; a later one names the next section.
-    let heading: Element | null = null;
-    try {
-      heading =
-        Array.from(up.querySelectorAll(':scope > :is(h1,h2,h3,h4,h5,h6), :scope > * > :is(h1,h2,h3,h4,h5,h6)'))
-          .filter((candidate) => candidate.compareDocumentPosition(el) & 4)
-          .pop() ?? null;
-    } catch {}
+    const heading = ownHeading(up, el);
     if (label) within.unshift(`<${tag}> labelled "${label}"`);
     else if (test) within.unshift(`<${tag} data-testid="${test}">`);
-    else if (heading && heading !== el)
-      within.unshift(`<${tag}> headed "${(heading.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 60)}"`);
+    else if (heading) within.unshift(`<${tag}> headed "${oneLine(heading.textContent)}"`);
   }
   const box = el.getBoundingClientRect();
   const view = el.ownerDocument?.defaultView;
@@ -283,6 +360,25 @@ function elementContext(el: Element): Partial<IsotoneElement> {
       : {}),
     ...(styles ? { styles } : {}),
   };
+}
+
+const HEADING = 'h1,h2,h3,h4,h5,h6';
+
+/**
+ * The heading that titles `up` itself, above the branch holding `el`: its last
+ * heading child there, else the first heading in a `header` or `hgroup` child
+ * there. Nothing else counts, so a card or column beside the element never
+ * lends its heading; a missing label misleads nobody.
+ */
+function ownHeading(up: Element, el: Element): Element | null {
+  let heading: Element | null = null;
+  let header: Element | null = null;
+  for (const child of Array.from(up.children)) {
+    if (child === el || child.contains(el)) break;
+    if (child.matches(HEADING)) heading = child;
+    else if (child.matches('header,hgroup')) header ??= child.querySelector(HEADING);
+  }
+  return heading ?? header;
 }
 
 /** `rgb(17, 17, 17)` as `#111111`, the form a stylesheet is searched for; anything else as it is. */

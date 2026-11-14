@@ -510,6 +510,7 @@ export function noteRecord(record: StoredNote, root: string) {
     createdAt: n.createdAt,
     viewport: n.viewport,
     payload: n.payload,
+    selections: n.selections,
     variant: n.variant,
     variantAction: n.variantAction,
     update: n.update,
@@ -530,6 +531,16 @@ function doneCommand(id: string): string {
 /** The human listing of `npx isotone`, grouped by route; `root` as for `agentNote`. */
 export function printNotes(io: CliIO, rows: StoredNote[], root: string): void {
   let cur: string | null = null;
+  // Read once, and only for a note that has selections: a pick that is a file variant's id.
+  let ids: Set<string> | undefined;
+  const variantIds = () => {
+    try {
+      ids ??= new Set(listVariants({ root }).map((v) => v.id));
+    } catch {
+      ids = new Set();
+    }
+    return ids;
+  };
   for (const n of rows) {
     if (n.route !== cur) {
       cur = n.route;
@@ -575,6 +586,14 @@ export function printNotes(io: CliIO, rows: StoredNote[], root: string): void {
         oneLine(
           `  ◇ ${v.label}${v.optionLabel ? ` → ${v.optionLabel}` : ''} — selector=${v.axisId}${v.optionId ? ` option=${v.optionId}` : ''}${v.value ? ` value=${v.value}` : ''}`,
         ),
+      );
+    }
+    if (n.selections && Object.keys(n.selections).length) {
+      const picks = Object.entries(n.selections);
+      const copies = picks.some(([, value]) => variantIds().has(value)) ? '; source lines may be lines of the active variant copy' : '';
+      out(
+        io,
+        `  ⊙ selections: ${oneLine(picks.map(([id, value]) => `${id}=${value}`).join(', '), 200)} (the page showed these, not the defaults${copies})`,
       );
     }
     const context = n.payload === undefined ? '' : describePayload(n.payload);

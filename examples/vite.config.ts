@@ -43,6 +43,8 @@ function demoNotes(): Plugin {
             createdAt: new Date().toISOString(),
             // The README image: one note the agent is working on, one waiting.
             ...(session === 'light' || session === 'dark' ? { workingAt: new Date().toISOString() } : {}),
+            // Filed with a selector moved: the note says so, for the agent and in the panel.
+            ...(session === 'interactive' ? { selections: { 'card-padding': '24' } } : {}),
           },
         ];
         if (session === 'light' || session === 'dark') {
