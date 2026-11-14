@@ -10,9 +10,9 @@ import { MAX_FEEDBACK_LENGTH, MAX_NOTES, MAX_ROUTE, PAYLOAD_MAX } from '../../co
 import { updateNoteText } from '../../core/update';
 import { LockBusyError, SERVER_LOCK_WAIT_MS, withFileLock } from '../fs/lock';
 import { type HandlerRequest, type HandlerResponse, jsonResponse } from '../http';
-import { notesProjectRoot, updateRequestOf } from '../update/request';
+import { notesApp, notesProjectRoot, updateRequestOf } from '../update/request';
 import { noteFingerprint, notesRevision, readNotes, replyView, type StoredNote, writeNotes } from './store';
-import { elementFields, elementOf, notesApp, removalOf, selectionsOf, variantOf, viewportOf, withinPayloadCap } from './validate';
+import { elementFields, elementOf, removalOf, selectionsOf, variantOf, viewportOf, withinPayloadCap } from './validate';
 
 /** The endpoint path the client calls. */
 export const NOTES_ENDPOINT = '/api/isotone/notes';

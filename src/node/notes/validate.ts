@@ -3,35 +3,30 @@
  * what it keeps and drops anything malformed, so a hostile or buggy page
  * cannot bloat or corrupt the notes file.
  */
-import { basename, dirname, resolve } from 'node:path';
-
 import type { IsotoneElement, VariantReference, VariantRemoval } from '../../core/types';
 import { MAX_SELECTOR, PAYLOAD_MAX } from '../../core/limits';
-import { realPath, toPosixPath } from '../fs/paths';
+import { realPath } from '../fs/paths';
 
 function cap(v: string, max: number): string {
   return v.slice(0, max);
 }
 
-/** The app a notes file belongs to: the directory holding its `.isotone/`, where the agent runs the CLI. */
-export function notesApp(file: string): string {
-  const own = dirname(resolve(file));
-  return basename(own) === '.isotone' ? dirname(own) : own;
-}
-
 /**
  * A `source` the page gave as an absolute path (Vue's `__file`, a source map's
- * `file://` source) as a path from the app. A file outside the app stays absolute.
+ * `file://` source) as a forward-slash path from `app`, the directory holding
+ * `.isotone/`. A file outside it stays as it is. Windows paths compare without
+ * case, as the file system does.
  */
-function fromApp(source: string, app: string): string {
+export function fromApp(source: string, app: string, caseless = process.platform === 'win32'): string {
   let real = app;
   try {
     real = realPath(app);
   } catch {}
+  const fold = (path: string) => (caseless ? path.toLowerCase() : path);
   const posix = source.replaceAll('\\', '/');
   for (const dir of [app, real]) {
-    const base = toPosixPath(dir).replace(/\/?$/, '/');
-    if (posix.startsWith(base)) return source.slice(base.length);
+    const base = dir.replaceAll('\\', '/').replace(/\/?$/, '/');
+    if (fold(posix).startsWith(fold(base))) return posix.slice(base.length);
   }
   return source;
 }
@@ -46,13 +41,11 @@ export function elementOf(value: unknown, app?: string): IsotoneElement | null {
 /** Every element field, each bounded, from any object; a missing selector is empty. */
 export function elementFields(value: object, app?: string): IsotoneElement {
   const v = value as { tag?: unknown; text?: unknown; selector?: unknown };
-  const context = elementContext(value);
-  if (context.source && app) context.source = fromApp(context.source, app);
   return {
     tag: cap(String(v.tag ?? ''), 30),
     text: cap(String(v.text ?? ''), 120),
     selector: cap(String(v.selector ?? ''), MAX_SELECTOR),
-    ...context,
+    ...elementContext(value, app),
   };
 }
 
@@ -66,7 +59,7 @@ function stringList(value: unknown, count: number, length: number): string[] {
 }
 
 /** The optional identifying fields, each bounded; anything malformed is dropped. */
-function elementContext(value: object): Partial<IsotoneElement> {
+function elementContext(value: object, app?: string): Partial<IsotoneElement> {
   const v = value as Record<string, unknown>;
   const out: Partial<IsotoneElement> = {};
   if (v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes)) {
@@ -80,7 +73,7 @@ function elementContext(value: object): Partial<IsotoneElement> {
   if (component.length) out.component = component;
   const within = stringList(v.within, 6, 120);
   if (within.length) out.within = within;
-  if (typeof v.source === 'string' && v.source) out.source = cap(v.source, 300);
+  if (typeof v.source === 'string' && v.source) out.source = cap(app ? fromApp(v.source, app) : v.source, 300);
   if (typeof v.near === 'string' && v.near) out.near = cap(v.near, 120);
   const rect = v.rect as Record<string, unknown> | null | undefined;
   if (rect && typeof rect === 'object' && [rect.x, rect.y, rect.w, rect.h].every((n) => typeof n === 'number' && Number.isFinite(n))) {

@@ -22,19 +22,27 @@ export interface NodeLike {
    *  path stops at an id or the depth cap, unchecked. */
   isOnlyMatch?(selector: string): boolean;
   /** Segments that name the node by what it is rather than where (a test id;
-   *  for the pinned node, a stable class or attribute), tried in order before
-   *  its position. */
+   *  for the pinned node, a stable attribute), tried in order before its
+   *  position. */
   anchors?(): string[];
   /** What else identifies the node, beyond its path. */
   context?(): Partial<IsotoneElement>;
 }
 
 /**
+ * An id the page generates on each render, which names nothing for long:
+ * React's `useId` (`:r1:`, `«r1»`, `_r_1_`) and the libraries built on it.
+ */
+const GENERATED_ID = /:r[\da-z]*:|«r[\da-z]*»|^_r_[\da-z]+_|^(?:radix|headlessui|mui|react-aria|downshift)-/i;
+
+/**
  * Descriptor of a picked element for locating it in code. Walks up the tree
- * collecting `#id`, then a unique test id (or, for the pinned element only, a
- * stable class or attribute), else `tag:nth-child(n)` segments. The panel finds pins again with `querySelector`, which takes the
- * first match, so with a real DOM the walk goes on past `maxDepth` until the
- * path matches this element alone. Kept framework-free so it is unit-testable.
+ * collecting a `#id` the page did not generate, then a unique test id (or,
+ * for the pinned element only, a stable attribute), else `tag:nth-child(n)`
+ * segments; never a class. The panel finds pins again with `querySelector`,
+ * which takes the first match, so with a real DOM the walk goes on past
+ * `maxDepth` until the path matches this element alone. Kept framework-free
+ * so it is unit-testable.
  */
 export function describeIsotoneElement(el: NodeLike, maxDepth = 4): IsotoneElement {
   const parts: string[] = [];
@@ -43,7 +51,7 @@ export function describeIsotoneElement(el: NodeLike, maxDepth = 4): IsotoneEleme
   const only = el.isOnlyMatch ? (path: string[]) => el.isOnlyMatch?.(path.join(' > ')) === true : null;
   let settled = false;
   while (node && node.tagName !== 'BODY' && (only || depth < maxDepth)) {
-    if (node.id) {
+    if (node.id && !GENERATED_ID.test(node.id)) {
       // Escape every code point: valid for leading digits, punctuation and
       // framework-generated ids without depending on the host's CSS global.
       const id = Array.from(node.id, (c) => `\\${c.codePointAt(0)?.toString(16)} `).join('');
@@ -55,7 +63,7 @@ export function describeIsotoneElement(el: NodeLike, maxDepth = 4): IsotoneEleme
         break;
       }
     }
-    // A test id, class or attribute survives a sibling being added, which a position does not.
+    // A test id or attribute survives a sibling being added, which a position does not.
     const anchor = only && node.anchors?.().find((segment) => only([segment, ...parts]));
     if (anchor) {
       parts.unshift(anchor);
@@ -269,15 +277,15 @@ function vueContext(el: Element): Pick<IsotoneElement, 'component' | 'source'> {
 }
 
 /**
- * A frame as `file:line`. A bundle chunk (Next's `/_next/static/`) names no
- * file until its source map is read. Webpack's eval'd modules and the server
- * frames React replays name only their file: their line is a transformed one,
- * never the file's own.
+ * A frame's file, with its line only where that is the file's own: React 18's
+ * `_debugSource`. A stack's line is the transformed code's until the module's
+ * source map says otherwise (`resolveElementSource`), and a bundle chunk
+ * (Next's `/_next/static/`) names no file until then.
  */
-function frameSource({ url, line }: StackFrame): string | undefined {
+function frameSource({ url, line, legacy }: StackFrame): string | undefined {
   const path = sourcePath(url);
   if (path.includes('/_next/static/')) return undefined;
-  return /^(?:about|webpack-internal):/.test(url) ? path : `${path}:${line}`;
+  return legacy ? `${path}:${line}` : path;
 }
 
 /** A served module URL as the source path it stands for. */
@@ -295,7 +303,8 @@ function sourcePath(location: string): string {
   try {
     path = decodeURIComponent(path);
   } catch {}
-  return path.replace(/^\.\//, '');
+  // `file:///C:/…` and Vite's `/@fs/C:/…` leave a slash before the drive.
+  return path.replace(/^\/(?=[a-z]:\/)/i, '').replace(/^\.\//, '');
 }
 
 const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -342,68 +351,120 @@ interface SourceMap {
   sections?: { offset: { line: number; column: number }; map: SourceMap }[];
 }
 
-/** Webpack's `require`, whose `m` holds every module's current factory, hot updates included. */
-let webpackRequire: { m?: Record<string, unknown> } | undefined;
-
-/**
- * The code a frame ran: the served module, or for webpack's
- * `webpack-internal:///<id>` the module's factory, which holds its code and
- * inline map as a string. A chunk pushed onto `webpackChunk*` with a runtime
- * callback is handed webpack's `require`.
- */
-async function frameCode(url: string): Promise<string | undefined> {
-  if (/^https?:/.test(url)) return (await fetch(url)).text();
-  if (!url.startsWith('webpack-internal:///')) return undefined;
-  const scope = globalThis as unknown as Record<string, { push?: (chunk: unknown) => void } | undefined>;
-  const chunks = Object.keys(scope).find((name) => name.startsWith('webpackChunk'));
-  // Webpack runs a runtime callback only for a chunk it has not seen, so the id is new each time.
-  if (!webpackRequire && chunks)
-    scope[chunks]?.push?.([[`isotone-${Date.now()}-${Math.random()}`], {}, (require: typeof webpackRequire) => (webpackRequire = require)]);
-  const factory = webpackRequire?.m?.[url.slice('webpack-internal:///'.length)];
-  return factory ? String(factory) : undefined;
+/** A module as the page loaded it: its generated code, and the source map of that code. */
+interface Loaded {
+  code: string;
+  map: SourceMap;
+  /** What the map's relative sources are relative to. */
+  base: URL;
 }
 
-/** A module's parsed source map, and the URL its sources are relative to. */
-type Mapped = { map: SourceMap; base: URL } | undefined;
-
-async function readMap(url: string): Promise<Mapped> {
-  const code = await frameCode(url);
-  // The last reference is the module's own: a chunk can quote another in its code.
-  const reference = [...(code ?? '').matchAll(/[#@] sourceMappingURL=([^\s'"\\]+)/g)].pop()?.[1];
+/** `code`'s own source map: the last reference, since a chunk can quote another in its code. */
+async function withMap(url: string, code: string): Promise<Loaded | undefined> {
+  const reference = [...code.matchAll(/[#@] sourceMappingURL=([^\s'"\\]+)/g)].pop()?.[1];
   if (!reference) return undefined;
   // Sources in an inline map are relative to the module itself.
   if (reference.startsWith('data:')) {
     const json = new TextDecoder().decode(Uint8Array.from(atob(reference.slice(reference.indexOf(',') + 1)), (c) => c.charCodeAt(0)));
-    return { map: JSON.parse(json), base: new URL(url) };
+    return { code, map: JSON.parse(json), base: new URL(url) };
   }
   const base = new URL(reference, url);
   // Only the server that sent the module is asked for its map.
-  return base.origin === new URL(url).origin ? { map: await (await fetch(base)).json(), base } : undefined;
+  return base.origin === new URL(url).origin ? { code, map: await (await fetch(base)).json(), base } : undefined;
 }
 
-/** Parsed maps by module URL. Vite serves a hot update under a new URL (`?t=`), so it misses. */
-const maps = new Map<string, Promise<Mapped>>();
+/** Served modules by URL as first read: the nearest to what the page loaded. */
+const served = new Map<string, Promise<Loaded | undefined>>();
 
-function mapOf(url: string): Promise<Mapped> {
-  // A webpack module and a Next chunk keep their URL across a hot update: read them again.
-  if (!/^https?:/.test(url) || url.includes('/_next/static/')) return readMap(url);
-  let mapped = maps.get(url);
-  if (!mapped) {
-    if (maps.size >= 64) maps.clear();
-    mapped = readMap(url);
-    maps.set(url, mapped);
-    mapped.then(
-      (found) => found || maps.delete(url),
-      () => maps.delete(url),
+/**
+ * Every version of a served module the page may have run: as first read, and
+ * as served now when that differs. Vite serves a hot update under a new URL
+ * (`?t=`), but a Next chunk and a module's first URL keep theirs.
+ */
+async function servedVersions(url: string): Promise<(Loaded | undefined)[]> {
+  const read = async () => withMap(url, await (await fetch(url)).text());
+  const first = served.get(url);
+  if (!first) {
+    if (served.size >= 64) served.clear();
+    const module = read();
+    served.set(url, module);
+    module.then(
+      (found) => found || served.delete(url),
+      () => served.delete(url),
     );
+    return [await module];
   }
-  return mapped;
+  const [then, now] = await Promise.all([first, read()]);
+  return then?.code === now?.code ? [then] : [then, now];
+}
+
+/** Webpack's `require` for each `webpackChunk*` global, handed to a runtime callback of a chunk pushed there. */
+const webpackRequires = new Map<string, { m?: Record<string, unknown> }>();
+
+/**
+ * Every version of a webpack module the page may have run: the factory a hot
+ * update installed (`require.m`), and the one its chunk delivered. Each holds
+ * the module's code and inline map as a JSON string passed to `eval`.
+ */
+function webpackModules(url: string): Promise<Loaded | undefined>[] {
+  const id = url.slice('webpack-internal:///'.length);
+  const scope = globalThis as unknown as Record<string, ({ push?: (chunk: unknown) => void } & unknown[]) | undefined>;
+  for (const key of Object.keys(scope).filter((name) => name.startsWith('webpackChunk'))) {
+    const chunks = scope[key];
+    // Webpack runs a runtime callback only for a chunk it has not seen, so the id is new each time.
+    if (!webpackRequires.has(key))
+      chunks?.push?.([
+        [`isotone-${Date.now()}-${Math.random()}`],
+        {},
+        (require: { m?: Record<string, unknown> }) => webpackRequires.set(key, require),
+      ]);
+    const current = webpackRequires.get(key)?.m?.[id];
+    // Another runtime on the page holds other modules.
+    if (!current) continue;
+    const delivered = Array.from(chunks ?? [], (chunk) => (chunk as [unknown, Record<string, unknown>?])[1]?.[id]);
+    return [...new Set([current, ...delivered])].flatMap((factory) => {
+      const literal = factory ? String(factory).match(/eval\((?:__webpack_require__\.ts\()?("(?:[^"\\]+|\\.)*")/)?.[1] : undefined;
+      return literal ? [withMap(url, JSON.parse(literal))] : [];
+    });
+  }
+  return [];
+}
+
+/** A JSX factory, as the transformed code calls it. */
+const FACTORY = '(?:_?jsx(?:s|DEV)?\\w*|createElement|cloneElement)';
+/** V8 places a direct call (`_jsxDEV(…)`, Vite) at the callee… */
+const CALLEE = new RegExp(`^${FACTORY}\\s*\\(`);
+/** …and a wrapped one (`(0, m["jsxDEV"])(…)`, webpack and Turbopack) at its arguments. */
+const WRAPPED = new RegExp(`${FACTORY}["'\\]]*\\)$`);
+
+/**
+ * The file and line `frame` was written at, through `module`'s map, when the
+ * frame is a JSX call in `module`'s code: a frame from another version of the
+ * module (a fiber Fast Refresh kept, a chunk rebuilt since) usually lands
+ * elsewhere.
+ */
+function mapFrame(frame: StackFrame, module: Loaded): string | undefined {
+  let [line, column] = [frame.line - 1, frame.column - 1];
+  const text = module.code.split('\n')[line] ?? '';
+  const [before, at] = [text.slice(0, column), text.slice(column)];
+  if (column > text.length || !(CALLEE.test(at) || (WRAPPED.test(before) && at.startsWith('(')))) return undefined;
+  const section = module.map.sections?.filter(({ offset: o }) => o.line < line || (o.line === line && o.column <= column)).pop();
+  const map = section?.map ?? module.map;
+  if (section) [line, column] = [line - section.offset.line, line === section.offset.line ? column - section.offset.column : column];
+  const position = mapPosition(map.mappings, line, column);
+  const file = position && map.sources[position.source];
+  if (!position || !file) return undefined;
+  // An absolute path is made relative to the app by the notes endpoint.
+  return `${sourcePath(file.startsWith('/') ? file : new URL((map.sourceRoot ?? '') + file, module.base).href)}:${position.line + 1}`;
 }
 
 /**
  * The pinned element's JSX callsite in its original file, on React 19 hosts:
- * the served module's source map turns the stack's transformed line into the
- * line the agent will open, and a bundle chunk into the file it came from.
+ * the module's source map turns the stack's transformed line into the line
+ * the agent will open, and a bundle chunk into the file it came from. A hot
+ * update leaves versions of a module the page may have run; the line is given
+ * only when every version where the frame is a JSX call agrees on it, and the
+ * file alone when they agree only on that.
  * Resolves to undefined when there is nothing better than what
  * `describeIsotoneElement` already recorded.
  */
@@ -412,17 +473,15 @@ export async function resolveElementSource(el: Element): Promise<string | undefi
   // A Turbopack hot update runs the module from the whole chunk (`?id=`), at lines its map does not describe.
   if (!frame || frame.legacy || /\/_next\/static\/.*[?&]id=/.test(frame.url)) return undefined;
   try {
-    const mapped = await mapOf(frame.url);
-    if (!mapped) return undefined;
-    let [line, column] = [frame.line - 1, frame.column - 1];
-    const section = mapped.map.sections?.filter(({ offset: o }) => o.line < line || (o.line === line && o.column <= column)).pop();
-    const map = section?.map ?? mapped.map;
-    if (section) [line, column] = [line - section.offset.line, line === section.offset.line ? column - section.offset.column : column];
-    const position = mapPosition(map.mappings, line, column);
-    const file = position && map.sources[position.source];
-    if (!position || !file) return undefined;
-    // An absolute path is made relative to the project by the notes endpoint.
-    return `${sourcePath(file.startsWith('/') ? file : new URL((map.sourceRoot ?? '') + file, mapped.base).href)}:${position.line + 1}`;
+    const versions = /^https?:/.test(frame.url)
+      ? await servedVersions(frame.url)
+      : frame.url.startsWith('webpack-internal:///')
+        ? await Promise.all(webpackModules(frame.url))
+        : [];
+    const lines = new Set(versions.map((module) => module && mapFrame(frame, module)).filter((line): line is string => Boolean(line)));
+    // Versions that agree on the file only give the file.
+    const files = new Set([...lines].map((line) => line.replace(/:\d+$/, '')));
+    return lines.size === 1 ? [...lines][0] : files.size === 1 ? [...files][0] : undefined;
   } catch {
     return undefined;
   }
@@ -630,23 +689,6 @@ function renderedText(el: Element): string {
   return walk(el);
 }
 
-/** Classes that will not name the element for long: a build made them, or the page's state did. */
-const UNSTABLE_CLASS = {
-  /** Not a plain name: CSS modules' `_card_1k2j3_5`, Tailwind's `md:flex` and `w-1/2`. */
-  unspellable: /^(?![a-zA-Z][\w-]*$)/,
-  /** Emotion, styled-components, styled-jsx, Svelte and Stitches. */
-  cssInJs: /^(?:css|sc|jsx|svelte|emotion|c)-/,
-  /** A CSS module's hash after `__` (`Card_cta__x7Yz1`); a BEM element (`card__title`) is lower case. */
-  cssModule: /-module__|__[^_]*[A-Z\d]/,
-  /** A part mixing letters and digits: `css-1q2w3e`, `svelte-1abc2de`. */
-  hashed: /(?:^|[_-])(?=[a-zA-Z\d]*\d)(?=[a-zA-Z\d]*[a-zA-Z])[a-zA-Z\d]{4,}(?=[_-]|$)/,
-  /** A case change inside a word, as a styled-components hash has (`bZkfAO`). */
-  mixedCase: /[a-z][A-Z]/,
-  /** `is-open`, `has-error`, a BEM modifier (`card--highlighted`), or a state word: `active`, `nav-open`. */
-  state:
-    /^(?:is|has)-|--|(?:^|[_-])(?:active|open|opened|closed|show|shown|hidden|visible|selected|current|highlighted|disabled|enabled|checked|expanded|collapsed|hover|hovered|focus|focused|pressed|dragging|loading|invalid|valid|error|dark|light)(?=[_-]|$)/,
-};
-
 /** Test ids, which also anchor an ancestor. */
 const TEST_IDS = ['data-testid', 'data-test-id', 'data-test', 'data-cy'];
 
@@ -654,23 +696,17 @@ const TEST_IDS = ['data-testid', 'data-test-id', 'data-test', 'data-cy'];
 const STABLE_ATTRIBUTES = ['name', 'for', 'href', 'alt', 'placeholder'];
 
 /**
- * `n`'s selector segments that do not depend on its position: a test id, then
- * for the pinned element itself its stable classes and attributes. A state
- * class on an ancestor would move the pin to another element once the state
- * moved, so ancestors take only an id or a test id.
+ * `n`'s selector segments that do not depend on its position: a test id, and
+ * for the pinned element itself a stable attribute. Never a class: state,
+ * Tailwind utilities, a style fix and a variant all change classes, and the
+ * pin would move to another element or to none.
  */
 function anchors(n: Element, pinned: boolean): string[] {
   const attribute = (name: string) => {
     const value = n.getAttribute(name);
     return value && value.length <= 80 && !/["\\\n]/.test(value) ? [`${n.localName}[${name}="${value}"]`] : [];
   };
-  if (!pinned) return TEST_IDS.flatMap(attribute);
-  const stable = (name: string) => !Object.values(UNSTABLE_CLASS).some((pattern) => pattern.test(name));
-  return [
-    ...TEST_IDS.flatMap(attribute),
-    ...Array.from(n.classList, (name) => (stable(name) ? [`${n.localName}.${name}`] : [])).flat(),
-    ...STABLE_ATTRIBUTES.flatMap(attribute),
-  ];
+  return [...TEST_IDS, ...(pinned ? STABLE_ATTRIBUTES : [])].flatMap(attribute);
 }
 
 export function elementAsNode(el: Element): NodeLike {

@@ -5,6 +5,7 @@ import { afterEach, assert, describe, expect, it } from 'vitest';
 
 import { notesResponse } from '../../src/node/notes/handler';
 import { readNotes, updateNotes } from '../../src/node/notes/store';
+import { elementOf, fromApp } from '../../src/node/notes/validate';
 import { PAYLOAD_MAX } from '../../src/core/limits';
 import { overlayGroups } from '../../src/core/variants';
 import { tempNotesFile } from '../helpers/fs';
@@ -272,6 +273,14 @@ describe("a pinned element's source", () => {
       '/src/components/Header.tsx:6',
       '/elsewhere/packages/ui/Button.tsx:3',
     ]);
+  });
+
+  it('compares a Windows path without case, and relativizes before it bounds the length', () => {
+    expect(fromApp('C:\\Users\\Me\\app\\src\\Card.vue', 'c:\\users\\me\\app', true)).toBe('src/Card.vue');
+    expect(fromApp('C:/Users/Me/app/src/Card.tsx:4', 'C:\\Users\\Me\\app', true)).toBe('src/Card.tsx:4');
+    expect(fromApp('C:\\Users\\Me\\app\\src\\Card.vue', 'c:\\users\\me\\app', false)).toBe('C:\\Users\\Me\\app\\src\\Card.vue');
+    const app = `/projects/${'deep/'.repeat(70)}app`;
+    expect(elementOf({ selector: '#a', source: `${app}/src/Card.tsx:12` }, app)?.source).toBe('src/Card.tsx:12');
   });
 });
 

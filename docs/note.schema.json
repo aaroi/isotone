@@ -106,7 +106,7 @@
         "text": { "type": "string" },
         "selector": {
           "type": "string",
-          "description": "Matches only this element on that page: by an id or test id, or the element's own stable class or attribute, where one is unique; else by position."
+          "description": "Matches only this element on that page: by an id or test id, or the element's own stable attribute (href, name, for, alt, placeholder), where one is unique; else by position. Never a class."
         },
         "attributes": { "type": "object", "additionalProperties": { "type": "string" } },
         "component": {
@@ -116,7 +116,7 @@
         },
         "source": {
           "type": "string",
-          "description": "file:line that wrote the element, from the app's directory where the file is in it, or just the file where no line is known (Vue, a server component under webpack). A variant copy's own path when the page ran the copy."
+          "description": "file:line that wrote the element, from the app's directory where the file is in it, or just the file where the line is not known for sure (Vue, a server component under webpack, a module changed since the page loaded it). A variant copy's own path when the page ran the copy."
         },
         "within": { "type": "array", "items": { "type": "string" }, "description": "Labelled ancestors, outermost first." },
         "near": { "type": "string", "description": "Nearby text, for an element with none of its own." },
