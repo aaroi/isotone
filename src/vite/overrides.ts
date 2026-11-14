@@ -28,12 +28,20 @@ const COMPARES_TYPES = /\.type\s*[!=]==?|[!=]==?\s*[\w$.]+\.type\b/;
 const SCRIPT = /\.[cm]?[jt]sx?$/;
 
 /**
- * A Vue single-file component. plugin-vue compiles one into a module per
- * block, each answered from its own parse of the whole file, and its hot
- * update reads the real file from disk: so a block request is left to it,
- * and a switch reloads the page.
+ * A component its framework plugin compiles into several modules (Vue,
+ * Svelte, Astro), each part answered from the plugin's compile of the whole
+ * file: so a part request is left to the plugin, and a copy is never served
+ * on its own (`?isotone=`), since the parts it imports would be the page's.
  */
-export const isSingleFileComponent = (path: string): boolean => path.endsWith('.vue');
+export const isCompiledInParts = (path: string): boolean => /\.(?:vue|svelte|astro)$/.test(path);
+
+/**
+ * plugin-vue's hot update compares its last parse of a component with the
+ * real file on disk, neither of which a switch changes, so it would update
+ * nothing: a Vue component switches by reloading the page. Svelte's compiles
+ * the file again through load(), which answers with the copy.
+ */
+export const reloadsOnSwitch = (path: string): boolean => path.endsWith('.vue');
 
 /** How live mode serves one file: every version, and the names it exports. */
 export interface DispatchPlan {

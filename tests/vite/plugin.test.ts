@@ -963,15 +963,20 @@ describe('other devices on the network', () => {
 });
 
 describe('overlay variants in handleHotUpdate()', () => {
-  it("maps an override edit to the real source's modules while active", () => {
+  it('reports an override edit as an edit of the real source while active', () => {
     const { root, source, override } = tempProject();
     writeActive({ root }, ['b']);
     const hooks = plugin(root, 'serve');
     const server = fakeServer(root);
     const mod = { id: '/src/Button.tsx' };
     server.moduleGraph.getModulesByFile.mockImplementation((f: string) => (f === source ? new Set([mod]) : undefined));
-    expect(hooks.handleHotUpdate({ file: override, server })).toEqual([mod]);
-    // The real file's edit is invisible: the browser is showing the override.
+    hooks.configureServer(server);
+    // The page holds the real file's URL, so the copy's edit is reported as
+    // the real file's, as a switch is, and its update goes through.
+    expect(hooks.handleHotUpdate({ file: override, server })).toEqual([]);
+    expect(server.watcher.emit).toHaveBeenCalledWith('change', source);
+    expect(hooks.handleHotUpdate({ file: source, server })).toBeUndefined();
+    // The real file's own edit is invisible: the browser is showing the override.
     expect(hooks.handleHotUpdate({ file: source, server })).toEqual([]);
     // The manifest is not a module anywhere.
     expect(hooks.handleHotUpdate({ file: id(variantDir({ root }, 'b'), 'variant.json'), server })).toEqual([]);
@@ -1332,6 +1337,8 @@ describe('project files through the dev server', () => {
 
 const REAL_SFC = '<template><p class="card">real</p></template>\n<style scoped>\n.card { color: blue; }\n</style>\n';
 const COPY_SFC = '<template><p class="card">copy</p></template>\n<style scoped>\n.card { color: red; }\n</style>\n';
+const REAL_SVELTE = '<script>let n = 0;</script>\n<button class="n">real {n}</button>\n<style>\n.n { color: purple; }\n</style>\n';
+const COPY_SVELTE = '<script>let n = 0;</script>\n<button class="n">copy {n}</button>\n<style>\n.n { color: green; }\n</style>\n';
 
 /** `tempProject()` plus a component, `src/Card.vue`, and a stylesheet one
  *  of its blocks could name with `src`; variant `v` copies both. */
@@ -1361,7 +1368,7 @@ interface BlockEnvironment {
 }
 type BlockLoad = (this: { environment?: BlockEnvironment }, id: string) => Promise<null> | { code: string } | null;
 
-describe('Vue single-file components', () => {
+describe('Components compiled in parts: Vue, Svelte, Astro', () => {
   it('swaps the whole file and leaves each block to plugin-vue, which parsed that copy', () => {
     const { root, card, sheet } = vueProject();
     writeActive({ root }, ['v']);
@@ -1381,6 +1388,46 @@ describe('Vue single-file components', () => {
     expect(hooks.load(`${sheet}?vue&type=style&index=0&src=7a7a7a7a&scoped=7a7a7a7a&lang.css`)?.code).toContain('margin: 8px');
     // A query that only mentions vue is not a block.
     expect(hooks.load(`${card}?vuex=1`)?.code).toBe(COPY_SFC);
+  });
+
+  it('leaves Svelte and Astro parts to their plugins, and lets a Svelte switch hot-update', async () => {
+    const { root } = vueProject();
+    const counter = id(root, 'src', 'Counter.svelte');
+    const page = id(root, 'src', 'Page.astro');
+    writeFileSync(counter, REAL_SVELTE);
+    writeFileSync(page, '---\n---\n<h1 class="t">real</h1>\n<style>.t { color: purple; }</style>\n');
+    execFileSync('git', ['add', '.'], { cwd: root });
+    execFileSync('git', ['commit', '-q', '-m', 'parts'], { cwd: root });
+    createVariant({ root }, { id: 'p', label: 'P' });
+    addVariantFile({ root }, 'p', 'src/Counter.svelte');
+    addVariantFile({ root }, 'p', 'src/Page.astro');
+    writeFileSync(join(variantDir({ root }, 'p'), 'src', 'Counter.svelte'), COPY_SVELTE);
+    writeActive({ root }, ['p']);
+    const hooks = plugin(root, 'serve') as unknown as LiveHooks;
+    expect(hooks.load(counter)?.code).toBe(COPY_SVELTE);
+    // Each plugin answers the part from its own compile of that copy.
+    expect(hooks.load(`${counter}?svelte&type=style&lang.css`)).toBeNull();
+    expect(hooks.load(`${page}?astro&type=style&index=0&lang.css`)).toBeNull();
+    expect(hooks.load(`${page}?astro&type=script&index=0&lang.ts`)).toBeNull();
+
+    // vite-plugin-svelte compiles the file again through load() to see what
+    // changed, so a switch is the usual hot update, not a reload.
+    const server = fakeServer(root);
+    Object.assign(server.moduleGraph, { getModuleById: vi.fn() });
+    const mod = { id: counter };
+    server.moduleGraph.getModulesByFile.mockImplementation((f: string) => (f === counter ? new Set([mod]) : undefined));
+    hooks.configureServer(server);
+    await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: [] });
+    expect(server.watcher.emit).toHaveBeenCalledWith('change', counter);
+    vi.useFakeTimers();
+    try {
+      const client = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([mod]), invalidateModule: vi.fn() } };
+      expect(hooks.hotUpdate.call({ environment: client }, { file: counter })).toBeUndefined();
+      vi.advanceTimersByTime(100);
+      expect(server.ws.send).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('compiles the whole component again before a block, once Vite has dropped it', async () => {
@@ -1435,15 +1482,19 @@ describe('Vue single-file components', () => {
     const { root, source, override } = vueProject();
     writeActive({ root }, ['b']);
     const hooks = plugin(root, 'serve') as unknown as LiveHooks;
-    hooks.configureServer(Object.assign(fakeServer(root), { environments: { client: {} } }));
+    const server = Object.assign(fakeServer(root), { environments: { client: {} } });
+    server.moduleGraph.getModulesByFile.mockImplementation((f: string) => (f === source ? new Set([{ id: source }]) : undefined));
+    hooks.configureServer(server);
     const page = { id: source };
     const check = { id: `${source}?isotone=b` };
     const invalidateModule = vi.fn();
     const client = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([page, check]), invalidateModule } };
     // Nothing imports the check's module: in the update it would end the
     // walk with a full reload, every switch from then on.
-    expect(hooks.hotUpdate.call({ environment: client }, { file: override })).toEqual([page]);
+    expect(hooks.hotUpdate.call({ environment: client }, { file: override })).toEqual([]);
     expect(invalidateModule).toHaveBeenCalledWith(check);
+    expect(server.watcher.emit).toHaveBeenCalledWith('change', source);
+    expect(hooks.hotUpdate.call({ environment: client }, { file: source })).toEqual([page]);
     // A hand edit of a file no variant overrides now, the same.
     writeActive({ root }, []);
     const fresh = plugin(root, 'serve') as unknown as LiveHooks;
@@ -1499,8 +1550,8 @@ describe('Vue single-file components', () => {
     const mod = { id: card };
     server.moduleGraph.getModulesByFile.mockImplementation((f: string) => (f === card ? new Set([mod]) : undefined));
     hooks.configureServer(server);
-    const client = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([mod]) } };
-    const ssr = { name: 'ssr', moduleGraph: { getModulesByFile: () => new Set([mod]) } };
+    const client = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([mod]), invalidateModule: vi.fn() } };
+    const ssr = { name: 'ssr', moduleGraph: { getModulesByFile: () => new Set([mod]), invalidateModule: vi.fn() } };
     /** Vite 6 and later: each environment's hook, after a hand edit or a swap. */
     const update = (file: string) => {
       const browser = hooks.hotUpdate.call({ environment: client }, { file });
@@ -1524,8 +1575,11 @@ describe('Vue single-file components', () => {
       expect(update(card)).toEqual({ browser: [], render: undefined });
       expect(reloads()).toBe(1);
       expect(server.moduleGraph.invalidateModule).toHaveBeenCalledWith(mod);
-      // An edit of the active copy reloads too.
-      expect(update(copy).browser).toEqual([]);
+      // An edit of the active copy is reported as the real file's, and reloads too.
+      server.watcher.emit.mockClear();
+      expect(update(copy)).toEqual({ browser: [], render: [] });
+      expect(server.watcher.emit).toHaveBeenCalledWith('change', card);
+      expect(update(card)).toEqual({ browser: [], render: undefined });
       expect(reloads()).toBe(1);
       // An edit of the real file changes nothing the page shows.
       expect(update(card).browser).toEqual([]);
@@ -1550,7 +1604,7 @@ describe('Vue single-file components', () => {
   });
 });
 
-describe('Vue single-file components through the dev server', () => {
+describe('Components compiled in parts, through the dev server', () => {
   let vue: ViteDevServer;
   let base: string;
   let project: ReturnType<typeof vueProject>;
@@ -1566,6 +1620,12 @@ describe('Vue single-file components through the dev server', () => {
     writeFileSync(join(project.root, '.env'), 'SECRET_TOKEN=sk_live_FAKE_ENV\n');
     createVariant({ root: project.root }, { id: 'forced' });
     addVariantFile({ root: project.root }, 'forced', '.env', { force: true });
+    // A Svelte component the same variant copies.
+    writeFileSync(join(project.root, 'src', 'Counter.svelte'), REAL_SVELTE);
+    execFileSync('git', ['add', '.'], { cwd: project.root });
+    execFileSync('git', ['commit', '-q', '-m', 'counter'], { cwd: project.root });
+    addVariantFile({ root: project.root }, 'v', 'src/Counter.svelte');
+    writeFileSync(join(variantDir({ root: project.root }, 'v'), 'src', 'Counter.svelte'), COPY_SVELTE);
     writeActive({ root: project.root }, ['v']);
     vue = await createServer({
       root: project.root,
@@ -1587,6 +1647,25 @@ describe('Vue single-file components through the dev server', () => {
             if (!file.endsWith('.vue') || /(?:^|&)vue(?:&|$)/.test(query)) return null;
             parses.set(file, code);
             return `import ${JSON.stringify(`${file}?vue&type=style&index=0&scoped=7a7a7a7a&lang.css`)};\nexport default ${JSON.stringify(code.includes('copy') ? 'copy' : 'real')};\n`;
+          },
+        },
+        {
+          // A stand-in for vite-plugin-svelte: it keeps a component's CSS with
+          // its compiled module and answers the CSS part from there.
+          name: 'fixture:svelte',
+          load(moduleId: string) {
+            const [file = '', query = ''] = moduleId.split('?');
+            if (!/(?:^|&)svelte(?:&|$)/.test(query)) return null;
+            const meta = this.getModuleInfo(file)?.meta as { svelte?: { css?: string } } | undefined;
+            return meta?.svelte?.css ?? null;
+          },
+          transform(code: string, moduleId: string) {
+            const [file = '', query = ''] = moduleId.split('?');
+            if (!file.endsWith('.svelte') || query !== '') return null;
+            return {
+              code: `import ${JSON.stringify(`${file}?svelte&type=style&lang.css`)};\nexport default ${JSON.stringify(code.includes('copy') ? 'copy' : 'real')};\n`,
+              meta: { svelte: { css: styleOf(code) } },
+            };
           },
         },
         isotone({ checkForUpdates: false }),
@@ -1632,6 +1711,15 @@ describe('Vue single-file components through the dev server', () => {
     expect(rebuilt).toContain('color: red');
     expect(rebuilt).not.toContain('color: blue');
     expect(rebuilt).not.toContain('<template>');
+  });
+
+  it("renders the copy's CSS in a Svelte component", async () => {
+    expect((await get('/src/Counter.svelte')).body).toContain('"copy"');
+    const part = await get('/src/Counter.svelte?svelte&type=style&lang.css');
+    expect(part.status).toBe(200);
+    expect(part.body).toContain('color: green');
+    expect(part.body).not.toContain('<script');
+    expect((await get('/src/Counter.svelte?isotone=v')).status).toBe(404);
   });
 
   it("refuses ?isotone= for a component, and serves scripts' versions to the check", async () => {

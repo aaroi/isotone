@@ -4,8 +4,8 @@
 
 ### Fixed
 
-- **File variants of Vue components work.** A variant of a `.vue` file with `<style scoped>` used to fail with a CSS error and a blank page; each block of the copy now compiles as the real file's would. Switching one from the panel or with `variant use`, or editing the active copy, reloads the page, where it used to change nothing until a manual reload. [Vue components](docs/variants.md#vue-components) says what Vue supports.
-- **`<file>?isotone=<id>` serves the copy on any dev server on Vite 6 and later**, not only with live switching in React, so the check `init` suggests works there too. A `.vue` file is checked with `variant use <id>` instead.
+- **File variants of Vue, Svelte and Astro components work.** A variant of a `.vue` file with `<style scoped>` used to fail with a CSS error and a blank page, and a Svelte copy's styles came out as the whole file; each part of the copy now compiles as the real file's would. Switching a Vue variant from the panel or with `variant use`, or editing the active copy, reloads the page, where it used to change nothing until a manual reload; Svelte switches as a hot update, and editing an active Svelte copy no longer shows an error. [Vue components](docs/variants.md#vue-components) says what each supports.
+- **`<file>?isotone=<id>` serves the copy on any dev server on Vite 6 and later**, not only with live switching in React, so the check `init` suggests works there too. A `.vue`, `.svelte` or `.astro` file is checked with `variant use <id>` instead.
 
 ## 1.5.0
 

@@ -49,7 +49,7 @@ import {
 } from './live';
 import { type Gate, notesEndpoint, updateEndpoint, variantsEndpoint } from './middleware';
 import type { IsotonePlugin, IsotoneViteOptions } from './options';
-import { createOverrides, isSingleFileComponent } from './overrides';
+import { createOverrides, isCompiledInParts } from './overrides';
 import { createSwitching } from './switching';
 
 export type { IsotonePlugin, IsotoneViteOptions } from './options';
@@ -68,13 +68,15 @@ const VITE_DENY = ['.env', '.env.*', '*.{crt,pem}', '**/.git/**'];
 const SPECIAL_QUERY = /[?&](raw|url|inline|no-inline|worker|sharedworker|html-proxy)(?:[&=]|$)/;
 
 /**
- * One block of a Vue single-file component (`Card.vue?vue&type=style&index=0…`).
- * plugin-vue answers it from its parse of the whole file, which load() has
- * already swapped; the whole file in its place would compile as CSS. A block
- * kept in a file of its own (`<style src="./card.css">`, which adds `src=`) is
- * that whole file, and is swapped as usual.
+ * A part of a component that its framework plugin compiled from the whole
+ * file, named by the framework in the query: `Card.vue?vue&type=style&index=0…`,
+ * `Card.svelte?svelte&type=style&lang.css`, `Card.astro?astro&type=style…`.
+ * The plugin answers it from its own compile of the whole file, which load()
+ * has already swapped; the whole file in its place would compile as CSS. A
+ * Vue block kept in a file of its own (`<style src="./card.css">`, which adds
+ * `src=`) is that whole file, and is swapped as usual.
  */
-const COMPONENT_BLOCK = /(?:^|&)vue(?:[&=]|$)/;
+const COMPONENT_PART = /(?:^|&)(?:vue|svelte|astro)(?:[&=]|$)/;
 const OWN_FILE = /(?:^|&)src=/;
 
 /** What load() reads of a Vite 6+ dev environment; a build has neither. */
@@ -85,15 +87,16 @@ interface LoadEnvironment {
 }
 
 /**
- * Leave a component block to plugin-vue once it has parsed the file as load()
- * serves it now. It keeps one parse per file and drops it when the real file
- * changes on disk; a block asked before the whole file compiles again is then
- * read from the real file. Under an active variant, an edit of the real file
- * followed by a block rebuilt on its own (a stylesheet it imports changed)
- * would show the real file's block. Compiling the whole file first restores
- * the copy's parse. Vite 5 has no environment here and keeps that gap.
+ * Leave a component part to its framework plugin once the plugin has compiled
+ * the file as load() serves it now. plugin-vue keeps one parse per file and
+ * drops it when the real file changes on disk; a part asked before the whole
+ * file compiles again is then read from the real file. Under an active
+ * variant, an edit of the real file followed by a part rebuilt on its own (a
+ * stylesheet it imports changed) would show the real file's part. Compiling
+ * the whole file first restores the copy's. Vite 5 has no environment here
+ * and keeps that gap.
  */
-function componentBlock(env: LoadEnvironment | undefined, path: string): Promise<null> | null {
+function componentPart(env: LoadEnvironment | undefined, path: string): Promise<null> | null {
   const main = env?.moduleGraph?.getModuleById(path);
   if (!main || main.transformResult || !env?.transformRequest) return null;
   // A copy that does not compile reports that on its own request.
@@ -106,9 +109,10 @@ function componentBlock(env: LoadEnvironment | undefined, path: string): Promise
 /**
  * A check request (`<file>?isotone=<id>`) that would not compile the copy gets
  * a plain 404, rather than the page's file, which would pass an agent's check
- * of a copy it never compiled. For a `.vue` file: plugin-vue keeps one parse
- * of each component, shared by every tab, so a copy compiled on its own would
- * replace the page's. On Vite 5: see load(). Only files a variant tracks:
+ * of a copy it never compiled. For a component compiled in parts: its parts
+ * come from the plugin's compile of the page's file (plugin-vue keeps one
+ * parse per component, so a copy compiled on its own would even replace the
+ * page's). On Vite 5: see load(). Only files a variant tracks:
  * `tracked` maps a request path to that answer, and any other `?isotone=` is
  * the app's own.
  */
@@ -134,8 +138,8 @@ function refuseVersion(vite6: () => boolean, tracked: (path: string) => boolean)
       next();
       return;
     }
-    const reason = isSingleFileComponent(path)
-      ? 'isotone serves no copy of a .vue file on its own'
+    const reason = isCompiledInParts(path)
+      ? 'isotone serves no copy of a .vue, .svelte or .astro file on its own'
       : vite6()
         ? null
         : 'isotone serves a copy on its own from Vite 6';
@@ -244,8 +248,8 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       const path = id.replace(/[?#].*$/, '');
       if (!overrides.overridable(path)) return null;
       const query = id.slice(path.length).replace(/^\?/, '').replace(/#.*$/, '');
-      if (COMPONENT_BLOCK.test(query) && !OWN_FILE.test(query)) {
-        return overrides.versionsByFile().has(path) ? componentBlock(this.environment, path) : null;
+      if (COMPONENT_PART.test(query) && !OWN_FILE.test(query)) {
+        return overrides.versionsByFile().has(path) ? componentPart(this.environment, path) : null;
       }
       // `?isotone=<id>`: one version of a tracked file. Live dispatchers import
       // each version this way, and on any dev server it shows that a copy
@@ -253,7 +257,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       // `server.fs.deny` (below); Vite 5's check takes a server, not a
       // config. On Vite 5, as for a component (plugin-vue would take that
       // copy for the real file's parse), refuseVersion answers 404 first.
-      const versioned = vite6 && !isSingleFileComponent(path);
+      const versioned = vite6 && !isCompiledInParts(path);
       const version = versioned ? new URLSearchParams(query).get(VERSION_QUERY) : null;
       // Only a file some variant tracks has versions. Any other path is left
       // to Vite, whose `server.fs.deny` keeps `.env` and `.git/` out of reach;

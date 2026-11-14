@@ -13,7 +13,7 @@ import { ensureDirIgnored, ensureFileIgnored } from '../node/fs/git-exclude';
 import { isWithin } from '../node/fs/paths';
 import { overrideSourcePath, readVariant } from '../node/variants';
 import { ACTIVE_EVENT, BASE_VERSION, RESOLVED_LIVE_MODULE, VERSION_QUERY } from './live';
-import { isSingleFileComponent, type Overrides } from './overrides';
+import { type Overrides, reloadsOnSwitch } from './overrides';
 
 const MANIFEST = 'variant.json';
 
@@ -43,11 +43,8 @@ export function createSwitching(overrides: Overrides) {
   const swapping = new Map<string, Set<string>>();
   const swapWaiters = new Set<() => void>();
 
-  /**
-   * A switch of a Vue component, or an edit of its active copy, reloads the
-   * page. plugin-vue's own hot update compares its last parse with the real
-   * file on disk, which neither changes, so it would update nothing.
-   */
+  /** A switch of a Vue component, or an edit of its active copy, reloads the
+   *  page (see reloadsOnSwitch). */
   const reloadForComponent = (): [] => {
     reloadPage();
     return [];
@@ -102,11 +99,12 @@ export function createSwitching(overrides: Overrides) {
       // A check of any copy of this file compiles afresh on its next request.
       const { page } = pageModules(source);
       if (!overrides.active().includes(hit.id)) return [];
-      // A component no page has loaded has nothing to reload.
-      if (client && isSingleFileComponent(source)) return page.length > 0 ? reloadForComponent() : [];
-      // The browser holds the real file's URL, so the override's edit has
-      // to be delivered as if the real file changed.
-      return page;
+      // The page holds the real file's URL, so the edit is reported as the
+      // real file's, as a switch is: a framework plugin that compiles the
+      // changed file again (Svelte's) would otherwise compile the copy's own
+      // path, which Vite refuses. A file no page has loaded needs nothing.
+      if (client && page.length > 0 && dev) reportSwap(dev, source);
+      return [];
     }
     // A change activate() reported. Vite hands this hook a forward-slash
     // path, and the swap is keyed the same way, so Windows paths match too.
@@ -132,7 +130,7 @@ export function createSwitching(overrides: Overrides) {
       }
       return [...(modulesOf(path) ?? [])].filter((m) => versionOfId(m.id) === BASE_VERSION);
     }
-    if (swap && client && isSingleFileComponent(path)) return reloadForComponent();
+    if (swap && client && reloadsOnSwitch(path)) return reloadForComponent();
     const { page, checked } = pageModules(path);
     // Let Vite compute the swap's update as usual.
     if (swap) return checked ? page : undefined;
@@ -180,6 +178,14 @@ export function createSwitching(overrides: Overrides) {
       dispatched.clear();
       server.ws.send({ type: 'full-reload', path: '*' });
     }, 50);
+  };
+
+  /** Tell Vite the real file `source` changed, and let its hot update through
+   *  (see hotModules), as an editor save would: load() answers it now with
+   *  whatever the active set says. */
+  const reportSwap = (server: ViteDevServer, source: string): void => {
+    swapping.set(source, new Set());
+    server.watcher.emit('change', source);
   };
 
   /**
@@ -244,9 +250,8 @@ export function createSwitching(overrides: Overrides) {
     for (const source of sources) {
       const loaded = server.moduleGraph.getModulesByFile(source);
       if (!loaded || loaded.size === 0) continue;
-      swapping.set(source, new Set());
       emitted.push(source);
-      server.watcher.emit('change', source);
+      reportSwap(server, source);
     }
     // Live tabs switch themselves; this tells the ones still on the
     // server's default to follow it, once a reload would render it.

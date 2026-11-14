@@ -70,7 +70,7 @@ stop reading as stale: they are alternatives to what was promoted.
 
 - **Framework HMR.** Keep the host's Vite framework plugin (`@vitejs/plugin-react`
   or its wrapper; Vue and Svelte their own): without an accept boundary, a
-  switch reloads. A `.vue` file always reloads ([Vue components](#vue-components)).
+  switch reloads. A `.vue` or `.astro` file always reloads ([Vue components](#vue-components)).
 - **Tailwind v4** scans only the sources it is pointed at. Add
   `@source "../.isotone/variants/**/*.{ts,tsx}";` (relative to the CSS
   file) or classes new to a variant render unstyled.
@@ -311,15 +311,23 @@ switching anything, to check that it compiles; Vite 5 answers 404.
 
 ### Vue components
 
-A Vue app switches whole files: a variant of a `.vue` file follows
-`.isotone/active.json` in every tab, and a pick has no `?v=` link.
-`@vitejs/plugin-vue` compiles the active copy's blocks (`<template>`,
-`<script setup>`, `<style scoped>`) as it would the real file's. A switch, or an
-edit of the active copy, reloads the page, since plugin-vue's own hot update
-reads the real file from disk; a variant of a `.ts` or `.css` file still
-switches as a hot update. `<file>?isotone=<id>` answers 404 for a `.vue` file:
-plugin-vue keeps one parse of each component, shared by every tab, so check a
-copy by switching to it with `variant use <id>`.
+Vue, Svelte and Astro compile a component into several modules, and the page
+asks the dev server for each part on its own (`Card.vue?vue&type=style…`,
+`Card.svelte?svelte&type=style…`, `Card.astro?astro&type=style…`). The plugin
+swaps the whole file and leaves each part to the framework's plugin, which
+compiled the copy, so a variant renders its own template, script and styles.
+Such a variant switches whole files: it follows `.isotone/active.json` in every
+tab, and a pick has no `?v=` link.
+
+- **Vue:** a switch, or an edit of the active copy, reloads the page, since
+  plugin-vue's own hot update reads the real file from disk.
+- **Svelte:** a switch is a hot update, as an edit would be.
+- **Astro:** the page reloads, as after any edit of an `.astro` file.
+
+A variant of a `.ts` or `.css` file still switches as a hot update.
+`<file>?isotone=<id>` answers 404 for these components, since their parts come
+from the page's compile: check a copy by switching to it with
+`variant use <id>`.
 
 ### Server rendering
 
