@@ -282,7 +282,8 @@ describe('the React components that wrote the element', () => {
       ),
       _debugOwner: owner,
     });
-    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['Pricing'], source: 'C:/app/src/Pricing.tsx:12' });
+    // The file, with forward slashes; its line comes from the module's source map.
+    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['Pricing'], source: 'C:/app/src/Pricing.tsx' });
   });
 
   it('names the route a router created', () => {
@@ -522,7 +523,7 @@ describe('the React components that wrote the element', () => {
     }
   });
 
-  it('reads Windows paths without taking the drive for a URL scheme', () => {
+  it('reads Windows paths with forward slashes, without taking the drive for a URL scheme', () => {
     const vite = made(
       'exports.jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js:250:33)',
       'TabButton (http://localhost:5173/@fs/C:/Users/me/app/src/tabs.tsx:8:3)',
@@ -533,7 +534,7 @@ describe('the React components that wrote the element', () => {
       'C:/Users/me/app/src/tabs.tsx',
     );
     const legacy = pin({ type: 'button', _debugSource: { fileName: 'C:\\Users\\me\\app\\src\\old.tsx', lineNumber: 3 } });
-    expect(describeIsotoneElement(elementAsNode(legacy)).source).toBe('C:\\Users\\me\\app\\src\\old.tsx:3');
+    expect(describeIsotoneElement(elementAsNode(legacy)).source).toBe('C:/Users/me/app/src/old.tsx:3');
   });
 
   /** A wrapped JSX call as webpack and Turbopack emit it; V8 places it at its arguments. */
