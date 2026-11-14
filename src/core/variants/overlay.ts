@@ -857,7 +857,12 @@ export function createOverlayVariantsSource(cfg: {
     // `isotone:knob` event alone.
     const writes = (knob: KnobAxis) => `${knob.id} ${knob.kind} ${knob.kind === 'range' ? (knob.unit ?? '') : ''}`;
     const listed = new Set((list.knobs ?? []).map(writes));
-    if (knobRoot) applyKnobValues(previousKnobs.filter((knob) => !listed.has(writes(knob))), {}, knobRoot);
+    if (knobRoot)
+      applyKnobValues(
+        previousKnobs.filter((knob) => !listed.has(writes(knob))),
+        {},
+        knobRoot,
+      );
     // A stored value for a knob a group now hides is dropped too, so it cannot style the page unseen.
     const valid = new Map(overlayKnobs(list).map((knob) => [knob.id, knob]));
     knobValues = Object.fromEntries(

@@ -44,7 +44,8 @@ import { npm } from './npm.mjs';
 // Bundle raised to 407 kB and tarball to 466.5 kB (406.1 and 465.7 kB; note source): source maps read
 // for Turbopack, webpack and variant copies, checked against the page's downloads, Vue components,
 // selectors without classes, sources relative to the app, and their docs.
-const BUDGET = { bundle: 407_000, tarball: 466_500 };
+// #72, #73, #75 and #76 folded into #71: bundle 409.6 kB, tarball 483.2 kB.
+const BUDGET = { bundle: 410_500, tarball: 484_500 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));
