@@ -10,6 +10,8 @@ export interface VariantOption {
   image?: string;
   /** Optional secondary text shown as a tooltip on the option. */
   hint?: string;
+  /** Shown but not pickable, such as a file variant whose copy holds conflict markers. */
+  disabled?: boolean;
 }
 
 /** Show an axis only while another axis holds (`equals`) or does not hold

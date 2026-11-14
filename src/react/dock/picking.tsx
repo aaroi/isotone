@@ -101,8 +101,8 @@ function usePicker(context: PickerContext) {
             ? [...prev, target]
             : prev,
       );
-      // React 19 records the transformed line; its source map names the line in the file.
-      if (added && target.source)
+      // React 19 records the transformed line, or a bundle chunk; its source map names the file and line.
+      if (added)
         void resolveElementSource(el).then((source) => {
           if (source && source !== target.source)
             latest.current.setTargets((prev) => prev.map((t) => (t.selector === target.selector ? { ...t, source } : t)));

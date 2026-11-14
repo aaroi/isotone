@@ -19,6 +19,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+// @ts-expect-error jsdom ships no types; this file only parses a served page.
+import { JSDOM } from 'jsdom';
 import { createServer, normalizePath, type ViteDevServer } from 'vite';
 
 import { withNativeFetch } from '../../src/vite/html-inject';
@@ -118,9 +120,8 @@ describe('the Vite adapter, served', () => {
   it('injects into <head>, never into the body a react tree owns', async () => {
     const html = await (await fetch(`${origin}/`, { headers: { accept: 'text/html' } })).text();
     expect(html).toContain('data-isotone-inject');
-    // The loader script sits inside <head> (right after the opening tag,
-    // sharing it with the native-fetch capture it must run after, and ahead
-    // of the host's own head content)...
+    // The loader script sits inside <head> (at its end, after the
+    // native-fetch capture it must run after and the host's own head content)...
     const head = html.slice(html.indexOf('<head>') + '<head>'.length, html.indexOf('</head>'));
     expect(head).toMatch(/(^|>)[ \t]*<script type="module" data-isotone-inject>/);
     // ...and nothing between <body> and </body> carries a script tag. A
@@ -135,7 +136,7 @@ describe('the Vite adapter, served', () => {
   it('serves the variants endpoint, path-relative to its mount', async () => {
     const res = await fetch(`${origin}${VARIANTS_ENDPOINT}`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ variants: [], active: [], knobs: [] });
+    expect(await res.json()).toEqual({ variants: [], active: [], knobs: [], hmr: '/@vite/client' });
     const unknown = await fetch(`${origin}${VARIANTS_ENDPOINT}/active`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -229,9 +230,63 @@ describe('the Vite adapter, served', () => {
     const html = await (await fetch(`${origin}/`, { headers: { accept: 'text/html' } })).text();
     const capture = html.indexOf('data-isotone-native');
     expect(capture).toBeGreaterThan(-1);
-    // Before anything the app loads: directly inside <head>.
-    expect(html.slice(html.indexOf('<head>') + '<head>'.length).startsWith('<script data-isotone-native')).toBe(true);
+    // At the end of <head>, ahead of Isotone's other scripts; a classic script there runs before any module.
+    expect(capture).toBeLessThan(html.indexOf('data-isotone-inject'));
+    expect(html.slice(capture, html.indexOf('</head>'))).not.toContain('<title>');
     expect(html).toContain('window.__isotoneFetch=window.fetch.bind(window)');
+  });
+
+  it('puts the route’s stored knob values on the page before it paints, outside <html style>', async () => {
+    const knobs = join(root, '.isotone', 'knobs.json');
+    mkdirSync(dirname(knobs), { recursive: true });
+    writeFileSync(
+      knobs,
+      JSON.stringify([
+        { kind: 'range', id: 'pad', label: 'Padding', min: 0, max: 40, step: 1, defaultValue: 8, unit: 'px' },
+        { kind: 'color', id: 'ink', label: 'Ink', defaultColor: '#000000', swatches: [], route: '/pricing' },
+        {
+          kind: 'select',
+          id: 'ticks',
+          label: 'Ticks',
+          defaultOption: 'lines',
+          options: [
+            { id: 'lines', label: 'Lines' },
+            { id: 'dots', label: 'Dots' },
+          ],
+        },
+      ]),
+    );
+    try {
+      const load = async (path: string) => {
+        const html = await (await fetch(`${origin}${path}`, { headers: { accept: 'text/html' } })).text();
+        let atBody: string | null = null;
+        const dom = new JSDOM(html.replace('<body>', '<body><script>window.atBody = document.documentElement.outerHTML</script>'), {
+          url: `${origin}${path}`,
+          runScripts: 'dangerously',
+          beforeParse(window: Window) {
+            window.localStorage.setItem('isotone:knobs', JSON.stringify({ pad: '24', ink: '#ff0000', ticks: 'dots' }));
+            Object.defineProperty(window, 'atBody', {
+              set: (value: string) => {
+                atBody = value;
+              },
+            });
+          },
+        });
+        const rule = dom.window.document.querySelector('style[data-isotone-knobs]') as HTMLStyleElement | null;
+        return { atBody, html: dom.window.document.documentElement, rule: (rule?.sheet?.cssRules[0] as CSSStyleRule | undefined)?.style };
+      };
+      const home = await load('/');
+      // Set before the parser reached <body>: nothing has painted yet.
+      expect(home.atBody).toContain('data-knob-ticks="dots"');
+      expect(home.atBody).toContain('data-isotone-knobs');
+      expect(home.rule?.getPropertyValue('--knob-pad')).toBe('24px');
+      expect(home.rule?.getPropertyValue('--knob-ticks')).toBe('dots');
+      expect(home.rule?.getPropertyValue('--knob-ink')).toBe('');
+      expect(home.html.hasAttribute('style')).toBe(false);
+      expect((await load('/pricing')).rule?.getPropertyValue('--knob-ink')).toBe('#ff0000');
+    } finally {
+      rmSync(knobs);
+    }
   });
 
   it('resolves a relative notes file against the Vite root, not the cwd', async () => {
@@ -282,7 +337,13 @@ describe('the Vite adapter, served', () => {
       expect(html).not.toContain('data-isotone');
       expect(html).not.toContain('/@isotone/panel.js');
       expect(await (await fetch(`${url}${NOTES_ENDPOINT}`)).json()).toEqual([]);
-      expect(await (await fetch(`${url}${VARIANTS_ENDPOINT}`)).json()).toEqual({ variants: [], active: [], knobs: [] });
+      // The listing names the dev server's HMR client, which the panel listens on for the set changing.
+      expect(await (await fetch(`${url}${VARIANTS_ENDPOINT}`)).json()).toEqual({
+        variants: [],
+        active: [],
+        knobs: [],
+        hmr: '/@vite/client',
+      });
       const update = await fetch(`${url}${UPDATE_ENDPOINT}`);
       expect(update.headers.get('cache-control')).toBe('no-store');
       expect(await update.json()).toMatchObject({ status: 'disabled', upgrade: null });
@@ -387,9 +448,10 @@ describe('the notes file from before 1.3', () => {
 });
 
 describe('withNativeFetch', () => {
-  it('lands right after <head>, and after <body> when there is no head', () => {
+  it('lands at the end of <head>, and after <body> when there is no head', () => {
+    // At the start of <head>, React 19 claims it for a script the app renders there and React 18 fails hydration.
     expect(withNativeFetch('<html><head lang="en"><title>x</title></head><body></body></html>')).toMatch(
-      /<head lang="en"><script data-isotone-native>/,
+      /<title>x<\/title><script data-isotone-native>.*<\/script><\/head>/,
     );
     expect(withNativeFetch('<html><body class="a"><p>x</p></body></html>')).toMatch(/<body class="a"><script data-isotone-native>/);
     // A document without a head tag: the app's <header> is not one.
@@ -402,6 +464,16 @@ describe('withNativeFetch', () => {
     const once = withNativeFetch('<html><head></head><body></body></html>');
     expect(withNativeFetch(once)).toBe(once);
     expect(withNativeFetch('<p>fragment</p>')).toBe('<p>fragment</p>');
+  });
+
+  it('passes over a </head> written inside an earlier script or comment', () => {
+    const page = '<html><head><!-- </head> --><script>document.write("</head>")</script><title>x</title></head><body></body></html>';
+    expect(withNativeFetch(page)).toMatch(/<title>x<\/title><script data-isotone-native>.*<\/script><\/head><body>/);
+  });
+
+  it('still captures fetch beside the live store, whose source names the capture', () => {
+    const page = '<html><head><script data-isotone-head>win.__isotoneFetch ?? win.fetch</script></head><body></body></html>';
+    expect(withNativeFetch(page)).toContain('<script data-isotone-native>');
   });
 });
 
@@ -465,6 +537,13 @@ afterEach(() => {
  *  `C:/…` form on Windows as in Vite's module graph and hot updates. */
 function id(...parts: string[]): string {
   return normalizePath(join(...parts));
+}
+
+/** A `/@fs` URL for an absolute path, as Vite writes one: `/@fs/C:/…` on Windows,
+ *  `/@fs/home/…` elsewhere. `/@fs${root}` would be `/@fsC:\…` on Windows, which
+ *  Vite never sends, so a test of what it refuses would pass without testing it. */
+function fsUrl(...parts: string[]): string {
+  return `/@fs/${id(...parts).replace(/^\//, '')}`;
 }
 
 function tempProject(): { root: string; source: string; override: string; table: string } {
@@ -564,6 +643,18 @@ describe('overlay variants in load()', () => {
     // job (covered below), not something load() re-reads every time.
     writeActive({ root }, []);
     expect(fresh.load(source)?.code).toContain('variant b');
+  });
+
+  it("serves a copy with a map naming it, so a pinned element's source is the copy's file", () => {
+    const { root, source, override } = tempProject();
+    writeFileSync(override, 'export const label = "variant b";\n\nexport const more = 1;\n');
+    writeActive({ root }, ['b']);
+    const map = (loaded: unknown) => (loaded as { map: { sources: string[]; mappings: string } | null } | null)?.map;
+    // Whole-file mode and a live version (`?isotone=b`) alike; the real file keeps Vite's own map.
+    expect(map(plugin(root, 'serve').load(source))).toMatchObject({ sources: [override], mappings: 'AAAA;AACA;AACA;AACA' });
+    const { hooks } = livePlugin(root);
+    expect(map(hooks.load(`${source}?isotone=b`))?.sources).toEqual([override]);
+    expect(map(hooks.load(`${source}?isotone=_base`))).toBeNull();
   });
 
   it('strips the query and hash vite decorates module ids with', () => {
@@ -718,7 +809,10 @@ describe('overlay variants in the dev server', () => {
     // The swap is reported to Vite as an edit of the real file, never as a
     // page reload: Fast Refresh keeps the reviewer's state and open panel.
     expect(server.watcher.emit).toHaveBeenCalledWith('change', source);
-    expect(server.ws.send).not.toHaveBeenCalled();
+    expect(server.ws.send).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'full-reload' }));
+    // Every tab's panel hears the new set, so its highlight and a note's
+    // selections name what the page now shows.
+    expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: ['b'] } });
     // The hot update for that reported change goes through, where an
     // ordinary edit of an overridden real file would be dropped.
     // Vite reports the change in its own normalized form (forward slashes
@@ -893,6 +987,110 @@ describe('overlay variants in the dev server', () => {
     onAll('add', activeFile);
     expect(server.watcher.emit).toHaveBeenCalledWith('change', source);
     expect(hooks.load(source)?.code).toContain('variant b');
+    // Whole-file switching too: the panels follow the CLI's pick.
+    await vi.waitFor(() =>
+      expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: ['b'] } }),
+    );
+  });
+
+  it('never serves a copy with conflict markers, and shows it again once they are resolved', async () => {
+    const { root, source, override } = tempProject();
+    const markers = '<<<<<<< variant\nexport const label = "variant b";\n=======\nexport const label = "real";\n>>>>>>> real\n';
+    writeActive({ root }, ['b']);
+    writeFileSync(override, markers);
+    const hooks = plugin(root, 'serve');
+    const server = fakeServer(root);
+    server.moduleGraph.getModulesByFile.mockImplementation((f: string) =>
+      f === source ? new Set([{ id: '/src/Button.tsx' }]) : undefined,
+    );
+    hooks.configureServer(server);
+    const onAll = server.watcher.on.mock.calls.find((c) => c[0] === 'all')?.[1] as (event: string, file: string) => void;
+
+    // The pointer still names it, but nothing shows it: the real file loads,
+    // and the listing does not call it active.
+    expect(hooks.load(source)).toBeNull();
+    expect((await request(server, VARIANTS_ENDPOINT, 'GET', '/')).body).toMatchObject({ active: [] });
+    const pointer = () => JSON.parse(readFileSync(join(root, ACTIVE_FILE), 'utf8')).active;
+    // A tab posts what it shows: a pick in another group keeps it in the file,
+    // and so does a stale tab that still names it.
+    expect(await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['t'] })).toMatchObject({
+      status: 200,
+      body: { active: ['t'] },
+    });
+    expect(pointer()).toEqual(['t', 'b']);
+    expect((await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] })).status).toBe(200);
+    expect(pointer()).toEqual(['b']);
+    // Default picked in its own selector (or a reset) drops it.
+    expect((await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: [], groups: ['b'] })).status).toBe(200);
+    expect(pointer()).toEqual([]);
+    // Only a new pick of it is refused.
+    writeActive({ root }, []);
+    const refused = await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] });
+    expect(refused.status).toBe(409);
+    expect((refused.body as { error: string }).error).toBe(
+      '"b" holds conflict markers from `variant sync` in src/Button.tsx, so it cannot be shown until they are resolved.',
+    );
+    writeActive({ root }, ['b']);
+
+    // Resolved: the pick it kept shows, and every panel hears so.
+    writeFileSync(override, 'export const label = "variant b";\n');
+    onAll('change', override);
+    expect(hooks.load(source)?.code).toContain('variant b');
+    await vi.waitFor(() =>
+      expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: ['b'] } }),
+    );
+
+    // A sync that leaves markers in the active copy takes it off the page.
+    writeFileSync(override, markers);
+    onAll('change', override);
+    expect(hooks.load(source)).toBeNull();
+    await vi.waitFor(() => expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: [] } }));
+    expect(JSON.parse(readFileSync(join(root, ACTIVE_FILE), 'utf8')).active).toEqual(['b']);
+
+    // A copy nothing shows gaining markers changes no set, but what the panels
+    // list: they hear of it on an event of its own, which a live tab does not
+    // follow (it could reload before a server render has a swap).
+    writeActive({ root }, []);
+    onAll('change', join(root, ACTIVE_FILE));
+    server.ws.send.mockClear();
+    writeFileSync(join(variantDir({ root }, 't'), 'src', 'Table.tsx'), markers);
+    onAll('change', join(variantDir({ root }, 't'), 'src', 'Table.tsx'));
+    await vi.waitFor(() => expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:variants' }));
+    expect(server.ws.send).not.toHaveBeenCalledWith(expect.objectContaining({ event: 'isotone:active' }));
+
+    // The lock every change takes is not a change, nor is the dir itself, which
+    // macOS reports as added whenever the lock comes and goes.
+    server.ws.send.mockClear();
+    onAll('add', join(root, '.isotone', 'variants', '.mutation.lock'));
+    onAll('addDir', join(root, '.isotone', 'variants'));
+    onAll('unlink', join(root, '.isotone', 'variants', '.mutation.lock'));
+    await new Promise((r) => setTimeout(r, 120));
+    expect(server.ws.send).not.toHaveBeenCalled();
+  });
+
+  it('keeps a live tab off the panels’ announcements: it follows only the server’s set', () => {
+    const { root } = tempProject();
+    const { hooks } = livePlugin(root);
+    const runtime = hooks.load('\0isotone-live')?.code ?? '';
+    expect(runtime).toContain('import.meta.hot.on("isotone:active"');
+    expect(runtime).not.toContain('isotone:variants');
+  });
+
+  it('names the HMR client under the dev server’s origin, and none without a WebSocket server', async () => {
+    const { root } = tempProject();
+    const withOrigin = fakeServer(root);
+    Object.assign(withOrigin.config.server, { origin: 'http://127.0.0.1:5173' });
+    plugin(root, 'serve').configureServer(withOrigin);
+    expect((await request(withOrigin, VARIANTS_ENDPOINT, 'GET', '/')).body).toMatchObject({ hmr: 'http://127.0.0.1:5173/@vite/client' });
+    const noSocket = fakeServer(root);
+    Object.assign(noSocket.config.server, { ws: false, hmr: false });
+    plugin(root, 'serve').configureServer(noSocket);
+    expect((await request(noSocket, VARIANTS_ENDPOINT, 'GET', '/')).body).not.toHaveProperty('hmr');
+    // HMR off alone still has the socket, which custom events use.
+    const hmrOff = fakeServer(root);
+    Object.assign(hmrOff.config.server, { hmr: false });
+    plugin(root, 'serve').configureServer(hmrOff);
+    expect((await request(hmrOff, VARIANTS_ENDPOINT, 'GET', '/')).body).toMatchObject({ hmr: '/@vite/client' });
   });
 
   it('logs the variants dir after the banner when it exists', () => {
@@ -988,6 +1186,33 @@ describe('other devices on the network', () => {
     // This machine, on the same exposed server, gets everything.
     expect(navigate(server, '/', { host: 'localhost:5173' }, '127.0.0.1').body).toContain('data-isotone-inject');
     expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, { 'content-type': 'application/json' })).status).toBe(201);
+  });
+
+  it('marks a page for React hydration only on a React server render', () => {
+    const { root } = tempProject();
+    writeFileSync(
+      join(root, '.isotone', 'knobs.json'),
+      JSON.stringify([{ kind: 'select', id: 'ticks', label: 'Ticks', defaultOption: 'a', options: [{ id: 'a', label: 'A' }] }]),
+    );
+    const hydrates = (appType: string, plugins: string[]) => {
+      const hooks = isotone() as unknown as Hooks;
+      (hooks.configResolved as (config: object) => void)({
+        root,
+        command: 'serve',
+        assetsInclude: () => false,
+        server: { fs: { strict: false } },
+        appType,
+        plugins: plugins.map((name) => ({ name })),
+      });
+      const server = fakeServer(root);
+      hooks.configureServer(server);
+      return navigate(server, '/', { host: 'localhost:5173' }, '127.0.0.1').body.match(/\]\], (true|false), function knobStyle/)?.[1];
+    };
+    expect(hydrates('custom', ['react-router'])).toBe('true');
+    expect(hydrates('spa', ['vite:react-babel'])).toBe('false');
+    // Preact's name holds "react"; Astro renders the document itself, with React islands at most.
+    expect(hydrates('custom', ['preact:config', 'prefresh'])).toBe('false');
+    expect(hydrates('custom', ['astro:build', 'vite:react-babel'])).toBe('false');
   });
 
   it('says nothing about other devices when the dev server stays on this machine', () => {
@@ -1243,6 +1468,10 @@ describe('live variants', () => {
       const dispatcher = hooks.load(source)?.code ?? '';
       expect(dispatcher).toContain('"./Button.tsx?isotone=_base"');
       expect(dispatcher).not.toContain('?isotone=b');
+      // Nor can a tab pick it, from the panel or a `?v=` link: its group has no such member.
+      expect(hooks.load('\0isotone-live')?.code).toContain(
+        '"groups":[{"id":"b","members":["b"]},{"id":"t","members":["t"]}],"conflicted":["b"]',
+      );
       writeFileSync(override, 'export const label = "variant b";\n');
       const client = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([{ id: source }]) } };
       expect(hooks.hotUpdate.call({ environment: client }, { file: override })).toEqual([]);
@@ -1369,10 +1598,10 @@ describe('project files through the dev server', () => {
       '/.env',
       '/.env?import',
       '/.env?t=1',
-      `/@fs${project}/.env`,
-      `/@fs${project}/.env/`,
-      `/@fs${project}/.env/?import`,
-      `/@fs${project}/.env/?isotone=forced&import`,
+      `${fsUrl(project)}/.env`,
+      `${fsUrl(project)}/.env/`,
+      `${fsUrl(project)}/.env/?import`,
+      `${fsUrl(project)}/.env/?isotone=forced&import`,
       '/.env?isotone=_base',
       '/.env?isotone=b',
       '/.env?isotone=forced',
@@ -1382,7 +1611,7 @@ describe('project files through the dev server', () => {
       '/src/../.env?isotone=_base',
       '/%2eenv?isotone=_base',
       '/.%65nv?isotone=_base',
-      `/@fs${project}/.env?isotone=_base`,
+      `${fsUrl(project)}/.env?isotone=_base`,
       '/.isotone/notes.json',
       '/.isotone/notes.json?import',
       '/.isotone/notes.json?raw',
@@ -1392,7 +1621,7 @@ describe('project files through the dev server', () => {
       '/.isotone/knobs.json',
       '/.isotone/knobs.json?import',
       '/.isotone/variants/b/src/Button.tsx',
-      `/@fs${project}/.isotone/knobs.json`,
+      `${fsUrl(project)}/.isotone/knobs.json`,
     ];
     for (const path of paths) {
       const { body } = await raw(path);
@@ -1500,7 +1729,7 @@ describe('Components compiled in parts: Vue, Svelte, Astro', () => {
       const client = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([mod]), invalidateModule: vi.fn() } };
       expect(hooks.hotUpdate.call({ environment: client }, { file: counter })).toBeUndefined();
       vi.advanceTimersByTime(100);
-      expect(server.ws.send).not.toHaveBeenCalled();
+      expect(server.ws.send).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'full-reload' }));
     } finally {
       vi.useRealTimers();
     }
@@ -1610,7 +1839,7 @@ describe('Components compiled in parts: Vue, Svelte, Astro', () => {
     expect(await vite6('/src/Card.vue?vue&type=style&index=0&lang.css')).toBe('next');
     const vite5 = refusal(false);
     expect(await vite5('/src/Button.tsx?isotone=b')).toBe(404);
-    expect(await vite5(`/@fs${root}/src/Button.tsx?isotone=b`)).toBe(404);
+    expect(await vite5(`${fsUrl(root)}/src/Button.tsx?isotone=b`)).toBe(404);
     expect(await vite5('/src/Button.tsx')).toBe('next');
     // Any other `?isotone=` is the app's own.
     expect(await vite5('/?isotone=x')).toBe('next');
@@ -1966,8 +2195,8 @@ describe('variants kept outside .isotone', () => {
       '/variants/f/src/Button.tsx',
       '/variants/f/src/Button.tsx?import',
       '/variants/f/src/Button.tsx?raw',
-      `/@fs${project}/variants/f/src/Button.tsx`,
-      `/@fs${project}/variants/f/.env`,
+      `${fsUrl(project)}/variants/f/src/Button.tsx`,
+      `${fsUrl(project)}/variants/f/.env`,
       '/variants/f/variant.json',
       '/variants/f/variant.json?import',
       '/.env',

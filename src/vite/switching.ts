@@ -5,17 +5,25 @@
  * ./live.ts) are tracked here, since a change to what they hold is a reload.
  */
 import { mkdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 import { normalizePath, type ViteDevServer } from 'vite';
 
 import { ensureDirIgnored, ensureFileIgnored } from '../node/fs/git-exclude';
 import { isWithin } from '../node/fs/paths';
 import { overrideSourcePath, readVariant } from '../node/variants';
-import { ACTIVE_EVENT, BASE_VERSION, RESOLVED_LIVE_MODULE, VERSION_QUERY } from './live';
+import { ACTIVE_EVENT, VARIANTS_EVENT } from '../core/variants/overlay';
+import { BASE_VERSION, RESOLVED_LIVE_MODULE, VERSION_QUERY } from './live';
 import { type Overrides, reloadsOnSwitch } from './overrides';
 
 const MANIFEST = 'variant.json';
+/** The variants lock every change takes (`.mutation.lock`, and its temporary files): not a change itself. */
+const MUTATION_LOCK = '.mutation.lock';
+
+/** A change under the variants dir that says something: not the dir itself,
+ *  which macOS reports (`addDir`) whenever the lock comes and goes, and not the lock. */
+const isVariantsChange = (dir: string, path: string): boolean =>
+  path !== dir && isWithin(dir, path) && !basename(path).startsWith(MUTATION_LOCK);
 
 /** The version a module id names (`?isotone=<id>`), or null for any other module. */
 function versionOfId(id: string | null): string | null {
@@ -274,10 +282,21 @@ export function createSwitching(overrides: Overrides) {
       reportSwap(server, source);
     }
     // Live tabs switch themselves; this tells the ones still on the
-    // server's default to follow it, once a reload would render it.
+    // server's default to follow it, once a reload would render it, and every
+    // panel what the page now shows.
     const settled = serverSawSwap(server, emitted);
-    if (live) void settled.then(() => server.ws.send({ type: 'custom', event: ACTIVE_EVENT, data: { active: next } }));
+    void settled.then(() => server.ws.send({ type: 'custom', event: ACTIVE_EVENT, data: { active: next } }));
     return settled;
+  };
+
+  // One announcement per burst of changes, such as a sync writing several copies.
+  let announceTimer: ReturnType<typeof setTimeout> | null = null;
+  const announce = (server: ViteDevServer): void => {
+    if (announceTimer) clearTimeout(announceTimer);
+    announceTimer = setTimeout(() => {
+      announceTimer = null;
+      server.ws.send({ type: 'custom', event: VARIANTS_EVENT });
+    }, 50);
   };
 
   /**
@@ -296,7 +315,7 @@ export function createSwitching(overrides: Overrides) {
       const path = resolve(changed);
       if (path === activeFile) {
         void activate(overrides.readActive());
-      } else if (isWithin(overrides.dir, path)) {
+      } else if (isVariantsChange(overrides.dir, path)) {
         // Covers adds and unlinks, which hot updates never see.
         forgetManifests();
         // A variant deleted by hand leaves its id in the file. Pages are
@@ -304,6 +323,9 @@ export function createSwitching(overrides: Overrides) {
         const stillActive = overrides.readActive();
         const activeChanged = stillActive.join() !== overrides.active().join();
         if (activeChanged) void activate(stillActive);
+        // Anything else (a copy gaining or losing conflict markers, a new
+        // variant) changes what the panels list: tell them to read it again.
+        else announce(server);
         const now = signature();
         if (now !== listed) {
           listed = now;

@@ -27,7 +27,8 @@ import {
 // module there. (Later Vite 5 releases take a server, not a config.)
 import * as vite from 'vite';
 
-import { VARIANTS_ENDPOINT } from '../core/variants';
+import { axisDefault, KNOBS_STORAGE_KEY, overlayKnobs, VARIANTS_ENDPOINT } from '../core/variants';
+import { applyStoredKnobs, knobStyle } from '../core/variants/overlay';
 import { blastFile } from '../node/blast';
 import { defaultNotesFile, LEGACY_NOTES_FILE, NOTES_FILE } from '../node/notes/location';
 import { ensureFileIgnored } from '../node/fs/git-exclude';
@@ -35,7 +36,7 @@ import { canonicalPath, isWithin, realPath } from '../node/fs/paths';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
 import { autoUpdateNote } from '../node/update/note';
-import { listVariants, variantsDir } from '../node/variants';
+import { listVariants, readKnobs, variantsDir } from '../node/variants';
 import { isLoopback } from '../node/http';
 import { mountModuleSource, servePanel } from './html-inject';
 import {
@@ -45,6 +46,7 @@ import {
   liveRuntimeModule,
   liveStoreScript,
   RESOLVED_LIVE_MODULE,
+  safeJson,
   VERSION_QUERY,
 } from './live';
 import { type Gate, notesEndpoint, updateEndpoint, variantsEndpoint } from './middleware';
@@ -66,6 +68,19 @@ const VITE_DENY = ['.env', '.env.*', '*.{crt,pem}', '**/.git/**'];
  * them and show the real file.
  */
 const SPECIAL_QUERY = /[?&](raw|url|inline|no-inline|worker|sharedworker|html-proxy)(?:[&=]|$)/;
+
+/**
+ * A variant's copy, served under the real file's module id, with a line map
+ * that names the copy: a stack's source map then leads the agent to the file
+ * that ran, at a line of that file.
+ */
+function copy(file: string): { code: string; map: { version: 3; sources: string[]; names: []; mappings: string } } {
+  const code = readFileSync(file, 'utf8');
+  return {
+    code,
+    map: { version: 3, sources: [normalizePath(file)], names: [], mappings: `AAAA${';AACA'.repeat(code.split('\n').length - 1)}` },
+  };
+}
 
 /**
  * A part of a component that its framework plugin compiled from the whole
@@ -224,6 +239,18 @@ function canonical(path: string): string {
   }
 }
 
+/**
+ * Where the page's Vite client lives, which carries the server's custom
+ * events: under `server.origin` when one is set, and the base. Null without
+ * a WebSocket server (`server.ws: false`, Vite 7 and later); Vite still sends
+ * custom events with `server.hmr` off.
+ */
+function hmrClient(server: ViteDevServer): string | null {
+  const { ws, origin } = server.config.server as { ws?: false; origin?: string };
+  if (ws === false) return null;
+  return `${origin ?? ''}${server.config.base ?? '/'}@vite/client`;
+}
+
 /** Say where the notes go after Vite's own banner, so it is not buried under
  *  it. Portable setups fail quietly otherwise: a reviewer writes notes and the
  *  agent looks in the wrong place. */
@@ -247,6 +274,8 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
   let isDev = false;
   let hasReact = false;
   let ssrHost = false;
+  // A server render React hydrates whole: React (not Preact) on an SSR host other than Astro, whose islands are React.
+  let reactDocument = false;
   // Vite 6 or later, whose environments mark it: decided in configureServer.
   let vite6 = false;
   // Whether the dev server would serve a path (see servableBy). A build
@@ -280,6 +309,9 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       overrides.configure(config);
       hasReact = (config.plugins ?? []).some((p) => /react/i.test(p.name));
       ssrHost = config.appType !== 'spa' && config.appType !== 'mpa';
+      const names = (config.plugins ?? []).map((p) => p.name);
+      reactDocument =
+        ssrHost && names.some((name) => /react/i.test(name) && !/preact/i.test(name)) && !names.some((name) => /astro/i.test(name));
     },
     async resolveId(source: string, importer: string | undefined, opts: { ssr?: boolean; isEntry?: boolean } = {}) {
       if (!variantsOptions) return null;
@@ -332,7 +364,8 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
         // One version asked for in a server render obeys `server.fs.deny` too.
         if (!servable(path)) return null;
         const from = version === BASE_VERSION ? (existsSync(path) ? path : null) : overrides.copyOf(version, path);
-        return { code: from ? readFileSync(from, 'utf8') : 'export {};\n', map: null };
+        if (!from) return { code: 'export {};\n', map: null };
+        return from === path ? { code: readFileSync(from, 'utf8'), map: null } : copy(from);
       }
       // The browser gets a dispatcher; a server render keeps the whole-file
       // swap, since the server cannot know which tab it renders for.
@@ -345,7 +378,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
         }
       }
       const override = overrides.overrideFor(overrides.active(), path);
-      return override ? { code: readFileSync(override, 'utf8'), map: null } : null;
+      return override ? copy(override) : null;
     },
     // Vite 6 and later call this once per environment and skip
     // handleHotUpdate; Vite 5 only knows handleHotUpdate.
@@ -406,7 +439,12 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
         const activate = switching.attach(server, { live, ignored: variantsOptions.ignored });
         server.middlewares.use(
           VARIANTS_ENDPOINT,
-          variantsEndpoint(() => overrides.opts, activate, allowedHosts),
+          variantsEndpoint(
+            () => overrides.opts,
+            activate,
+            allowedHosts,
+            () => hmrClient(server),
+          ),
         );
         server.middlewares.use(
           refuseVersion(
@@ -418,7 +456,17 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
 
       // The tab's variant store has to exist before the app's modules run,
       // so it rides in the document itself, with the server's current set.
-      const liveScript = switching.live ? () => liveStoreScript(overrides.liveConfig(ssrHost)) : null;
+      // The route's stored knob values go on there too, before the first paint.
+      const knobsScript = (url: string): string => {
+        const route = new URL(url, 'http://localhost').pathname;
+        const knobs = overlayKnobs({ variants: overrides.readManifests(), knobs: readKnobs(overrides.opts) }, route);
+        if (knobs.length === 0) return '';
+        const rows = knobs.map((k) => [k.id, k.kind === 'range' ? (k.unit ?? '') : '', axisDefault(k), k.kind === 'select']);
+        return `(${applyStoredKnobs})(document, ${safeJson(KNOBS_STORAGE_KEY)}, ${safeJson(rows)}, ${reactDocument}, ${knobStyle});`;
+      };
+      const headScript = variantsOptions
+        ? (url: string) => knobsScript(url) + (switching.live ? liveStoreScript(overrides.liveConfig(ssrHost)) : '')
+        : null;
       const mount =
         options.panel === false
           ? null
@@ -430,7 +478,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
               options.theme,
               options.compareShortcut,
             );
-      servePanel(server.middlewares.use.bind(server.middlewares) as never, mount, liveScript);
+      servePanel(server.middlewares.use.bind(server.middlewares) as never, mount, headScript);
     },
   } satisfies Plugin;
 

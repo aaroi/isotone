@@ -441,14 +441,15 @@ describe('mountIsotone variants options', () => {
       (fetchMock.mock.calls as unknown as [RequestInfo | URL, RequestInit?][])
         .filter((c) => String(c[0]) === '/api/isotone/variants/active')
         .map((c) => JSON.parse(String(c[1]?.body)));
-    expect(posts().at(-1)).toEqual({ active: ['table-dense', 'settings-tabs'] });
+    // With the selector it was made in, whose hidden pick (if any) the server then drops.
+    expect(posts().at(-1)).toEqual({ active: ['table-dense', 'settings-tabs'], groups: ['settings'] });
     await tick();
     expect(button('Tabs')?.classList.contains('isotone-seg-on')).toBe(true);
     expect(button('Dense rows')?.classList.contains('isotone-seg-on')).toBe(true);
 
     // A sibling replaces only its own group's member.
     await clickIn(button('Striped'));
-    expect(posts().at(-1)).toEqual({ active: ['settings-tabs', 'table-striped'] });
+    expect(posts().at(-1)).toMatchObject({ active: ['settings-tabs', 'table-striped'] });
 
     // Make default names every pick, in panel order, and pins the first.
     await clickIn(button('Make default'));
@@ -464,7 +465,7 @@ describe('mountIsotone variants options', () => {
     // Default in one selector drops that group and leaves the other.
     const defaults = Array.from(shadow.querySelectorAll('button')).filter((b) => b.textContent?.trim() === 'Default');
     await clickIn(defaults[0]);
-    expect(posts().at(-1)).toEqual({ active: ['settings-tabs'] });
+    expect(posts().at(-1)).toMatchObject({ active: ['settings-tabs'] });
 
     off();
     await tick();

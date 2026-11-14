@@ -66,13 +66,15 @@ variants into a `vite build` for a preview.
 made from and reads as stale once that file moves on. In a Git repository that
 version is kept in Git's object store; outside one, in the variant's own
 `.isotone-base/` directory, so a project without `git init` works the same,
-before and after one. After a later `git init` those kept versions are
-committed with the variant, so teammates can sync it too. `variant sync <id>` merges the real file's changes in,
+before and after one. Git's object store keeps only a version the current
+commit holds; any other (an uncommitted or untracked real file, a repository
+with no commits) is kept in `.isotone-base/` too, so it is committed with the
+variant, teammates can sync it, and `git gc` never drops it. `variant sync <id>` merges the real file's changes in,
 untracked files included; it needs Git installed and says so when it is not.
 Where both sides changed the same lines the copy gets conflict markers: `sync`
 exits 1, `variant list` counts them under CONFLICTS, and the copy cannot be
-shown until they are resolved (in live mode, picking it shows the real file
-meanwhile). A copy made outside a repository by Isotone 1.5.0 or earlier has no
+shown until they are resolved: `variant use` refuses it, the panel shows it disabled, and if it
+was active the real files show meanwhile (it returns once they are). A copy made outside a repository by Isotone 1.5.0 or earlier has no
 recorded version: `variant list` names it under NO BASE, since nobody knows
 whether its real file changed, and `sync` cannot merge it (unless the copy still
 matches the real file). Compare it with the real file by hand, then `variant
@@ -87,13 +89,15 @@ stop reading as stale: they are alternatives to what was promoted.
   switch reloads. A `.vue` or `.astro` file always reloads ([Vue components](#vue-components)).
 - **Tailwind v4** scans only the sources it is pointed at. Add
   `@source "../.isotone/variants/**/*.{ts,tsx}";` (relative to the CSS
-  file) or classes new to a variant render unstyled.
+  file, with your components' extensions; `init` prints the line) or classes
+  new to a variant render unstyled.
 - **A sibling dev server** that aliases into another package sets
   `variants: { root: '../that-package' }` so both serve the same variants.
 - **Routes** come from `window.location.pathname`; on a memory router (`/`
   everywhere) leave `--route` off.
-- **Linters** should ignore `.isotone` (Biome: `"!.isotone"` in
-  `files.includes`; ESLint: `{ ignores: ['.isotone/**'] }`).
+- **Linters** should ignore `.isotone`, since a copy's imports resolve from the
+  real file (Biome: `"!.isotone"` in `files.includes`; ESLint:
+  `{ ignores: ['.isotone/**'] }`). `init` says so when it finds a config.
 
 ## Knobs
 
@@ -135,12 +139,18 @@ A colour knob takes a `defaultColor` and named `swatches`, all as hex values:
 Ranges render as sliders and colours as swatches with a custom picker. An
 invalid entry is skipped, and so is a knob whose id a file variant group already
 has (a lone variant's id is its group's); `npx isotone variant list` names each one. Knobs work
-with `isotone serve` too. A value reaches the page as `--knob-<id>` on `<html>`,
+with `isotone serve` too. A value reaches the page as `--knob-<id>` on `:root`,
 unit appended, so the source reads it with the committed default as fallback:
 
 ```css
 mask-image: radial-gradient(ellipse, black var(--knob-fade-from, 0%), transparent 100%);
 ```
+
+The property sits, marked `!important`, in a `:root` rule of a stylesheet the
+page adopts (`document.adoptedStyleSheets`), not in `<html style>`, so a
+framework that renders `<html>` (React Router, Next.js) hydrates the page
+without a mismatch. On Vite, the plugin's inline `<head>` script applies the
+stored values before the page first paints.
 
 A knob's value applies only on the routes its `route` names, where its control
 is. On any other page, after a full load or a client-side navigation, its
@@ -150,7 +160,10 @@ that should change on every page leaves `route` out.
 
 A select knob names a style that one line of CSS or a draw call can act on. Give
 it `options` of `{ "id", "label" }` and a `defaultOption`. Its value also lands
-as `data-knob-<id>` on `<html>`, since CSS cannot branch on a custom property:
+as `data-knob-<id>` on `<html>`, since CSS cannot branch on a custom property.
+Where React hydrates `<html>`, the attribute arrives once it has (or after five
+seconds if hydration never shows); in a Vite app without server rendering,
+before the first paint:
 
 ```css
 html[data-knob-tick-style="dots"] .tick { border-radius: 50%; }
@@ -159,8 +172,8 @@ html[data-knob-tick-style="dots"] .tick { border-radius: 50%; }
 When the alternative changes structure, use a file variant: a select knob leaves
 both branches in the source until someone removes one.
 
-Code that draws for itself, such as a canvas chart, reads the property and
-redraws on the `isotone:knob` event, which bubbles from `<html>` with
+Code that draws for itself, such as a canvas chart, reads the property with
+`getComputedStyle(document.documentElement)` and redraws on the `isotone:knob` event, which bubbles from `<html>` with
 `{ id, value }` (`null` when the knob returns to its default or leaves the page
 with its route):
 
@@ -267,7 +280,8 @@ mountIsotone({ variants: source, defaultTab: 'variants' });
 ```
 
 `selections` maps each axis id to a string; a range's value is a numeric string,
-and `onChange` must apply it to the app's state or styles. With `compare: true`
+and `onChange` must apply it to the app's state or styles. A select option with
+`disabled: true` shows but cannot be picked. With `compare: true`
 the panel offers [Compare](#hold-to-compare) for these selectors: while the
 reviewer holds it, `onChange` gets the defaults with `{ preview: true }` as its
 second argument, then the picks with `{ preview: false }`. Apply both, but keep
@@ -333,7 +347,7 @@ names the one it finds:
 | --- | --- | --- |
 | React on Vite 6 or later | Per tab, in the tab's URL ([live](#live-switching)); CSS and files served whole follow every tab | Opens those variants |
 | Vite 5, Vue, Svelte or another host without React, or `variants: { live: false }` | Shared by every tab and browser, through `.isotone/active.json` ([whole files](#whole-file-switching)) | Not applied; the Variants panel says so |
-| `isotone serve` (Next.js, other dev servers) | None: only the Vite plugin serves them, and the `variant` commands warn | — |
+| `isotone serve` (Next.js, other dev servers) | None: only the Vite plugin serves them. In Next.js `variant new` and `use` refuse without `--force`; the other `variant` commands warn | — |
 | A host `VariantsSource` | The app's own: per tab when it keeps picks in the URL. File variants listed beside it ([on Vite](#beside-knobs-and-file-variants)) switch as in the rows above | The app's own selectors as the app decides; file variants as above |
 
 Knob values stay in the browser in every setup: the panel keeps them in
@@ -416,8 +430,8 @@ from the page's compile: check a copy by switching to it with
 
 ### Server rendering
 
-Server rendering follows `.isotone/active.json`, since the server cannot tell
-tabs apart; a tab whose components differ hydrates from it and switches right
+Server rendering (React Router's framework mode, Remix on Vite) follows
+`.isotone/active.json`, since the server cannot tell tabs apart; a tab whose components differ hydrates from it and switches right
 after. A link whose `?v=` differs in a fixed export saves its set as the default
 and reloads once; later reloads hydrate with a recoverable mismatch, so two tabs
 never fight over the default.

@@ -38,6 +38,12 @@ function dispose(off: () => void) {
   vi.runAllTimers();
 }
 
+/** A knob's value in the `:root` rule the panel writes (jsdom does not recompute styles for a CSSOM edit). */
+const knobValue = (name: string) => {
+  const sheet = document.querySelector<HTMLStyleElement>('style[data-isotone-knobs]')?.sheet;
+  return sheet ? (sheet.cssRules[0] as CSSStyleRule).style.getPropertyValue(name) : '';
+};
+
 describe('mountIsotone next to a document-level host root', () => {
   it('leaves no react-dom marker on the document', () => {
     const before = Object.getOwnPropertyNames(document);
@@ -147,8 +153,7 @@ describe('mountIsotone and route-scoped knobs', () => {
       act(async () => {
         await new Promise((r) => setTimeout(r, 0));
       });
-    const html = document.documentElement;
-    const shown = () => html.style.getPropertyValue('--knob-header-border');
+    const shown = () => knobValue('--knob-header-border');
     window.history.pushState(null, '', '/');
 
     const off = mountIsotone({ endpoint: '/api/isotone/notes', variants: 'overlay' });
@@ -174,7 +179,7 @@ describe('mountIsotone and route-scoped knobs', () => {
     } finally {
       off();
       await tick();
-      html.style.removeProperty('--knob-header-border');
+      document.querySelector('style[data-isotone-knobs]')?.remove();
       localStorage.removeItem('isotone:knobs');
       window.history.replaceState(null, '', '/');
       vi.unstubAllGlobals();
@@ -383,7 +388,7 @@ describe('a host source beside the knobs of the server that answers notes', () =
       'Card radius',
       'Call to action',
     ]);
-    expect(document.documentElement.style.getPropertyValue('--knob-card-radius')).toBe('16px');
+    expect(knobValue('--knob-card-radius')).toBe('16px');
 
     await panel.click(panel.button('Get started'));
     expect(onChange).toHaveBeenLastCalledWith({ cta: 'start' });
@@ -399,10 +404,10 @@ describe('a host source beside the knobs of the server that answers notes', () =
       });
     await key('keydown');
     expect(onChange).toHaveBeenLastCalledWith({ cta: 'join' }, { preview: true });
-    expect(document.documentElement.style.getPropertyValue('--knob-card-radius')).toBe('');
+    expect(knobValue('--knob-card-radius')).toBe('');
     await key('keyup');
     expect(onChange).toHaveBeenLastCalledWith({ cta: 'start' }, { preview: false });
-    expect(document.documentElement.style.getPropertyValue('--knob-card-radius')).toBe('16px');
+    expect(knobValue('--knob-card-radius')).toBe('16px');
 
     await panel.click(panel.button('Make default'));
     expect(panel.posted()).toEqual([
@@ -430,7 +435,7 @@ describe('a host source beside the knobs of the server that answers notes', () =
     await act(async () => {
       await new Promise((r) => setTimeout(r, 10));
     });
-    expect(document.documentElement.style.getPropertyValue('--knob-card-radius')).toBe('16px');
+    expect(knobValue('--knob-card-radius')).toBe('16px');
     off();
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
@@ -486,7 +491,7 @@ describe('a host source beside the knobs of the server that answers notes', () =
     };
     const source = createVariantsSource({ axes: [hostRadius], onChange: () => {} });
     const panel = await mountWithKnobs({ endpoint: notesEndpoint, variants: source, getRoute: () => '/' });
-    expect(document.documentElement.style.getPropertyValue('--knob-card-radius')).toBe('');
+    expect(knobValue('--knob-card-radius')).toBe('');
     expect(Array.from(panel.shadow.querySelectorAll('.isotone-axis-label')).map((el) => el.textContent)).toEqual(['Card radius']);
     expect(panel.button('Sharp')).toBeDefined();
     // One short line, explained in full on hover or focus.
@@ -504,7 +509,7 @@ describe('a host source beside the knobs of the server that answers notes', () =
   it('takes a knob off the page when a host selector with its id arrives later, and back when it goes', async () => {
     const source = createVariantsSource({ axes: [], onChange: () => {} });
     const panel = await mountWithKnobs({ endpoint: notesEndpoint, variants: source, getRoute: () => '/' });
-    const radius = () => document.documentElement.style.getPropertyValue('--knob-card-radius');
+    const radius = () => knobValue('--knob-card-radius');
     expect(radius()).toBe('16px');
     await act(async () => {
       source.setAxes([{ id: 'card-radius', label: 'Card radius', defaultOption: 'soft', options: [{ id: 'soft', label: 'Soft' }] }]);
@@ -561,7 +566,7 @@ describe('route-scoped knobs beside a host source', () => {
         await new Promise((r) => setTimeout(r, 0));
       });
     const html = document.documentElement;
-    const border = () => html.style.getPropertyValue('--knob-header-border');
+    const border = () => knobValue('--knob-header-border');
     const source = createVariantsSource({
       axes: [{ id: 'cta', label: 'Call to action', defaultOption: 'join', options: [{ id: 'join', label: 'Join' }] }],
       onChange: () => {},
@@ -575,12 +580,12 @@ describe('route-scoped knobs beside a host source', () => {
       // Loaded at mount beside the host's source (#64), and off on another route (#60).
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/isotone/variants'))).toBe(true);
       expect(border()).toBe('');
-      expect(html.style.getPropertyValue('--knob-hero')).toBe('');
+      expect(knobValue('--knob-hero')).toBe('');
 
       window.history.pushState(null, '', '/pricing');
       await tick();
       expect(border()).toBe('#f59e0b');
-      expect(html.style.getPropertyValue('--knob-hero')).toBe('');
+      expect(knobValue('--knob-hero')).toBe('');
 
       window.history.pushState(null, '', '/');
       await tick();

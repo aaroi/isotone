@@ -18,7 +18,7 @@ import { defaultNotesFile, NOTES_FILE } from '../node/notes/location';
 import { foreignServers } from '../node/serve-owner';
 import { notesProjectRoot, updateRequestOf } from '../node/update/request';
 import { filesWithoutBase, hasGit, listVariants, NO_GIT_SYNC, readActive, variantDir } from '../node/variants';
-import { latestChange, mtime, snapshot } from './changes';
+import { changedSince, latestChange, mtime, snapshot } from './changes';
 import { docPath } from './docs';
 import { excludeLocalFiles } from './local-files';
 import { fileVariantSwitching } from './project';
@@ -200,8 +200,9 @@ function reply(io: CliIO, args: NotesArgs, root: string): number {
 function flip(io: CliIO, args: NotesArgs, action: Exclude<Action, '--reply'>, root: string): number {
   // `since` is read before `--done` clears `workingAt`, for the variant advice.
   const changed: { note: StoredNote; already: boolean; since: number }[] = [];
+  let counted: string[] = [];
   try {
-    if (action === '--done' && !args.force) refuseUnfixed(args, root);
+    if (action === '--done' && !args.force) counted = refuseUnfixed(io, args, root);
     const started = action === '--working' ? snapshot(root, isBookkeeping(args.file), managedFiles(args.file, root)) : null;
     updateNotes(args.file, (current) => {
       changed.length = 0;
@@ -235,10 +236,13 @@ function flip(io: CliIO, args: NotesArgs, action: Exclude<Action, '--reply'>, ro
   touchSession(args.file, Date.now(), action === '--working' ? [] : changed.map((c) => c.note.id));
   const advice =
     action === '--done'
-      ? variantAdvice(
-          args.dir,
-          changed.filter((c) => !c.already),
-        )
+      ? [
+          ...counted,
+          ...variantAdvice(
+            args.dir,
+            changed.filter((c) => !c.already),
+          ),
+        ]
       : [];
   if (args.json) {
     out(io, toJson(changed.map((c) => noteRecord(c.note, root))));
@@ -308,11 +312,13 @@ function managedFiles(file: string, root: string): string[] {
  * Refuses `--done` on a note when no project file changed since `--working`
  * on it, or since it was written: the fix has not landed. That is what a
  * chained `edit && … ; npx isotone --done <id>` does when the edit fails.
+ * Otherwise returns the line that names the files it counted, since any
+ * change counts (see `./changes`).
  */
-function refuseUnfixed(args: NotesArgs, root: string): void {
+function refuseUnfixed(io: CliIO, args: NotesArgs, root: string): string[] {
   const notes = readNotes(args.file);
   const targets = [...new Set(args.ids.map((id) => findNoteByPrefix(notes, id)))].filter((n) => !n.done);
-  if (!targets.length) return;
+  if (!targets.length) return [];
   const ignore = isBookkeeping(args.file);
   const own = managedFiles(args.file, root);
   let current: string | null | undefined;
@@ -325,7 +331,7 @@ function refuseUnfixed(args: NotesArgs, root: string): void {
     latest ??= latestChange(root, ignore, own);
     return latest <= since(n);
   });
-  if (!unfixed.length) return;
+  if (!unfixed.length) return countedLine(io, targets, changedSince(root, ignore, own, Math.min(...targets.map(since))));
   const lines = unfixed.map((n) => {
     const at =
       n.workingAt && Date.parse(n.workingAt) >= Date.parse(n.createdAt)
@@ -343,6 +349,35 @@ function refuseUnfixed(args: NotesArgs, root: string): void {
   );
 }
 
+/** What `--done` took for the fix, so a change that is not one (another agent's, the user's) shows. */
+function countedLine(io: CliIO, notes: StoredNote[], files: string[] | null): string[] {
+  const working = notes.filter((n) => n.workingAt).length;
+  const from = working === notes.length ? '--working' : working ? '--working or the note' : 'the note';
+  const whose = notes.length === 1 ? 'its fix' : 'their fixes';
+  // Too many files to name.
+  if (files === null) return [`Counted as ${whose}: a change since ${from}.`];
+  if (!files.length) return [`Counted as ${whose}: a staged or committed change since ${from}.`];
+  // Named from where the agent runs, the way Git names the files (macOS's /var is /private/var).
+  let cwd = io.cwd;
+  try {
+    cwd = realPath(cwd);
+  } catch {}
+  // A variant's manifest and copies are one change: named by its directory.
+  const named = [
+    ...new Set(
+      files.map((file) =>
+        relative(cwd, file)
+          .split(sep)
+          .join('/')
+          .replace(/^(.*\.isotone\/variants\/[^/]+\/).+$/, '$1'),
+      ),
+    ),
+  ];
+  const shown = named.slice(0, 5);
+  const more = named.length > 5 ? ` and ${named.length - 5} more` : '';
+  return [`Counted as ${whose}, changed since ${from}: ${shown.join(', ')}${more}.`];
+}
+
 /**
  * After a fix: the variants on the fixed notes' routes that copy a file this
  * fix changed (it changed after `--working`, or after the note was written),
@@ -352,7 +387,11 @@ function refuseUnfixed(args: NotesArgs, root: string): void {
  * tab without a pick of its own shows. The pick stays the reviewer's.
  */
 function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]): string[] {
-  if (!notes.length) return [];
+  // Nothing serves a copy in a Next app, which runs no Vite plugin: the page shows the real files, and no
+  // copy needs a sync. A project without a Vite config of its own may be served by a sibling's
+  // (`variants: { root }`), so it is not judged.
+  const switching = fileVariantSwitching(dir);
+  if (!notes.length || switching === 'none') return [];
   let variants: ReturnType<typeof listVariants>;
   let active: string[];
   try {
@@ -404,14 +443,10 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
   // tab's: a note about this variant's selector says what its reviewer was on (the option it is about, else
   // the pick it was written with), as do the selections a note records, and they outrank it. A stylesheet follows active.json in every tab, and so
   // does every file where picks are shared (no React, Vite 5, `live: false`): there it is what every tab shows.
-  const switching = fileVariantSwitching(dir);
   const shared = switching === 'whole' || switching === 'whole-react';
   const groupOf = new Map(overlayGroups(variants).flatMap((group) => group.members.map((member) => [member.id, group.id] as const)));
   const article = (fixed: unknown[]) => (fixed.length > 1 ? 'a' : 'the');
-  // Nothing serves a copy in a Next app, which runs no Vite plugin: the page shows the real files. A project
-  // without a Vite config of its own may be served by a sibling's (`variants: { root }`), so it is not judged.
   const showing = stale.flatMap(({ variant, files, notes: fixed }) => {
-    if (switching === 'none') return [];
     if (shared)
       return active.includes(variant.id)
         ? [{ id: variant.id, files, why: 'active in .isotone/active.json, which every tab shows here' }]

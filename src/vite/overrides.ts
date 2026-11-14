@@ -12,6 +12,7 @@ import { type OverlayVariant, overlayGroups, VARIANTS_ENDPOINT } from '../core/v
 import { isWithin, realPath } from '../node/fs/paths';
 import {
   ACTIVE_FILE,
+  conflictedCopies,
   hasConflictMarkers,
   readActive,
   readVariants,
@@ -99,6 +100,8 @@ export function createOverrides(setup: VariantsSetup) {
   let manifests: OverlayVariant[] | null = null;
   let byFile: Map<string, string[]> | null = null;
   let addedFiles: Map<string, string[]> | null = null;
+  // The live store's groups and the members it cannot show, for each page.
+  let liveGroups: Pick<LiveConfig, 'groups' | 'conflicted'> | null = null;
 
   const readManifests = (): OverlayVariant[] => {
     manifests ??= readVariants(opts);
@@ -151,6 +154,7 @@ export function createOverrides(setup: VariantsSetup) {
     manifests = null;
     byFile = null;
     addedFiles = null;
+    liveGroups = null;
     answers.clear();
   };
 
@@ -195,9 +199,11 @@ export function createOverrides(setup: VariantsSetup) {
 
     forget,
 
-    /** Drop which copy answers each path, keeping the manifests. */
+    /** Drop which copy answers each path, and which copies hold conflict
+     *  markers, keeping the manifests. */
     forgetAnswers(): void {
       answers.clear();
+      liveGroups = null;
     },
 
     /** The override that answers `path` under the active set `ids`. */
@@ -263,10 +269,16 @@ export function createOverrides(setup: VariantsSetup) {
       return { key: normalizePath(relative(opts.root, path)), versions, names: [...names].sort() };
     },
 
-    /** The live store's config: groups in panel order and the active set. */
+    /** The live store's config: groups in panel order, the members it cannot
+     *  show, and the active set. Read once per change under the variants dir. */
     liveConfig(ssr: boolean): LiveConfig {
-      const groups = overlayGroups(readManifests()).map((group) => ({ id: group.id, members: group.members.map((m) => m.id) }));
-      return { groups, active: active(), ssr, endpoint: VARIANTS_ENDPOINT };
+      liveGroups ??= {
+        groups: overlayGroups(readManifests()).map((group) => ({ id: group.id, members: group.members.map((m) => m.id) })),
+        conflicted: readManifests()
+          .filter((m) => conflictedCopies(opts, m.id).length > 0)
+          .map((m) => m.id),
+      };
+      return { ...liveGroups, active: active(), ssr, endpoint: VARIANTS_ENDPOINT };
     },
 
     /**

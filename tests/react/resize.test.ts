@@ -42,7 +42,7 @@ beforeEach(async () => {
   panelRoot = createRoot(target);
   Object.defineProperty(window, 'innerWidth', { value: 1200, configurable: true });
   Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
-  // Node's own localStorage global is unusable without a file path.
+  // A fresh store per test.
   const data = new Map<string, string>();
   vi.stubGlobal('localStorage', {
     getItem: (k: string) => data.get(k) ?? null,

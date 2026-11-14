@@ -317,6 +317,34 @@ describe('overlay knobs and the route', () => {
     expect(source.getSelections()).toMatchObject({ 'header-border': '#f59e0b', density: 'compact' });
   });
 
+  it('announces a stored value once, and leaves it alone when the listing is read again', async () => {
+    const { source, props, events } = fixture('/pricing', { 'header-border': '#f59e0b' });
+    await source.refresh();
+    expect(events).toEqual([{ id: 'header-border', value: '#f59e0b' }]);
+    // The panel re-reads the listing as it opens.
+    await source.refresh();
+    expect(events).toHaveLength(1);
+    expect(props.get(knobVar('header-border'))).toBe('#f59e0b');
+  });
+
+  it('leaves a relabelled knob alone, and takes a select’s attribute off when it becomes another kind', async () => {
+    const { source, attrs, events } = fixture('/pricing', { density: 'compact' });
+    await source.refresh();
+    events.length = 0;
+    const listing = (knobs: KnobAxis[]) =>
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => Response.json({ variants: [], active: [], knobs })),
+      );
+    listing([border, { ...density, label: 'Spacing' }, gap]);
+    await source.refresh();
+    expect(events).toEqual([]);
+    expect(attrs.get('data-knob-density')).toBe('compact');
+    listing([border, { kind: 'range', id: 'density', label: 'Density', min: 0, max: 10, step: 1, defaultValue: 5 }, gap]);
+    await source.refresh();
+    expect(attrs.has('data-knob-density')).toBe(false);
+  });
+
   it('keeps a held compare off other routes’ knobs', async () => {
     const { source, page, props } = fixture('/', { 'header-border': '#f59e0b' });
     await source.refresh();
@@ -596,3 +624,166 @@ describe('a ?v= the overlay source does not apply', () => {
 function detailOf(notice: string | { detail?: string } | null | undefined) {
   return typeof notice === 'string' ? notice : notice?.detail;
 }
+
+describe('what the overlay source says the page shows', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+  /** A source without a live store, as on Vite 5 or without React, against a stand-in
+   *  server (what it shows, which copies hold conflict markers) and HMR channel. */
+  function source(live: Parameters<typeof createOverlayVariantsSource>[0]['live'] = null) {
+    const server = { active: ['card-bold'], conflicts: new Set<string>(['card-merged']), fail: false };
+    const listing = (): OverlayVariantsList => ({
+      variants: [
+        ['card-bold', 'Bold'],
+        ['card-compact', 'Compact'],
+        ['card-merged', 'Merged'],
+      ]
+        .map(([id, label]) =>
+          variant(id as string, {
+            label,
+            group: 'pricing-card',
+            files: ['src/Card.tsx'],
+            conflicts: server.conflicts.has(id as string) ? ['src/Card.tsx'] : [],
+          }),
+        )
+        .concat(variant('hero-split', { group: 'hero', route: '/other', files: ['src/Hero.tsx'] })),
+      active: server.active,
+      hmr: '/@vite/client',
+    });
+    const posted: { active: string[]; groups: string[] }[] = [];
+    let gets = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        if (init?.method !== 'POST') {
+          gets++;
+          return Response.json(listing());
+        }
+        const body = JSON.parse(String(init.body)) as { active: string[]; groups: string[] };
+        posted.push(body);
+        if (server.fail) return Response.json({ error: 'busy' }, { status: 503 });
+        // Like the endpoint: it answers with what it shows, never a conflicted copy.
+        server.active = body.active.filter((id) => !server.conflicts.has(id));
+        return Response.json({ active: server.active });
+      }),
+    );
+    const listeners = new Set<() => void>();
+    const connected: string[] = [];
+    const hot = async (client: string) => {
+      connected.push(client);
+      return {
+        on: (_event: string, listener: () => void) => {
+          listeners.add(listener);
+        },
+        off: (_event: string, listener: () => void) => {
+          listeners.delete(listener);
+        },
+      };
+    };
+    const page = { route: '/' };
+    const overlay = createOverlayVariantsSource({
+      endpoint: '/variants',
+      getRoute: () => page.route,
+      storage: null,
+      knobRoot: null,
+      live,
+      hot,
+    });
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const announce = async () => {
+      for (const listener of listeners) listener();
+      await settle();
+    };
+    return { overlay, server, page, posted, connected, listeners, settle, announce, gets: () => gets };
+  }
+  const disabled = (overlay: ReturnType<typeof createOverlayVariantsSource>) =>
+    (overlay.getAxes()[0] as { options: { id: string; disabled?: boolean }[] }).options.filter((o) => o.disabled).map((o) => o.id);
+
+  it('reads the listing again whenever the server says its variants changed', async () => {
+    const { overlay, server, connected, listeners, settle, announce, gets } = source();
+    await overlay.refresh();
+    await settle();
+    // Connected once, at the client the listing names, and read again once connected.
+    await overlay.refresh();
+    await settle();
+    expect(connected).toEqual(['http://localhost/@vite/client']);
+    expect(gets()).toBe(3);
+    expect(overlay.getSelections()['pricing-card']).toBe('card-bold');
+
+    // Another tab or the CLI picks: the highlight and a new note's selections follow.
+    server.active = ['card-compact'];
+    await announce();
+    expect(overlay.getSelections()['pricing-card']).toBe('card-compact');
+
+    // The shown copy gains markers: Default shows, and the option cannot be picked.
+    server.conflicts.add('card-compact');
+    server.active = [];
+    await announce();
+    expect(overlay.getSelections()['pricing-card']).toBe(OVERLAY_DEFAULT_OPTION);
+    expect(disabled(overlay)).toEqual(['card-compact', 'card-merged']);
+    // And back once they are resolved.
+    server.conflicts.delete('card-merged');
+    await announce();
+    expect(disabled(overlay)).toEqual(['card-compact']);
+
+    overlay.dispose();
+    await settle();
+    expect(listeners.size).toBe(0);
+  });
+
+  it('keeps what the server answers a pick with, not what it posted', async () => {
+    const { overlay, server, settle } = source();
+    await overlay.refresh();
+    await settle();
+    // Markers arrive before the panel hears of them: the pick still goes out, and the
+    // server shows the real file.
+    server.conflicts.add('card-compact');
+    overlay.setSelection('pricing-card', 'card-compact');
+    await vi.waitFor(() => expect(overlay.getSelections()['pricing-card']).toBe(OVERLAY_DEFAULT_OPTION));
+  });
+
+  it('names the selectors the reviewer set, so a Default there drops a hidden pick', async () => {
+    const { overlay, posted, settle } = source();
+    await overlay.refresh();
+    await settle();
+    overlay.setSelection('pricing-card', OVERLAY_DEFAULT_OPTION);
+    await vi.waitFor(() => expect(posted).toEqual([{ active: [], groups: ['pricing-card'] }]));
+    // A reset sets every group, on every route.
+    overlay.reset?.();
+    await vi.waitFor(() => expect(posted[1]).toEqual({ active: [], groups: ['pricing-card', 'hero'] }));
+  });
+
+  it('carries the selectors of a pick that failed into the next one', async () => {
+    const { overlay, server, page, posted, settle } = source();
+    await overlay.refresh();
+    await settle();
+    server.fail = true;
+    overlay.setSelection('pricing-card', OVERLAY_DEFAULT_OPTION);
+    await vi.waitFor(() => expect(overlay.getError?.()).toBe('busy'));
+    server.fail = false;
+    page.route = '/other';
+    overlay.setSelection('hero', 'hero-split');
+    await vi.waitFor(() => expect(posted[1]).toEqual({ active: ['card-bold', 'hero-split'], groups: ['pricing-card', 'hero'] }));
+    // Sent once it went through.
+    overlay.setSelection('hero', OVERLAY_DEFAULT_OPTION);
+    await vi.waitFor(() => expect(posted[2]).toEqual({ active: ['card-bold'], groups: ['hero'] }));
+  });
+
+  it('shows a copy with conflict markers as an option nobody can pick, and says why', async () => {
+    const live = { active: ['card-bold'], select: vi.fn(() => false), subscribe: () => () => {}, reload: () => {} };
+    const { overlay, posted, settle } = source(live);
+    await overlay.refresh();
+    expect(disabled(overlay)).toEqual(['card-merged']);
+    expect(overlay.getNotice()).toEqual({
+      text: '“Merged” can’t be shown',
+      detail: '"Merged" holds conflict markers from `variant sync` in src/Card.tsx, so it cannot be shown until they are resolved.',
+    });
+    overlay.setSelection('pricing-card', 'card-merged');
+    await settle();
+    expect(live.select).not.toHaveBeenCalled();
+    expect(posted).toEqual([]);
+    expect(overlay.getError?.()).toBeNull();
+    expect(overlay.getSelections()['pricing-card']).toBe('card-bold');
+  });
+});

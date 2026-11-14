@@ -41,6 +41,10 @@ import { npm } from './npm.mjs';
 // and its notes in the shipped variants guide and changelog.
 // The figures above are each change on its own over 1.5.0. Merged together (#60 to #69), the bundle is
 // 402.6 kB and the tarball 457.6 kB: bundle raised to 403.5 kB and tarball to 459 kB.
+// Bundle raised to 407 kB and tarball to 466.5 kB (406.1 and 465.7 kB; note source): source maps read
+// for Turbopack, webpack and variant copies, checked against the page's downloads, Vue components,
+// selectors without classes, sources relative to the app, and their docs.
+// #72, #73, #75 and #76 folded into #71: bundle 409.6 kB, tarball 483.2 kB.
 // Bundle raised to 408.5 kB and tarball to 466 kB (407.8 and 464.9 kB over #71; panel entry): the tab's
 // remembered panels and Variants scroll, the caret placed as Feedback opens, select mode ending at
 // Variants, the list that yields room from its top and holds its height as room returns, the line by
@@ -56,7 +60,8 @@ import { npm } from './npm.mjs';
 // Bundle raised to 416.5 kB and tarball to 474.5 kB (416.2 and 473.8 kB; one ease): a hold that lets go in
 // one ease and covers any change of Feedback's contents, no hold for a finger, and a reveal that keeps the
 // gap to the panel above.
-const BUDGET = { bundle: 416_500, tarball: 474_500 };
+// Panel entry (#74) over 1.6.1: bundle 424 kB and tarball 500.5 kB (423.5 and 500.0 kB).
+const BUDGET = { bundle: 424_000, tarball: 500_500 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

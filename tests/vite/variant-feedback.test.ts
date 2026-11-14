@@ -3,7 +3,7 @@
  * say why, a hand-deleted variant must not poison later activations, sync has
  * to work on files git does not track, and a promote leaves its group current.
  */
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -294,6 +294,26 @@ describe('`variant sync` conflict advice', () => {
     // An absolute path to open, in the platform's own separators.
     expect(sync.text.out).toMatch(/resolve the conflict markers in .*src[\\/]a\.ts/);
     expect(sync.text.err).toContain('Not synced: "v" has a conflict.');
+
+    // Nothing can show it meanwhile, so `variant use` refuses it and the set stays.
+    const use = sink(root);
+    expect(await runCli(['variant', 'use', 'v'], use)).toBe(1);
+    expect(use.text.err).toContain(
+      '"v" holds conflict markers from `variant sync` in src/a.ts, so it cannot be shown until they are resolved.',
+    );
+    expect(existsSync(join(root, '.isotone', 'active.json'))).toBe(false);
+
+    // A pick it already had stays in the file through other picks, to show
+    // again once the markers are resolved.
+    writeFileSync(join(root, 'src', 'b.ts'), 'b\n');
+    await runCli(['variant', 'new', 'w'], sink(root));
+    await runCli(['variant', 'add', 'w', 'src/b.ts'], sink(root));
+    writeActive({ root }, ['v']);
+    const pointer = () => JSON.parse(readFileSync(join(root, '.isotone', 'active.json'), 'utf8')).active;
+    expect(await runCli(['variant', 'use', 'w'], sink(root))).toBe(0);
+    expect(pointer()).toEqual(['v', 'w']);
+    expect(await runCli(['variant', 'off', 'w'], sink(root))).toBe(0);
+    expect(pointer()).toEqual(['v']);
 
     // The list says so too, as text and as JSON, until the markers go.
     const listed = sink(root);
