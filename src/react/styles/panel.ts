@@ -342,6 +342,8 @@ ${APPEARANCE_CSS}
    The side gutters contain the corner action and keyboard focus outlines. */
 .isotone-list { display: flex; flex-direction: column; gap: 0; flex: 0 1 auto; max-height: calc(var(--iso-list-height) + 2 * var(--iso-space) - 8px); min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; margin: calc(0px - var(--iso-space)) calc(-8px - var(--iso-note-outset)) calc(-2px - var(--iso-space)); padding: var(--iso-space) 8px; scroll-padding-block: var(--iso-space); }
 .isotone-empty { color: var(--iso-muted); font-size: 11px; line-height: 1.7; padding: 8px; }
+/* A note about what the page shows (a link's ?v= it does not apply): quiet, wrapping, above the selectors. */
+.isotone-vars-notice { flex: none; color: var(--iso-muted); font-size: 11px; line-height: 1.6; padding: 2px 8px; }
 .isotone-note { position: relative; flex: none; }
 .isotone-request-more { flex: none; color: var(--iso-faint); font-size: 9px; }
 

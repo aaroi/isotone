@@ -142,23 +142,80 @@ describe('two groups over one file', () => {
 });
 
 describe('`variant add` on a file that cannot hot-swap', () => {
-  it('names the exports that will force a reload', async () => {
+  const plugin = "import { isotone } from 'isotone/vite';\nexport default { plugins: [isotone()] };\n";
+  /** A project the plugin serves: live for React on Vite 6+, whole files otherwise. */
+  function served(dependencies: Record<string, string>, config = plugin): string {
     const root = tempRepo();
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ devDependencies: dependencies }));
+    writeFileSync(join(root, 'vite.config.ts'), config);
     writeFileSync(join(root, 'src', 'Chart.tsx'), 'export function Chart() {}\nexport const clampWindowTo = 1;\n');
+    // A route module: the router's plugin reads its exports one by one, so it is served whole.
+    writeFileSync(join(root, 'src', 'route.tsx'), 'export default function Page() {}\nexport const loader = () => null;\n');
+    return root;
+  }
+  async function add(root: string, file: string): Promise<string> {
     await runCli(['variant', 'new', 'v'], sink(root));
-    const add = sink(root);
-    expect(await runCli(['variant', 'add', 'v', 'src/Chart.tsx'], add)).toBe(0);
-    expect(add.text.err).toContain('clampWindowTo');
-    expect(add.text.err).toContain('reload');
+    const io = sink(root);
+    expect(await runCli(['variant', 'add', 'v', file], io)).toBe(0);
+    return io.text.err;
+  }
+  const react = { react: '^19.0.0', 'react-dom': '^19.0.0' };
+
+  it('names the exports that will force a reload in live mode', async () => {
+    const err = await add(served({ ...react, vite: '^8.0.0' }), 'src/Chart.tsx');
+    expect(err).toContain('clampWindowTo');
+    expect(err).toContain('reload');
+  });
+
+  it('says a route module is served whole in live mode', async () => {
+    const err = await add(served({ ...react, vite: '^8.0.0' }), 'src/route.tsx');
+    expect(err).toContain('src/route.tsx is served whole');
+  });
+
+  it('says nothing about either on a host without React, where every file is swapped whole', async () => {
+    const root = served({ vue: '^3.5.0', vite: '^8.0.0' });
+    expect(await add(root, 'src/Chart.tsx')).toBe('');
+    await runCli(['variant', 'drop', 'v'], sink(root));
+    expect(await add(root, 'src/route.tsx')).toBe('');
+  });
+
+  it('says a copy exporting helpers may reload on React with whole-file switching (Vite 5, `live: false`)', async () => {
+    for (const root of [
+      served({ ...react, vite: '^5.4.0' }),
+      served({ ...react, vite: '^8.0.0' }, plugin.replace('isotone()', 'isotone({ variants: { live: false } })')),
+    ]) {
+      const err = await add(root, 'src/Chart.tsx');
+      expect(err).toContain('exports clampWindowTo, so a switch re-runs the files that import it and may reload the page.');
+      expect(err).toContain('Move it to a file the variant leaves alone');
+      await runCli(['variant', 'drop', 'v'], sink(root));
+      // Every file is served whole here, so this one is no exception.
+      expect(await add(root, 'src/route.tsx')).toBe('');
+    }
+  });
+
+  it('warns as for live mode when it cannot tell: an unreadable Vite, or variants a sibling app serves', async () => {
+    const unknown = served({ ...react, vite: 'catalog:' });
+    expect(await add(unknown, 'src/Chart.tsx')).toContain('so switching this variant reloads the page');
+    // `variants: { root }` in another app's vite.config: this package has no Vite config of its own.
+    const sibling = tempRepo();
+    writeFileSync(join(sibling, 'package.json'), JSON.stringify({ devDependencies: { vue: '^3.5.0' } }));
+    writeFileSync(join(sibling, 'src', 'Chart.tsx'), 'export function Chart() {}\nexport const clampWindowTo = 1;\n');
+    expect(await add(sibling, 'src/Chart.tsx')).toContain('so switching this variant reloads the page');
+  });
+
+  it('judges a --dir by the app that holds it', async () => {
+    const vue = served({ vue: '^3.5.0', vite: '^8.0.0' });
+    const elsewhere = tempRepo();
+    await runCli(['variant', '--dir', join(vue, '.isotone/variants'), 'new', 'v'], sink(elsewhere));
+    const io = sink(vue);
+    expect(await runCli(['variant', '--dir', join(vue, '.isotone/variants'), 'add', 'v', 'src/Chart.tsx'], io)).toBe(0);
+    expect(io.text.err).toBe('');
   });
 
   it('stays quiet for a file of components', async () => {
-    const root = tempRepo();
+    const root = served({ ...react, vite: '^8.0.0' });
     writeFileSync(join(root, 'src', 'Chart.tsx'), 'export function Chart() {}\nexport default Chart;\n');
-    await runCli(['variant', 'new', 'v'], sink(root));
-    const add = sink(root);
-    expect(await runCli(['variant', 'add', 'v', 'src/Chart.tsx'], add)).toBe(0);
-    expect(add.text.err).toBe('');
+    expect(await add(root, 'src/Chart.tsx')).toBe('');
   });
 });
 

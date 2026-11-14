@@ -164,7 +164,7 @@ export function IsotonePanel({
   // name, and so does a mount while it is empty: a network-backed source starts that way.
   // biome-ignore lint/correctness/useExhaustiveDependencies: these moments only.
   useEffect(() => {
-    if (variants && (notesOpen || !variantsAvailable)) refreshSource(variants);
+    if (variants && (notesOpen || !variantsAvailable)) void refreshSource(variants);
   }, [variants, notesOpen]);
 
   if (!visible) return null;

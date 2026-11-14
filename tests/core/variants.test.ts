@@ -5,6 +5,7 @@ import {
   createOverlayVariantsSource,
   createVariantsSource,
   KNOBS_STORAGE_KEY,
+  type OverlayVariantsList,
   type OverlayVariantStatus,
   overlayAxes,
   overlayGroups,
@@ -497,5 +498,94 @@ describe('sections', () => {
     };
     expect(overlayAxes(list, '/')[0]).toMatchObject({ label: 'Logo.tsx', section: 'Header' });
     expect(overlayAxes({ variants: [variant('plain', { files: ['A.tsx'] })], active: [] }, '/')[0]).not.toHaveProperty('section');
+  });
+});
+
+describe('a ?v= the overlay source does not apply', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+  const listing: OverlayVariantsList = {
+    variants: [
+      variant('hero-split', { label: 'Split', group: 'hero', groupLabel: 'Header > Hero', files: ['src/Hero.tsx'] }),
+      variant('hero-stacked', { label: 'Stacked', group: 'hero', files: ['src/Hero.tsx'] }),
+      variant('card-highlight', { label: 'Highlight', files: ['src/Card.tsx'] }),
+    ],
+    active: ['hero-stacked'],
+  };
+  /** A source without a live store, as on Vite 5 or without React, on a page at `search`. */
+  function source(search: string, live: Parameters<typeof createOverlayVariantsSource>[0]['live'] = null) {
+    // Like the endpoint: a posted set is what the next listing has as active.
+    let active = listing.active;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') active = (JSON.parse(String(init.body)) as { active: string[] }).active;
+        return Response.json({ ...listing, active });
+      }),
+    );
+    let query = search;
+    const overlay = createOverlayVariantsSource({
+      endpoint: '/variants',
+      getRoute: () => '/',
+      storage: null,
+      knobRoot: null,
+      live,
+      getSearch: () => query,
+    });
+    const go = (next: string) => {
+      query = next;
+    };
+    return { overlay, go };
+  }
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it('names the picks the page does not show, with section, selector and option', async () => {
+    const { overlay } = source('?tab=2&v=hero:hero-split,card-highlight:default,theme:dark');
+    // Nothing to compare against until the listing is in.
+    expect(overlay.getNotice()).toBeNull();
+    await overlay.refresh();
+    // The card group is at Default already, and `theme` is not a group here: maybe the host's own.
+    expect(overlay.getNotice()).toBe(
+      'This link’s ?v= asks for Header › Hero: Split, but links don’t choose variants here. Pick it below instead; a pick shows in every tab. Per-tab links need live switching (React on Vite 6+).',
+    );
+  });
+
+  it('follows the picks: gone once they match the link, back when they move away', async () => {
+    const { overlay } = source('?v=hero:hero-split,card-highlight:card-highlight');
+    await overlay.refresh();
+    expect(overlay.getNotice()).toContain('asks for Header › Hero: Split; Card.tsx: Highlight, but');
+    expect(overlay.getNotice()).toContain('Pick them below instead;');
+    // The view keeps what it showed while the panel is open; the source says how things are now.
+    overlay.setSelection('hero', 'hero-split');
+    overlay.setSelection('card-highlight', 'card-highlight');
+    expect(overlay.getNotice()).toBeNull();
+    overlay.setSelection('hero', OVERLAY_DEFAULT_OPTION);
+    expect(overlay.getNotice()).toContain('asks for Header › Hero: Split, but');
+    await settle();
+    await overlay.refresh();
+    expect(overlay.getNotice()).toContain('asks for Header › Hero: Split, but');
+  });
+
+  it('names a Default the link asks for', async () => {
+    const { overlay } = source('?v=hero:default');
+    await overlay.refresh();
+    expect(overlay.getNotice()).toContain('asks for Header › Hero: Default, but');
+  });
+
+  it('says nothing without ?v=, for pairs naming no member, or with a live store that applies the link', async () => {
+    const { overlay, go } = source('?v=hero:gone,hero,:x,');
+    await overlay.refresh();
+    expect(overlay.getNotice()).toBeNull();
+    for (const search of ['', '?v=', '?view=hero:hero-split']) {
+      go(search);
+      await overlay.refresh();
+      expect(overlay.getNotice(), search).toBeNull();
+    }
+
+    const live = { active: ['hero-stacked'], select: () => false, subscribe: () => () => {}, reload: () => {} };
+    const { overlay: inLive } = source('?v=hero:hero-split', live);
+    await inLive.refresh();
+    expect(inLive.getNotice()).toBeNull();
   });
 });

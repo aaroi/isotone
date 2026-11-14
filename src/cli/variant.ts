@@ -4,7 +4,7 @@
  * I/O beyond the filesystem and `git`, so there is nothing here to await.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 import {
   axisDefault,
@@ -45,6 +45,7 @@ import { mutateVariants } from '../node/variants/options';
 import { repoRelativeKey } from '../node/variants/paths';
 import { docPath } from './docs';
 import { findNotesFile } from './notes';
+import { detectHost, vitePlugin, viteSwitching } from './project';
 import { toJson } from './text';
 import { type CliIO, errOut, extractFlag, findNoteByPrefix, has, out, parseArgs, printTable, valueFor } from './util';
 
@@ -144,6 +145,9 @@ function printVariantHelp(io: CliIO): void {
   out(io);
   out(io, 'Options: --dir <path> (default .isotone/variants), --file <path> (notes file for --note)');
   out(io);
+  out(io, 'File variants need the Vite plugin (isotone/vite). With `isotone serve` or another dev');
+  out(io, 'server, use knobs in .isotone/knobs.json, or the app’s own VariantsSource.');
+  out(io);
   out(io, 'Variants that override the same file are alternatives of one selector without a');
   out(io, '--group; use one when the alternatives touch different files.');
   out(io, 'With more than a few selectors on a page, give each a section: --section "Header",');
@@ -182,6 +186,7 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
     if (section.name === null) continue;
     for (const { axis } of section.axes) for (const id of membersOf.get(axis.id) ?? []) sectionOf.set(id, section.name);
   }
+  if (variants.length) warnUnserved(io, opts);
 
   if (has(args, '--json')) {
     out(
@@ -375,6 +380,7 @@ function cmdNew(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
       variant.group ? ` in group ${variant.group}` : ''
     }${variant.section ? ` in section "${variant.section}"` : ''}`,
   );
+  warnUnserved(io, opts);
   return 0;
 }
 
@@ -387,29 +393,95 @@ function cmdAdd(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
   }
   for (const file of files) addVariantFile(opts, id, file, { create, force: has(args, '--force') });
   out(io, create ? `created ${files.length} new file(s) in "${id}"` : `added ${files.length} file(s) to "${id}"`);
-  if (!create) for (const file of files) warnNoHotSwap(io, file);
+  if (!create) {
+    const switching = switchingOf(opts);
+    for (const file of files) warnNoHotSwap(io, file, switching);
+  }
   warnOverlaps(io, opts, id);
+  warnUnserved(io, opts);
   return 0;
+}
+
+/**
+ * The store takes a variant anywhere, but only the Vite plugin serves one: in
+ * a Next app, or under `isotone serve`, the panel lists nothing while the CLI
+ * reports success. Said on stderr, so `--json` output stays parseable. Only
+ * Next is certain: a sibling dev server can serve this project's variants
+ * (`variants: { root }`), so the rest say "may".
+ */
+function warnUnserved(io: CliIO, opts: VariantsStoreOptions): void {
+  const root = variantsProject(opts);
+  if (root === null) return;
+  const { loaded, viteConfig } = vitePlugin(root);
+  if (loaded) return;
+  const alternatives = 'Use knobs in .isotone/knobs.json, or the app’s own VariantsSource (npx isotone init --approach host).';
+  if (detectHost(root) === 'next') {
+    errOut(
+      io,
+      `warning: file variants need the Vite plugin (isotone/vite), and Next.js does not run it, so the panel will not show them. ${alternatives}`,
+    );
+  } else if (viteConfig) {
+    errOut(
+      io,
+      `warning: ${viteConfig} does not import isotone/vite, so the panel may not show file variants from here. \`npx isotone init\` prints the plugin line.`,
+    );
+  } else {
+    errOut(
+      io,
+      `warning: file variants need the Vite plugin (isotone/vite), and no config in this directory imports it, so the panel may not show them. ${alternatives}`,
+    );
+  }
+}
+
+/** The project that holds the variants: `--dir <app>/.isotone/variants` names another one; any other directory, null. */
+function variantsProject(opts: VariantsStoreOptions): string | null {
+  if (!opts.dir) return opts.root;
+  const dir = resolve(opts.root, opts.dir);
+  return basename(dirname(dir)) === '.isotone' ? dirname(dirname(dir)) : null;
+}
+
+/**
+ * How the plugin will switch these variants, for what `variant add` warns about.
+ * `live` also stands for "cannot tell": a project with neither a Vite config nor
+ * the plugin may be served by a sibling (`variants: { root }`), and an unreadable
+ * Vite version may be 6. Next serves none, which `warnUnserved` says.
+ */
+function switchingOf(opts: VariantsStoreOptions): 'live' | 'whole-react' | 'whole' | 'none' {
+  const root = variantsProject(opts);
+  if (root === null) return 'live';
+  if (detectHost(root) === 'next') return 'none';
+  const { loaded, viteConfig } = vitePlugin(root);
+  if (!loaded && viteConfig === null) return 'live';
+  const { mode, why } = viteSwitching(root);
+  return mode !== 'shared' ? 'live' : why === 'no-react' ? 'whole' : 'whole-react';
 }
 
 /** Say up front what would otherwise look like a page that reloads for no
  *  reason. Reads the export names only, so a capitalized constant slips by. */
-function warnNoHotSwap(io: CliIO, file: string): void {
+function warnNoHotSwap(io: CliIO, file: string, switching: ReturnType<typeof switchingOf>): void {
+  // A host without React swaps the file over HMR, which its own components accept.
+  if (switching === 'whole' || switching === 'none') return;
   const names = scanExports(readFileSync(resolve(io.cwd, file), 'utf8'));
   if (!names || isRouteModule(names)) {
-    errOut(
-      io,
-      `warning: ${file} is served whole, so it follows .isotone/active.json in every tab instead of switching per tab. See "Live switching" in the variants guide.`,
-    );
+    // Every file is served whole outside live mode; only there is this one the exception.
+    if (switching === 'live') {
+      errOut(
+        io,
+        `warning: ${file} is served whole, so it follows .isotone/active.json in every tab instead of switching per tab. See "Live switching" in the variants guide.`,
+      );
+    }
     return;
   }
   const fixed = names.filter((name) => name !== 'default' && !/^[A-Z]/.test(name));
-  if (fixed.length) {
-    errOut(
-      io,
-      `warning: ${file} exports ${fixed.join(', ')}, so switching this variant reloads the page. Move ${fixed.length === 1 ? 'it' : 'them'} to a file the variant leaves alone to switch in place.`,
-    );
-  }
+  if (!fixed.length) return;
+  const move = `Move ${fixed.length === 1 ? 'it' : 'them'} to a file the variant leaves alone to switch in place.`;
+  errOut(
+    io,
+    switching === 'live'
+      ? `warning: ${file} exports ${fixed.join(', ')}, so switching this variant reloads the page. ${move}`
+      : // Fast Refresh cannot swap such a file alone: the update climbs to its importers, and reloads at an entry.
+        `warning: ${file} exports ${fixed.join(', ')}, so a switch re-runs the files that import it and may reload the page. ${move}`,
+  );
 }
 
 function warnOverlaps(io: CliIO, opts: VariantsStoreOptions, id: string): void {
@@ -478,6 +550,7 @@ function cmdUse(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOp
     return `active: "${id}"${describeActive(readActive(opts), id)}`;
   });
   out(io, message);
+  warnUnserved(io, opts);
   return 0;
 }
 

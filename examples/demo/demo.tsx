@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Gem, Moon, Play, Plus, Search, Sun } from 'lucide-react';
+import { unappliedLinkNotice } from '../../src/core/variants/overlay';
 import { createVariantsSource, IsotonePanel, type IsotoneTheme, type VariantAxis } from '../../src/react/index';
 import { type LiveStore, liveStore } from '../../src/vite/live';
 import { Tour, tourSeen } from './tour';
@@ -255,6 +256,39 @@ if (tab) {
     const picks = tabPicks(tab.active);
     if (tabGroups.some((g) => current[g.id] !== picks[g.id])) source.setSelections({ ...current, ...picks });
   });
+}
+
+/**
+ * `?shared=1`: what the Variants panel says about a link's `?v=` where picks are shared by
+ * every tab (file variants on Vite 5, or without React), which ignores the link. The Layout
+ * options stand in for the file variants such a setup lists, and the link asks for Feature
+ * unless it names another. Like the real panel, it stays while the reviewer picks.
+ */
+const sharedLink = !screenshot && params.get('shared') === '1';
+if (sharedLink) {
+  if (!params.has('v')) {
+    const next = new URLSearchParams(location.search);
+    next.set('v', 'layout:feature');
+    history.replaceState(history.state, '', `?${next.toString().replace(/%3A/gi, ':')}${location.hash}`);
+  }
+  const layout = axes.find((axis) => axis.id === 'layout');
+  const options = layout && (layout.kind === undefined || layout.kind === 'select') ? layout.options : [];
+  const variants = options
+    .filter((option) => option.id !== 'row')
+    .map((option) => ({
+      id: option.id,
+      label: option.label,
+      group: 'layout',
+      groupLabel: layout?.label,
+      createdAt: '',
+      files: {},
+      stale: [],
+      missing: [],
+    }));
+  const picked = source.getSelections().layout;
+  const active = picked && picked !== 'row' ? [picked] : [];
+  const notice = unappliedLinkNotice({ variants, active }, active, location.search);
+  Object.assign(source, { getNotice: () => notice });
 }
 
 type DemoNote = Record<string, unknown> & {
@@ -700,7 +734,9 @@ function Demo() {
     screenshot ? 'auto' : savedTheme('iso-demo-panel', ['auto', 'system', 'light', 'dark'], 'auto'),
   );
   // Every first visit starts with the tour. The Tour button brings it back.
-  const [touring, setTouring] = useState(() => !screenshot && !review && !stress && (params.get('tour') === '1' || !tourSeen()));
+  const [touring, setTouring] = useState(
+    () => !screenshot && !review && !stress && !sharedLink && (params.get('tour') === '1' || !tourSeen()),
+  );
   useEffect(() => {
     document.documentElement.dataset.theme = pageTheme;
     document.documentElement.dataset.capture = String(screenshot);

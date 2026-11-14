@@ -6,6 +6,7 @@ import { matchRoute } from '../routes';
 import type { IsotoneElement } from '../types';
 import type { SelectVariantAxis, RangeVariantAxis, ColorVariantAxis, VariantAxis, VariantSelections } from './axes';
 import { axisDefault, isValidSelection, formatRangeValue } from './helpers';
+import { splitSectionLabel } from './sections';
 import type { VariantsSource } from './source';
 
 /**
@@ -342,6 +343,36 @@ export interface LiveVariantSelection {
   preview?(next: string[] | null): boolean;
 }
 
+/**
+ * What the panel says when the page's `?v=` names picks it does not show. Only
+ * live mode (React on Vite 6 or later) keeps picks per tab and reads `?v=`;
+ * everywhere else every tab shows `.isotone/active.json`, so a link made in
+ * live mode, or by hand, would otherwise be ignored without a word. Pairs that
+ * name no group here are left alone: they may be the host's own.
+ */
+export function unappliedLinkNotice(list: OverlayVariantsList, active: string[], search: string): string | null {
+  const raw = new URLSearchParams(search).get('v');
+  if (!raw) return null;
+  const groups = new Map(overlayGroups(list.variants).map((group) => [group.id, group]));
+  const shown = new Set(active);
+  const asked: string[] = [];
+  for (const pair of raw.split(',')) {
+    const at = pair.indexOf(':');
+    const group = at < 0 ? undefined : groups.get(pair.slice(0, at));
+    if (!group) continue;
+    const want = pair.slice(at + 1);
+    const member = group.members.find((m) => m.id === want);
+    if (!member && want !== OVERLAY_DEFAULT_OPTION) continue;
+    const current = group.members.find((m) => shown.has(m.id))?.id ?? OVERLAY_DEFAULT_OPTION;
+    if (current === want) continue;
+    const section = group.members.find((m) => m.section !== undefined)?.section;
+    asked.push(`${splitSectionLabel(group.label, section).fullLabel}: ${member ? member.label || member.id : 'Default'}`);
+  }
+  if (asked.length === 0) return null;
+  // Stays true while the panel keeps it, even once the reviewer has picked what the link asked for.
+  return `This link’s ?v= asks for ${asked.join('; ')}, but links don’t choose variants here. Pick ${asked.length > 1 ? 'them' : 'it'} below instead; a pick shows in every tab. Per-tab links need live switching (React on Vite 6+).`;
+}
+
 function pageLiveStore(): LiveVariantSelection | null {
   if (typeof window === 'undefined') return null;
   const store = (window as { __isotoneLive?: LiveVariantSelection & { version?: number } }).__isotoneLive;
@@ -366,8 +397,12 @@ export function createOverlayVariantsSource(cfg: {
   knobRoot?: Parameters<typeof applyKnobValues>[2] | null;
   /** The tab's live store. Default: the one the Vite plugin put on the page, if any. */
   live?: LiveVariantSelection | null;
+  /** The page's query string, for a `?v=` the source does not apply. Default: `location.search`. */
+  getSearch?: () => string;
 }): VariantsSource & {
   refresh(): Promise<void>;
+  /** For the reviewer: the page's `?v=` names picks the page does not show; else null. */
+  getNotice(): string | null;
   readonly list: OverlayVariantsList | null;
   /** The knobs on the current route and their values, for the save note. */
   readonly knobs: { axes: KnobAxis[]; values: VariantSelections };
@@ -515,8 +550,12 @@ export function createOverlayVariantsSource(cfg: {
         if (intended !== null) scheduleActivation();
       });
   }
+  const search = cfg.getSearch ?? (() => (typeof location === 'undefined' ? '' : location.search));
   return {
     getError: () => error,
+    // A live tab follows its own `?v=`, so only a source without one can leave a link unapplied.
+    // Read as the picks are now; the view keeps what it showed until the panel closes.
+    getNotice: () => (live || !list ? null : unappliedLinkNotice(list, current(), search())),
     get list() {
       return list;
     },

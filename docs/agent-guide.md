@@ -129,8 +129,9 @@ npx isotone variant list [<route>] [--json]        # check what the panel will s
 - `variant use` moves only tabs without a pick of their own: with live
   switching, a tab where the reviewer picked, Default included, keeps its pick
   ([live switching](variants.md#live-switching)). Ask them to pick it there.
-- Copy only files that export components where you can: a copied hook, helper,
-  context or constant object makes every switch reload the page.
+- Copy only files that export components where you can: in a React app a copied
+  hook, helper, context or constant object cannot switch in place, so a switch
+  reloads the page (`variant add` says when).
 - Describe a variant with `variant new --description`, not a comment in the copy:
   `promote` lands the copy as it stands.
 - `variant promote <id>` lands a variant over the real files, only when the
@@ -144,6 +145,12 @@ npx isotone variant list [<route>] [--json]        # check what the panel will s
 - `variant off <id>` turns one off, `variant rm <id> <file>` stops overriding a
   file, and `variant group <id> <groupId> [--label <text>]` moves a variant into
   a group. `--dir <path>` points every subcommand at another variants directory.
+- `init` prints whether picks stay in their tab or change every tab
+  ([per tab or shared](variants.md#per-tab-or-shared)): tell the user, so they know
+  whether a link carries their picks.
+- File variants need the Vite plugin, and the `variant` commands warn when nothing
+  will serve them (Next.js, `isotone serve`): use knobs there, or the app's own
+  `VariantsSource`.
 - `npx isotone variant --help` lists every subcommand; [Variants](variants.md)
   covers groups, live switching and host needs.
 

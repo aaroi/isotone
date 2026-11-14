@@ -157,8 +157,9 @@ document.addEventListener('isotone:knob', ({ detail }) => {
 ```
 
 The event only fires while the panel is mounted, so keep the committed default in
-the source. Knob values live in the reviewer's browser; **Make default** files the
-moved ones in its `[set-defaults]` note (`payload.knobs` as `fade-from:40`).
+the source. Knob values live in the reviewer's browser, never in a link
+([how](#per-tab-or-shared)); **Make default** files the moved ones in its
+`[set-defaults]` note (`payload.knobs` as `fade-from:40`).
 
 ## Sections
 
@@ -273,6 +274,23 @@ optional `canPreview(axisId)` returns `true`, or `false` or a reason
 Without `preview` the panel offers no Compare.
 
 ## How switching works
+
+### Per tab or shared
+
+Whether a pick stays in its tab depends on the setup, and `npx isotone init`
+names the one it finds:
+
+| Setup | File variants | A link with `?v=` |
+| --- | --- | --- |
+| React on Vite 6 or later | Per tab, in the tab's URL ([live](#live-switching)); CSS and files served whole follow every tab | Opens those variants |
+| Vite 5, Vue, Svelte or another host without React, or `variants: { live: false }` | Shared by every tab and browser, through `.isotone/active.json` ([whole files](#whole-file-switching)) | Not applied; the Variants panel says so |
+| `isotone serve` (Next.js, other dev servers) | None: only the Vite plugin serves them, and the `variant` commands warn | — |
+| A host `VariantsSource` | The app's own: per tab when it keeps picks in the URL | The app's own |
+
+Knob values stay in the browser in every setup: the panel keeps them in
+`localStorage` (`isotone:knobs`, per origin), never in the URL, so a link does not
+carry them. A page reads them when it loads; an open tab does not follow moves made
+in another, and its next move saves its own whole set over them.
 
 ### Live switching
 
