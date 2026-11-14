@@ -113,15 +113,15 @@ export function IsotonePanel({
 
   // The handlers below go to plain elements or through refs, so they need no memoizing.
   /**
-   * Open Feedback. The pointer and the shortcut start selecting, with the caret waiting in the note field
-   * under the select-mode cover, so whatever is typed next ends selecting and lands there; Enter or Space
-   * on a focused button goes straight to the field. A finger gets no caret, so no on-screen keyboard rises
-   * over the page it is about to tap.
+   * Open Feedback in select mode, however it is opened: a click, Enter or Space on a face, or the shortcut.
+   * The caret waits in the note field under the select-mode cover, so whatever is typed next ends
+   * selecting and lands there. A finger gets no caret, so no on-screen keyboard rises over the page it is
+   * about to tap.
    */
-  const startFeedback = (select: boolean) => {
-    update((m) => ({ notesOpen: true, ...(select ? { picking: true, pickingWithPanel: !m.notesOpen } : {}) }));
-    if (select && events.touch) focus.cancel();
-    else focus.openComposer(select);
+  const startFeedback = () => {
+    update((m) => ({ notesOpen: true, picking: true, pickingWithPanel: !m.notesOpen }));
+    if (events.touch) focus.cancel();
+    else focus.openComposer();
   };
   /** Close one panel. Focus inside it goes to its rail button, or the launcher once the rail folds away. */
   const closePanel = (panel: Surface) => {
@@ -152,7 +152,7 @@ export function IsotonePanel({
       else {
         if (!mode.notesOpen && !mode.variantsOpen) focus.remember();
         update({ expanded: true });
-        startFeedback(true);
+        startFeedback();
       }
     },
     onEscape: () => {
@@ -275,7 +275,7 @@ export function IsotonePanel({
             count={count}
             working={working}
             shortcutLabel={shortcutLabel}
-            onClick={(event) => {
+            onClick={() => {
               if (open) closeAll();
               else if (expanded) update({ expanded: false });
               else {
@@ -284,7 +284,7 @@ export function IsotonePanel({
                 // The tool used last in this tab, else the host's choice.
                 if (((memory.current.last ?? defaultTab) === 'variants' || !notesAvailable) && variantsAvailable)
                   update({ variantsOpen: true });
-                else startFeedback(event.detail > 0);
+                else startFeedback();
               }
             }}
           />
@@ -340,11 +340,11 @@ export function IsotonePanel({
             count={count}
             controls={`${id}-notes`}
             open={notesOpen}
-            onClick={(event) => {
+            onClick={() => {
               if (notesOpen) closePanel('notes');
               else {
                 update({ expanded: false });
-                startFeedback(event.detail > 0);
+                startFeedback();
               }
             }}
           />

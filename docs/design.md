@@ -69,12 +69,12 @@ or rescales another's text.
 
 A tool's face on the pill opens it and, pressed again, closes it; a click or
 tap on the folded pill, or Enter on it, reopens the tool used last in the tab
-(else the host's `defaultTab`). Opening Feedback with the pointer or the
-shortcut starts select mode, with the caret already in the note field under the
-cover, placed in the commit that shows it, never a frame later, so nothing typed
-during the entrance is lost; Enter or Space on a focused face goes straight to
-the field, and a finger gets select mode with no caret, so no on-screen
-keyboard rises over the page. The crosshair turns select mode on and off. The
+(else the host's `defaultTab`). Opening Feedback, however it opens (a click,
+Enter or Space on a face or the pill, or the shortcut), starts select mode, with
+the caret already in the note field under the cover, placed in the commit that
+shows it, never a frame later, so nothing typed during the entrance is lost; a
+finger gets select mode with no caret, so no on-screen keyboard rises over the
+page. The crosshair turns select mode on and off. The
 first character, keyed or inserted, or a key that would edit or move the caret
 unseen (Backspace, Delete, arrows, Home, End, Page Up and Down, select all),
 ends selecting and acts in the field. Opening Variants, or a press anywhere in

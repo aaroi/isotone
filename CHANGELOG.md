@@ -12,7 +12,7 @@
 
 ### Fixed
 
-- **What you type right after opening Feedback is kept.** Opening Feedback in select mode (with ⌘/Ctrl + Shift + . or a click) used to leave no field focused, so typing, dictation or text sent by a browser-driving agent went nowhere, and text typed while the panel slid in could be lost. The caret now waits in the note field under the select-mode cover, and the first thing you type, or a Backspace or arrow key there, ends select mode and lands in the field. Tab or Shift+Tab still takes you to the page to pin with Space.
+- **What you type right after opening Feedback is kept.** Opening Feedback in select mode (with ⌘/Ctrl + Shift + ., a click or, now, Enter on its button) used to leave no field focused, so typing, dictation or text sent by a browser-driving agent went nowhere, and text typed while the panel slid in could be lost. The caret now waits in the note field under the select-mode cover, and the first thing you type, or a Backspace or arrow key there, ends select mode and lands in the field. Tab or Shift+Tab still takes you to the page to pin with Space.
 - **Select mode ends when you turn to Variants.** Opening Variants, or using it, ends select mode and keeps what you pinned, so the next click on a link in the page follows it instead of pinning it.
 - **No ring left on the pill after Escape.** Closing a panel you opened with the mouse no longer leaves a focus ring around a tool's button; opened from the keyboard, focus still returns to the pill.
 - **Panels never jump.** A panel growing or shrinking (a note saved, a section folded, Feedback opening over a long Variants list, a panel opening beside another) now eases into its new size instead of snapping, and the panels above glide with it.

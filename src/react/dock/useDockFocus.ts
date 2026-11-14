@@ -104,9 +104,9 @@ export function useDockFocus(
        * The caret in the note field of a panel that is opening, as it shows. While selecting it waits there
        * under the select-mode cover, so whatever is typed next ends selecting and lands in the field.
        */
-      openComposer: (selecting: boolean) =>
+      openComposer: () =>
         atCommit(() => {
-          pinning.current = selecting;
+          pinning.current = true;
           fieldRef.current?.focus({ preventScroll: true });
           pinning.current = false;
         }),

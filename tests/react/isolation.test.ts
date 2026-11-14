@@ -188,11 +188,14 @@ it('returns focus after a pointer close without asking for a focus ring, and wit
 it('never drops focus to the page body when Escape closes a panel opened from the launcher', async () => {
   await render();
   document.getElementById('host-button')?.focus();
+  // Opened from the keyboard: Enter on the launcher.
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
   await openFeedback();
-  await act(async () => {
-    $('textarea').focus();
-    $('textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
-  });
+  // The first Escape ends select mode, which opening started; the second closes.
+  for (let i = 0; i < 2; i++)
+    await act(async () => {
+      $('textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
+    });
   await frame();
   expect($('.isotone-notes-panel').dataset.open).toBe('false');
   expect(document.activeElement).toBe(host);
