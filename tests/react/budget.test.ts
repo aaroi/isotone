@@ -175,7 +175,6 @@ it('commits nothing for pointer moves in select mode', async () => {
   document.elementFromPoint = () => page;
   await render();
   await click('.isotone-fab');
-  await click('[aria-label="Select elements"]');
   expect($('[aria-label="Select elements"]').getAttribute('aria-pressed')).toBe('true');
   const moved = await commitsDuring(async () => {
     for (let i = 0; i < 100; i++)

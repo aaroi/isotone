@@ -210,3 +210,36 @@ describe('the field under the select-mode cover', () => {
     expect(selecting()).toBe('true');
   });
 });
+
+describe('Escape', () => {
+  const pressEscape = () =>
+    act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+  const inDock = () => container.contains(document.activeElement);
+
+  it('lets focus go when the dock was opened with the pointer, so no face is left ringed', async () => {
+    await reload({ variants: createVariantsSource({ axes: AXES }) });
+    await act(async () => {
+      window.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'mouse' }));
+      container.querySelector('.isotone-fab')?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    });
+    expect(inDock()).toBe(true);
+    await pressEscape(); // ends selecting
+    await pressEscape(); // closes
+    expect(open('notes')).toBe(false);
+    expect(inDock()).toBe(false);
+  });
+
+  it('returns focus to the launcher when the dock was opened from the keyboard', async () => {
+    await reload({ variants: createVariantsSource({ axes: AXES }) });
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Period', ctrlKey: true, shiftKey: true, bubbles: true }));
+    });
+    await pressEscape();
+    await pressEscape();
+    expect(open('notes')).toBe(false);
+    expect(inDock()).toBe(true);
+  });
+});

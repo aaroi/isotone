@@ -69,11 +69,12 @@ or rescales another's text.
 
 A tool's face on the pill opens it and, pressed again, closes it; a click or
 tap on the folded pill, or Enter on it, reopens the tool used last in the tab
-(else the host's `defaultTab`). Opening Feedback puts the caret in the note
-field in the commit that shows it, never a frame later, so nothing typed during
-the entrance is lost; a finger only opens it, so no on-screen keyboard rises
-over the page. Select mode is something the reviewer starts: the crosshair, or
-the shortcut, which also leaves the caret in the field under the cover. The
+(else the host's `defaultTab`). Opening Feedback with the pointer or the
+shortcut starts select mode, with the caret already in the note field under the
+cover, placed in the commit that shows it, never a frame later, so nothing typed
+during the entrance is lost; Enter or Space on a focused face goes straight to
+the field, and a finger gets select mode with no caret, so no on-screen
+keyboard rises over the page. The crosshair turns select mode on and off. The
 first character, keyed or inserted, or a key that would edit or move the caret
 unseen (Backspace, Delete, arrows, Home, End, Page Up and Down, select all),
 ends selecting and acts in the field. Opening Variants, or a press anywhere in
@@ -98,9 +99,14 @@ saved into it or closing it never moves a selector: when room runs out,
 Variants gives it from its top edge and its list scrolls by as much; room given
 back is taken only as far as that scroll absorbs, and while the pointer rests on
 the dock the rest waits until it leaves (or a resize handle is taken up by
-pointer or key); closed from the keyboard, the list simply grows. Opening Variants under
-an open Feedback slides Feedback up: the one movement left, caused by the
+pointer or key); closed from the keyboard, the list simply grows. Every such
+change of size eases (see Motion). Opening Variants under an open Feedback
+unfolds Variants and glides Feedback up: the one movement left, caused by the
 reviewer's own click.
+
+Escape returns focus to the control that opened the dock: the host's, or the
+launcher when the dock was opened from the keyboard. Opened with the pointer, it
+lets focus go, so the pill folds back with no ring on a face.
 
 A link whose `?v=` the source did not apply (its optional `linkIgnored()`)
 gets one quiet line beside the pill in the update notice's glass: “This link’s
@@ -328,9 +334,22 @@ Motion explains opening, closing and layout changes. Keyboard actions are
 immediate: the rail track, axis menus and colour popover drop their transition
 while the keyboard is in use, each named one by one (a rule over every
 descendant restyles the dock on each change of input). Reduced motion removes
-spatial movement; hover stays brief. The dock hangs from its bottom-right
-corner, so a panel moves only when its bottom or right edge does: one that grows
-or shrinks at its top stays still. The launcher expands on mouse or
+spatial movement; hover stays brief.
+
+No panel ever jumps. The dock hangs from its bottom-right corner, so a panel
+moves when its bottom or right edge does, and slides there. A change of a
+panel's height (a note saved, a section folded, Feedback taking room from
+Variants or giving it back, the composer growing a line, a keyboard resize)
+eases the card's height from what showed to what it needs, every changed panel
+on the same clock, so the stack's total moves evenly between two layouts that
+fit and the panels above glide with it. A panel opening beside another unfolds
+from nothing, contents clipped, with the gap between them; one opening alone
+rises 6px and fades in. Heights ease after a key too, since they follow from
+what the key did; only reduced motion, a resize the pointer drives (which
+tracks the pointer) and panels a reload restored are immediate. Inside a
+height that eases, Variants' list scrolls by as much as its top edge moves, so
+its controls stay still. `tests/browser/dock-motion.test.ts` samples every
+painted frame and fails on an edge that jumps. The launcher expands on mouse or
 hovering-pen entry, even where the primary pointer reports coarse; touch opens
 it by tap. The pill's hit surface spans its rim and the gap between icons.
 
@@ -376,7 +395,8 @@ working note's glint moves its text's gradient, a repaint that content-visibilit
 keeps to the rows in view, on the dots' shared clock; text,
 corners and hit targets keep their size. Read positions before writing styles,
 retarget interrupted movement, cancel on cleanup. Only the pill's own width
-transitions; never animate the size of long lists. Lists above
+transitions, and a panel card's height eases as above (the card, never its
+rows); never animate the size of long lists or their rows. Lists above
 `MAX_ANIMATED_ITEMS` (40) update immediately and skip cloned exit snapshots.
 Hidden lists do not measure on render, and typing must not remeasure unchanged
 selectors or notes.

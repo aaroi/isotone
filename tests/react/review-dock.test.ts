@@ -566,7 +566,7 @@ describe('review dock interactions', () => {
     expect(overlay()).toBeNull();
     expect(fetchMock).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'POST' }));
   });
-  it('opens Feedback ready to write, by pointer or key, and selects only from the crosshair or the shortcut', async () => {
+  it('starts selecting when Feedback opens with a pointer, caret waiting in the field, and goes to the field from the keyboard', async () => {
     await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     // A real pointer over the dock hits the panel, which select mode ignores.
     Object.defineProperty(document, 'elementFromPoint', { value: () => container.querySelector('.isotone-root'), configurable: true });
@@ -575,23 +575,20 @@ describe('review dock interactions', () => {
         el?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
       });
     const field = () => container.querySelector('textarea');
-    // The pill and the Feedback key open the panel with the caret in the field, as it shows: no frame later.
     await pointer(container.querySelector('.isotone-fab'));
-    expect(container.querySelector('.isotone-notes-panel')?.getAttribute('data-open')).toBe('true');
-    expect(container.querySelector('.isotone-picking')).toBeNull();
+    // It opens already covered, so the field never shows through the fade; the caret waits under the cover.
+    expect(container.querySelector('.isotone-picking')?.getAttribute('data-still')).toBe('true');
+    expect(byText('Select elements')?.getAttribute('aria-pressed')).toBe('true');
     expect(document.activeElement).toBe(field());
     await pointer(byText('Feedback'));
     expect(container.querySelector('.isotone-notes-panel')?.getAttribute('data-open')).toBe('false');
+    expect(container.querySelector('.isotone-picking')).toBeNull();
+    await click(byText('Feedback'));
+    expect(container.querySelector('.isotone-picking')).toBeNull();
+    expect(document.activeElement).toBe(field());
+    await click(byText('Feedback'));
     await pointer(byText('Feedback'));
-    expect(container.querySelector('.isotone-picking')).toBeNull();
-    expect(document.activeElement).toBe(field());
-    await click(byText('Feedback'));
-    await click(byText('Feedback'));
-    expect(container.querySelector('.isotone-picking')).toBeNull();
-    expect(document.activeElement).toBe(field());
-    // The crosshair is the way in from the panel.
-    await pointer(byText('Select elements'));
-    expect(byText('Select elements')?.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('.isotone-picking')).not.toBeNull();
   });
   it('keeps the caret in the field while the shortcut selects, so text typed at once lands there', async () => {
     await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));

@@ -182,14 +182,34 @@ describe.skipIf(!binary)('Getting into the panel (headless Chrome)', () => {
     expect(await chrome.eval('selecting()')).toBe(false);
   });
 
-  it('opens Feedback from its face ready to write, without selecting', async () => {
+  it('opens Feedback from its face in select mode, with the caret waiting for what is typed', async () => {
     await fresh(1024, 768);
     await start(3);
     await tool('Feedback');
     expect(await chrome.eval('isOpen("notes")')).toBe(true);
-    expect(await chrome.eval('selecting()')).toBe(false);
+    expect(await chrome.eval('selecting()')).toBe(true);
     await chrome.insertText('Tighter');
     expect(await chrome.eval('field().value')).toBe('Tighter');
+    expect(await chrome.eval('selecting()')).toBe(false);
+  });
+
+  it('leaves no ring on a face after Escape closes a dock opened by pointer, and returns focus after a key', async () => {
+    await fresh(1024, 768);
+    await start(3);
+    const ringed = `Boolean(root().querySelector(':focus-visible'))`;
+    await tool('Feedback');
+    await chrome.key('Escape', 'Escape');
+    await chrome.key('Escape', 'Escape');
+    await chrome.eval('settle()');
+    expect(await chrome.eval('isOpen("notes")')).toBe(false);
+    expect(await chrome.eval(ringed)).toBe(false);
+    expect(await chrome.eval(`root().querySelector('.isotone-root').dataset.expanded`)).toBe('false');
+    await chrome.move(20, 300);
+    await shortcut();
+    await chrome.key('Escape', 'Escape');
+    await chrome.key('Escape', 'Escape');
+    await chrome.eval('settle()');
+    expect(await chrome.eval(`root().activeElement?.matches('.isotone-fab, .isotone-rail-button')`)).toBe(true);
   });
 
   it('ends selecting on a pick in Variants, so the next page click follows the link', async () => {
@@ -348,6 +368,7 @@ describe.skipIf(!binary)('Getting into the panel (headless Chrome)', () => {
     expect(await chrome.eval(hold)).toBe('');
     // Closed from the keyboard, with the pointer away, nothing is held, and arrows resize.
     await tool('Feedback');
+    await chrome.key('Escape', 'Escape'); // select mode
     await chrome.move(20, 300);
     await chrome.eval(`root().querySelector('.isotone-rail-button[aria-label^="Feedback"]').focus()`);
     await chrome.key('Enter', 'Enter', 0, '\r');

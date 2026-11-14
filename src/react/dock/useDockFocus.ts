@@ -28,6 +28,8 @@ export function useDockFocus(
   id: string,
 ) {
   const previous = useRef<HTMLElement | null>(null);
+  // Whether the dock was last opened from the keyboard; a pointer opening gets its focus back without a ring.
+  const byKey = useRef(false);
   const frame = useRef(0);
   // Focusing the composer after a pin must not leave select mode.
   const pinning = useRef(false);
@@ -108,6 +110,10 @@ export function useDockFocus(
           fieldRef.current?.focus({ preventScroll: true });
           pinning.current = false;
         }),
+      /** Note how the dock was opened, as it opens. */
+      opened: () => {
+        byKey.current = lastInputWasKey;
+      },
       /** Focus the composer beside a fresh pin without leaving select mode. */
       composerWhilePicking: () =>
         later(() => {
@@ -117,14 +123,18 @@ export function useDockFocus(
         }),
       /** Whether the composer is taking focus for a pin, which keeps select mode on. */
       pinning: () => pinning.current,
-      /** Return focus after everything closes: to the host control it came from, else the launcher. */
+      /**
+       * Return focus after everything closes: to the host control it came from, else the launcher. Opened
+       * with the pointer, the dock lets focus go instead, so the pill folds back with no ring on a face.
+       */
       restore: () => {
         cancel();
-        if (previous.current?.isConnected) previous.current.focus();
-        else launcher();
+        if (previous.current?.isConnected) previous.current.focus({ focusVisible: byKey.current } as FocusOptions);
+        else if (byKey.current) launcher();
+        else ((rootRef.current?.getRootNode() as ShadowRoot | Document | undefined)?.activeElement as HTMLElement | null)?.blur();
       },
     }),
-    [cancel, inDock, remember, launcher, later, atCommit, fieldRef],
+    [cancel, inDock, remember, launcher, later, atCommit, fieldRef, rootRef],
   );
 }
 

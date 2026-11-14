@@ -45,7 +45,10 @@ import { npm } from './npm.mjs';
 // remembered panels and Variants scroll, the caret placed as Feedback opens, select mode ending at
 // Variants, the list that yields room from its top and holds its height as room returns, the line by
 // the pill for a link's unapplied ?v=, and their changelog and README notes.
-const BUDGET = { bundle: 408_500, tarball: 466_000 };
+// Bundle raised to 410 kB and tarball to 468 kB (409.1 and 466.8 kB; panels never jump): heights that
+// ease together, a panel unfolding beside another, focus let go after a pointer-opened dock closes,
+// and their changelog notes.
+const BUDGET = { bundle: 410_000, tarball: 468_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));
