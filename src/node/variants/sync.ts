@@ -42,7 +42,7 @@ export function syncVariant(opts: VariantsStoreOptions, id: string): SyncResult 
     const unchanged: string[] = [];
     const blocked: Record<string, SyncBlocker> = {};
     let dirty = false;
-    const git = hasGit();
+    let git: boolean | undefined;
 
     for (const [file, entry] of Object.entries(manifest.files)) {
       const currentAbs = join(root, file);
@@ -80,6 +80,7 @@ export function syncVariant(opts: VariantsStoreOptions, id: string): SyncResult 
         blocked[file] = 'no-file';
         continue;
       }
+      git ??= hasGit();
       if (!git) {
         blocked[file] = 'no-git';
         continue;

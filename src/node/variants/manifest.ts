@@ -8,7 +8,7 @@ import { writeJson } from '../fs/atomic';
 import { isWithin } from '../fs/paths';
 import { BASES_ATTRIBUTES, hashFile, isGitIgnored, recordBase } from './git';
 import { type VariantsStoreOptions, mutateVariants, variantsDir } from './options';
-import { baseStore, variantDir, isValidVariantId, isSafeManifestKey, repoRelativeKey } from './paths';
+import { BASE_FILE, baseStore, variantDir, isValidVariantId, isSafeManifestKey, repoRelativeKey } from './paths';
 
 /** Env files, private keys and credentials: a copy would sit in a directory
  *  that is committed by default. `.env.example` and the like are fine. */
@@ -86,15 +86,14 @@ export function writeVariant(opts: VariantsStoreOptions, v: OverlayVariant): voi
   pruneBases(store, v);
 }
 
-/** A kept base, or one being written. Nothing else in the store is ever deleted. */
-const BASE_FILE = /^[a-f0-9]{40}(?:[a-f0-9]{24})?(?:\.[a-f0-9-]{36}\.tmp)?$/;
-
 /** Drop the kept bases the manifest no longer names: a sync moved past
  *  them, a file left the variant, or git holds the new base instead. */
 function pruneBases(store: string, v: OverlayVariant): void {
   if (!existsSync(store)) return;
   const kept = new Set(Object.values(v.files).map((entry) => entry.base));
-  const bases = readdirSync(store).filter((name) => BASE_FILE.test(name));
+  const bases = readdirSync(store, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && BASE_FILE.test(entry.name))
+    .map((entry) => entry.name);
   for (const name of bases) if (!kept.has(name)) rmSync(join(store, name), { force: true });
   if (bases.some((name) => kept.has(name))) return;
   rmSync(join(store, BASES_ATTRIBUTES), { force: true });
@@ -278,6 +277,7 @@ export function addVariantFile(
     if (!manifest) throw new Error(`No variant "${id}"`);
     const root = resolve(opts.root);
     const { abs: sourceAbs, key } = repoRelativeKey(root, file);
+    const store = baseStore(opts, id); // refused before anything is copied
     // Idempotent: a file already tracked keeps its override and its base
     // untouched. Re-adding is a no-op, not a refresh (sync is how you refresh).
     if (Object.hasOwn(manifest.files, key)) return manifest;
@@ -303,7 +303,7 @@ export function addVariantFile(
       throw new Error(`${refusal}; variants are meant to be committed, so it is not copied. Ask the user before copying it with --force.`);
     mkdirSync(dirname(destAbs), { recursive: true });
     writeFileSync(destAbs, readFileSync(sourceAbs));
-    manifest.files = { ...manifest.files, [key]: { base: recordBase(sourceAbs, baseStore(opts, id)) } };
+    manifest.files = { ...manifest.files, [key]: { base: recordBase(sourceAbs, store) } };
     writeVariant(opts, manifest);
     return manifest;
   });

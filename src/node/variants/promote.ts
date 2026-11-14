@@ -65,6 +65,8 @@ export function promoteVariant(
       overlayGroups(readVariants(opts))
         .find((g) => g.members.some((m) => m.id === id))
         ?.members.filter((m) => m.id !== id) ?? [];
+    // Before anything lands: a sibling store refused afterwards would leave a half-done promote.
+    const stores = new Map(siblings.map((s) => [s.id, baseStore(opts, s.id)]));
     const files = Object.keys(manifest.files);
     // Hashed once per file, in both formats a sibling's base can have.
     const before = new Map(files.map((key) => [key, existsSync(join(root, key)) ? blobHashes(readFileSync(join(root, key))) : null]));
@@ -75,7 +77,7 @@ export function promoteVariant(
         opts,
         active.filter((a) => a !== id),
       );
-    return { files, rebased: rebaseSiblings(opts, siblings, before) };
+    return { files, rebased: rebaseSiblings(opts, siblings, before, stores) };
   });
 }
 
@@ -118,7 +120,12 @@ function landFiles(copies: { from: string; to: string }[]): void {
  * stays stale, because the real file changed in ways nobody has looked at.
  * `before` holds the hashes of what each landed file replaced (null for a new file).
  */
-function rebaseSiblings(opts: VariantsStoreOptions, siblings: OverlayVariant[], before: Map<string, string[] | null>): string[] {
+function rebaseSiblings(
+  opts: VariantsStoreOptions,
+  siblings: OverlayVariant[],
+  before: Map<string, string[] | null>,
+  stores: Map<string, string>,
+): string[] {
   const root = resolve(opts.root);
   const rebased: string[] = [];
   for (const sibling of siblings) {
@@ -126,7 +133,7 @@ function rebaseSiblings(opts: VariantsStoreOptions, siblings: OverlayVariant[], 
     for (const [key, entry] of Object.entries(sibling.files)) {
       const replaced = before.get(key);
       if (replaced === undefined || !(entry.added || (entry.base !== null && replaced?.includes(entry.base)))) continue;
-      const base = recordBase(join(root, key), baseStore(opts, sibling.id));
+      const base = recordBase(join(root, key), stores.get(sibling.id) as string);
       if (base === null) continue;
       sibling.files[key] = { base };
       moved = true;

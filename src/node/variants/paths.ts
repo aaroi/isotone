@@ -14,13 +14,29 @@ export function variantDir(opts: VariantsStoreOptions, id: string): string {
  *  copy was made or synced outside a repository. Named by blob hash. */
 const BASES_DIR = '.isotone-base';
 
-/** The variant's kept-bases directory. Variants are committed and shared, so
- *  a store that is a link, or resolves outside the variant, is refused. */
+/** A kept base, or one being written. Nothing else in the store is ever deleted. */
+export const BASE_FILE = /^[a-f0-9]{40}(?:[a-f0-9]{24})?(?:\.[a-f0-9-]{36}\.tmp)?$/;
+
+/** The first path segment, which a case-insensitive filesystem reads in any case. */
+function isReserved(key: string): boolean {
+  return key.split('/')[0]?.toLowerCase() === BASES_DIR;
+}
+
+/**
+ * The variant's kept-bases directory. Variants are committed and shared, so
+ * anything but a plain directory of regular base files (a link, a file, a
+ * checkout that turned a link into either) is refused before anything is written.
+ */
 export function baseStore(opts: VariantsStoreOptions, id: string): string {
   const dir = variantDir(opts, id);
   const store = join(dir, BASES_DIR);
-  if (lstatSync(store, { throwIfNoEntry: false })?.isSymbolicLink() || !isWithin(dir, store, { realpath: true }))
-    throw new Error(`${store} is a link, not a directory of the variant's own. Remove it.`);
+  const stat = lstatSync(store, { throwIfNoEntry: false });
+  const sound =
+    !stat ||
+    (stat.isDirectory() &&
+      isWithin(dir, store, { realpath: true }) &&
+      readdirSync(store, { withFileTypes: true }).every((entry) => entry.isFile() || !BASE_FILE.test(entry.name)));
+  if (!sound) throw new Error(`${store} is not a plain directory of kept bases, so "${id}" was left unchanged. Remove it.`);
   return store;
 }
 
@@ -32,7 +48,7 @@ export function baseStore(opts: VariantsStoreOptions, id: string): string {
  * is not a variant at all.
  */
 export function isSafeManifestKey(key: string): boolean {
-  if (!key || isAbsolute(key) || /[\\:\0]/.test(key) || key === 'variant.json' || key.split('/')[0] === BASES_DIR) return false;
+  if (!key || isAbsolute(key) || /[\\:\0]/.test(key) || key === 'variant.json' || isReserved(key)) return false;
   return !key.split('/').some((segment) => !segment || segment === '.' || segment === '..' || segment === '.git');
 }
 
@@ -51,8 +67,7 @@ export function repoRelativeKey(root: string, file: string): { abs: string; key:
   if (!typed || isEscaping(typed)) throw new Error(`"${file}" escapes the project root`);
   const rel = onDiskCase(root, typed);
   const abs = join(root, rel);
-  if (toPosixPath(rel).split('/')[0] === BASES_DIR)
-    throw new Error(`"${file}" is under ${BASES_DIR}/, which variants reserve for their bases`);
+  if (isReserved(toPosixPath(rel))) throw new Error(`"${file}" is under ${BASES_DIR}/, which variants reserve for their bases`);
   if (!isSafeManifestKey(toPosixPath(rel)) || !isWithin(root, abs, { realpath: true })) {
     throw new Error(`"${file}" escapes the project root`);
   }

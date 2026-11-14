@@ -140,7 +140,7 @@ export function recordBase(absPath: string, store: string): string | null {
     // Never through a link (`wx` refuses one), and once only: a checkout must
     // not convert line endings, or the bases no longer match their names.
     try {
-      writeFileSync(join(store, BASES_ATTRIBUTES), '* -text\n', { flag: 'wx' });
+      writeFileSync(join(store, BASES_ATTRIBUTES), '* -text -filter -ident -working-tree-encoding\n', { flag: 'wx' });
     } catch {}
     // Written beside and renamed, so a crash never leaves a partial base.
     const temp = join(store, `${hash}.${randomUUID()}.tmp`);

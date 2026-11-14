@@ -365,17 +365,19 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
   const stale = relevant.map((v) => ({ id: v.id, files: changedFor(v), unbased: filesWithoutBase(v) })).filter((v) => v.files.length);
   if (stale.length) {
     lines.push('These variants copy files changed since the note (or --working), so their copies may lack the fix:');
-    const git = hasGit();
+    // With no recorded base there is nothing to sync from.
+    const syncable = stale.filter((v) => v.files.some((file) => !v.unbased.includes(file)));
+    const git = syncable.length > 0 && hasGit();
     for (const v of stale) {
-      // With no recorded base there is nothing to sync from.
-      const advice = v.files.every((file) => v.unbased.includes(file))
+      const advice = !syncable.includes(v)
         ? ': no base recorded, so compare the copy with the real file by hand'
         : git
           ? `: ${shellCommand('npx', 'isotone', 'variant', 'sync', v.id)}`
           : '';
       lines.push(`  ${v.id} (${v.files.join(', ')})${advice}`);
     }
-    lines.push(git ? 'Sync each one the fix belongs in too; leave a copy alone when it is the alternative itself.' : `${NO_GIT_SYNC}.`);
+    if (syncable.length)
+      lines.push(git ? 'Sync each one the fix belongs in too; leave a copy alone when it is the alternative itself.' : `${NO_GIT_SYNC}.`);
   }
   const conflicted = relevant.filter((v) => v.conflicts?.length);
   if (conflicted.length) {

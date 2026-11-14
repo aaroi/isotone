@@ -20,7 +20,7 @@ import { npm } from './npm.mjs';
 // blur bands, the header and defaults-bar materials, the rim drawn over content and rows that recede.
 // Bundle raised to 395 kB and tarball to 422.5 kB (393.8 and 420.8 kB; rolling figures): the component
 // that rolls changed characters, and its notes in the shipped design guide and changelog.
-// Tarball raised to 427.5 kB (426.1 kB; variants without Git): kept bases, the sync and
+// Tarball raised to 427.5 kB (426.5 kB; variants without Git): kept bases, the sync and
 // stale messages that say why a copy can't merge, and their docs.
 const BUDGET = { bundle: 395_000, tarball: 427_500 };
 

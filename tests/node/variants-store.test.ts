@@ -358,7 +358,9 @@ describe('outside a Git repository', () => {
     expect(base).toBe(sha1Blob(original));
     expect(readFileSync(join(variantDir(opts, 'v1'), '.isotone-base', base as string), 'utf8')).toBe(original);
     // Committed beside the bases, so no checkout rewrites their line endings.
-    expect(readFileSync(join(variantDir(opts, 'v1'), '.isotone-base', '.gitattributes'), 'utf8')).toBe('* -text\n');
+    expect(readFileSync(join(variantDir(opts, 'v1'), '.isotone-base', '.gitattributes'), 'utf8')).toBe(
+      '* -text -filter -ident -working-tree-encoding\n',
+    );
     expect(listVariants(opts)[0]?.stale).toEqual([]);
 
     writeFileSync(join(root, 'src', 'Button.tsx'), 'line one\nline two\nline three, changed\n');
@@ -434,16 +436,63 @@ describe('outside a Git repository', () => {
     createVariant(opts, { id: 'v' });
     symlinkSync(join(root, 'precious'), join(variantDir(opts, 'v'), '.isotone-base'));
 
-    expect(() => addVariantFile(opts, 'v', 'src/Button.tsx')).toThrow(/is a link/);
+    expect(() => addVariantFile(opts, 'v', 'src/Button.tsx')).toThrow(/not a plain directory/);
     expect(readdirSync(join(root, 'precious'))).toEqual(['data.txt']);
   });
 
-  it('keeps `.isotone-base/` out of reach of `variant add`', () => {
+  it('keeps `.isotone-base/` out of reach of `variant add`, in any case', () => {
     const { root, opts } = tempProject();
-    mkdirSync(join(root, '.isotone-base'));
-    writeFileSync(join(root, '.isotone-base', 'x.ts'), '');
+    mkdirSync(join(root, '.Isotone-Base'));
+    writeFileSync(join(root, '.Isotone-Base', 'x.ts'), '');
     createVariant(opts, { id: 'v' });
-    expect(() => addVariantFile(opts, 'v', '.isotone-base/x.ts')).toThrow(/reserve/);
+    expect(() => addVariantFile(opts, 'v', '.Isotone-Base/x.ts')).toThrow(/reserve/);
+  });
+
+  it('refuses a bases directory that is a file, leaving the variant untouched', () => {
+    // What a checkout with `core.symlinks=false` makes of a committed link.
+    const { opts } = tempProject();
+    createVariant(opts, { id: 'v' });
+    const manifest = readFileSync(join(variantDir(opts, 'v'), 'variant.json'), 'utf8');
+    writeFileSync(join(variantDir(opts, 'v'), '.isotone-base'), '../../../precious');
+
+    expect(() => addVariantFile(opts, 'v', 'src/Button.tsx')).toThrow(/is not a plain directory of kept bases, so "v" was left unchanged/);
+    expect(() => setVariantGroup(opts, 'v', 'g')).toThrow(/not a plain directory/);
+    expect(readFileSync(join(variantDir(opts, 'v'), 'variant.json'), 'utf8')).toBe(manifest);
+    expect(existsSync(join(variantDir(opts, 'v'), 'src'))).toBe(false);
+  });
+
+  it('prunes only files named like a kept base', () => {
+    const { opts } = tempProject();
+    createVariant(opts, { id: 'v' });
+    addVariantFile(opts, 'v', 'src/Button.tsx');
+    writeFileSync(join(variantDir(opts, 'v'), '.isotone-base', 'README'), 'mine\n');
+    removeVariantFile(opts, 'v', 'src/Button.tsx');
+    expect(readdirSync(join(variantDir(opts, 'v'), '.isotone-base'))).toEqual(['README']);
+  });
+
+  it('lands nothing when an alternative’s bases directory would be refused', () => {
+    const { root, opts } = tempProject();
+    mkdirSync(join(root, 'precious'));
+    createVariant(opts, { id: 'a', group: 'g' });
+    createVariant(opts, { id: 'b', group: 'g' });
+    addVariantFile(opts, 'a', 'src/Button.tsx');
+    addVariantFile(opts, 'b', 'src/Button.tsx');
+    writeFileSync(join(variantDir(opts, 'a'), 'src/Button.tsx'), 'promoted\n');
+    rmSync(join(variantDir(opts, 'b'), '.isotone-base'), { recursive: true });
+    symlinkSync(join(root, 'precious'), join(variantDir(opts, 'b'), '.isotone-base'));
+
+    expect(() => promoteVariant(opts, 'a')).toThrow(/not a plain directory/);
+    expect(readFileSync(join(root, 'src', 'Button.tsx'), 'utf8')).toBe('line one\nline two\nline three\n');
+    expect(readVariant(opts, 'a')).not.toBeNull();
+  });
+
+  it('does not offer `variant sync` from promote when Git is not installed', () => {
+    const { root, opts } = tempProject();
+    vi.stubEnv('PATH', '');
+    createVariant(opts, { id: 'v' });
+    addVariantFile(opts, 'v', 'src/Button.tsx');
+    writeFileSync(join(root, 'src', 'Button.tsx'), 'changed\n');
+    expect(() => promoteVariant(opts, 'v')).toThrow(/Git is not installed, so `variant sync` cannot merge.*then promote with --force\.$/);
   });
 
   it('never merges from a kept base that no longer matches its hash', () => {
@@ -736,6 +785,8 @@ describe('path escape rejected', () => {
       { ...manifest, files: { '.git/config': { base: null } } },
       { ...manifest, files: { 'variant.json': { base: null } } },
       { ...manifest, files: { './a.ts': { base: null } } },
+      // A case-insensitive filesystem opens the bases directory under this key.
+      { ...manifest, files: { [`.ISOTONE-BASE/${'a'.repeat(40)}`]: { base: null } } },
     ]) {
       writeFileSync(file, JSON.stringify(bad));
       expect(readVariant(opts, 'safe')).toBeNull();
