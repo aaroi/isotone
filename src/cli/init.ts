@@ -501,8 +501,8 @@ function printSwitching(print: Print, { mode, why, vite }: Switching): void {
     ],
     host: [
       'Switching: the app’s own. Picks live wherever onChange keeps them; kept in the URL,',
-      'each tab has its own and a link carries them. Knobs from .isotone/knobs.json, and on',
-      'Vite file variants, listed beside them switch as Isotone’s own setups do: a knob’s',
+      'each tab has its own and a link carries them. Knobs from .isotone/knobs.json and,',
+      'on Vite, file variants listed beside them switch as Isotone’s own setups do: a knob’s',
       'value stays in the browser (localStorage), never in a link.',
     ],
   }[mode];
