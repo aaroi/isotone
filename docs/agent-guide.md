@@ -40,8 +40,8 @@ npx isotone --undone <id>          # reopen it
   lack the fix, with the `variant sync <id>` for each (a copy with no base
   recorded is compared by hand instead), any copy with conflict
   markers, and which of those copies a page may show in place of the fix: the
-  option a note about that selector names, else one active in
-  `.isotone/active.json`. Where picks are shared by every tab
+  option a note about that selector names or the pick its `selections` record,
+  else one active in `.isotone/active.json`. Where picks are shared by every tab
   ([per tab or shared](variants.md#per-tab-or-shared)), every tab shows
   `.isotone/active.json`, so an active copy is named whatever the note was on.
   Leave that pick to the reviewer. With `--json` that goes to stderr; stdout

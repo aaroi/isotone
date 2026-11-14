@@ -402,7 +402,7 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
   }
   // Each tab keeps its own pick of a script in live switching, so `.isotone/active.json` may be another
   // tab's: a note about this variant's selector says what its reviewer was on (the option it is about, else
-  // the pick it was written with), and outranks it. A stylesheet follows active.json in every tab, and so
+  // the pick it was written with), as do the selections a note records, and they outrank it. A stylesheet follows active.json in every tab, and so
   // does every file where picks are shared (no React, Vite 5, `live: false`): there it is what every tab shows.
   const switching = fileVariantSwitching(dir);
   const shared = switching === 'whole' || switching === 'whole-react';
@@ -418,7 +418,10 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
     const about = fixed.map(({ variant: ref }) => (ref?.axisId === groupOf.get(variant.id) ? ref : undefined));
     if (about.some((ref) => ref?.optionId === variant.id))
       return [{ id: variant.id, files, why: `${article(fixed)} note is about this option` }];
-    if (about.some((ref) => !ref?.optionId && ref?.value === variant.id))
+    // A note records the picks its tab showed (`selections`), whatever it is about.
+    const group = groupOf.get(variant.id);
+    const pickedThen = fixed.some((note) => group !== undefined && note.selections?.[group] === variant.id);
+    if (pickedThen || about.some((ref) => !ref?.optionId && ref?.value === variant.id))
       return [{ id: variant.id, files, why: `picked when ${article(fixed)} note was written` }];
     if (!active.includes(variant.id)) return [];
     const followed = about.some((ref) => !(ref?.optionId ?? ref?.value)) ? files : files.filter((file) => !SCRIPT.test(file));

@@ -35,6 +35,7 @@ function notes(
     route?: string;
     viewport?: { w: number; h: number };
     variant?: { axisId: string; label: string; optionId?: string; value?: string };
+    selections?: Record<string, string>;
   }[],
 ): void {
   write(
@@ -445,6 +446,42 @@ describe('--done and variants', () => {
     // The copy may still lack the fix, so the sync advice stays.
     expect(io.text.out).toContain('hero-left (src/App.jsx): npx isotone variant sync hero-left');
     expect(io.text.out).not.toContain('The reviewer may be looking');
+  });
+
+  // #69 records the picks a note was written under. In live switching (#61) those are the tab's own,
+  // so a note pinned to an element (about no selector) still says which copy its reviewer saw.
+  it('names the copy a note was written under, from its selections, though active.json moved on', async () => {
+    const root = repo();
+    notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000), selections: { hero: 'hero-left' } }]);
+    for (const id of ['hero-left', 'hero-centered']) {
+      expect(await runCli(['variant', 'new', id, '--route', '/', '--group', 'hero'], captureIo(root))).toBe(0);
+      expect(await runCli(['variant', 'add', id, 'src/App.jsx'], captureIo(root))).toBe(0);
+    }
+    // Another tab went back to Default since.
+    expect(await runCli(['variant', 'use', 'default'], captureIo(root))).toBe(0);
+    write(root, 'src/App.jsx', 'export default function App() { return <button>Start</button>; }\n', Date.now() + 2000);
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    expect(io.text.out).toContain('  hero-left (src/App.jsx): picked when the note was written');
+    expect(io.text.out).not.toContain('hero-centered (src/App.jsx): picked');
+  });
+
+  // #69's listing names a pick that is a variant's id, read with listVariants; #66 leaves 1.5.0's
+  // copies without a base, which listVariants still lists.
+  it("says a note's pick ran a variant copy, even one with no recorded base", async () => {
+    const root = repo();
+    notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000), selections: { hero: 'hero-left' } }]);
+    expect(await runCli(['variant', 'new', 'hero-left', '--route', '/', '--group', 'hero'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'add', 'hero-left', 'src/App.jsx'], captureIo(root))).toBe(0);
+    const manifest = join(root, '.isotone/variants/hero-left/variant.json');
+    const parsed = JSON.parse(readFileSync(manifest, 'utf8'));
+    parsed.files['src/App.jsx'].base = null;
+    writeFileSync(manifest, JSON.stringify(parsed));
+    const io = captureIo(root);
+    expect(await runCli([], io)).toBe(0);
+    expect(io.text.out).toContain(
+      '⊙ selections: hero=hero-left (the page showed these, not the defaults; source lines may be lines of the active variant copy)',
+    );
   });
 
   it('names copies on the route that still hold conflict markers', async () => {
