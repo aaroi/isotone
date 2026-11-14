@@ -296,7 +296,7 @@ if (sharedLink) {
   const picked = source.getSelections().layout;
   const active = picked && picked !== 'row' ? [picked] : [];
   const notice = unappliedLinkNotice({ variants, active }, active, location.search);
-  Object.assign(source, { getNotice: () => notice });
+  source.getNotice = () => notice;
 }
 
 type DemoNote = Record<string, unknown> & {

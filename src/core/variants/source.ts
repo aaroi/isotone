@@ -46,6 +46,13 @@ export interface VariantsSource {
    * page"). Absent, every axis can.
    */
   canPreview?: (axisId: string) => boolean | string;
+  /**
+   * Optional: a quiet note the Variants view shows above the selectors, or
+   * `null`, such as the overlay's on a link whose `?v=` it does not apply.
+   * Read when the view opens and kept until it closes, so it never moves the
+   * selectors under a pick.
+   */
+  getNotice?: () => string | null;
 }
 
 /**

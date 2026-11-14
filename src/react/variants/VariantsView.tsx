@@ -47,9 +47,8 @@ export function refreshSource(source: VariantsSource): Promise<void> {
 
 const noop = () => {};
 
-/** Not part of the source contract: the overlay source has it, for a link's `?v=` it does not apply. */
 function readNotice(source: VariantsSource): string | null {
-  return (source as { getNotice?: () => string | null }).getNotice?.() ?? null;
+  return source.getNotice?.() ?? null;
 }
 
 /** What the panel draws from a source: read once per change and shared by every view of it. */
