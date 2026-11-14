@@ -194,10 +194,22 @@ const HEAD_OPEN = /<head(?=[\s/>])[^>]*>/i;
  * opening body tag for a document without a head; null when it has neither.
  */
 function intoHead(html: string, script: string): string | null {
-  const end = html.match(/<\/head>/i)?.index;
+  const end = headEnd(html);
   const open = html.match(HEAD_OPEN) ?? html.match(/<body[^>]*>/i);
   const at = end ?? (open?.index === undefined ? undefined : open.index + open[0].length);
   return at === undefined ? null : `${html.slice(0, at)}${script}${html.slice(at)}`;
+}
+
+/**
+ * Where `</head>` closes the head: the first one outside a comment, script or
+ * style, before `<body>`. A `</head>` written inside an inline script is text.
+ */
+function headEnd(html: string): number | undefined {
+  for (const match of html.matchAll(/<!--[\s\S]*?-->|<(script|style)\b[\s\S]*?<\/\1\s*>|<\/head\s*>|<body(?=[\s/>])/gi)) {
+    if (/^<\/head/i.test(match[0])) return match.index;
+    if (/^<body/i.test(match[0])) return undefined;
+  }
+  return undefined;
 }
 
 /**

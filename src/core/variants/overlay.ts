@@ -154,15 +154,36 @@ export function knobStyle(doc: Document, create: boolean): CSSStyleDeclaration |
 
 /** How long select attributes wait for a hydration the page expects; after it they apply anyway. */
 const HYDRATION_WAIT_MS = 5000;
-/** How long the panel keeps watching for that hydration to write them again. */
+/** How long the panel keeps watching for that hydration to write them again; after it, it gives up. */
 const HYDRATION_WATCH_MS = 60_000;
+
+/**
+ * What every knob source on a document has written there, kept on its window so
+ * that a remount, a second source or a second copy of Isotone shares it: the
+ * properties (the event compares against them), the attributes, and the wait
+ * for hydration they are held in.
+ */
+interface PageKnobs {
+  written: Map<string, string>;
+  attributes: Map<string, string | null>;
+  waitingSince: number | null;
+  gaveUp: boolean;
+  timer: ReturnType<typeof setTimeout> | null;
+  users: number;
+}
+
+function pageKnobs(doc: Document): PageKnobs {
+  const win = (doc.defaultView ?? {}) as { __isotoneKnobPage?: PageKnobs };
+  win.__isotoneKnobPage ??= { written: new Map(), attributes: new Map(), waitingSince: null, gaveUp: false, timer: null, users: 0 };
+  return win.__isotoneKnobPage;
+}
 
 /**
  * The page as `applyKnobValues` writes it: properties in {@link knobStyle}, at
  * `!important` so a host's own `:root` rule does not win, and select attributes
- * and the event on `<html>`. The event compares against what the panel last
- * wrote, so a full load announces each moved knob even though the head script
- * already put its value on.
+ * and the event on `<html>`. The event compares against what was last written
+ * on the page ({@link PageKnobs}), so a full load announces each moved knob once
+ * even though the head script already put its value on.
  *
  * React compares the attributes of an `<html>` it renders while it hydrates, so
  * the attributes wait while a React root on the document has not hydrated
@@ -170,57 +191,72 @@ const HYDRATION_WATCH_MS = 60_000;
  * React has no React root at all; React's own markers on the nodes tell which.
  * After {@link HYDRATION_WAIT_MS} they apply anyway. When the wait ends, every
  * attribute is written again, since React clears `<html>`'s when it falls back
- * to rendering the page itself.
+ * to rendering the page itself. A watch that runs out gives up for good: later
+ * writes apply at once. `dispose` stops the watch once no source needs it.
  */
-function pageKnobRoot(doc: Document): Parameters<typeof applyKnobValues>[2] {
+function pageKnobRoot(doc: Document): Parameters<typeof applyKnobValues>[2] & { dispose(): void } {
   // Read `<html>` each time: React 18 replaces it when it gives up hydrating the document.
   const html = () => doc.documentElement;
+  const page = pageKnobs(doc);
+  page.users++;
   const has = (node: object, key: string) => Object.keys(node).some((k) => k.startsWith(key));
   const marked = () => (doc.defaultView as { __isotoneHydrates?: boolean } | null)?.__isotoneHydrates === true;
   const hydrating = () => !has(html(), '__reactFiber$') && (has(doc, '__reactContainer$') || (marked() && !has(doc, '_reactListening')));
-  const written = new Map<string, string>();
-  const attributes = new Map<string, string | null>();
   const writeAll = () => {
-    for (const [name, value] of attributes) {
+    for (const [name, value] of page.attributes) {
       if (value === null) html().removeAttribute(name);
       else html().setAttribute(name, value);
     }
   };
-  let waitingSince: number | null = null;
-  const overdue = () => waitingSince !== null && Date.now() - waitingSince >= HYDRATION_WAIT_MS;
+  const waited = () => (page.waitingSince === null ? 0 : Date.now() - page.waitingSince);
   const settle = (capped: boolean) => {
-    if (waitingSince !== null && hydrating() && Date.now() - waitingSince < HYDRATION_WATCH_MS) {
-      if (!capped && overdue()) writeAll();
-      setTimeout(settle, 50, capped || overdue());
-      return;
+    page.timer = null;
+    if (page.waitingSince === null) return;
+    if (hydrating()) {
+      if (waited() < HYDRATION_WATCH_MS) {
+        if (!capped && waited() >= HYDRATION_WAIT_MS) writeAll();
+        page.timer = setTimeout(settle, 50, capped || waited() >= HYDRATION_WAIT_MS);
+        return;
+      }
+      page.gaveUp = true;
     }
-    waitingSince = null;
+    page.waitingSince = null;
     writeAll();
     // And the properties, should the render have taken a fallback `<style>` with it.
-    for (const [name, value] of written) knobStyle(doc, true)?.setProperty(name, value, 'important');
+    for (const [name, value] of page.written) knobStyle(doc, true)?.setProperty(name, value, 'important');
   };
   const write = (name: string, value: string | null) => {
-    attributes.set(name, value);
-    if (overdue()) writeAll();
-    if (waitingSince !== null) return;
-    waitingSince = Date.now();
+    page.attributes.set(name, value);
+    if (page.gaveUp || waited() >= HYDRATION_WAIT_MS) writeAll();
+    if (page.gaveUp || page.waitingSince !== null) return;
+    page.waitingSince = Date.now();
     settle(false);
   };
+  let disposed = false;
   return {
     style: {
       setProperty: (name, value) => {
-        written.set(name, value);
+        page.written.set(name, value);
         knobStyle(doc, true)?.setProperty(name, value, 'important');
       },
       removeProperty: (name) => {
-        written.delete(name);
+        page.written.delete(name);
         knobStyle(doc, false)?.removeProperty(name);
       },
-      getPropertyValue: (name) => written.get(name) ?? '',
+      getPropertyValue: (name) => page.written.get(name) ?? '',
     },
     setAttribute: (name, value) => write(name, value),
     removeAttribute: (name) => write(name, null),
     dispatchEvent: (event) => html().dispatchEvent(event),
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      page.users--;
+      if (page.users > 0) return;
+      if (page.timer !== null) clearTimeout(page.timer);
+      page.timer = null;
+      page.waitingSince = null;
+    },
   };
 }
 
@@ -555,6 +591,8 @@ export function createOverlayVariantsSource(cfg: {
   /** Call when the ids `takenIds` gives may have changed (a host source loaded
    *  its axes): puts back or takes off the knobs they leave out. */
   takenChanged(): void;
+  /** Call when the panel unmounts: stops its wait for hydration once no other source on the page needs it. */
+  dispose(): void;
 } {
   let list: OverlayVariantsList | null = null;
   let error: string | null = null;
@@ -603,7 +641,8 @@ export function createOverlayVariantsSource(cfg: {
       return null;
     }
   })();
-  const knobRoot = cfg.knobRoot === undefined ? (typeof document === 'undefined' ? null : pageKnobRoot(document)) : cfg.knobRoot;
+  const pageRoot = cfg.knobRoot === undefined && typeof document !== 'undefined' ? pageKnobRoot(document) : null;
+  const knobRoot = cfg.knobRoot === undefined ? pageRoot : cfg.knobRoot;
   let knobValues: VariantSelections = (() => {
     const parse = (raw: string | null): VariantSelections => {
       try {
@@ -725,6 +764,9 @@ export function createOverlayVariantsSource(cfg: {
     get knobs() {
       return { axes: knobAxes(), values: { ...knobValues } };
     },
+    dispose() {
+      pageRoot?.dispose();
+    },
     takenChanged() {
       // The panel re-reads axes from the source that changed; only <html> needs this.
       if (list) applyKnobs();
@@ -748,12 +790,15 @@ export function createOverlayVariantsSource(cfg: {
       // the listing was loading. Definitions can still refresh independently.
       const previousKnobs = list?.knobs ?? [];
       list = list && (wasActivating || activation !== null || startedRevision !== revision) ? { ...next, active: list.active } : next;
-      // Knobs the listing dropped or redefined come off; `applyKnobs` below writes every listed one, so
-      // re-reading an unchanged listing as the panel opens leaves the page, and the `isotone:knob` event, alone.
-      const listed = new Set((list.knobs ?? []).map((knob) => JSON.stringify(knob)));
+      // Knobs the listing dropped, or that now write differently (another kind drops a stale
+      // `data-knob-*`, another unit changes the value), come off; `applyKnobs` below writes every listed
+      // one, so re-reading the listing as the panel opens, or after a label edit, leaves the page and the
+      // `isotone:knob` event alone.
+      const writes = (knob: KnobAxis) => `${knob.id} ${knob.kind} ${knob.kind === 'range' ? (knob.unit ?? '') : ''}`;
+      const listed = new Set((list.knobs ?? []).map(writes));
       if (knobRoot)
         applyKnobValues(
-          previousKnobs.filter((knob) => !listed.has(JSON.stringify(knob))),
+          previousKnobs.filter((knob) => !listed.has(writes(knob))),
           {},
           knobRoot,
         );

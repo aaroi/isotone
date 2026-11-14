@@ -327,6 +327,24 @@ describe('overlay knobs and the route', () => {
     expect(props.get(knobVar('header-border'))).toBe('#f59e0b');
   });
 
+  it('leaves a relabelled knob alone, and takes a select’s attribute off when it becomes another kind', async () => {
+    const { source, attrs, events } = fixture('/pricing', { density: 'compact' });
+    await source.refresh();
+    events.length = 0;
+    const listing = (knobs: KnobAxis[]) =>
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => Response.json({ variants: [], active: [], knobs })),
+      );
+    listing([border, { ...density, label: 'Spacing' }, gap]);
+    await source.refresh();
+    expect(events).toEqual([]);
+    expect(attrs.get('data-knob-density')).toBe('compact');
+    listing([border, { kind: 'range', id: 'density', label: 'Density', min: 0, max: 10, step: 1, defaultValue: 5 }, gap]);
+    await source.refresh();
+    expect(attrs.has('data-knob-density')).toBe(false);
+  });
+
   it('keeps a held compare off other routes’ knobs', async () => {
     const { source, page, props } = fixture('/', { 'header-border': '#f59e0b' });
     await source.refresh();

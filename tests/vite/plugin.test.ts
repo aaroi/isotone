@@ -460,6 +460,11 @@ describe('withNativeFetch', () => {
     expect(withNativeFetch('<p>fragment</p>')).toBe('<p>fragment</p>');
   });
 
+  it('passes over a </head> written inside an earlier script or comment', () => {
+    const page = '<html><head><!-- </head> --><script>document.write("</head>")</script><title>x</title></head><body></body></html>';
+    expect(withNativeFetch(page)).toMatch(/<title>x<\/title><script data-isotone-native>.*<\/script><\/head><body>/);
+  });
+
   it('still captures fetch beside the live store, whose source names the capture', () => {
     const page = '<html><head><script data-isotone-head>win.__isotoneFetch ?? win.fetch</script></head><body></body></html>';
     expect(withNativeFetch(page)).toContain('<script data-isotone-native>');

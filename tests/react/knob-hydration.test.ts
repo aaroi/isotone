@@ -45,9 +45,11 @@ const App = ({ text = 'Plans' }: { text?: string }) =>
     createElement('body', null, createElement('main', null, text)),
   );
 
-type Win = { __isotoneHydrates?: boolean; __isotoneKnobs?: CSSStyleSheet };
+type Win = { __isotoneHydrates?: boolean; __isotoneKnobs?: CSSStyleSheet; __isotoneKnobPage?: unknown };
+const sources: { dispose(): void }[] = [];
 let root: Root | null = null;
 afterEach(() => {
+  for (const source of sources.splice(0)) source.dispose();
   vi.useRealTimers();
   root?.unmount();
   root = null;
@@ -57,6 +59,7 @@ afterEach(() => {
   }
   delete (window as Win).__isotoneHydrates;
   delete (window as Win).__isotoneKnobs;
+  delete (window as Win).__isotoneKnobPage;
   delete (document as { adoptedStyleSheets?: unknown }).adoptedStyleSheets;
   document.querySelector('style[data-isotone-knobs]')?.remove();
   document.documentElement.removeAttribute('data-knob-title');
@@ -79,10 +82,18 @@ function panel() {
     'fetch',
     vi.fn(async () => Response.json({ variants: [], active: [], knobs })),
   );
-  return createOverlayVariantsSource({ endpoint: '/variants', getRoute: () => '/', live: null });
+  const source = createOverlayVariantsSource({ endpoint: '/variants', getRoute: () => '/', live: null });
+  sources.push(source);
+  return source;
 }
 
 const value = (name: string) => knobStyle(document, false)?.getPropertyValue(name) ?? '';
+/** The panel's checks for hydration so far: it polls every 50 ms while it waits. */
+let polls = () => 0;
+const watchPolls = () => {
+  const spy = vi.spyOn(globalThis, 'setTimeout');
+  polls = () => spy.mock.calls.filter((call) => call[1] === 50).length;
+};
 const settle = () => new Promise((resolve) => setTimeout(resolve, 120));
 const hydrationErrors = (errors: { mock: { calls: unknown[][] } }) =>
   errors.mock.calls.map((call) => String(call[0])).filter((message) => /hydrat|match/i.test(message));
@@ -163,6 +174,50 @@ it('writes the attributes again when React hydrates after that and renders the p
   await vi.waitFor(() => expect(document.body.textContent).toBe('Prices'));
   await vi.advanceTimersByTimeAsync(100);
   expect(document.documentElement.getAttribute('data-knob-title')).toBe('underlined');
+});
+
+it('gives up on a hydration that never shows, and applies later picks at once', async () => {
+  vi.useFakeTimers();
+  watchPolls();
+  serverRender();
+  localStorage.setItem(KNOBS_STORAGE_KEY, JSON.stringify(stored));
+  applyStoredKnobs(document, KNOBS_STORAGE_KEY, rows, true, knobStyle);
+  const source = panel();
+  await source.refresh();
+  await vi.advanceTimersByTimeAsync(61_000);
+  const polled = polls();
+  source.setSelection('title', 'plain');
+  expect(document.documentElement.hasAttribute('data-knob-title')).toBe(false);
+  source.setSelection('title', 'underlined');
+  // No second five-second wait, and no polling started again.
+  expect(document.documentElement.getAttribute('data-knob-title')).toBe('underlined');
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(polls()).toBe(polled);
+});
+
+it('announces moved knobs once per page, across a remount, and stops its wait when the last source goes', async () => {
+  vi.useFakeTimers();
+  watchPolls();
+  serverRender();
+  localStorage.setItem(KNOBS_STORAGE_KEY, JSON.stringify(stored));
+  applyStoredKnobs(document, KNOBS_STORAGE_KEY, rows, true, knobStyle);
+  const events: unknown[] = [];
+  document.addEventListener('isotone:knob', (event) => events.push((event as CustomEvent).detail));
+  const first = panel();
+  await first.refresh();
+  expect(events).toHaveLength(2);
+  const second = panel();
+  await second.refresh();
+  first.dispose();
+  // The panel remounted (or a second source) on the same page: nothing new to announce, and the wait goes on.
+  expect(events).toHaveLength(2);
+  let polled = polls();
+  await vi.advanceTimersByTimeAsync(200);
+  expect(polls()).toBeGreaterThan(polled);
+  second.dispose();
+  polled = polls();
+  await vi.advanceTimersByTimeAsync(200);
+  expect(polls()).toBe(polled);
 });
 
 it('sets select attributes from the head script where React does not hydrate the page', () => {
