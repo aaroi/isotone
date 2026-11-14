@@ -35,7 +35,7 @@ import { mutateVariants } from '../node/variants/options';
 import { repoRelativeKey } from '../node/variants/paths';
 import { docPath } from './docs';
 import { findNotesFile } from './notes';
-import { detectHost, vitePlugin } from './project';
+import { detectHost, vitePlugin, viteSwitching } from './project';
 import { toJson } from './text';
 import { type CliIO, errOut, extractFlag, findNoteByPrefix, has, out, parseArgs, printTable, valueFor } from './util';
 
@@ -365,7 +365,8 @@ function cmdAdd(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
   }
   for (const file of files) addVariantFile(opts, id, file, { create, force: has(args, '--force') });
   out(io, create ? `created ${files.length} new file(s) in "${id}"` : `added ${files.length} file(s) to "${id}"`);
-  if (!create) for (const file of files) warnNoHotSwap(io, file);
+  // Only live mode switches a file per tab, in place; whole-file mode swaps every file the same way.
+  if (!create && liveSwitching(opts)) for (const file of files) warnNoHotSwap(io, file);
   warnOverlaps(io, opts, id);
   warnUnserved(io, opts);
   return 0;
@@ -379,9 +380,7 @@ function cmdAdd(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
  * (`variants: { root }`), so the rest say "may".
  */
 function warnUnserved(io: CliIO, opts: VariantsStoreOptions): void {
-  // `--dir <app>/.isotone/variants` holds another project's variants; any other directory, we cannot tell.
-  const dir = opts.dir ? resolve(opts.root, opts.dir) : null;
-  const root = dir === null ? opts.root : basename(dirname(dir)) === '.isotone' ? dirname(dirname(dir)) : null;
+  const root = variantsProject(opts);
   if (root === null) return;
   const { loaded, viteConfig } = vitePlugin(root);
   if (loaded) return;
@@ -404,8 +403,21 @@ function warnUnserved(io: CliIO, opts: VariantsStoreOptions): void {
   }
 }
 
+/** The project that holds the variants: `--dir <app>/.isotone/variants` names another one; any other directory, null. */
+function variantsProject(opts: VariantsStoreOptions): string | null {
+  if (!opts.dir) return opts.root;
+  const dir = resolve(opts.root, opts.dir);
+  return basename(dirname(dir)) === '.isotone' ? dirname(dirname(dir)) : null;
+}
+
+/** Whether the plugin will switch these variants live (per tab, in place), or may: an unreadable Vite version counts. */
+function liveSwitching(opts: VariantsStoreOptions): boolean {
+  const root = variantsProject(opts) ?? opts.root;
+  return detectHost(root) === 'vite' && viteSwitching(root).mode !== 'shared';
+}
+
 /** Say up front what would otherwise look like a page that reloads for no
- *  reason. Reads the export names only, so a capitalized constant slips by. */
+ *  reason, in live mode. Reads the export names only, so a capitalized constant slips by. */
 function warnNoHotSwap(io: CliIO, file: string): void {
   const names = scanExports(readFileSync(resolve(io.cwd, file), 'utf8'));
   if (!names || isRouteModule(names)) {

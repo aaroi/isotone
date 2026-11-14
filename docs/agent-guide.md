@@ -123,8 +123,9 @@ npx isotone variant list [<route>] [--json]        # check what the panel will s
 
 - `--group <id>` joins alternatives of one decision over different files; give
   them the note's route (`--route`).
-- Copy only files that export components where you can: a copied hook, helper,
-  context or constant object makes every switch reload the page.
+- Copy only files that export components where you can: with per-tab switching
+  (React on Vite 6 or later), a copied hook, helper, context or constant object
+  makes every switch reload the page, and `variant add` says so.
 - Describe a variant with `variant new --description`, not a comment in the copy:
   `promote` lands the copy as it stands.
 - `variant promote <id>` lands a variant over the real files, only when the

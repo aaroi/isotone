@@ -8,6 +8,10 @@
 - **The Variants panel says when a link's `?v=` isn't applied.** Where picks are shared by every tab, a link that asks for other variants used to show the current ones without a word; the panel now names what the link asked for.
 - **`variant new`, `add`, `use` and `list` warn when nothing will serve file variants**, as in a Next.js app or a Vite config without `isotone/vite`, and point to knobs or your app's own `VariantsSource`. `variant --help` says file variants need the Vite plugin.
 
+### Fixed
+
+- **`variant add` no longer warns that a copy reloads the page, or is served whole, where every variant is swapped whole anyway** (Vite 5, Vue and other hosts without React, or `variants: { live: false }`). Those warnings are about per-tab switching, so they now appear only there.
+
 ## 1.5.0
 
 ### Changed
