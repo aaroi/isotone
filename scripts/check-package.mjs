@@ -37,6 +37,8 @@ import { npm } from './npm.mjs';
 // Bundle raised to 397 kB and tarball to 428.5 kB (396.3 and 427.5 kB; note context): the selections a note
 // records and their tags, and how `within` and `component` are read, with the note field in the agent
 // guide, schema and changelog.
+// Tarball raised to 423.5 kB (422.9 kB; copies obey fs.deny): the file check for every served copy,
+// and its notes in the shipped variants guide and changelog.
 // The figures above are each change on its own over 1.5.0. Merged together (#60 to #69), the bundle is
 // 402.5 kB and the tarball 456.9 kB: bundle raised to 403.5 kB and tarball to 458 kB.
 const BUDGET = { bundle: 403_500, tarball: 458_000 };

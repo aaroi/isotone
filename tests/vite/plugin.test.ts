@@ -1812,3 +1812,169 @@ describe('Components compiled in parts, through the dev server', () => {
     }
   });
 });
+
+/* ── copies of secrets added while the dev server runs ────────────────── */
+
+describe.each([
+  ['with no watcher', null],
+  ['with .isotone ignored by the watcher', { ignored: ['**/.isotone/**'] }],
+])('a secret forced into a variant while the dev server runs, %s', (_name, watch) => {
+  let dev: ViteDevServer;
+  let base: string;
+  let project: string;
+
+  beforeAll(async () => {
+    project = tempProject().root;
+    repos.splice(repos.indexOf(project), 1);
+    writeFileSync(join(project, '.env'), 'SECRET_TOKEN=sk_live_FAKE_REAL\n');
+    writeActive({ root: project }, ['b']);
+    dev = await createServer({
+      root: project,
+      configFile: false,
+      logLevel: 'silent',
+      server: { port: 0, host: '127.0.0.1', watch },
+      optimizeDeps: { noDiscovery: true, include: [] },
+      plugins: [isotone({ checkForUpdates: false })],
+    });
+    await dev.listen();
+    const address = dev.httpServer?.address();
+    base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
+  });
+
+  afterAll(async () => {
+    (dev?.httpServer as import('node:http').Server | null)?.closeAllConnections?.();
+    await dev?.close();
+    rmSync(project, { recursive: true, force: true });
+  });
+
+  /** One request on a connection of its own: the two servers here can be
+   *  given the same port in turn, and a pooled connection would outlive the first. */
+  const send = (path: string, method = 'GET', payload?: string): Promise<{ status: number; body: string }> =>
+    new Promise((done, fail) => {
+      const headers = payload === undefined ? {} : { 'content-type': 'application/json' };
+      const req = httpRequest(`${base}${path}`, { method, headers, agent: false }, (res) => {
+        let text = '';
+        res.on('data', (chunk) => (text += chunk));
+        res.on('end', () => done({ status: res.statusCode ?? 0, body: text }));
+      });
+      req.on('error', fail);
+      req.path = path;
+      req.end(payload);
+    });
+  const body = async (path: string) => (await send(path)).body;
+  const SECRET_PATHS = ['/.env', '/.env?import', '/.env?t=1', '/.env/?import'];
+
+  it('is never served, with no switch or after one, though nothing told Isotone it changed', async () => {
+    // The tracked files are read and cached: an ordinary copy is served.
+    expect(await body('/src/Button.tsx')).toContain('variant b');
+    // Forced into the active variant, with no watcher event.
+    addVariantFile({ root: project }, 'b', '.env', { force: true });
+    writeFileSync(join(variantDir({ root: project }, 'b'), '.env'), 'SECRET_TOKEN=sk_live_FAKE_COPY_B\n');
+    for (const path of SECRET_PATHS) expect(await body(path), path).not.toMatch(/FAKE_COPY/);
+    // A new variant over it, switched on from the panel.
+    createVariant({ root: project }, { id: 'late' });
+    addVariantFile({ root: project }, 'late', '.env', { force: true });
+    writeFileSync(join(variantDir({ root: project }, 'late'), '.env'), 'SECRET_TOKEN=sk_live_FAKE_COPY_LATE\n');
+    const switched = await send(`${VARIANTS_ENDPOINT}/active`, 'POST', JSON.stringify({ active: ['late'] }));
+    expect(switched.status).toBe(200);
+    expect(readActive({ root: project })).toEqual(['late']);
+    for (const path of SECRET_PATHS) expect(await body(path), path).not.toMatch(/FAKE_COPY/);
+  });
+});
+
+/* ── a variants directory outside .isotone ────────────────────────────── */
+
+describe('variants kept outside .isotone', () => {
+  let dev: ViteDevServer;
+  let base: string;
+  let project: string;
+  const store = (root: string) => ({ root, dir: 'variants' });
+
+  beforeAll(async () => {
+    project = tempGitRepo('isotone-vite-dir-', repos);
+    repos.splice(repos.indexOf(project), 1);
+    mkdirSync(join(project, 'src'), { recursive: true });
+    writeFileSync(join(project, 'src', 'Button.tsx'), 'export const label = "real";\n');
+    writeFileSync(join(project, '.env'), 'SECRET_TOKEN=sk_live_FAKE_REAL\n');
+    execFileSync('git', ['add', 'src'], { cwd: project });
+    execFileSync('git', ['commit', '-q', '-m', 'init'], { cwd: project });
+    createVariant(store(project), { id: 'f' });
+    addVariantFile(store(project), 'f', 'src/Button.tsx');
+    addVariantFile(store(project), 'f', '.env', { force: true });
+    writeFileSync(join(project, 'variants', 'f', 'src', 'Button.tsx'), 'export const label = "FAKE_COPY_BUTTON";\n');
+    writeFileSync(join(project, 'variants', 'f', '.env'), 'SECRET_TOKEN=sk_live_FAKE_COPY_ENV\n');
+    writeActive(store(project), ['f']);
+    dev = await createServer({
+      root: project,
+      configFile: false,
+      logLevel: 'silent',
+      server: { port: 0, host: '127.0.0.1', watch: null },
+      optimizeDeps: { noDiscovery: true, include: [] },
+      plugins: [isotone({ checkForUpdates: false, variants: { dir: 'variants' } })],
+    });
+    await dev.listen();
+    const address = dev.httpServer?.address();
+    base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
+  });
+
+  afterAll(async () => {
+    (dev?.httpServer as import('node:http').Server | null)?.closeAllConnections?.();
+    await dev?.close();
+    rmSync(project, { recursive: true, force: true });
+  });
+
+  const get = (path: string): Promise<{ status: number; body: string }> =>
+    new Promise((done, fail) => {
+      const req = httpRequest(`${base}${path}`, { agent: false }, (res) => {
+        let text = '';
+        res.on('data', (chunk) => (text += chunk));
+        res.on('end', () => done({ status: res.statusCode ?? 0, body: text }));
+      });
+      req.on('error', fail);
+      req.path = path;
+      req.end();
+    });
+
+  it('denies the directory itself to Vite, spelled as a literal path', () => {
+    type Config = (c: { root?: string; server?: { fs?: { deny?: string[] } } }) => { server: { fs: { deny: string[] } } };
+    const deny = (options: IsotoneViteOptions, root: string) =>
+      (isotone(options) as unknown as { config: Config }).config({ root }).server.fs.deny;
+    // Glob characters in the path match literally.
+    const dir = id(resolve('/work/My App (copy) | v2'), 'variants');
+    expect(deny({ variants: { dir: 'variants' } }, '/work/My App (copy) | v2')).toContain(`${dir.replace(/[()|]/g, '\\$&')}/**`);
+    expect(deny({ variants: { dir: resolve('/elsewhere/alts') } }, '/work/app')).toContain(`${id(resolve('/elsewhere/alts'))}/**`);
+    // A directory that is a symlink is denied where it leads, too.
+    if (process.platform !== 'win32') {
+      const app = realpathSync.native(mkdtempSync(join(tmpdir(), 'isotone-link-dir-')));
+      repos.push(app);
+      mkdirSync(join(app, 'real-alts'));
+      symlinkSync(join(app, 'real-alts'), join(app, 'alts'));
+      expect(deny({ variants: { dir: 'alts' } }, app)).toEqual(
+        expect.arrayContaining([`${id(app, 'alts')}/**`, `${id(app, 'real-alts')}/**`]),
+      );
+    }
+    // A directory holding the app itself is never denied: it would deny the app.
+    expect(deny({ variants: { dir: resolve('/work') } }, '/work/app').filter((glob) => glob.includes('work'))).toEqual([]);
+    // The default directory is under `.isotone/`, which is denied already.
+    expect(deny({}, '/work/app').filter((glob) => glob.includes('work'))).toEqual([]);
+  });
+
+  it('never hands out a copy at its own path, only in place of the real file', async () => {
+    for (const path of [
+      '/variants/f/.env',
+      '/variants/f/.env?import',
+      '/variants/f/src/Button.tsx',
+      '/variants/f/src/Button.tsx?import',
+      '/variants/f/src/Button.tsx?raw',
+      `/@fs${project}/variants/f/src/Button.tsx`,
+      `/@fs${project}/variants/f/.env`,
+      '/variants/f/variant.json',
+      '/variants/f/variant.json?import',
+      '/.env',
+    ]) {
+      expect((await get(path)).body, path).not.toMatch(/FAKE_/);
+    }
+    // In place of the real file, the copy is served as usual.
+    expect((await get('/src/Button.tsx')).body).toContain('FAKE_COPY_BUTTON');
+  });
+});

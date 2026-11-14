@@ -196,6 +196,15 @@ export function createSwitching(overrides: Overrides) {
     server.watcher.emit('change', source);
   };
 
+  /** Drop the cached manifests, keeping the files they named in `covered`:
+   *  a file that leaves a variant has no entry to be found by afterwards. */
+  const forgetManifests = (): void => {
+    for (const variant of overrides.cachedManifests()) {
+      for (const key of Object.keys(variant.files)) covered.add(normalizePath(join(overrides.opts.root, key)));
+    }
+    overrides.forget();
+  };
+
   /**
    * Resolves once every server environment (an SSR render) has taken
    * the swap of `files`, or after a second. A tab that reloads right
@@ -244,6 +253,9 @@ export function createSwitching(overrides: Overrides) {
     const prev = overrides.active();
     const changed = [...prev.filter((id) => !next.includes(id)), ...next.filter((id) => !prev.includes(id))];
     if (!server || (changed.length === 0 && removedFiles.length === 0)) return Promise.resolve();
+    // The variants may have changed with no watcher to say so (`watch: null`,
+    // or `.isotone` ignored): what each file resolves to is read again.
+    forgetManifests();
     overrides.setActive(next);
     const root = overrides.opts.root;
     // Forward-slash paths throughout: the module graph and the hot
@@ -286,10 +298,7 @@ export function createSwitching(overrides: Overrides) {
         void activate(overrides.readActive());
       } else if (isWithin(overrides.dir, path)) {
         // Covers adds and unlinks, which hot updates never see.
-        for (const variant of overrides.cachedManifests()) {
-          for (const key of Object.keys(variant.files)) covered.add(normalizePath(join(overrides.opts.root, key)));
-        }
-        overrides.forget();
+        forgetManifests();
         // A variant deleted by hand leaves its id in the file. Pages are
         // told this set, and a pick posts it back, so it has to go here.
         const stillActive = overrides.readActive();

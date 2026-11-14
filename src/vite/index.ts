@@ -31,11 +31,11 @@ import { VARIANTS_ENDPOINT } from '../core/variants';
 import { blastFile } from '../node/blast';
 import { defaultNotesFile, LEGACY_NOTES_FILE, NOTES_FILE } from '../node/notes/location';
 import { ensureFileIgnored } from '../node/fs/git-exclude';
-import { isWithin, realPath } from '../node/fs/paths';
+import { canonicalPath, isWithin, realPath } from '../node/fs/paths';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
 import { autoUpdateNote } from '../node/update/note';
-import { listVariants } from '../node/variants';
+import { listVariants, variantsDir } from '../node/variants';
 import { isLoopback } from '../node/http';
 import { mountModuleSource, servePanel } from './html-inject';
 import {
@@ -194,6 +194,36 @@ function servableBy(server: ViteDevServer): (path: string) => boolean {
     !strict || (!denied(path) && (vite5.moduleGraph.safeModulesPath?.has(path) === true || allow.some((dir) => isWithin(dir, path))));
 }
 
+/**
+ * `server.fs.deny` globs for a variants directory outside `.isotone/`, which
+ * Vite matches against absolute paths: as configured, under the root as
+ * configured, and as the filesystem resolves either, since module ids are
+ * canonical and static files are not, and the directory may be a symlink.
+ */
+function variantsDirGlobs(viteRoot: string, setup: { root?: string; dir?: string }): string[] {
+  const roots = [viteRoot, canonical(viteRoot)];
+  const dirs = new Set<string>();
+  for (const base of roots) {
+    const dir = variantsDir({ root: resolve(base, setup.root ?? '.'), ...(setup.dir ? { dir: setup.dir } : {}) });
+    dirs.add(normalizePath(dir));
+    dirs.add(normalizePath(canonical(dir)));
+  }
+  // Glob characters in the path itself match literally, on Windows too.
+  const literal = (path: string) => path.replace(/[*?{}()[\]!+@|^$]/g, '\\$&');
+  // A directory holding the app itself, however spelled, would deny the whole app.
+  return [...dirs].filter((dir) => !roots.some((root) => isWithin(dir, root))).map((dir) => `${literal(dir)}/**`);
+}
+
+/** The filesystem's own spelling of `path`, through any symlink, for a path
+ *  that may not exist yet; `path` itself when it cannot be read. */
+function canonical(path: string): string {
+  try {
+    return canonicalPath(path);
+  } catch {
+    return path;
+  }
+}
+
 /** Say where the notes go after Vite's own banner, so it is not buried under
  *  it. Portable setups fail quietly otherwise: a reviewer writes notes and the
  *  agent looks in the wrong place. */
@@ -234,10 +264,13 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
     enforce: 'pre',
     // Isotone's own files are read through its endpoints, never as static
     // files: keep Vite's file server from handing them out.
-    config(config: { server?: { fs?: { deny?: string[] } } }) {
+    config(config: { root?: string; server?: { fs?: { deny?: string[] } } }) {
       // The default notes file and its Blast session are under `.isotone/`.
       const notes = options.file === undefined ? LEGACY_NOTES_FILE : basename(options.file);
       const own = [`**/${notes}`, `**/${basename(blastFile(notes))}`, '**/.isotone/**'];
+      // Variants kept elsewhere (`variants.dir`): a copy is served only in
+      // place of its real file, through load()'s check, never at its own path.
+      if (variantsOptions?.dir) own.push(...variantsDirGlobs(resolve(config.root ?? '.'), variantsOptions));
       // Vite concatenates a plugin's array with the user's.
       return { server: { fs: { deny: config.server?.fs?.deny ? own : [...VITE_DENY, ...own] } } };
     },
@@ -277,9 +310,11 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       const path = normalizePath(resolve(raw));
       // Every copy, version, dispatcher and component part of a file obeys the
       // dev server's `server.fs.deny` as the real file does: left to Vite, the
-      // request gets 403. A server render loads files without that check, so
-      // it keeps its swap.
-      if (!opts?.ssr && overrides.versionsByFile().has(path) && !servable(path)) return null;
+      // request gets 403. Asked of every path, before anything below reads a
+      // manifest: the list of tracked files is cached, while the copy is looked
+      // up afresh. A server render loads files without that check, so it keeps
+      // its swap.
+      if (!opts?.ssr && !servable(path)) return null;
       if (COMPONENT_PART.test(query) && !OWN_FILE.test(query)) {
         return overrides.versionsByFile().has(path) ? componentPart(this.environment, path) : null;
       }

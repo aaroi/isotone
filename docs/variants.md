@@ -54,7 +54,8 @@ Variant files are the change under review, so they are committed by default and
 (`.env`, private keys, `*credentials*.json`, `*.keystore`, anything under
 `.aws/` or `.ssh/`) unless given `--force`. Even then, the dev server serves a
 copy only where it would serve the real file: what `server.fs.deny` refuses
-(`.env`, keys, `.git/`) it refuses for every copy. `variants: { ignored: true }` keeps
+(`.env`, keys, `.git/`) it refuses for every copy, and no copy is served at its
+own path, even from a `variants: { dir }` outside `.isotone/`. `variants: { ignored: true }` keeps
 the variants directory local. The active pointer, `.isotone/active.json`, is
 local and never committed: like the notes file, it goes into the repository's
 `.git/info/exclude` when the dev server starts and when the CLI's notes and
