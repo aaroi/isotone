@@ -99,11 +99,15 @@ export function createSwitching(overrides: Overrides) {
       // A check of any copy of this file compiles afresh on its next request.
       const { page } = pageModules(source);
       if (!overrides.active().includes(hit.id)) return [];
+      // Live: the browser's dispatcher took the edit above, and a server
+      // render, which swaps the whole file, takes it as the real file's.
+      if (live && dispatched.has(source)) return page;
       // The page holds the real file's URL, so the edit is reported as the
       // real file's, as a switch is: a framework plugin that compiles the
       // changed file again (Svelte's) would otherwise compile the copy's own
-      // path, which Vite refuses. A file no page has loaded needs nothing.
-      if (client && page.length > 0 && dev) reportSwap(dev, source);
+      // path, which Vite refuses. Once, from the browser's environment, for a
+      // file any environment has loaded (a server render may be the only one).
+      if (client && dev && loadedAnywhere(dev, source)) reportSwap(dev, source);
       return [];
     }
     // A change activate() reported. Vite hands this hook a forward-slash
@@ -179,6 +183,10 @@ export function createSwitching(overrides: Overrides) {
       server.ws.send({ type: 'full-reload', path: '*' });
     }, 50);
   };
+
+  /** Whether any environment has loaded `source` itself, not only a check of a copy. */
+  const loadedAnywhere = (server: ViteDevServer, source: string): boolean =>
+    [...(server.moduleGraph.getModulesByFile(source) ?? [])].some((mod) => versionOfId(mod.id) === null);
 
   /** Tell Vite the real file `source` changed, and let its hot update through
    *  (see hotModules), as an editor save would: load() answers it now with

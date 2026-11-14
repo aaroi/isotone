@@ -978,6 +978,17 @@ describe('overlay variants in handleHotUpdate()', () => {
     expect(hooks.handleHotUpdate({ file: source, server })).toBeUndefined();
     // The real file's own edit is invisible: the browser is showing the override.
     expect(hooks.handleHotUpdate({ file: source, server })).toEqual([]);
+    // A file only a server render has loaded is reported all the same (Vite
+    // 6: the browser's environment has none of its modules).
+    server.watcher.emit.mockClear();
+    const empty = { name: 'client', moduleGraph: { getModulesByFile: () => undefined, invalidateModule: vi.fn() } };
+    expect((hooks as unknown as LiveHooks).hotUpdate.call({ environment: empty }, { file: override })).toEqual([]);
+    expect(server.watcher.emit).toHaveBeenCalledWith('change', source);
+    // Nothing loaded anywhere: nothing to report.
+    server.watcher.emit.mockClear();
+    server.moduleGraph.getModulesByFile.mockImplementation(() => undefined);
+    expect(hooks.handleHotUpdate({ file: override, server })).toEqual([]);
+    expect(server.watcher.emit).not.toHaveBeenCalled();
     // The manifest is not a module anywhere.
     expect(hooks.handleHotUpdate({ file: id(variantDir({ root }, 'b'), 'variant.json'), server })).toEqual([]);
     // Files the variant does not touch go through vite's default handling.
@@ -1130,6 +1141,10 @@ describe('live variants', () => {
     expect(hooks.hotUpdate.call({ environment: client }, { file: source })).toEqual([]);
     expect(hooks.hotUpdate.call({ environment: ssr }, { file: source })).toBeUndefined();
     expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: ['b'] } });
+    // An edit of the active copy: the browser's version module above, and the
+    // server render, which swaps the whole file, takes it as the real file's.
+    expect(hooks.hotUpdate.call({ environment: client }, { file: override })).toEqual([{ id: `${source}?isotone=b` }]);
+    expect(hooks.hotUpdate.call({ environment: ssr }, { file: override })).toEqual([{ id: source }]);
   });
 
   it('answers a switch once the server render has taken it', async () => {
