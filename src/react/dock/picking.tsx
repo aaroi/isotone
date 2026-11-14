@@ -163,6 +163,9 @@ function usePicker(context: PickerContext) {
         return;
       }
       if (e.key !== 'Escape' && e.key !== 'Enter') return;
+      // Escape or Enter in a field on the page (closing its menu, submitting its form) is the page's.
+      const source = e.composedPath().find((node): node is Element => node instanceof Element);
+      if (source && !source.closest('[data-isotone]') && source.closest('input, textarea, select, [contenteditable]')) return;
       // The floating composer is not covered, so Enter there sends what is written.
       const field = fieldRef.current;
       if (e.key === 'Enter' && anchored && field && !e.shiftKey && field.value.trim() && e.composedPath().includes(field)) return;

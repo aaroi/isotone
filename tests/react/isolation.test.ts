@@ -115,14 +115,20 @@ it('leaves an Escape pressed in a host input to the host', async () => {
   await act(async () => {
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
   });
+  // Also once the frames after it have passed: nothing comes back for the focus.
+  await frame();
+  await frame();
   expect($('.isotone-notes-panel').dataset.open).toBe('true');
   expect(document.activeElement).toBe(input);
-  // Escape in the dock still closes it.
-  await act(async () => {
-    $('textarea').focus();
-    $('textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
-  });
-  expect($('.isotone-notes-panel').dataset.open).toBe('false');
+  // Escape in the dock is the panel's: the first ends selecting, the next closes Feedback.
+  for (const open of ['true', 'false']) {
+    await act(async () => {
+      $('textarea').focus();
+      $('textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
+    });
+    expect($('.isotone-notes-panel').dataset.open).toBe(open);
+  }
+  expect($('[aria-label="Select elements"]').getAttribute('aria-pressed')).toBe('false');
 });
 
 it('never takes focus back from a host input clicked while the panel opens', async () => {
