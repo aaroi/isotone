@@ -14,6 +14,8 @@ function SummaryTag({ label, list }: Omit<Reference, 'key'>) {
   return list ? (
     <span className="isotone-chip isotone-chip-count" title={list.join('\n')}>
       <span>{label}</span>
+      {/* The list in the note's own text, for a screen reader; the title is only a pointer's. */}
+      <span className="isotone-hidden">: {list.join(', ')}</span>
     </span>
   ) : (
     <span className="isotone-chip">

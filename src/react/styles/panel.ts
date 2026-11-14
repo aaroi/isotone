@@ -358,6 +358,7 @@ ${APPEARANCE_CSS}
 .isotone-meta .isotone-chip:not(:only-child) { max-width: 140px; }
 /* A count ("3 pins", "2 picks") keeps its width; a single reference beside it keeps a few letters. */
 .isotone-meta .isotone-chip-count { flex-shrink: 0; }
+.isotone-chip > .isotone-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .isotone-meta .isotone-chip:not(.isotone-chip-count) { min-width: 52px; }
 /* The corner action floats outside the text column; its 24px hit target
    surrounds a 16px face without reserving trailing space in every row. */

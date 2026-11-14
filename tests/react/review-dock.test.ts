@@ -330,7 +330,8 @@ describe('review dock interactions', () => {
     await click(byText('Send note'));
     expect(posts[0]?.selections).toEqual({ 'card-radius': '24' });
     const tag = container.querySelector('.isotone-note-hit [title]');
-    expect(tag?.textContent).toBe('1 pick');
+    expect(tag?.firstElementChild?.textContent).toBe('1 pick');
+    expect(tag?.textContent).toBe('1 pick: card-radius: 24');
     expect(tag?.getAttribute('title')).toBe('card-radius: 24');
     await click(container.querySelector('.isotone-note-hit'));
     await typeFeedback('Rounder still, and softer');
@@ -369,7 +370,7 @@ describe('review dock interactions', () => {
     // The headline and haze sit at their defaults, and the tagline is hidden.
     expect(posts[0]?.selections).toEqual({ pad: '24', gap: '8', radius: '12' });
     const tags = [...(container.querySelector('.isotone-note-hit .isotone-meta')?.children ?? [])];
-    expect(tags.map((tag) => tag.textContent)).toEqual(['3 picks']);
+    expect(tags.map((tag) => tag.firstElementChild?.textContent)).toEqual(['3 picks']);
     expect(tags[0]?.getAttribute('title')).toBe('pad: 24\ngap: 8\nradius: 12');
   });
   it('shows one pin by its text and several as a count, beside the picks', async () => {
@@ -395,11 +396,11 @@ describe('review dock interactions', () => {
     expect(rows).toEqual([
       [
         ['Start free trial', null],
-        ['2 picks', 'pad: 24\ngap: 8'],
+        ['2 picks: pad: 24, gap: 8', 'pad: 24\ngap: 8'],
       ],
       [
-        ['3 pins', 'Free\nPro\nTeam'],
-        ['2 picks', 'pad: 24\ngap: 8'],
+        ['3 pins: Free, Pro, Team', 'Free\nPro\nTeam'],
+        ['2 picks: pad: 24, gap: 8', 'pad: 24\ngap: 8'],
       ],
     ]);
   });

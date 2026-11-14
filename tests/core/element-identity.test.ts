@@ -7,6 +7,8 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { act, createElement } from 'react';
+import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { runCli } from '../../src/cli/run';
@@ -498,5 +500,138 @@ describe('select knobs on the page', () => {
       { id: 'ticks', value: null },
     ]);
     expect(knobDelta([axis], { ticks: 'dots' })[0]?.shown).toBe('Dots');
+  });
+});
+
+/**
+ * The same rules against React itself: real creation stacks, from components
+ * rendered in this test file (the app) and React (a dependency).
+ */
+describe('the components that wrote an element React rendered', () => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  const h = createElement;
+  const describeRendered = async (tree: ReturnType<typeof h>, selector: string) => {
+    document.body.innerHTML = '<div id="root"></div>';
+    const root = createRoot(document.getElementById('root') as Element);
+    await act(async () => root.render(tree));
+    const described = describeIsotoneElement(elementAsNode(document.querySelector(selector) as Element));
+    await act(async () => root.unmount());
+    return { component: described.component, source: described.source?.replace(/^.*\//, '') };
+  };
+
+  function PlanList() {
+    return h(
+      'ul',
+      null,
+      ['free', 'pro'].map((plan) => h('li', { key: plan, 'data-plan': plan }, plan)),
+    );
+  }
+  function _temp(plan: string) {
+    return h('li', { key: plan, 'data-compiled': plan }, plan);
+  }
+  function CompiledList() {
+    return h('ul', null, ['free', 'pro'].map(_temp));
+  }
+  function renderBadge(count: number) {
+    return h('span', { className: 'badge' }, count);
+  }
+  function Inbox() {
+    return h('div', null, renderBadge(3));
+  }
+  const columns = [{ key: 'name', render: (value: string) => h('a', { className: 'cell' }, value) }];
+  function DataTable({ rows }: { rows: string[] }) {
+    return h(
+      'table',
+      null,
+      h(
+        'tbody',
+        null,
+        rows.map((row) =>
+          h(
+            'tr',
+            { key: row },
+            columns.map((column) => h('td', { key: column.key }, column.render(row))),
+          ),
+        ),
+      ),
+    );
+  }
+  function UsersPage() {
+    return h(DataTable, { rows: ['ann'] });
+  }
+
+  it('names the component around a .map callback, a helper and a compiler-outlined _temp', async () => {
+    expect(await describeRendered(h(PlanList), 'li[data-plan=free]')).toEqual({
+      component: ['PlanList'],
+      source: expect.stringMatching(/^element-identity\.test\.ts:\d+$/),
+    });
+    expect((await describeRendered(h(CompiledList), 'li[data-compiled=free]')).component).toEqual(['CompiledList']);
+    expect((await describeRendered(h(Inbox), 'span.badge')).component).toEqual(['Inbox']);
+  });
+
+  it("names the table, not the column definition's object, for a cell a column renders", async () => {
+    expect((await describeRendered(h(UsersPage), 'a.cell')).component).toEqual(['UsersPage', 'DataTable']);
+  });
+});
+
+describe('reading Chrome, Firefox and Safari stack lines', () => {
+  const pin = (fiber: object) => {
+    document.body.innerHTML = '<button>Get started</button>';
+    const button = document.querySelector('button') as Element;
+    Object.assign(button, { __reactFiber$abc: fiber });
+    return describeIsotoneElement(elementAsNode(button));
+  };
+  const app = (file: string) => `http://localhost:5173/src/${file}`;
+  const dep = 'http://localhost:5173/node_modules/.vite/deps';
+  const owner = { type: Object.defineProperty(() => {}, 'name', { value: 'Card' }), _debugOwner: null };
+  /** Firefox and Safari: `name@url`, no message line, the factory first. */
+  const gecko = (...frames: string[]) =>
+    [`jsxDEV@${dep}/react_jsx-dev-runtime.js?v=1:1:1`, ...frames, `react_stack_bottom_frame@${dep}/react-dom_client.js?v=1:9:9`].join('\n');
+  const chrome = (...frames: string[]) => ({
+    stack: [
+      'Error: react-stack-top-frame',
+      `    at exports.jsxDEV (${dep}/react_jsx-dev-runtime.js?v=1:1:1)`,
+      ...frames.map((f) => `    at ${f}`),
+    ].join('\n'),
+  });
+
+  it('reads Firefox closures, async frames and a bare render', () => {
+    expect(pin({ type: 'li', _debugStack: gecko(`PlanList/<@${app('PlanList.tsx')}:5:40`), _debugOwner: owner })).toMatchObject({
+      component: ['PlanList'],
+      source: '/src/PlanList.tsx:5',
+    });
+    expect(pin({ type: 'b', _debugStack: gecko(`async*Pricing@${app('Pricing.tsx')}:5:40`), _debugOwner: owner }).component).toEqual([
+      'Pricing',
+    ]);
+    // A class component's render: the fiber names it.
+    expect(pin({ type: 'section', _debugStack: gecko(`render@${app('Card.tsx')}:5:40`), _debugOwner: owner }).component).toEqual(['Card']);
+  });
+
+  it('reads Safari anonymous frames and skips native ones', () => {
+    const stack = gecko(`@${app('PlanList.tsx')}:5:40`, 'map@[native code]', `PlanList@${app('PlanList.tsx')}:5:20`);
+    expect(pin({ type: 'li', _debugStack: stack, _debugOwner: owner })).toMatchObject({
+      component: ['PlanList'],
+      source: '/src/PlanList.tsx:5',
+    });
+  });
+
+  it("takes a receiver only for a class's render, and never a built-in one", () => {
+    const column = chrome(`Object.render (${app('columns.tsx')}:3:30)`, `Table (${dep}/antd.js?v=1:3:3)`);
+    expect(pin({ type: 'a', _debugStack: column, _debugOwner: null })).toMatchObject({ source: '/src/columns.tsx:3' });
+    expect(pin({ type: 'a', _debugStack: column, _debugOwner: null }).component).toBeUndefined();
+    const story = chrome(`Object.render (${app('Profile.stories.tsx')}:9:30)`, `Array.decorators (${app('Profile.stories.tsx')}:4:30)`);
+    expect(pin({ type: 'p', _debugStack: story, _debugOwner: null }).component).toBeUndefined();
+    expect(pin({ type: 'p', _debugStack: chrome(`Card.render (${app('Card.tsx')}:9:30)`), _debugOwner: null }).component).toEqual(['Card']);
+    expect(pin({ type: 'p', _debugStack: chrome(`Module.Pricing (${app('Pricing.tsx')}:3:30)`), _debugOwner: null }).component).toEqual([
+      'Pricing',
+    ]);
+  });
+
+  it('treats minified code vendored into the app as a dependency', () => {
+    const vendored = chrome(`Xe (${app('vendor/ui.min.js')}:1:4021)`, `Pricing (${app('Pricing.tsx')}:12:7)`);
+    expect(pin({ type: 'button', _debugStack: vendored, _debugOwner: null })).toMatchObject({
+      component: ['Pricing'],
+      source: '/src/Pricing.tsx:12',
+    });
   });
 });

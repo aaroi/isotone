@@ -100,44 +100,77 @@ interface StackFrame {
   url: string;
   line: number;
   column: number;
-  /** The function running there, as the stack names it: `Pricing`, `Foo.render`, or none. */
-  name?: string;
   legacy?: true;
 }
 
+/** Code that is not the app's: a dependency, or minified code vendored into the app. */
+const NOT_APP = /node_modules|\.min\.js(?:[?#:]|$)/;
+
+/** Receivers V8 prints before a method that are the runtime's, never a component. */
+const BUILT_IN = new Set(['Object', 'Array', 'Module', 'Function', 'Promise', 'Proxy']);
+
 /**
- * Where a node's element was written: React 18's `_debugSource`, or the first
- * frame of React 19's creation stack that is the app's own. The stack's first
- * frame is the call that made the element (`jsxDEV`, `createElement`,
- * `cloneElement`, or the server-component client replaying the server's
- * stack); after it come any wrapping JSX runtime (Emotion's, a profiler's) and
- * library code, all under `node_modules`. Frames below React's bottom frame are
- * React calling the component, not the component.
+ * The component a stack frame's function name stands for: `Pricing`,
+ * `Module.Pricing` and Firefox's `Pricing/<` (a closure inside it) are
+ * `Pricing`; a class's `Card.render` is `Card`, and a bare `render` (Firefox,
+ * Safari) is `render`, for the caller to name from the fiber. Callbacks,
+ * helpers and built-in receivers (`Object.render` on a column definition) are
+ * nothing.
  */
-function callsite(node: Made): StackFrame | undefined {
+function frameComponent(raw: string | undefined): string | undefined {
+  const name = raw?.replace(/^async\*/, '').replace(/\/.*$/, '');
+  if (!name) return undefined;
+  if (name === 'render') return name;
+  const parts = name.split('.');
+  const method = parts.pop() ?? '';
+  const receiver = parts.pop();
+  const found = method === 'render' ? receiver : method;
+  return found && /^[A-Z]/.test(found) && !BUILT_IN.has(found) ? found : undefined;
+}
+
+/**
+ * Where a node's element was written, and the component whose code wrote it.
+ * React 18 records the place as `_debugSource`. React 19 records a creation
+ * stack: its first frame is the call that made the element (`jsxDEV`,
+ * `createElement`, `cloneElement`, or the server-component client replaying
+ * the server's stack), then any wrapping JSX runtime (Emotion's, a profiler's)
+ * and library code, then the app's own frames, until React's bottom frame
+ * (React calling the component). The first app frame is the place. The
+ * component is the first one named in the run of app frames from there, which
+ * reaches past a `.map` callback, a helper or a compiler's `_temp` to the
+ * component around them, and ends at the next library frame.
+ */
+function callsite(node: Made): { at: StackFrame; name?: string } | undefined {
   const legacy = node._debugSource;
   if (legacy?.fileName) {
-    return /node_modules/.test(legacy.fileName)
+    return NOT_APP.test(legacy.fileName)
       ? undefined
-      : { url: legacy.fileName, line: legacy.lineNumber ?? 0, column: 0, legacy: true };
+      : { at: { url: legacy.fileName, line: legacy.lineNumber ?? 0, column: 0, legacy: true } };
   }
   const stack = node._debugStack ?? node.debugStack;
   const lines = (typeof stack === 'string' ? stack : stack?.stack)?.split('\n') ?? [];
   let factory = true;
+  let at: StackFrame | undefined;
   for (const text of lines) {
     if (/react[_-]stack[_-]bottom[_-]frame/.test(text)) break;
     const [, url, line, column] = text.match(/(?:\(|@|\bat )((?:[a-z-]+:\/\/\/?|\/)\S+?):(\d+):(\d+)\)?\s*$/i) ?? [];
     if (!url) continue;
-    if (factory) factory = false;
-    else if (!/node_modules/.test(url)) {
-      const name = text.match(/^\s*at\s+(?:async\s+)?(?:new\s+)?([^\s(]+)\s+\(/)?.[1] ?? text.match(/^\s*([^@\s]+)@/)?.[1];
-      return { url, line: Number(line), column: Number(column), name };
+    if (factory) {
+      factory = false;
+      continue;
     }
+    if (NOT_APP.test(url)) {
+      if (at) break;
+      continue;
+    }
+    at ??= { url, line: Number(line), column: Number(column) };
+    const name = frameComponent(text.match(/^\s*at\s+(?:async\s+)?(?:new\s+)?([^\s(]+)\s+\(/)?.[1] ?? text.match(/^\s*([^@\s]+)@/)?.[1]);
+    if (name) return { at, name };
   }
-  return undefined;
+  return at && { at };
 }
 
-/** A fiber's component name, for React 18, whose `_debugSource` names no function. */
+/** A fiber's component name, where the stack names no function: React 18, or a bare `render`. */
 function typeName(node: Made | null | undefined): string | undefined {
   const type = node?.type as { displayName?: string; name?: string; render?: Made; type?: Made } | string | undefined;
   if (!type || typeof type === 'string') return node?.name;
@@ -148,11 +181,11 @@ function typeName(node: Made | null | undefined): string | undefined {
 /**
  * The components whose code wrote the element, outermost first, and the line
  * that wrote it. For the element and each of its owners (who rendered what,
- * not parents, so layout providers stay out), the app's own frame on its
- * creation stack names the function that wrote it: `at Pricing (…)`. Nodes a
+ * not parents, so layout providers stay out), the app's own frames on its
+ * creation stack name the component that wrote it: `at Pricing (…)`. Nodes a
  * library made carry no such frame and are passed, so an app component a
  * router, a framework, a `Slot` or a list renders is still named. `source` is
- * the first of those frames. Absent on other frameworks and production builds,
+ * the first app frame. Absent on other frameworks and production builds,
  * which leaves the fields out.
  */
 function reactOwners(el: Element): { names: string[]; at?: StackFrame } {
@@ -165,15 +198,10 @@ function reactOwners(el: Element): { names: string[]; at?: StackFrame } {
     const made = callsite(node);
     if (made) {
       // React's replay of a server component's stack names the server bundle, not a source file.
-      if (!/^(?:about|rsc):/.test(made.url)) at ??= made;
-      // `Foo.render` is a class's method: the class is the component.
-      const name = made.legacy
-        ? typeName(owner)
-        : made.name
-            ?.split('.')
-            .reverse()
-            .find((part) => /^[A-Z]/.test(part));
-      // Capitalized is a component; anything else is a callback, a module's top level or a minified name.
+      if (!/^(?:about|rsc):/.test(made.at.url)) at ??= made.at;
+      // The frame is in the owner's code: where it names no component, the owner's type does.
+      const name = made.at.legacy || made.name === 'render' ? typeName(owner) : made.name;
+      // Capitalized is a component; anything else is a minified or internal name.
       if (name && /^[A-Z]/.test(name) && !names.includes(name) && names.length < 5) names.unshift(name);
     }
     node = owner;
