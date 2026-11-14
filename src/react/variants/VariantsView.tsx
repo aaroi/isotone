@@ -294,12 +294,12 @@ export const VariantsView = memo(function VariantsView({
     .join('. ');
   const shownCount = lastCount.current;
   const saving = Boolean(source.saveDefaults) && dirty;
-  // Where the last press in the list landed, until the pointer moves away from it.
-  const pressed = useRef<{ x: number; y: number; target: Element } | null>(null);
+  // Where and when the last press in the list landed, and whether the pointer has since moved away from it.
+  const pressed = useRef<{ x: number; y: number; time: number; target: Element; moved: boolean } | null>(null);
   useEffect(() => {
     const moved = (e: PointerEvent) => {
       const at = pressed.current;
-      if (at && Math.hypot(e.clientX - at.x, e.clientY - at.y) > 4) pressed.current = null;
+      if (at && Math.hypot(e.clientX - at.x, e.clientY - at.y) > 8) at.moved = true;
     };
     window.addEventListener('pointermove', moved, { passive: true });
     return () => window.removeEventListener('pointermove', moved);
@@ -317,11 +317,11 @@ export const VariantsView = memo(function VariantsView({
     const covered = rect.bottom - (bar.parentElement as HTMLElement).getBoundingClientRect().bottom + bar.offsetHeight;
     if (covered > 0) body.scrollBy?.({ top: covered, behavior: stillMotion(body) ? 'auto' : 'smooth' });
   }, [saving]);
-  // A press on the bar where the pointer last pressed in the list, without moving, was meant for the list: a
-  // second click on a pick the bar has just risen under must not file a default request.
-  const unmoved = (e: { clientX: number; clientY: number; preventDefault(): void; stopPropagation(): void }) => {
+  // A press on the bar soon after a press in the list, or where that press landed with the pointer not moved
+  // away, was meant for the list: a second click on a pick the bar has just risen under files nothing.
+  const unmoved = (e: { timeStamp: number; preventDefault(): void; stopPropagation(): void }) => {
     const at = pressed.current;
-    if (!at || Math.hypot(e.clientX - at.x, e.clientY - at.y) > 4) return;
+    if (!at || (at.moved && e.timeStamp - at.time > 500)) return;
     e.preventDefault();
     e.stopPropagation();
   };
@@ -356,7 +356,7 @@ export const VariantsView = memo(function VariantsView({
           node?.toggleAttribute('inert', menuShown);
         }}
         onPointerDownCapture={(e) => {
-          pressed.current = { x: e.clientX, y: e.clientY, target: e.target as Element };
+          pressed.current = { x: e.clientX, y: e.clientY, time: e.timeStamp, target: e.target as Element, moved: false };
         }}
         // While held, presses do nothing here; scrolling, Tab and Escape (the dock's) still work.
         onKeyDownCapture={(e) => {

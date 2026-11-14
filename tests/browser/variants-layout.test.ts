@@ -146,6 +146,19 @@ describe.skipIf(!binary)('Variants controls stay put (headless Chrome)', () => {
     await expectSteady(11);
   });
 
+  it('with the bar hidden, the bottom band rests in the inset, so no control at rest is blurred', async () => {
+    await open(1024, 768, 12);
+    // At the end of the list the band is at rest; elsewhere it reaches further, over content passing under it.
+    await chrome.eval('body().scrollTop = body().scrollHeight');
+    await chrome.eval('settle()');
+    const rest = () => chrome.eval<string>(`getComputedStyle(body().querySelector('.isotone-edge-bottom')).backgroundSize`);
+    expect(await rest()).toBe('100% 14px');
+    await pick(11, 'Bold');
+    expect(await rest()).not.toBe('100% 14px');
+    await pick(11, 'Plain');
+    expect(await rest()).toBe('100% 14px');
+  });
+
   it('a pick the bar would cover, in a list that scrolls, comes clear of it, and a second click there files nothing', async () => {
     await open(1024, 768, 12);
     // Scroll so the options of the 9th selector, below the fold, sit 30px above the list's foot, where the bar will rise.

@@ -49,9 +49,10 @@ const RIM = `
 // is always its full reach, edge to edge, taking no room beside the flex gap; its painted size grows.
 // Growing needs scroll-driven animations; without them a band stays at rest. The top band is last in
 // the markup, so it changes no sibling selector, and first in the column (order: -1), so it can stick
-// to the top. The bottom band's rest is the inset plus the room kept for the defaults bar
-// (--iso-bar-room), so content leaving view has already faded where the bar appears. The layers' windows run along the band from its inner edge (0%) out, so the
-// blur begins once the fade is under way.
+// to the top. The bottom band's rest is the inset plus the defaults bar's veil (--iso-bar-veil), which
+// eases from nothing to the bar's room as the bar appears, so nothing at rest is blurred while it is
+// hidden. The layers' windows run along the band from its inner edge (0%) out, so the blur begins once
+// the fade is under way.
 //
 // Scroll padding keeps keyboard focus clear of each band at its full reach.
 const BANDS = `
@@ -69,7 +70,7 @@ const BANDS = `
   background-image: linear-gradient(to top, ${ramp(surface, '0%', '100%')});
 }
 .isotone-edge-bottom {
-  --iso-edge-rest: calc(${INSET} + var(--iso-bar-room)); z-index: 4;
+  --iso-edge-rest: calc(${INSET} + var(--iso-bar-veil, 0px)); z-index: 4;
   bottom: calc(-1px - ${INSET}); margin-block: calc(0px - var(--iso-edge-reach)) calc(0px - ${INSET});
   background-position: 0 100%; background-image: linear-gradient(to bottom, ${ramp(surface, '0%', '100%')});
 }
@@ -112,12 +113,12 @@ ${SECTIONS}:not(:has(> .isotone-section[data-collapsed='false'])) { --iso-edge-l
 :where(${SECTIONS}) .isotone-section-head { background: none; }
 :where(${SECTIONS}) .isotone-section-head::after { display: none; }
 .isotone-section-head::after { background: linear-gradient(to top, ${ramp(surface, '0%', '100%')}); }
+.isotone-vars[data-bar='true'] > .isotone-vars-body { --iso-bar-veil: 0px; transition: --iso-bar-veil var(--iso-enter) var(--iso-ease-out); }
+.isotone-vars[data-saving='true'] > .isotone-vars-body { --iso-bar-veil: var(--iso-bar-room); }
+@media (prefers-reduced-motion: reduce) { .isotone-vars[data-bar='true'] > .isotone-vars-body { transition: none; } }
 .isotone-vars[data-bar='true'] .isotone-edge-bottom {
-  --iso-bar-veil: 0px; transition: --iso-bar-veil var(--iso-enter) var(--iso-ease-out);
   background-image: linear-gradient(to top, ${ramp(surface, '0px', 'var(--iso-bar-veil)', true, 0.94)}, ${ramp(surface, 'var(--iso-bar-veil)', '100%', true, 0, 0.94)});
-}
-.isotone-vars[data-saving='true'] .isotone-edge-bottom { --iso-bar-veil: var(--iso-bar-room); }
-@media (prefers-reduced-motion: reduce) { .isotone-vars[data-bar='true'] .isotone-edge-bottom { transition: none; } }`;
+}`;
 
 // The note list's mask fades with eased ends, with a light blur band at each; a dialog's scrolled rows
 // fade with the same eased ends.
@@ -148,7 +149,7 @@ const RECEDE = `
       animation-timeline: var(--iso-recede), var(--iso-recede);
       animation-range: entry, exit;
     }
-    .isotone-vars-body { --iso-recede-bottom: calc(${INSET} + var(--iso-bar-room)); }
+    .isotone-vars-body { --iso-recede-bottom: calc(${INSET} + var(--iso-bar-veil, 0px)); }
     ${SECTIONS} { --iso-recede-top: var(--iso-head-h); }
     .isotone-list { --iso-recede-top: var(--iso-space); --iso-recede-bottom: var(--iso-space); }
     .isotone-pages + .isotone-list { --iso-recede-top: 18px; }

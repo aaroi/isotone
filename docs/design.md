@@ -252,11 +252,12 @@ behind their text, rather than solid blocks beside a fade. At rest each band fil
 only the empty space at its edge, so nothing at rest is ever blurred; once content
 can pass under it, it reaches further in, and scroll padding keeps keyboard focus
 clear of that reach. The defaults bar never hides the end of a list: the list
-keeps room at its end for the bar, and the bottom band at rest spans that room,
-so the bar rises over content already fading out. A pick on a control partly
+keeps room at its end for the bar, so it never resizes, and its text sits one
+selector gap below the last selector. While the bar shows, the bottom band rests
+over that room, easing in and out with the bar. A pick on a control partly
 under it, in a list that scrolls, brings that control just clear; a press on the
-bar where the pointer last pressed in the list, without moving, does nothing, so
-a second click never files a default request. The blur steps through layers, each
+bar within half a second of a press in the list, or before the pointer has moved
+away from it, does nothing, so a second click never files a default request. The blur steps through layers, each
 twice the last, so no faint blurred copy sits over sharp text as a glow. Every
 fade eases in and out, so neither end reads as a line. `styles/edges.ts` owns it.
 
@@ -319,7 +320,8 @@ Scroll edges move with the scroll position rather than a clock: a band grows as
 content starts to pass under it, and a row shrinks to 96% while it crosses a band
 (scroll-driven animations, so a browser without them shows the bands at rest and
 rows at full size; reduced motion keeps rows still). The defaults bar's material
-over the list eases in and out with the bar; the room it floats in stays put.
+and the bottom band's rest over its room ease in and out with the bar; the room
+it floats in stays put.
 
 Movement uses transforms and opacity through the Web Animations API (the
 defaults bar's crossfade also uses a 2px blur, and a rolling figure 1.5px); a
