@@ -408,7 +408,9 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
   const shared = switching === 'whole' || switching === 'whole-react';
   const groupOf = new Map(overlayGroups(variants).flatMap((group) => group.members.map((member) => [member.id, group.id] as const)));
   const article = (fixed: unknown[]) => (fixed.length > 1 ? 'a' : 'the');
+  // Nothing serves a copy where no Vite plugin runs (Next, `isotone serve`): the page shows the real files.
   const showing = stale.flatMap(({ variant, files, notes: fixed }) => {
+    if (switching === 'none') return [];
     if (shared)
       return active.includes(variant.id)
         ? [{ id: variant.id, files, why: 'active in .isotone/active.json, which every tab shows here' }]

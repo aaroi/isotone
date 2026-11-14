@@ -430,6 +430,23 @@ describe('--done and variants', () => {
     expect(io.text.out).toContain('since `variant use` moves every tab here.');
   });
 
+  // Next runs no Vite plugin, so no copy is served (#63): the page shows the fix, whatever is active.
+  it('names no copy a page may show where nothing serves file variants', async () => {
+    const root = repo();
+    write(root, 'package.json', JSON.stringify({ dependencies: { next: '16.0.0', react: '^19.0.0' } }));
+    write(root, 'next.config.ts', 'export default {};\n');
+    notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000), variant: { axisId: 'hero', label: 'Hero', optionId: 'hero-left' } }]);
+    expect(await runCli(['variant', 'new', 'hero-left', '--route', '/', '--group', 'hero'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'add', 'hero-left', 'src/App.jsx'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'use', 'hero-left'], captureIo(root))).toBe(0);
+    write(root, 'src/App.jsx', 'export default function App() { return <button>Start</button>; }\n', Date.now() + 2000);
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    // The copy may still lack the fix, so the sync advice stays.
+    expect(io.text.out).toContain('hero-left (src/App.jsx): npx isotone variant sync hero-left');
+    expect(io.text.out).not.toContain('The reviewer may be looking');
+  });
+
   it('names copies on the route that still hold conflict markers', async () => {
     const root = repo();
     notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000) }]);
