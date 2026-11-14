@@ -71,6 +71,21 @@ window.layout = () =>
     const rect = node.getBoundingClientRect();
     return [Math.round(rect.left * 10) / 10, Math.round(rect.top * 10) / 10, Math.round(rect.width * 10) / 10];
   });
+// Watch the panel, selectors and section headers on every frame until unwatched, for the furthest any
+// strays from where it was: a slide that settles back is still motion under the pointer.
+window.watch = () => {
+  const tops = () => [panel(), ...panel().querySelectorAll('.isotone-axis, .isotone-section-head')].map((node) => node.getBoundingClientRect().top);
+  const base = tops();
+  let worst = 0;
+  let on = true;
+  const sample = () => {
+    if (!on) return;
+    tops().forEach((top, i) => { worst = Math.max(worst, Math.abs(top - base[i])); });
+    requestAnimationFrame(sample);
+  };
+  requestAnimationFrame(sample);
+  window.unwatch = () => { on = false; return worst; };
+};
 // The centre of an option, by selector index and option label.
 window.option = (index, label) => {
   const axis = panel().querySelectorAll('.isotone-axis')[index];
@@ -118,12 +133,14 @@ describe.skipIf(!binary)('Variants controls stay put (headless Chrome)', () => {
   // The first pick shows the bar and the return to Default hides it: nothing in the panel moves either way.
   async function expectSteady(index: number) {
     const before = await layout();
+    await chrome.eval('watch()');
     await pick(index, 'Bold');
     expect(await chrome.eval('barShown()')).toBe(true);
     expect(await layout()).toEqual(before);
     await pick(index, 'Plain');
     expect(await chrome.eval('barShown()')).toBe(false);
     expect(await layout()).toEqual(before);
+    expect(await chrome.eval<number>('unwatch()')).toBeLessThanOrEqual(0.5);
   }
 
   it('a short list keeps its height as the bar appears and leaves, on a desktop', async () => {
@@ -146,7 +163,7 @@ describe.skipIf(!binary)('Variants controls stay put (headless Chrome)', () => {
     await expectSteady(11);
   });
 
-  it('a list scrolled midway, with rows crossing its foot, neither moves nor rescales a row', async () => {
+  it('a list scrolled midway, with rows crossing its foot and a header stuck, moves and rescales nothing', async () => {
     await open(1024, 768, 12);
     const index = await chrome.eval<number>(`(async () => {
       body().scrollTop = (body().scrollHeight - body().clientHeight) / 2;
@@ -154,7 +171,24 @@ describe.skipIf(!binary)('Variants controls stay put (headless Chrome)', () => {
       const top = body().getBoundingClientRect().top + 80;
       return [...panel().querySelectorAll('.isotone-axis')].findIndex((axis) => axis.getBoundingClientRect().top > top);
     })()`);
+    // A section header is held at the top while its rows pass: its position follows the scroll, not the list.
+    expect(
+      await chrome.eval(`[...panel().querySelectorAll('.isotone-section-head')].some((head) =>
+        Math.abs(head.getBoundingClientRect().top - body().getBoundingClientRect().top) < 1)`),
+    ).toBe(true);
     await expectSteady(index);
+  });
+
+  it('a pick after scrolling back to the top does not slide a header from where it was stuck', async () => {
+    await open(1024, 768, 12);
+    await chrome.eval('body().scrollTop = (body().scrollHeight - body().clientHeight) / 2');
+    await chrome.eval('settle()');
+    // Picks while scrolled remember positions with a header stuck; then back to the top.
+    await pick(5, 'Bold');
+    await pick(5, 'Plain');
+    await chrome.eval('body().scrollTop = 0');
+    await chrome.eval('settle()');
+    await expectSteady(0);
   });
 
   it('with the bar hidden, the bottom band rests in the inset, so no control at rest is blurred', async () => {

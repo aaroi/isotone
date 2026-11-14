@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react';
 import { MAX_ANIMATED_ITEMS, MOTION } from './motion';
 
-type Position = { top: number; animation?: Animation };
+type Position = { top: number; stuck: boolean; animation?: Animation };
 
 function clearPositions(positions: Map<string, Position>) {
   for (const item of positions.values()) item.animation?.cancel();
@@ -18,6 +18,10 @@ function clearPositions(positions: Map<string, Position>) {
  * would animate from where things used to be: the whole list jolts once. A
  * resize of any item therefore refreshes what is remembered, without moving
  * anything.
+ *
+ * A sticky item held at the scroller's edge (a section header while its rows
+ * pass) has a position that follows the scroll, not the list, so it neither
+ * animates while stuck nor from a position remembered while stuck.
  */
 export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: unknown, active = true) {
   const previous = useRef(new Map<string, Position>());
@@ -44,18 +48,26 @@ export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: un
       clear();
       return;
     }
+    // Sticky offsets count from inside the scroller's padding.
+    const edge =
+      container.scrollTop > 0
+        ? container.getBoundingClientRect().top + container.clientTop + (Number.parseFloat(getComputedStyle(container).paddingTop) || 0)
+        : 0;
     const measurements = Array.from(elements, (element) => {
       const key = element.dataset.motionKey ?? '';
       const old = previous.current.get(key);
-      const transform = old?.animation ? getComputedStyle(element).transform : 'none';
+      const style = old?.animation || container.scrollTop > 0 ? getComputedStyle(element) : null;
+      const transform = old?.animation ? (style?.transform ?? 'none') : 'none';
       const offset = transform !== 'none' && typeof DOMMatrix !== 'undefined' ? new DOMMatrix(transform).m42 : 0;
-      return { element, key, old, top: element.offsetTop, offset };
+      const stuck =
+        style?.position === 'sticky' && element.getBoundingClientRect().top - offset <= edge + (Number.parseFloat(style.top) || 0) + 0.5;
+      return { element, key, old, top: element.offsetTop, offset, stuck };
     });
     const next = new Map<string, Position>();
-    for (const { element, key, old, top, offset } of measurements) {
+    for (const { element, key, old, top, offset, stuck } of measurements) {
       old?.animation?.cancel();
       let animation: Animation | undefined;
-      const delta = old ? old.top + offset - top : 0;
+      const delta = old && !old.stuck && !stuck ? old.top + offset - top : 0;
       if (typeof element.animate === 'function') {
         if (old && Math.abs(delta) > 0.5) {
           animation = element.animate([{ transform: `translateY(${delta}px)` }, { transform: 'translateY(0)' }], {
@@ -72,7 +84,7 @@ export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: un
           );
         }
       }
-      next.set(key, { top, animation });
+      next.set(key, { top, stuck, animation });
     }
     for (const [key, item] of previous.current) if (!next.has(key)) item.animation?.cancel();
     previous.current = next;
