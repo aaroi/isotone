@@ -41,8 +41,11 @@ npx isotone --undone <id>          # reopen it
   recorded is compared by hand instead), any copy with conflict
   markers, and which of those copies a page may show in place of the fix: the
   option a note about that selector names, else one active in
-  `.isotone/active.json`. Leave that pick to the reviewer. With `--json` that
-  goes to stderr; stdout stays one array.
+  `.isotone/active.json`. Where picks are shared by every tab
+  ([per tab or shared](variants.md#per-tab-or-shared)), every tab shows
+  `.isotone/active.json`, so an active copy is named whatever the note was on.
+  Leave that pick to the reviewer. With `--json` that goes to stderr; stdout
+  stays one array.
 - A unique id prefix is enough. `--working`, `--done` and `--undone` take
   several ids (`a1 b2` or `a1,b2`); either all change or none do.
 - A route is a pattern: `/items` is that page, `/items/*` also every page under
