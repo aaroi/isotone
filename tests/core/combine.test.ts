@@ -205,9 +205,7 @@ describe('combineVariantsSources', () => {
 describe('the overlay notice beside a host source', () => {
   it("passes the overlay's note on a link's ?v= through the combined source", async () => {
     const list = {
-      variants: [
-        { id: 'hero-split', label: 'Split', group: 'hero', groupLabel: 'Hero', files: {}, createdAt: '', stale: [], missing: [] },
-      ],
+      variants: [{ id: 'hero-split', label: 'Split', group: 'hero', groupLabel: 'Hero', files: {}, createdAt: '', stale: [], missing: [] }],
       active: [],
       knobs: [],
     } as unknown as OverlayVariantsList;
