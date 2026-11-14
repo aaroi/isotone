@@ -31,9 +31,10 @@ export interface NodeLike {
 
 /**
  * An id the page generates on each render, which names nothing for long:
- * React's `useId` (`:r1:`, `«r1»`, `_r_1_`) and the libraries built on it.
+ * React's `useId` (`:r1:`, `«r1»`, `_r_1_`, with any `identifierPrefix`) and
+ * the libraries built on it.
  */
-const GENERATED_ID = /:r[\da-z]*:|«r[\da-z]*»|^_r_[\da-z]+_|^(?:radix|headlessui|mui|react-aria|downshift)-/i;
+const GENERATED_ID = /:r[\da-z]*:|«r[\da-z]*»|_r_[\da-z]+_|^(?:radix|headlessui|mui|mantine|react-aria|downshift)-/i;
 
 /**
  * Descriptor of a picked element for locating it in code. Walks up the tree
@@ -284,7 +285,15 @@ function vueContext(el: Element): Pick<IsotoneElement, 'component' | 'source'> {
  */
 function frameSource({ url, line, legacy }: StackFrame): string | undefined {
   const path = sourcePath(url);
-  if (path.includes('/_next/static/')) return undefined;
+  if (path.includes('/_next/static/')) {
+    // A Turbopack hot update names its module in the query: `?id=%255Bproject%255D/src/…`.
+    const id = url.match(/[?&]id=([^&#]+)/)?.[1];
+    return id
+      ? sourcePath(decodeURIComponent(id))
+          .replace(/^\[project\]\//, '')
+          .replace(/\s.*$/, '')
+      : undefined;
+  }
   return legacy ? `${path}:${line}` : path;
 }
 
@@ -373,29 +382,26 @@ async function withMap(url: string, code: string): Promise<Loaded | undefined> {
   return base.origin === new URL(url).origin ? { code, map: await (await fetch(base)).json(), base } : undefined;
 }
 
-/** Served modules by URL as first read: the nearest to what the page loaded. */
-const served = new Map<string, Promise<Loaded | undefined>>();
+/** Served modules by URL, with their maps, so unchanged code is not mapped twice. */
+const served = new Map<string, Loaded>();
 
 /**
- * Every version of a served module the page may have run: as first read, and
- * as served now when that differs. Vite serves a hot update under a new URL
- * (`?t=`), but a Next chunk and a module's first URL keep theirs.
+ * A served module as the page loaded it, or nothing once the server sends
+ * other code at its URL: a Next chunk and a module's first URL keep theirs
+ * across a hot update (Vite gives the update a new one, `?t=`). The page's own
+ * download says how many bytes it loaded.
  */
-async function servedVersions(url: string): Promise<(Loaded | undefined)[]> {
-  const read = async () => withMap(url, await (await fetch(url)).text());
-  const first = served.get(url);
-  if (!first) {
-    if (served.size >= 64) served.clear();
-    const module = read();
-    served.set(url, module);
-    module.then(
-      (found) => found || served.delete(url),
-      () => served.delete(url),
-    );
-    return [await module];
-  }
-  const [then, now] = await Promise.all([first, read()]);
-  return then?.code === now?.code ? [then] : [then, now];
+async function servedModule(url: string): Promise<Loaded | undefined> {
+  const bytes = await (await fetch(url)).arrayBuffer();
+  const loaded = (globalThis.performance?.getEntriesByName?.(url)[0] as PerformanceResourceTiming | undefined)?.decodedBodySize;
+  if (loaded && loaded !== bytes.byteLength) return undefined;
+  const code = new TextDecoder().decode(bytes);
+  const known = served.get(url);
+  if (known?.code === code) return known;
+  const module = await withMap(url, code);
+  if (served.size >= 64) served.clear();
+  if (module) served.set(url, module);
+  return module;
 }
 
 /** Webpack's `require` for each `webpackChunk*` global, handed to a runtime callback of a chunk pushed there. */
@@ -461,12 +467,12 @@ function mapFrame(frame: StackFrame, module: Loaded): string | undefined {
 /**
  * The pinned element's JSX callsite in its original file, on React 19 hosts:
  * the module's source map turns the stack's transformed line into the line
- * the agent will open, and a bundle chunk into the file it came from. A hot
- * update leaves versions of a module the page may have run; the line is given
- * only when every version where the frame is a JSX call agrees on it, and the
- * file alone when they agree only on that.
- * Resolves to undefined when there is nothing better than what
- * `describeIsotoneElement` already recorded.
+ * the agent will open, and a bundle chunk into the file it came from, while
+ * the server still sends the code the page loaded. Webpack keeps the versions
+ * of a module the page may have run; the line is given only when every
+ * version where the frame is a JSX call agrees on it, and the file alone when
+ * they agree only on that. Resolves to undefined when there is nothing better
+ * than what `describeIsotoneElement` already recorded.
  */
 export async function resolveElementSource(el: Element): Promise<string | undefined> {
   const frame = reactOwners(el).at;
@@ -474,9 +480,9 @@ export async function resolveElementSource(el: Element): Promise<string | undefi
   if (!frame || frame.legacy || /\/_next\/static\/.*[?&]id=/.test(frame.url)) return undefined;
   try {
     const versions = /^https?:/.test(frame.url)
-      ? await servedVersions(frame.url)
+      ? [await servedModule(frame.url)]
       : frame.url.startsWith('webpack-internal:///')
-        ? await Promise.all(webpackModules(frame.url))
+        ? await Promise.all(webpackModules(frame.url).map((module) => module.catch(() => undefined)))
         : [];
     const lines = new Set(versions.map((module) => module && mapFrame(frame, module)).filter((line): line is string => Boolean(line)));
     // Versions that agree on the file only give the file.
@@ -704,7 +710,9 @@ const STABLE_ATTRIBUTES = ['name', 'for', 'href', 'alt', 'placeholder'];
 function anchors(n: Element, pinned: boolean): string[] {
   const attribute = (name: string) => {
     const value = n.getAttribute(name);
-    return value && value.length <= 80 && !/["\\\n]/.test(value) ? [`${n.localName}[${name}="${value}"]`] : [];
+    // A generated id in `for` or a `#fragment` changes with each render, as the id does.
+    const generated = value && GENERATED_ID.test(value.slice(value.indexOf('#') + 1));
+    return value && !generated && value.length <= 80 && !/["\\\n]/.test(value) ? [`${n.localName}[${name}="${value}"]`] : [];
   };
   return [...TEST_IDS, ...(pinned ? STABLE_ATTRIBUTES : [])].flatMap(attribute);
 }

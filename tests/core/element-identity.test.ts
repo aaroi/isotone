@@ -76,12 +76,16 @@ describe('a selector that names the element, not its place', () => {
   });
 
   it("never takes an id the page generates on each render, as React's useId and the libraries on it do", () => {
-    for (const id of [':r1:', '«r2»', '_r_3_', 'radix-:r4:', 'headlessui-menu-button-5']) {
+    for (const id of [':r1:', '«r2»', '_r_3_', 'app_r_1_', 'radix-:r4:', 'headlessui-menu-button-5', 'mantine-r1a']) {
       document.body.innerHTML = `<main><div><button>A</button><button id="${id}">B</button></div></main>`;
       expect(selectorOf('button', 1), id).toBe('main:nth-child(1) > div:nth-child(1) > button:nth-child(2)');
     }
     document.body.innerHTML = '<main><div><button>A</button><button id="checkout">B</button></div></main>';
     expect(selectorOf('button', 1)).toBe('#checkout');
+    // Nor such an id in an attribute that points at it.
+    document.body.innerHTML = '<form><label for=":r1:">Email</label><label for=":r2:">Name</label><a href="#radix-:r3:">Tab</a></form>';
+    expect(selectorOf('label', 1)).toBe('form:nth-child(1) > label:nth-child(2)');
+    expect(selectorOf('a')).toBe('form:nth-child(1) > a:nth-child(3)');
   });
 
   it('anchors an ancestor only by its id or test id, so a moved state class cannot move the pin', () => {
@@ -210,6 +214,14 @@ describe('the React components that wrote the element', () => {
   /** A React 19 creation stack: the call that made the element, then where it was written. */
   const made = (...frames: string[]) => ({ stack: ['Error: react-stack-top-frame', ...frames.map((f) => `    at ${f}`)].join('\n') });
   const reactBottom = 'Object.react_stack_bottom_frame (http://localhost:3000/_next/static/chunks/react-dom_cjs_1.js:2859:93)';
+  /** A fetched module's response. */
+  const body = (code: string) => ({ arrayBuffer: async () => new TextEncoder().encode(code).buffer });
+  /** The page's own download of each URL, as Resource Timing reports it: `decodedBodySize` bytes. */
+  const pageLoaded = (sizes: Record<string, string>) =>
+    vi.stubGlobal('performance', {
+      getEntriesByName: (url: string) =>
+        sizes[url] === undefined ? [] : [{ decodedBodySize: new TextEncoder().encode(sizes[url]).length }],
+    });
 
   const next = (file: string) => `webpack-internal:///(app-pages-browser)/./${file}`;
 
@@ -464,18 +476,18 @@ describe('the React components that wrote the element', () => {
     const module = (mappings: string) =>
       `import x;\n\t\t_jsxDEV("button", {});\n//# sourceMappingURL=data:application/json;base64,${btoa(JSON.stringify({ version: 3, sources: ['tabs.tsx'], mappings }))}\n`;
     let served = module(';AASA');
-    const fetch = vi.fn(async () => ({ text: async () => served }));
+    const fetch = vi.fn(async () => body(served));
     vi.stubGlobal('fetch', fetch);
+    pageLoaded({ 'http://localhost:5173/src/tabs.tsx?t=1': served });
     try {
       expect(await resolveElementSource(at(2, 3))).toBe('/src/tabs.tsx:10');
       expect(fetch).toHaveBeenCalledWith('http://localhost:5173/src/tabs.tsx?t=1');
-      // A position that is no JSX call in that code is from another version of it: no line.
+      // A position that is no JSX call in that code is not the JSX that made the element: no line.
       expect(await resolveElementSource(at(1, 1))).toBeUndefined();
       expect(await resolveElementSource(at(2, 99))).toBeUndefined();
-      // The same URL now serves code of the same shape whose call is two lines lower in the file
-      // (an edit above it): the versions the page may have run disagree on the line, so only the file.
-      served = module(';AAWA');
-      expect(await resolveElementSource(at(2, 3))).toBe('/src/tabs.tsx');
+      // Once the server sends other code than the page loaded, its map says nothing about the page.
+      served = module(';AAWAAAAA');
+      expect(await resolveElementSource(at(2, 3))).toBeUndefined();
       // React 18's own field is already exact: nothing to fetch.
       expect(await resolveElementSource(pin({ type: 'button', _debugSource: { fileName: 'a.tsx', lineNumber: 1 } }))).toBeUndefined();
     } finally {
@@ -501,7 +513,7 @@ describe('the React components that wrote the element', () => {
   const wrapped = (tag: string) => `    return (0, m["jsxDEV"])("${tag}", {});`;
   const argumentsAt = wrapped('button').indexOf('("') + 1;
 
-  it('maps a Turbopack chunk through its index map, and a kept fiber through the chunk as the page loaded it', async () => {
+  it('maps a Turbopack chunk through its index map while the server sends the chunk the page loaded', async () => {
     const chunk = 'http://localhost:3000/_next/static/chunks/_1ngr3bx56_1ly._.js';
     const at = (line: number) =>
       pin({ type: 'button', _debugStack: made(`jsxDEV (${chunk}:1:1)`, `Counter (${chunk}:${line}:${argumentsAt})`, reactBottom) });
@@ -529,24 +541,27 @@ describe('the React components that wrote the element', () => {
       return { code, map: { version: 3, sources: [], sections } };
     };
     let served = build(0);
-    const fetch = vi.fn(async (url: string | URL) =>
-      String(url).endsWith('.map') ? { json: async () => served.map } : { text: async () => served.code },
-    );
+    const fetch = vi.fn(async (url: string | URL) => (String(url).endsWith('.map') ? { json: async () => served.map } : body(served.code)));
     vi.stubGlobal('fetch', fetch);
+    // The page loaded build(0).
+    pageLoaded({ [chunk]: build(0).code });
     try {
       expect(describeIsotoneElement(elementAsNode(at(8))).source).toBeUndefined();
       // The absolute path is made relative to the app by the notes endpoint.
       expect(await resolveElementSource(at(8))).toBe('/Users/me/app/src/components/Counter.tsx:9');
-      // An edit to Providers moves Counter two lines down the chunk, at the same URL.
-      served = build(2);
-      // A fiber Fast Refresh kept ran the chunk as first read; in the new one its position is no JSX call.
       expect(await resolveElementSource(at(8))).toBe('/Users/me/app/src/components/Counter.tsx:9');
-      // One rendered since ran the new chunk, where the call now is.
-      expect(await resolveElementSource(at(10))).toBe('/Users/me/app/src/components/Counter.tsx:9');
-      // A hot update runs the module from the whole chunk, at lines its map does not describe.
-      const updated = `${chunk}?id=%255Bproject%255D/src/components/Counter.tsx`;
+      // Unchanged code is mapped once: one map for two pins.
+      expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('.map'))).toHaveLength(1);
+      // An edit to Providers moves Counter two lines down the chunk, at the same URL. A fiber Fast
+      // Refresh kept ran build(0), one rendered since build(2); neither can be told from the other,
+      // and on a first pin after the edit build(2) would put Counter's line on another module's.
+      served = build(2);
+      expect(await resolveElementSource(at(8))).toBeUndefined();
+      expect(await resolveElementSource(at(10))).toBeUndefined();
+      // A hot update runs the module from the whole chunk (`?id=`): the query names its file.
+      const updated = `${chunk}?id=%255Bproject%255D/src/components/Counter.tsx%2520%255Bapp-client%255D`;
       const hot = pin({ type: 'button', _debugStack: made(`jsxDEV (${chunk}:1:1)`, `Counter (${updated}:51:215)`, reactBottom) });
-      expect(describeIsotoneElement(elementAsNode(hot)).source).toBeUndefined();
+      expect(describeIsotoneElement(elementAsNode(hot)).source).toBe('src/components/Counter.tsx');
       expect(await resolveElementSource(hot)).toBeUndefined();
       // Under a basePath the chunk still names no file.
       const based = made(
@@ -625,7 +640,7 @@ describe('the React components that wrote the element', () => {
     const map = btoa(JSON.stringify({ version: 3, sources: ['../.isotone/variants/bold/src/Card.tsx'], mappings: ';AAcA' }));
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => ({ text: async () => `x;\n_jsxDEV("a");\n//# sourceMappingURL=data:application/json;base64,${map}\n` })),
+      vi.fn(async () => body(`x;\n_jsxDEV("a");\n//# sourceMappingURL=data:application/json;base64,${map}\n`)),
     );
     try {
       expect(await resolveElementSource(pin({ type: 'a', _debugStack: stack }))).toBe('/.isotone/variants/bold/src/Card.tsx:15');
@@ -639,7 +654,7 @@ describe('the React components that wrote the element', () => {
       'exports.jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js:250:33)',
       'Card (http://localhost:5173/src/Card.tsx:2:7)',
     );
-    const fetch = vi.fn(async () => ({ text: async () => 'x;\n//# sourceMappingURL=http://elsewhere.test/Card.tsx.map\n' }));
+    const fetch = vi.fn(async () => body('x;\n//# sourceMappingURL=http://elsewhere.test/Card.tsx.map\n'));
     vi.stubGlobal('fetch', fetch);
     try {
       expect(await resolveElementSource(pin({ type: 'a', _debugStack: stack }))).toBeUndefined();
