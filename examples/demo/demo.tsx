@@ -206,7 +206,7 @@ const tab = (() => {
   const page = window as Window & { __isotoneLive?: LiveStore };
   const plugin = page.__isotoneLive;
   delete page.__isotoneLive;
-  const store = liveStore(page, { groups: tabGroups, active: latestPick() ?? ['comfy'], ssr: false, endpoint: '' });
+  const store = liveStore(page, { groups: tabGroups, conflicted: [], active: latestPick() ?? ['comfy'], ssr: false, endpoint: '' });
   if (plugin) page.__isotoneLive = plugin;
   else delete page.__isotoneLive;
   return store;

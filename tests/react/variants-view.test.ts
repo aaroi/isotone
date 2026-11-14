@@ -333,6 +333,26 @@ describe('VariantsView', () => {
     expect(picks).toEqual(['2', '2', '0', '1', '2', '0']);
   });
 
+  it('shows a disabled option that neither a click nor the arrow keys pick', async () => {
+    const options = [
+      { id: 'plain', label: 'Plain' },
+      { id: 'merged', label: 'Merged', disabled: true },
+      { id: 'bold', label: 'Bold' },
+    ];
+    const source = createVariantsSource({ axes: [{ id: 'card', label: 'Card', options, defaultOption: 'plain' }] });
+    await render(createElement(VariantsView, { source }));
+    const merged = container.querySelector<HTMLButtonElement>('[role=radio][aria-label=Merged]');
+    expect(merged?.disabled).toBe(true);
+    await click(merged as HTMLElement);
+    expect(source.getSelections().card).toBe('plain');
+    await act(async () => {
+      const checked = container.querySelector<HTMLElement>('[role=radio][aria-checked=true]');
+      checked?.focus();
+      checked?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+    });
+    expect(source.getSelections().card).toBe('bold');
+  });
+
   it('renders colour swatches and the custom picker', async () => {
     const source = createVariantsSource({
       axes: [

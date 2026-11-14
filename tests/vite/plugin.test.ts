@@ -135,7 +135,7 @@ describe('the Vite adapter, served', () => {
   it('serves the variants endpoint, path-relative to its mount', async () => {
     const res = await fetch(`${origin}${VARIANTS_ENDPOINT}`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ variants: [], active: [], knobs: [] });
+    expect(await res.json()).toEqual({ variants: [], active: [], knobs: [], hmr: '/@vite/client' });
     const unknown = await fetch(`${origin}${VARIANTS_ENDPOINT}/active`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -282,7 +282,13 @@ describe('the Vite adapter, served', () => {
       expect(html).not.toContain('data-isotone');
       expect(html).not.toContain('/@isotone/panel.js');
       expect(await (await fetch(`${url}${NOTES_ENDPOINT}`)).json()).toEqual([]);
-      expect(await (await fetch(`${url}${VARIANTS_ENDPOINT}`)).json()).toEqual({ variants: [], active: [], knobs: [] });
+      // The listing names the dev server's HMR client, which the panel listens on for the set changing.
+      expect(await (await fetch(`${url}${VARIANTS_ENDPOINT}`)).json()).toEqual({
+        variants: [],
+        active: [],
+        knobs: [],
+        hmr: '/@vite/client',
+      });
       const update = await fetch(`${url}${UPDATE_ENDPOINT}`);
       expect(update.headers.get('cache-control')).toBe('no-store');
       expect(await update.json()).toMatchObject({ status: 'disabled', upgrade: null });
@@ -725,7 +731,10 @@ describe('overlay variants in the dev server', () => {
     // The swap is reported to Vite as an edit of the real file, never as a
     // page reload: Fast Refresh keeps the reviewer's state and open panel.
     expect(server.watcher.emit).toHaveBeenCalledWith('change', source);
-    expect(server.ws.send).not.toHaveBeenCalled();
+    expect(server.ws.send).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'full-reload' }));
+    // Every tab's panel hears the new set, so its highlight and a note's
+    // selections name what the page now shows.
+    expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: ['b'] } });
     // The hot update for that reported change goes through, where an
     // ordinary edit of an overridden real file would be dropped.
     // Vite reports the change in its own normalized form (forward slashes
@@ -900,6 +909,110 @@ describe('overlay variants in the dev server', () => {
     onAll('add', activeFile);
     expect(server.watcher.emit).toHaveBeenCalledWith('change', source);
     expect(hooks.load(source)?.code).toContain('variant b');
+    // Whole-file switching too: the panels follow the CLI's pick.
+    await vi.waitFor(() =>
+      expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: ['b'] } }),
+    );
+  });
+
+  it('never serves a copy with conflict markers, and shows it again once they are resolved', async () => {
+    const { root, source, override } = tempProject();
+    const markers = '<<<<<<< variant\nexport const label = "variant b";\n=======\nexport const label = "real";\n>>>>>>> real\n';
+    writeActive({ root }, ['b']);
+    writeFileSync(override, markers);
+    const hooks = plugin(root, 'serve');
+    const server = fakeServer(root);
+    server.moduleGraph.getModulesByFile.mockImplementation((f: string) =>
+      f === source ? new Set([{ id: '/src/Button.tsx' }]) : undefined,
+    );
+    hooks.configureServer(server);
+    const onAll = server.watcher.on.mock.calls.find((c) => c[0] === 'all')?.[1] as (event: string, file: string) => void;
+
+    // The pointer still names it, but nothing shows it: the real file loads,
+    // and the listing does not call it active.
+    expect(hooks.load(source)).toBeNull();
+    expect((await request(server, VARIANTS_ENDPOINT, 'GET', '/')).body).toMatchObject({ active: [] });
+    const pointer = () => JSON.parse(readFileSync(join(root, ACTIVE_FILE), 'utf8')).active;
+    // A tab posts what it shows: a pick in another group keeps it in the file,
+    // and so does a stale tab that still names it.
+    expect(await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['t'] })).toMatchObject({
+      status: 200,
+      body: { active: ['t'] },
+    });
+    expect(pointer()).toEqual(['t', 'b']);
+    expect((await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] })).status).toBe(200);
+    expect(pointer()).toEqual(['b']);
+    // Default picked in its own selector (or a reset) drops it.
+    expect((await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: [], groups: ['b'] })).status).toBe(200);
+    expect(pointer()).toEqual([]);
+    // Only a new pick of it is refused.
+    writeActive({ root }, []);
+    const refused = await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] });
+    expect(refused.status).toBe(409);
+    expect((refused.body as { error: string }).error).toBe(
+      '"b" holds conflict markers from `variant sync` in src/Button.tsx, so it cannot be shown until they are resolved.',
+    );
+    writeActive({ root }, ['b']);
+
+    // Resolved: the pick it kept shows, and every panel hears so.
+    writeFileSync(override, 'export const label = "variant b";\n');
+    onAll('change', override);
+    expect(hooks.load(source)?.code).toContain('variant b');
+    await vi.waitFor(() =>
+      expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: ['b'] } }),
+    );
+
+    // A sync that leaves markers in the active copy takes it off the page.
+    writeFileSync(override, markers);
+    onAll('change', override);
+    expect(hooks.load(source)).toBeNull();
+    await vi.waitFor(() => expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: [] } }));
+    expect(JSON.parse(readFileSync(join(root, ACTIVE_FILE), 'utf8')).active).toEqual(['b']);
+
+    // A copy nothing shows gaining markers changes no set, but what the panels
+    // list: they hear of it on an event of its own, which a live tab does not
+    // follow (it could reload before a server render has a swap).
+    writeActive({ root }, []);
+    onAll('change', join(root, ACTIVE_FILE));
+    server.ws.send.mockClear();
+    writeFileSync(join(variantDir({ root }, 't'), 'src', 'Table.tsx'), markers);
+    onAll('change', join(variantDir({ root }, 't'), 'src', 'Table.tsx'));
+    await vi.waitFor(() => expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:variants' }));
+    expect(server.ws.send).not.toHaveBeenCalledWith(expect.objectContaining({ event: 'isotone:active' }));
+
+    // The lock every change takes is not a change, nor is the dir itself, which
+    // macOS reports as added whenever the lock comes and goes.
+    server.ws.send.mockClear();
+    onAll('add', join(root, '.isotone', 'variants', '.mutation.lock'));
+    onAll('addDir', join(root, '.isotone', 'variants'));
+    onAll('unlink', join(root, '.isotone', 'variants', '.mutation.lock'));
+    await new Promise((r) => setTimeout(r, 120));
+    expect(server.ws.send).not.toHaveBeenCalled();
+  });
+
+  it('keeps a live tab off the panels’ announcements: it follows only the server’s set', () => {
+    const { root } = tempProject();
+    const { hooks } = livePlugin(root);
+    const runtime = hooks.load('\0isotone-live')?.code ?? '';
+    expect(runtime).toContain('import.meta.hot.on("isotone:active"');
+    expect(runtime).not.toContain('isotone:variants');
+  });
+
+  it('names the HMR client under the dev server’s origin, and none without a WebSocket server', async () => {
+    const { root } = tempProject();
+    const withOrigin = fakeServer(root);
+    Object.assign(withOrigin.config.server, { origin: 'http://127.0.0.1:5173' });
+    plugin(root, 'serve').configureServer(withOrigin);
+    expect((await request(withOrigin, VARIANTS_ENDPOINT, 'GET', '/')).body).toMatchObject({ hmr: 'http://127.0.0.1:5173/@vite/client' });
+    const noSocket = fakeServer(root);
+    Object.assign(noSocket.config.server, { ws: false, hmr: false });
+    plugin(root, 'serve').configureServer(noSocket);
+    expect((await request(noSocket, VARIANTS_ENDPOINT, 'GET', '/')).body).not.toHaveProperty('hmr');
+    // HMR off alone still has the socket, which custom events use.
+    const hmrOff = fakeServer(root);
+    Object.assign(hmrOff.config.server, { hmr: false });
+    plugin(root, 'serve').configureServer(hmrOff);
+    expect((await request(hmrOff, VARIANTS_ENDPOINT, 'GET', '/')).body).toMatchObject({ hmr: '/@vite/client' });
   });
 
   it('logs the variants dir after the banner when it exists', () => {
@@ -1250,6 +1363,10 @@ describe('live variants', () => {
       const dispatcher = hooks.load(source)?.code ?? '';
       expect(dispatcher).toContain('"./Button.tsx?isotone=_base"');
       expect(dispatcher).not.toContain('?isotone=b');
+      // Nor can a tab pick it, from the panel or a `?v=` link: its group has no such member.
+      expect(hooks.load('\0isotone-live')?.code).toContain(
+        '"groups":[{"id":"b","members":["b"]},{"id":"t","members":["t"]}],"conflicted":["b"]',
+      );
       writeFileSync(override, 'export const label = "variant b";\n');
       const client = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([{ id: source }]) } };
       expect(hooks.hotUpdate.call({ environment: client }, { file: override })).toEqual([]);
@@ -1507,7 +1624,7 @@ describe('Components compiled in parts: Vue, Svelte, Astro', () => {
       const client = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([mod]), invalidateModule: vi.fn() } };
       expect(hooks.hotUpdate.call({ environment: client }, { file: counter })).toBeUndefined();
       vi.advanceTimersByTime(100);
-      expect(server.ws.send).not.toHaveBeenCalled();
+      expect(server.ws.send).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'full-reload' }));
     } finally {
       vi.useRealTimers();
     }

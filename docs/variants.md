@@ -73,8 +73,8 @@ variant, teammates can sync it, and `git gc` never drops it. `variant sync <id>`
 untracked files included; it needs Git installed and says so when it is not.
 Where both sides changed the same lines the copy gets conflict markers: `sync`
 exits 1, `variant list` counts them under CONFLICTS, and the copy cannot be
-shown until they are resolved (in live mode, picking it shows the real file
-meanwhile). A copy made outside a repository by Isotone 1.5.0 or earlier has no
+shown until they are resolved: `variant use` refuses it, the panel shows it disabled, and if it
+was active the real files show meanwhile (it returns once they are). A copy made outside a repository by Isotone 1.5.0 or earlier has no
 recorded version: `variant list` names it under NO BASE, since nobody knows
 whether its real file changed, and `sync` cannot merge it (unless the copy still
 matches the real file). Compare it with the real file by hand, then `variant
@@ -271,7 +271,8 @@ mountIsotone({ variants: source, defaultTab: 'variants' });
 ```
 
 `selections` maps each axis id to a string; a range's value is a numeric string,
-and `onChange` must apply it to the app's state or styles. With `compare: true`
+and `onChange` must apply it to the app's state or styles. A select option with
+`disabled: true` shows but cannot be picked. With `compare: true`
 the panel offers [Compare](#hold-to-compare) for these selectors: while the
 reviewer holds it, `onChange` gets the defaults with `{ preview: true }` as its
 second argument, then the picks with `{ preview: false }`. Apply both, but keep

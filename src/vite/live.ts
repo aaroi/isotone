@@ -25,10 +25,16 @@
  * wrappers use, and keeps the functions testable as ordinary code.
  */
 
+import { ACTIVE_EVENT } from '../core/variants/overlay';
+
 /** What the store needs from the server, per page load. */
 export interface LiveConfig {
   /** Variant groups in panel order, each a decision with its members. */
   groups: { id: string; members: string[] }[];
+  /** Members whose copies hold conflict markers, which cannot be shown. A
+   *  tab's pick of one holds its group at Default, and stays in `?v=` so it
+   *  returns once they are resolved. */
+  conflicted: string[];
   /** The server's active set: `.isotone/active.json` when the page was served. */
   active: string[];
   /** The page may be server-rendered, so a pinned mismatch has to reach the server. */
@@ -82,8 +88,6 @@ export const VERSION_QUERY = 'isotone';
 export const BASE_VERSION = '_base';
 export const LIVE_MODULE = 'virtual:isotone/live';
 export const RESOLVED_LIVE_MODULE = '\0isotone-live';
-/** Sent over Vite's HMR channel when the server's active set changes. */
-export const ACTIVE_EVENT = 'isotone:active';
 
 /**
  * Create the tab's store on `win`, or return the one already there. Runs as
@@ -124,12 +128,15 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
     }
     return null;
   };
+  const conflicted = new Set(cfg.conflicted);
   /** Our picks from `?v=` (null when it names none of our groups), the groups
-   *  it sets to Default, and the pairs that belong to someone else, kept when
-   *  the param is rewritten. */
-  const parse = (search: string): { picks: string[] | null; defaults: string[]; foreign: string[] } => {
+   *  it sets to Default, the picks it holds at Default because their copies
+   *  hold conflict markers, and the pairs that belong to someone else, kept
+   *  when the param is rewritten. A pair naming one of our groups is never
+   *  someone else's, so a rewrite holds one pair per group. */
+  const parse = (search: string): { picks: string[] | null; defaults: string[]; held: [string, string][]; foreign: string[] } => {
     const raw = readParam(search);
-    if (raw === null) return { picks: null, defaults: [], foreign: [] };
+    if (raw === null) return { picks: null, defaults: [], held: [], foreign: [] };
     const foreign: string[] = [];
     const picks = new Map<string, string>();
     for (const pair of raw.split(',')) {
@@ -137,14 +144,15 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
       const at = pair.indexOf(':');
       const group = at < 0 ? undefined : groupFor(pair.slice(0, at));
       const value = at < 0 ? '' : pair.slice(at + 1);
-      if (group && (value === DEFAULT || group.members.includes(value))) picks.set(group.id, value);
-      else foreign.push(pair);
+      if (!group) foreign.push(pair);
+      else if (value === DEFAULT || group.members.includes(value)) picks.set(group.id, value);
     }
-    if (picks.size === 0) return { picks: null, defaults: [], foreign };
+    if (picks.size === 0) return { picks: null, defaults: [], held: [], foreign };
     const named = [...picks.entries()];
     return {
-      picks: named.filter(([, value]) => value !== DEFAULT).map(([, value]) => value),
+      picks: named.filter(([, value]) => value !== DEFAULT && !conflicted.has(value)).map(([, value]) => value),
       defaults: named.filter(([, value]) => value === DEFAULT).map(([group]) => group),
+      held: named.filter(([, value]) => conflicted.has(value)),
       foreign,
     };
   };
@@ -153,8 +161,10 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
     const mine: string[] = [];
     for (const group of groups) {
       const pick = group.members.find((member) => set.includes(member));
+      const kept = held.get(group.id);
       if (pick) mine.push(`${group.id}:${pick}`);
       else if (defaults.has(group.id)) mine.push(`${group.id}:${DEFAULT}`);
+      else if (kept) mine.push(`${group.id}:${kept}`);
     }
     // A tab with a pick of its own says so even when every group is at
     // Default, or a reload or a copied link would follow the server again.
@@ -186,6 +196,9 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
   // Groups this tab was set to Default in, kept in `?v=` as `<group>:default`
   // so the tab stays on Default while other tabs pick.
   const defaults = new Set(fromUrl.defaults);
+  // Picks whose copies hold conflict markers: their groups show Default, and
+  // `?v=` keeps them until the reviewer picks in that group.
+  const held = new Map(fromUrl.held);
   let previewing: string[] | null = null;
   let reloading = false;
 
@@ -297,15 +310,22 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
     needsReload(next) {
       return needsReload(active, next);
     },
-    select(next, touched = []) {
+    select(picked, touched = []) {
       if (reloading) return true;
+      // A copy with conflict markers cannot be shown: its group stays at Default.
+      const next = picked.filter((id) => !conflicted.has(id));
       const reloadNeeded = needsReload(active, next);
       for (const group of groups) {
-        if (group.members.some((member) => next.includes(member))) defaults.delete(group.id);
-        else if (touched.includes(group.id) || group.members.some((member) => active.includes(member))) defaults.add(group.id);
+        if (group.members.some((member) => next.includes(member))) {
+          defaults.delete(group.id);
+          held.delete(group.id);
+        } else if (touched.includes(group.id) || group.members.some((member) => active.includes(member))) {
+          defaults.add(group.id);
+          held.delete(group.id);
+        }
       }
       previewing = null;
-      active = next.slice();
+      active = next;
       // Any pick, Default included, keeps the tab where the reviewer put it.
       explicit = true;
       writeUrl(active);

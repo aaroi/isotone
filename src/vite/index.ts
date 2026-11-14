@@ -224,6 +224,18 @@ function canonical(path: string): string {
   }
 }
 
+/**
+ * Where the page's Vite client lives, which carries the server's custom
+ * events: under `server.origin` when one is set, and the base. Null without
+ * a WebSocket server (`server.ws: false`, Vite 7 and later); Vite still sends
+ * custom events with `server.hmr` off.
+ */
+function hmrClient(server: ViteDevServer): string | null {
+  const { ws, origin } = server.config.server as { ws?: false; origin?: string };
+  if (ws === false) return null;
+  return `${origin ?? ''}${server.config.base ?? '/'}@vite/client`;
+}
+
 /** Say where the notes go after Vite's own banner, so it is not buried under
  *  it. Portable setups fail quietly otherwise: a reviewer writes notes and the
  *  agent looks in the wrong place. */
@@ -406,7 +418,12 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
         const activate = switching.attach(server, { live, ignored: variantsOptions.ignored });
         server.middlewares.use(
           VARIANTS_ENDPOINT,
-          variantsEndpoint(() => overrides.opts, activate, allowedHosts),
+          variantsEndpoint(
+            () => overrides.opts,
+            activate,
+            allowedHosts,
+            () => hmrClient(server),
+          ),
         );
         server.middlewares.use(
           refuseVersion(

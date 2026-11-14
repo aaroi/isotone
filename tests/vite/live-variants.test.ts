@@ -21,6 +21,7 @@ const CONFIG: LiveConfig = {
   ],
   active: [],
   ssr: false,
+  conflicted: [],
   endpoint: '/api/isotone/variants',
 };
 

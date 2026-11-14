@@ -41,9 +41,10 @@ import { npm } from './npm.mjs';
 // and its notes in the shipped variants guide and changelog.
 // The figures above are each change on its own over 1.5.0. Merged together (#60 to #69), the bundle is
 // 402.6 kB and the tarball 457.6 kB: bundle raised to 403.5 kB and tarball to 459 kB.
-// Tarball raised to 466.5 kB (465.7 kB; setup guidance): init's framework, Tailwind, lint and port
-// detection, --done naming the files it counted, and the Next.js refusal, with their docs and changelog.
-const BUDGET = { bundle: 403_500, tarball: 466_500 };
+// Bundle raised to 404.5 kB and tarball to 463 kB (403.8 and 462.4 kB over the merged #60 to #69; panel
+// truth): the panel reading the listing again on the server's word over its HMR channel, a conflicted
+// copy held back in the CLI, endpoint, live store and panel, and their docs and changelog lines.
+const BUDGET = { bundle: 404_500, tarball: 463_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));
