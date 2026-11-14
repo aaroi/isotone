@@ -408,7 +408,8 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
   const shared = switching === 'whole' || switching === 'whole-react';
   const groupOf = new Map(overlayGroups(variants).flatMap((group) => group.members.map((member) => [member.id, group.id] as const)));
   const article = (fixed: unknown[]) => (fixed.length > 1 ? 'a' : 'the');
-  // Nothing serves a copy where no Vite plugin runs (Next, `isotone serve`): the page shows the real files.
+  // Nothing serves a copy in a Next app, which runs no Vite plugin: the page shows the real files. A project
+  // without a Vite config of its own may be served by a sibling's (`variants: { root }`), so it is not judged.
   const showing = stale.flatMap(({ variant, files, notes: fixed }) => {
     if (switching === 'none') return [];
     if (shared)
