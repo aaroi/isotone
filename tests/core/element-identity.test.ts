@@ -49,6 +49,22 @@ it('climbs past an id the page repeats', () => {
   expect(document.querySelector(describeIsotoneElement(elementAsNode(second)).selector)).toBe(second);
 });
 
+it('names an element by a unique class or attribute before its position, never by a generated class', () => {
+  const selectorOf = (target: string) => describeIsotoneElement(elementAsNode(document.querySelector(target) as Element)).selector;
+  document.body.innerHTML = `
+    <div class="app"><div class="promo-banner">Launch <button class="theme-toggle">Dark</button></div>
+      <section class="grid"><article><a class="cta" href="#buy-hobby">Hobby</a></article><article><a class="cta" href="#buy-pro">Pro</a></article></section>
+      <form><input class="Card_input__x7Yz1 css-1q2w3e kTeiLM md:w-1/2" name="email"></form>
+      <ul class="list"><li class="item">One</li><li class="item">Two</li></ul>
+      <button data-testid="save" class="primary">Save</button><button class="primary">Cancel</button></div>`;
+  expect(selectorOf('.theme-toggle')).toBe('button.theme-toggle');
+  expect(selectorOf('a[href="#buy-pro"]')).toBe('a[href="#buy-pro"]');
+  expect(selectorOf('input')).toBe('input[name="email"]');
+  expect(selectorOf('[data-testid]')).toBe('button[data-testid="save"]');
+  // Nothing of its own is unique, so it takes its position under one that is.
+  expect(selectorOf('li + li')).toBe('ul.list > li:nth-child(2)');
+});
+
 it('says which element it is in terms an agent can search for', () => {
   document.body.innerHTML = `
     <section aria-label="Usage"><div data-testid="tabs">
@@ -260,10 +276,10 @@ describe('the React components that wrote the element', () => {
       ),
       _debugOwner: page,
     });
-    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({
-      component: ['ClientPageRoot', 'Pricing'],
-      source: '/_next/static/chunks/src_app_client_page_tsx_1.js:24',
-    });
+    const described = describeIsotoneElement(elementAsNode(button));
+    expect(described.component).toEqual(['ClientPageRoot', 'Pricing']);
+    // The chunk names no file: its source map does, once read.
+    expect(described.source).toBeUndefined();
   });
 
   it('names server components from their debug info, with no source from the server bundle', () => {
@@ -424,6 +440,128 @@ describe('the React components that wrote the element', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("maps a Turbopack chunk through its index map to the module's file in the project", async () => {
+    const chunk = 'http://localhost:3000/_next/static/chunks/_1ngr3bx56_1ly._.js';
+    const at = (line: number) =>
+      pin({ type: 'button', _debugStack: made(`jsxDEV (${chunk}:1:1)`, `Counter (${chunk}:${line}:12)`, reactBottom) });
+    // Two modules in one chunk, each with its own map from where it starts.
+    const code = [
+      '(globalThis.TURBOPACK ||= []).push([document.currentScript,',
+      '"[project]/src/components/Providers.tsx [app-client] (ecmascript)", (ctx) => {',
+      '  jsxDEV("div");',
+      '}),',
+      '"[project]/src/components/Counter.tsx [app-client] (ecmascript)", (ctx) => {',
+      '  _s();',
+      '',
+      '  jsxDEV("button");',
+      '}),',
+      ']);',
+      '//# sourceMappingURL=_1ngr3bx56_1ly._.js.map',
+    ].join('\n');
+    const section = (line: number, file: string, mappings: string) => ({
+      offset: { line, column: 0 },
+      map: { version: 3, sources: [`file:///Users/me/app/src/components/${file}`], mappings },
+    });
+    const map = { version: 3, sources: [], sections: [section(1, 'Providers.tsx', ';AAEA'), section(4, 'Counter.tsx', ';;;AAQA')] };
+    const fetch = vi.fn(async (url: string | URL) =>
+      String(url).endsWith('.map') ? { json: async () => map } : { text: async () => code },
+    );
+    vi.stubGlobal('fetch', fetch);
+    try {
+      expect(describeIsotoneElement(elementAsNode(at(8))).source).toBeUndefined();
+      expect(await resolveElementSource(at(8))).toBe('src/components/Counter.tsx:9');
+      expect(await resolveElementSource(at(3))).toBe('src/components/Providers.tsx:3');
+      expect(fetch.mock.calls.map(([url]) => String(url))).toContain(`${chunk}.map`);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("maps webpack's eval'd module through the inline map its factory carries", async () => {
+    const id = '(app-pages-browser)/./src/components/Counter.tsx';
+    const map = btoa(JSON.stringify({ version: 3, sources: ['/Users/me/app/src/components/Counter.tsx'], mappings: ';;AAQA' }));
+    // Next's eval-source-map: the module's code and map are a string in the factory.
+    const factory = `(module) => { eval(__webpack_require__.ts("jsxDEV(1);\\n\\njsxDEV(\\"button\\");\\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,${map}\\n//# sourceURL=webpack-internal:///${id}\\n")); }`;
+    const scope = globalThis as unknown as Record<string, unknown>;
+    scope.webpackChunk_N_E = [[['app/page'], { [id]: { toString: () => factory } }]];
+    const button = pin({
+      type: 'button',
+      _debugStack: made(
+        'jsxDEV (webpack-internal:///(app-pages-browser)/./node_modules/react/jsx.js:1:1)',
+        `Counter (webpack-internal:///${id}:3:5)`,
+      ),
+    });
+    try {
+      // The transformed line until the map is read.
+      expect(describeIsotoneElement(elementAsNode(button)).source).toBe('src/components/Counter.tsx:3');
+      expect(await resolveElementSource(button)).toBe('src/components/Counter.tsx:9');
+    } finally {
+      delete scope.webpackChunk_N_E;
+    }
+  });
+
+  it("names the file of a server component webpack built, without the server's line", async () => {
+    const flight = 'fakeJSXCallSite (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/rsdw-client.js:3647:19)';
+    const card = { name: 'PricingCard', env: 'Prerender', debugStack: made(flight, 'Function.all (<anonymous>:1:21)'), owner: null };
+    const button = pin({
+      type: 'a',
+      _debugStack: made(
+        flight,
+        'PricingCard (about://React/Prerender/webpack-internal:///(rsc)/./src/components/PricingCard.tsx?20:49:88)',
+      ),
+      _debugOwner: card,
+    });
+    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({
+      component: ['PricingCard'],
+      source: 'src/components/PricingCard.tsx',
+    });
+    expect(await resolveElementSource(button)).toBeUndefined();
+  });
+
+  it("names a variant copy's own file where its module's map does", async () => {
+    // The Vite plugin serves a copy with a map that names it (see the plugin's tests).
+    const stack = made(
+      'exports.jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js:250:33)',
+      'Card (http://localhost:5173/src/Card.tsx?isotone=bold:2:7)',
+    );
+    const map = btoa(JSON.stringify({ version: 3, sources: ['../.isotone/variants/bold/src/Card.tsx'], mappings: ';AAcA' }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ text: async () => `x;\njsxDEV("a");\n//# sourceMappingURL=data:application/json;base64,${map}\n` })),
+    );
+    try {
+      expect(await resolveElementSource(pin({ type: 'a', _debugStack: stack }))).toBe('/.isotone/variants/bold/src/Card.tsx:15');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('the Vue components that wrote the element', () => {
+  /** A component instance as Vue's dev build keeps it, rendered by `owner`. */
+  const instance = (type: object, owner: object | null, parent: object | null = owner) => ({ type, vnode: { ctx: owner }, parent });
+
+  it('names app components outermost first, with the file of the one whose template wrote the element', () => {
+    const app = instance({ __name: 'App', __file: '/Users/me/app/src/App.vue' }, null);
+    const list = instance({ name: 'PlanList', __file: '/Users/me/app/src/components/PlanList.vue' }, app);
+    const card = instance({ __file: '/Users/me/app/src/components/PricingCard.vue' }, list);
+    const link = instance({ name: 'RouterLink' }, card);
+    document.body.innerHTML = '<p>Pro</p><a>Choose</a>';
+    const [p, a] = Array.from(document.body.children);
+    // Slot content: the card mounts it, but the list's template wrote it.
+    Object.assign(p as Element, { __vnode: { ctx: list }, __vueParentComponent: card });
+    expect(describeIsotoneElement(elementAsNode(p as Element))).toMatchObject({
+      component: ['App', 'PlanList'],
+      source: '/Users/me/app/src/components/PlanList.vue',
+    });
+    // A router's link rendered the anchor and is passed; the card, named from its file, wrote the link.
+    Object.assign(a as Element, { __vnode: { ctx: link }, __vueParentComponent: link });
+    expect(describeIsotoneElement(elementAsNode(a as Element))).toMatchObject({
+      component: ['App', 'PlanList', 'PricingCard'],
+      source: '/Users/me/app/src/components/PricingCard.vue',
+    });
   });
 });
 

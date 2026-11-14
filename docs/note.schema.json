@@ -104,10 +104,20 @@
       "properties": {
         "tag": { "type": "string", "description": "Lowercase tag name." },
         "text": { "type": "string" },
-        "selector": { "type": "string", "description": "Matches only this element on that page." },
+        "selector": {
+          "type": "string",
+          "description": "Matches only this element on that page: by id, class or attribute where one is unique, else by position."
+        },
         "attributes": { "type": "object", "additionalProperties": { "type": "string" } },
-        "component": { "type": "array", "items": { "type": "string" }, "description": "React components, outermost first." },
-        "source": { "type": "string", "description": "file:line of the JSX, where React records it." },
+        "component": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "React or Vue components whose code wrote the element, outermost first."
+        },
+        "source": {
+          "type": "string",
+          "description": "file:line that wrote the element, or just the file where no line is known (Vue, a server component under webpack). A variant copy's own path when the page ran the copy."
+        },
         "within": { "type": "array", "items": { "type": "string" }, "description": "Labelled ancestors, outermost first." },
         "near": { "type": "string", "description": "Nearby text, for an element with none of its own." },
         "rect": {

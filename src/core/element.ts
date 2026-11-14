@@ -21,16 +21,19 @@ export interface NodeLike {
   /** Whether a selector finds this node and nothing else. Without one, the
    *  path stops at an id or the depth cap, unchecked. */
   isOnlyMatch?(selector: string): boolean;
+  /** Segments that name the node by what it is rather than where (a class or
+   *  an attribute), tried in order before its position. */
+  anchors?(): string[];
   /** What else identifies the node, beyond its path. */
   context?(): Partial<IsotoneElement>;
 }
 
 /**
  * Descriptor of a picked element for locating it in code. Walks up the tree
- * collecting `#id` (preferred) or `tag:nth-child(n)` segments. The panel finds
- * pins again with `querySelector`, which takes the first match, so with a real
- * DOM the walk goes on past `maxDepth` until the path matches this element
- * alone. Kept framework-free so it is unit-testable.
+ * collecting `#id`, then a unique class or attribute, else `tag:nth-child(n)`
+ * segments. The panel finds pins again with `querySelector`, which takes the
+ * first match, so with a real DOM the walk goes on past `maxDepth` until the
+ * path matches this element alone. Kept framework-free so it is unit-testable.
  */
 export function describeIsotoneElement(el: NodeLike, maxDepth = 4): IsotoneElement {
   const parts: string[] = [];
@@ -50,6 +53,13 @@ export function describeIsotoneElement(el: NodeLike, maxDepth = 4): IsotoneEleme
         settled = true;
         break;
       }
+    }
+    // A class or attribute survives a sibling being added, which a position does not.
+    const anchor = only && node.anchors?.().find((segment) => only([segment, ...parts]));
+    if (anchor) {
+      parts.unshift(anchor);
+      settled = true;
+      break;
     }
     let part = node.localName ?? node.tagName.toLowerCase();
     const parent: NodeLike | null | undefined = node.parentElement;
@@ -194,8 +204,8 @@ function reactOwners(el: Element): { names: string[]; at?: StackFrame } {
     const owner = node._debugOwner ?? node.owner;
     const made = callsite(node);
     if (made) {
-      // React's replay of a server component's stack names the server bundle, not a source file.
-      if (!/^(?:about|rsc):/.test(made.at.url)) at ??= made.at;
+      // React's replay of a server component's stack names the server bundle, unless webpack named the module.
+      if (!/^(?:about|rsc):(?!.*webpack-internal:)/.test(made.at.url)) at ??= made.at;
       // React 18 names no function, and a bare `render` is a class's: the owner's type names them.
       // A library that wraps the app's component (MobX's `observer`) is named for it, when the
       // app's own frame on the stack is that component; a table's `Cell` calling a column is not.
@@ -218,12 +228,63 @@ function reactOwners(el: Element): { names: string[]; at?: StackFrame } {
 
 function reactContext(el: Element): Pick<IsotoneElement, 'component' | 'source'> {
   const { names, at } = reactOwners(el);
-  return { ...(names.length ? { component: names } : {}), ...(at ? { source: `${sourcePath(at.url)}:${at.line}` } : {}) };
+  return located(names, at && frameSource(at));
+}
+
+const located = (names: string[], source: string | undefined): Pick<IsotoneElement, 'component' | 'source'> => ({
+  ...(names.length ? { component: names } : {}),
+  ...(source ? { source } : {}),
+});
+
+/** What Vue's dev build keeps on a component instance. */
+interface VueInstance {
+  type?: { name?: string; __name?: string; __file?: string };
+  vnode?: { ctx?: VueInstance | null };
+  parent?: VueInstance | null;
+}
+
+/**
+ * Vue's counterpart of `reactContext`: the components whose templates wrote
+ * the element, outermost first, and the innermost one's file (Vue keeps no
+ * line). A vnode's `ctx` is the component that rendered it, as a fiber's owner
+ * is, so slot content belongs to the template that wrote it. A component
+ * without a file of the app's own, such as a library's, is passed.
+ */
+function vueContext(el: Element): Pick<IsotoneElement, 'component' | 'source'> {
+  const node = el as Element & { __vnode?: VueInstance['vnode']; __vueParentComponent?: VueInstance };
+  const names: string[] = [];
+  let source: string | undefined;
+  let instance: VueInstance | null | undefined = node.__vnode?.ctx ?? node.__vueParentComponent;
+  for (let depth = 0; instance && depth < 64; depth++) {
+    const { name, __name, __file: file } = instance.type ?? {};
+    if (file && !NOT_APP.test(file)) {
+      source ??= file;
+      const named = name ?? __name ?? file.match(/([^/\\]+)\.vue$/)?.[1];
+      if (named && !names.includes(named) && names.length < 5) names.unshift(named);
+    }
+    instance = instance.vnode?.ctx ?? instance.parent;
+  }
+  return located(names, source);
+}
+
+/**
+ * A frame as `file:line`. A bundle chunk (Next's `/_next/static/`) names no
+ * file until its source map is read, and a server frame React replays has
+ * only its file: its line is the server's transformed one, which the page
+ * cannot map.
+ */
+function frameSource({ url, line }: StackFrame): string | undefined {
+  const path = sourcePath(url);
+  if (path.startsWith('/_next/static/')) return undefined;
+  return url.startsWith('about:') ? path : `${path}:${line}`;
 }
 
 /** A served module URL as the source path it stands for. */
 function sourcePath(location: string): string {
-  let path = location.replace(/[?#].*$/, '').replace(/^webpack-internal:\/\/\/(?:\([^)]*\)\/)?/, '');
+  let path = location
+    .replace(/[?#].*$/, '')
+    .replace(/^about:\/\/React\/[^/]*\//, '')
+    .replace(/^webpack-internal:\/\/\/(?:\([^)]*\)\/)?/, '');
   // A Windows path is no URL (`C:` would parse as its scheme): forward slashes, as a module id writes it.
   if (/^[a-z]:[\\/]/i.test(path)) return path.replace(/\\/g, '/');
   try {
@@ -272,30 +333,63 @@ function mapPosition(mappings: string, line: number, column: number): { source: 
   return found;
 }
 
+interface SourceMap {
+  sources: string[];
+  sourceRoot?: string;
+  mappings: string;
+  /** An index map's parts (Turbopack's chunks): one map per module, from where it starts in the chunk. */
+  sections?: { offset: { line: number; column: number }; map: SourceMap }[];
+}
+
+/**
+ * The code a frame ran: the served module, or for webpack's
+ * `webpack-internal:///<id>` the module's factory, which holds its code and
+ * inline map as a string. Webpack keeps the factories in `webpackChunk*`.
+ */
+async function frameCode(url: string): Promise<string | undefined> {
+  if (/^https?:/.test(url)) return (await fetch(url)).text();
+  if (!url.startsWith('webpack-internal:///')) return undefined;
+  const id = url.slice('webpack-internal:///'.length);
+  const scope = globalThis as unknown as Record<string, unknown>;
+  for (const key of Object.keys(scope).filter((name) => name.startsWith('webpackChunk'))) {
+    for (const [, modules] of scope[key] as [unknown, Record<string, unknown>?][]) if (modules?.[id]) return String(modules[id]);
+  }
+  return undefined;
+}
+
 /**
  * The pinned element's JSX callsite in its original file, on React 19 hosts:
  * the served module's source map turns the stack's transformed line into the
- * line the agent will open. Resolves to undefined when there is nothing better
- * than what `describeIsotoneElement` already recorded.
+ * line the agent will open, and a bundle chunk into the file it came from.
+ * Resolves to undefined when there is nothing better than what
+ * `describeIsotoneElement` already recorded.
  */
 export async function resolveElementSource(el: Element): Promise<string | undefined> {
   const frame = reactOwners(el).at;
-  if (!frame || frame.legacy || !/^https?:/.test(frame.url)) return undefined;
+  if (!frame || frame.legacy) return undefined;
   try {
-    const code = await (await fetch(frame.url)).text();
-    const reference = code.match(/\/\/[#@] sourceMappingURL=(\S+)\s*$/)?.[1];
-    if (!reference) return undefined;
+    const code = await frameCode(frame.url);
+    // The last reference is the module's own: a chunk can quote another in its code.
+    const reference = [...(code ?? '').matchAll(/[#@] sourceMappingURL=([^\s'"\\]+)/g)].pop()?.[1];
+    if (!code || !reference) return undefined;
     const inline = reference.startsWith('data:');
     // Sources in an inline map are relative to the module itself.
     const mapUrl = inline ? new URL(frame.url) : new URL(reference, frame.url);
-    const map: { sources: string[]; sourceRoot?: string; mappings: string } = inline
+    const index: SourceMap = inline
       ? JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(reference.slice(reference.indexOf(',') + 1)), (c) => c.charCodeAt(0))))
       : await (await fetch(mapUrl)).json();
-    const position = mapPosition(map.mappings, frame.line - 1, frame.column - 1);
+    let [line, column] = [frame.line - 1, frame.column - 1];
+    const section = index.sections?.filter(({ offset: o }) => o.line < line || (o.line === line && o.column <= column)).pop();
+    const map = section?.map ?? index;
+    if (section) [line, column] = [line - section.offset.line, line === section.offset.line ? column - section.offset.column : column];
+    const position = mapPosition(map.mappings, line, column);
     const file = position && map.sources[position.source];
     if (!position || !file) return undefined;
-    const path = file.startsWith('/') ? file : new URL((map.sourceRoot ?? '') + file, mapUrl).href;
-    return `${sourcePath(path)}:${position.line + 1}`;
+    const path = sourcePath(file.startsWith('/') ? file : new URL((map.sourceRoot ?? '') + file, mapUrl).href);
+    // A map names the absolute file the bundle names from the project: webpack's
+    // module id (`./src/…`) and Turbopack's `[project]/src/…` read better.
+    const named = [sourcePath(frame.url), ...(code.match(/(?<=\[project\]\/)[^\s"'\]]+/g) ?? [])];
+    return `${named.find((name) => path.endsWith(`/${name}`)) ?? path}:${position.line + 1}`;
   } catch {
     return undefined;
   }
@@ -349,6 +443,7 @@ function elementContext(el: Element): Partial<IsotoneElement> {
   return {
     ...(Object.keys(attributes).length ? { attributes } : {}),
     ...reactContext(el),
+    ...vueContext(el),
     ...(within.length ? { within } : {}),
     ...(near ? { near } : {}),
     ...(box.width || box.height
@@ -502,6 +597,31 @@ function renderedText(el: Element): string {
   return walk(el);
 }
 
+/**
+ * A class a build generated, or one a selector cannot spell plainly: not a
+ * plain name (CSS modules' `_card_1k2j3_5`, Tailwind's `md:flex`), a CSS-in-JS
+ * prefix, a part mixing letters and digits (`Card_cta__x7Yz1`, `css-1q2w3e`)
+ * or random case (styled-components' `kTeiLM`).
+ */
+const GENERATED_CLASS =
+  /^(?![a-zA-Z][\w-]*$)|^(?:css|sc|jsx|svelte|emotion)-|(?:^|[_-])(?=[a-zA-Z\d]*\d)(?=[a-zA-Z\d]*[a-zA-Z])[a-zA-Z\d]{4,}(?=[_-]|$)|[a-z][A-Z]\w*[A-Z]/;
+
+/** Attributes that say what an element is, after a test id and the classes. */
+const ANCHOR_ATTRIBUTES = ['name', 'aria-label', 'href', 'title', 'alt', 'placeholder', 'for'];
+
+/** `n`'s selector segments by its test id, its own classes and identifying attributes, most deliberate first. */
+function anchors(n: Element): string[] {
+  const attribute = (name: string) => {
+    const value = n.getAttribute(name);
+    return value && value.length <= 80 && !/["\\\n]/.test(value) ? [`${n.localName}[${name}="${value}"]`] : [];
+  };
+  return [
+    ...attribute('data-testid'),
+    ...Array.from(n.classList, (name) => (GENERATED_CLASS.test(name) ? [] : [`${n.localName}.${name}`])).flat(),
+    ...ANCHOR_ATTRIBUTES.flatMap(attribute),
+  ];
+}
+
 export function elementAsNode(el: Element): NodeLike {
   const cache = new WeakMap<Element, NodeLike>();
   const view = (n: Element | null | undefined): NodeLike | null => {
@@ -526,6 +646,7 @@ export function elementAsNode(el: Element): NodeLike {
         for (let sibling = n.previousElementSibling; sibling; sibling = sibling.previousElementSibling) index++;
         return index;
       },
+      anchors: () => anchors(n),
     };
     cache.set(n, created);
     return created;
