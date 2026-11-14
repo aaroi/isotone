@@ -245,17 +245,31 @@ describe.skipIf(!binary)('Getting into the panel (headless Chrome)', () => {
     expect(await chrome.eval('isOpen("variants")')).toBe(false);
   });
 
-  it('shows panels restored by a reload at rest, with no entrance', async () => {
+  it('shows panels restored by a reload, and what is in them, at rest, with no entrance', async () => {
     await fresh(1024, 768);
     await start(3);
     await tool('Feedback');
+    await chrome.insertText('A saved note');
+    await chrome.key('Enter', 'Enter', 0, '\r');
+    await chrome.eval('settle()');
+    await tool('Variants');
     await chrome.goto('');
-    const moving = await chrome.eval<number>(`(async () => {
-      window.__isotone.mount({ variants: { getAxes: () => [], getSelections: () => ({}), setSelection() {}, reset() {}, subscribe: () => () => {} }, endpoint: '/notes' });
-      for (let i = 0; i < 100 && !root()?.querySelector('.isotone-notes-panel[data-open="true"]'); i++) await new Promise((r) => requestAnimationFrame(r));
-      return root().querySelector('.isotone-notes-panel').getAnimations().length;
+    // Every clock-driven animation in the dock, sampled each frame while it mounts and its notes load.
+    const moving = await chrome.eval<string[]>(`(async () => {
+      const seen = new Set();
+      let on = true;
+      const sample = () => {
+        if (!on || !root()) return requestAnimationFrame(sample);
+        for (const a of root().getAnimations()) if (a.timeline === document.timeline && a.effect?.target) seen.add(a.effect.target.className || a.effect.target.tagName);
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+      await start(3);
+      await new Promise((r) => setTimeout(r, 600));
+      on = false;
+      return [root().querySelectorAll('.isotone-note').length, ...seen];
     })()`);
-    expect(moving).toBe(0);
+    expect(moving).toEqual([1]);
   });
 
   // Opening Feedback, sending a note (the list grows by a row) and closing it again.
@@ -319,6 +333,45 @@ describe.skipIf(!binary)('Getting into the panel (headless Chrome)', () => {
     await chrome.move(20, 300);
     await chrome.eval('settle()');
     expect(await chrome.eval<number>('panel("variants").offsetHeight')).toBeGreaterThan(height);
+  });
+
+  it('lets a keyboard close and a keyboard resize size Variants, with no height held', async () => {
+    await fresh(1024, 768);
+    await start(12);
+    await tool('Feedback');
+    await tool('Variants');
+    const hold = `panel('variants').style.getPropertyValue('--iso-variants-hold')`;
+    // Closed by pointer, the height is held; taking up the resize handle by key lets it go.
+    await tool('Feedback');
+    expect(await chrome.eval(hold)).not.toBe('');
+    await chrome.eval(`panel('variants').querySelector('[role=separator][aria-label^="Resize variants"]').focus()`);
+    expect(await chrome.eval(hold)).toBe('');
+    // Closed from the keyboard, with the pointer away, nothing is held, and arrows resize.
+    await tool('Feedback');
+    await chrome.move(20, 300);
+    await chrome.eval(`root().querySelector('.isotone-rail-button[aria-label^="Feedback"]').focus()`);
+    await chrome.key('Enter', 'Enter', 0, '\r');
+    await chrome.eval('settle()');
+    expect(await chrome.eval('isOpen("notes")')).toBe(false);
+    expect(await chrome.eval(hold)).toBe('');
+    const height = await chrome.eval<number>('panel("variants").offsetHeight');
+    await chrome.eval(`panel('variants').querySelector('[role=separator][aria-label^="Resize variants"]').focus()`);
+    await chrome.key('ArrowDown', 'ArrowDown');
+    await chrome.eval('settle()');
+    expect(await chrome.eval<number>('panel("variants").offsetHeight')).toBeLessThan(height);
+  });
+
+  it("brings back a new visit's own panels on reload, not an earlier page's, and leaves its link unread", async () => {
+    await fresh(1024, 768);
+    await start(3);
+    await tool('Variants');
+    await chrome.goto(`${origin}/?v=selector0:b`);
+    await start(3, { notice: true });
+    expect(await chrome.eval('isOpen("variants")')).toBe(false);
+    await chrome.goto('');
+    await start(3, { notice: true });
+    expect(await chrome.eval('isOpen("variants")')).toBe(false);
+    expect(await chrome.eval(`Boolean(root().querySelector('.isotone-link-hint'))`)).toBe(true);
   });
 
   it.each([

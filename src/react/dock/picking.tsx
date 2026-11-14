@@ -47,7 +47,7 @@ interface PickerContext {
 }
 
 const MAX_PINS = 50;
-const EDIT_KEYS = /^(Backspace|Delete|Arrow\w+|Home|End)$/;
+const EDIT_KEYS = /^(Backspace|Delete|Arrow\w+|Home|End|Page(Up|Down))$/;
 
 const isPanelElement = (node: EventTarget | null) => node instanceof Element && Boolean(node.closest('[data-isotone]'));
 
@@ -152,7 +152,9 @@ function usePicker(context: PickerContext) {
       // In the field itself, a key that edits or moves the caret finishes it too, so no edit is unseen.
       const typing =
         (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey && !e.isComposing) ||
-        (EDIT_KEYS.test(e.key) && fieldRef.current !== null && e.composedPath().includes(fieldRef.current));
+        ((EDIT_KEYS.test(e.key) || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a')) &&
+          fieldRef.current !== null &&
+          e.composedPath().includes(fieldRef.current));
       if (typing) {
         const el = e.composedPath().find((node): node is Element => node instanceof Element);
         if (el && !el.closest('[data-isotone]') && el.closest('input, textarea, select, [contenteditable]')) return;

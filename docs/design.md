@@ -75,17 +75,20 @@ the entrance is lost; a finger only opens it, so no on-screen keyboard rises
 over the page. Select mode is something the reviewer starts: the crosshair, or
 the shortcut, which also leaves the caret in the field under the cover. The
 first character, keyed or inserted, or a key that would edit or move the caret
-unseen (Backspace, Delete, arrows, Home, End), ends selecting and acts in the
-field. Opening Variants, or a press anywhere in the dock outside Feedback, ends
-selecting and keeps the pins, so the next click on the page acts on the page.
-Focus passing through the dock does not: Tab and Shift+Tab are how the keyboard
-reaches the page, where Space pins.
+unseen (Backspace, Delete, arrows, Home, End, Page Up and Down, select all),
+ends selecting and acts in the field. Opening Variants, or a press anywhere in
+the dock outside Feedback, ends selecting and keeps the pins, so the next click
+on the page acts on the page. Focus passing through the dock does not: Tab and
+Shift+Tab are how the keyboard reaches the page, where Space pins. Tabbing back
+into the note field ends selecting, as a click there does, since the field is
+where the next keys go.
 
 The open panels are kept per tab (`sessionStorage`, `<namespace>::panels`, with
 the page and the document that wrote them) and come back when that page is
 reloaded, as a variant switch that reloads does, or when the panel remounts in
-the same document; a new visit starts folded. They come back already in place,
-with no entrance, and Variants at the same place in its list, kept from its
+the same document; a new visit starts folded, and writes that it did. They come
+back already in place, with no entrance for them or their contents until the
+first key or press, and Variants at the same place in its list, kept from its
 foot and held until the reviewer scrolls or presses there. Select mode and a
 floating composer never come back. Where panels take turns, only the one used
 last does.
@@ -93,8 +96,9 @@ last does.
 Variants sits on the pill and Feedback above it. Opening Feedback, a note
 saved into it or closing it never moves a selector: when room runs out,
 Variants gives it from its top edge and its list scrolls by as much; room given
-back is taken only as far as that scroll absorbs, and the rest waits until the
-pointer leaves the dock (or a resize handle is pressed). Opening Variants under
+back is taken only as far as that scroll absorbs, and while the pointer rests on
+the dock the rest waits until it leaves (or a resize handle is taken up by
+pointer or key); closed from the keyboard, the list simply grows. Opening Variants under
 an open Feedback slides Feedback up: the one movement left, caused by the
 reviewer's own click.
 
@@ -102,8 +106,8 @@ A link whose `?v=` the source did not apply (its optional `linkIgnored()`)
 gets one quiet line beside the pill in the update notice's glass: “This link’s
 variants aren’t shown”. It opens Variants, which says what the link asked for,
 and moves focus to Variants' face. Once Variants has been opened with that link
-in the tab, the line does not come back, after a reload included.
-
+in the tab, the line does not come back, after a reload included; a new `?v=`
+asks again.
 
 The defaults bar sits at the bottom of the variants panel while a pick differs
 from its default: a count, Compare and Make default, which files a request and

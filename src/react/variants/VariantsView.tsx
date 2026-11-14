@@ -99,16 +99,19 @@ function useSteadyBody(bodyRef: RefObject<HTMLDivElement | null>, active: boolea
     const closed = wasBeside.current && !besideFeedback;
     wasBeside.current = besideFeedback;
     const { height, scroll } = seen.current;
-    if (!closed || !active || !panel || !root || !height) return;
+    // Only a pointer resting on the dock is kept from moving; a close from the keyboard lets the list grow.
+    if (!closed || !active || !panel || !root || !height || !root.matches(':hover')) return;
     panel.style.setProperty('--iso-variants-hold', `${height + scroll}px`);
+    // A resize handle taken up by pointer or key lets go too, so the reviewer's own size applies.
+    const handle = ['pointerdown', 'keydown', 'focusin'];
     const release = (event?: Event) => {
-      if (event?.type === 'pointerdown' && !(event.target as Element).closest?.('.isotone-resize')) return;
+      if (event && event.type !== 'pointerleave' && !(event.target as Element).closest?.('.isotone-resize')) return;
       panel.style.removeProperty('--iso-variants-hold');
       root.removeEventListener('pointerleave', release);
-      root.removeEventListener('pointerdown', release, true);
+      for (const type of handle) root.removeEventListener(type, release, true);
     };
     root.addEventListener('pointerleave', release);
-    root.addEventListener('pointerdown', release, true);
+    for (const type of handle) root.addEventListener(type, release, true);
     return () => release();
   }, [bodyRef, active, besideFeedback]);
 }
@@ -148,12 +151,17 @@ function useKeptScroll(bodyRef: RefObject<HTMLDivElement | null>, active: boolea
     for (const child of want ? body.children : []) observer?.observe(child);
     hold();
     const presses = ['wheel', 'pointerdown', 'keydown', 'touchstart'];
+    let holding = Boolean(observer);
     const release = () => {
+      holding = false;
       observer?.disconnect();
       for (const type of presses) body.removeEventListener(type, release);
     };
     for (const type of presses) body.addEventListener(type, release, { passive: true });
     return () => {
+      // A remount in the same document comes back to where the list is now, not where the last unload left
+      // it; while the place is still held, that is the place being held.
+      if (!holding && body.clientHeight) save();
       release();
       window.removeEventListener('pagehide', save);
     };

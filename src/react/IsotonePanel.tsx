@@ -3,7 +3,7 @@ import type { IsotoneStoreConfig } from '../core/types';
 import { isRouteVisible, normalizeRoute, type RouteGateOptions } from '../core/routes';
 import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
 import { knobDelta, type VariantSelections, type VariantsSource, visibleAxes } from '../core/variants';
-import { type ReactElement, useEffect, useId, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useId, useRef } from 'react';
 import { Composer } from './notes/Composer';
 import { AwayButton, NotesPanel } from './notes/NotesPanel';
 import { PickOverlay, useSelectMode } from './dock/picking';
@@ -140,6 +140,8 @@ export function IsotonePanel({
   const events = useDockEvents({
     rootRef,
     visible,
+    // Panels open at mount were restored: they and their contents are simply there, with no entrance.
+    still: open,
     shortcut,
     onLeave: () => update({ expanded: false }),
     onShortcut: () => {
@@ -187,12 +189,9 @@ export function IsotonePanel({
   }, [variants, notesOpen]);
 
   // A link whose `?v=` the source could not apply gets a quiet line by the pill, until Variants, which
-  // says what the link asked for, has been opened with it in this tab.
-  const [linkSeen, setLinkSeen] = useState(() => variantsOpen || memory.current.link === location.search);
-  useEffect(() => {
-    if (variantsOpen) setLinkSeen(true);
-  }, [variantsOpen]);
-  const linkIgnored = !linkSeen && !variantsOpen && Boolean(variants?.linkIgnored?.());
+  // says what the link asked for, has been opened with it in this tab. Read each render, so a new
+  // `?v=` in the same document is asked about afresh.
+  const linkIgnored = !variantsOpen && memory.current.link !== location.search && Boolean(variants?.linkIgnored?.());
 
   if (!visible) return null;
   const composer = (

@@ -148,6 +148,28 @@ describe('a link whose ?v= was not applied', () => {
   });
 });
 
+describe('a new visit, then a reload', () => {
+  it("restores this visit's panels, not an earlier document's, and marks no link read", async () => {
+    // An earlier page in the tab left Variants open, read about its link and then navigated here.
+    sessionStorage.setItem(
+      'isotone-feedback::panels',
+      JSON.stringify({ variants: true, notes: false, last: 'variants', route: '/', doc: -1, link: '?v=old' }),
+    );
+    const props = { variants: createVariantsSource({ axes: AXES }) };
+    await reload(props);
+    expect(open('variants')).toBe(false);
+    const written = JSON.parse(sessionStorage.getItem('isotone-feedback::panels') ?? '{}');
+    expect(written).toMatchObject({ variants: false, notes: false, last: 'variants', link: '?v=old', route: '/' });
+    expect(written.doc).not.toBe(-1);
+    // Reloading this visit brings back what it had open: nothing.
+    vi.spyOn(performance, 'getEntriesByType').mockReturnValue([{ type: 'reload' } as unknown as PerformanceEntry]);
+    written.doc = -2;
+    sessionStorage.setItem('isotone-feedback::panels', JSON.stringify(written));
+    await reload(props);
+    expect(open('variants')).toBe(false);
+  });
+});
+
 describe('a remount in the same tab', () => {
   it('keeps the panels on the same page, and starts folded on another', async () => {
     const props = { variants: createVariantsSource({ axes: AXES }) };
@@ -170,12 +192,13 @@ describe('the field under the select-mode cover', () => {
       });
     const selecting = () => byText('Select elements')?.getAttribute('aria-pressed');
     const field = container.querySelector('textarea') as HTMLTextAreaElement;
-    for (const key of ['Backspace', 'ArrowLeft', 'Delete', 'End']) {
+    for (const key of ['Backspace', 'ArrowLeft', 'Delete', 'End', 'PageDown', 'select all']) {
       await shortcut();
       expect(selecting()).toBe('true');
       expect(document.activeElement).toBe(field);
+      const init = key === 'select all' ? { key: 'a', ctrlKey: true } : { key };
       await act(async () => {
-        field.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true }));
+        field.dispatchEvent(new KeyboardEvent('keydown', { ...init, bubbles: true, composed: true }));
       });
       expect(selecting(), key).toBe('false');
     }

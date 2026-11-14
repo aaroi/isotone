@@ -110,11 +110,13 @@ export function useDockMemory(key: string, route: string, { notesOpen, variantsO
     const saved = record.current as Remembered;
     const before = was.current;
     was.current = { notesOpen, variantsOpen };
-    // At mount the panels are the ones restored, which leaves the tool used last as it was.
-    if (!before && !notesOpen && !variantsOpen) return;
+    // Written at mount too, so a later reload of this visit restores this visit's panels, not an earlier
+    // one's. The panels at mount are the ones restored: the tool used last and the link stay as they were.
     if (before && notesOpen && !before.notesOpen) saved.last = 'notes';
-    if (before && variantsOpen && !before.variantsOpen) saved.last = 'variants';
-    if (variantsOpen) saved.link = location.search;
+    if (before && variantsOpen && !before.variantsOpen) {
+      saved.last = 'variants';
+      saved.link = location.search;
+    }
     Object.assign(saved, { notes: notesOpen, variants: variantsOpen, route, doc: thisDocument() });
     try {
       sessionStorage.setItem(key, JSON.stringify(saved));
