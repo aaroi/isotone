@@ -28,6 +28,7 @@ export {
 } from './manifest';
 export { dropVariant, promoteVariant } from './promote';
 export { syncVariant, type SyncBlocker } from './sync';
+export { hasGit, NO_GIT_SYNC } from './git';
 export { activeConflict, crossGroupOverlaps, overrideSourcePath, readActive, resolveOverride, writeActive } from './active';
 export { knobProblem, readKnobs } from './knobs';
 export { variantsResponse } from './handler';

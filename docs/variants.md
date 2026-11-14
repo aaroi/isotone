@@ -55,8 +55,8 @@ Variant files are the change under review, so they are committed by default and
 `.aws/` or `.ssh/`) unless given `--force`. `variants: { ignored: true }` keeps
 the variants directory local. The active pointer, `.isotone/active.json`, is
 local and never committed: like the notes file, it goes into the repository's
-`.git/info/exclude` when the dev server starts and when the CLI's notes,
-`variant` and `init` commands run. `ISOTONE_VARIANT=<id>` (a comma-separated list) bakes
+`.git/info/exclude` when the dev server starts and when the CLI's notes and
+`variant` commands run. `ISOTONE_VARIANT=<id>` (a comma-separated list) bakes
 variants into a `vite build` for a preview.
 
 **Keeping copies current.** A copy records the version of the real file it was

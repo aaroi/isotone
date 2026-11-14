@@ -357,6 +357,8 @@ describe('outside a Git repository', () => {
     const base = readVariant(opts, 'v1')?.files['src/Button.tsx']?.base;
     expect(base).toBe(sha1Blob(original));
     expect(readFileSync(join(variantDir(opts, 'v1'), '.isotone-base', base as string), 'utf8')).toBe(original);
+    // Committed beside the bases, so no checkout rewrites their line endings.
+    expect(readFileSync(join(variantDir(opts, 'v1'), '.isotone-base', '.gitattributes'), 'utf8')).toBe('* -text\n');
     expect(listVariants(opts)[0]?.stale).toEqual([]);
 
     writeFileSync(join(root, 'src', 'Button.tsx'), 'line one\nline two\nline three, changed\n');
@@ -373,7 +375,10 @@ describe('outside a Git repository', () => {
     expect(syncVariant(opts, 'v1')).toEqual({ merged: ['src/Button.tsx'], conflicts: [], unchanged: [], blocked: {} });
     expect(readFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'utf8')).toBe('REAL ONE\nline two\nOVERRIDE THREE\n');
     expect(listVariants(opts)[0]?.stale).toEqual([]);
-    expect(readdirSync(join(variantDir(opts, 'v1'), '.isotone-base'))).toEqual([sha1Blob('REAL ONE\nline two\nline three\n')]);
+    expect(readdirSync(join(variantDir(opts, 'v1'), '.isotone-base'))).toEqual([
+      '.gitattributes',
+      sha1Blob('REAL ONE\nline two\nline three\n'),
+    ]);
   });
 
   it('writes conflict markers when both sides change a line, and advances the base', () => {
@@ -421,6 +426,26 @@ describe('outside a Git repository', () => {
     expect(readFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'utf8')).toBe('line one\nline two\nline three\n');
   });
 
+  it('refuses a bases directory that is a link, and never deletes through one', () => {
+    // Variants are committed, so a link can arrive in a pull request.
+    const { root, opts } = tempProject();
+    mkdirSync(join(root, 'precious'));
+    writeFileSync(join(root, 'precious', 'data.txt'), 'keep\n');
+    createVariant(opts, { id: 'v' });
+    symlinkSync(join(root, 'precious'), join(variantDir(opts, 'v'), '.isotone-base'));
+
+    expect(() => addVariantFile(opts, 'v', 'src/Button.tsx')).toThrow(/is a link/);
+    expect(readdirSync(join(root, 'precious'))).toEqual(['data.txt']);
+  });
+
+  it('keeps `.isotone-base/` out of reach of `variant add`', () => {
+    const { root, opts } = tempProject();
+    mkdirSync(join(root, '.isotone-base'));
+    writeFileSync(join(root, '.isotone-base', 'x.ts'), '');
+    createVariant(opts, { id: 'v' });
+    expect(() => addVariantFile(opts, 'v', '.isotone-base/x.ts')).toThrow(/reserve/);
+  });
+
   it('never merges from a kept base that no longer matches its hash', () => {
     const { root, opts } = tempProject();
     createVariant(opts, { id: 'v1' });
@@ -431,7 +456,7 @@ describe('outside a Git repository', () => {
     writeFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'line one\nline two\nOVERRIDE THREE\n');
     writeFileSync(join(root, 'src', 'Button.tsx'), 'REAL ONE\nline two\nline three\n');
 
-    expect(syncVariant(opts, 'v1').blocked).toEqual({ 'src/Button.tsx': 'base-missing' });
+    expect(syncVariant(opts, 'v1').blocked).toEqual({ 'src/Button.tsx': 'failed' });
     expect(readFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'utf8')).toBe('line one\nline two\nOVERRIDE THREE\n');
   });
 
@@ -465,7 +490,7 @@ describe('outside a Git repository', () => {
     expect(promoteVariant(opts, 'a').rebased).toEqual(['b']);
     expect(readFileSync(join(root, 'src', 'Button.tsx'), 'utf8')).toBe('promoted\n');
     expect(listVariants(opts)[0]).toMatchObject({ id: 'b', stale: [] });
-    expect(readdirSync(join(variantDir(opts, 'b'), '.isotone-base'))).toEqual([sha1Blob('promoted\n')]);
+    expect(readdirSync(join(variantDir(opts, 'b'), '.isotone-base'))).toEqual(['.gitattributes', sha1Blob('promoted\n')]);
   });
 });
 

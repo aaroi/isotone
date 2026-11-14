@@ -1,14 +1,14 @@
 /** Variant manifests: reading, listing, creating and editing variants. */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { IsotoneElement } from '../../core/types';
 import { OVERLAY_GROUP_ID, type OverlayVariant, type OverlayVariantStatus } from '../../core/variants/overlay';
 import { writeJson } from '../fs/atomic';
 import { isWithin } from '../fs/paths';
-import { hashFile, isGitIgnored, recordBase } from './git';
+import { BASES_ATTRIBUTES, hashFile, isGitIgnored, recordBase } from './git';
 import { type VariantsStoreOptions, mutateVariants, variantsDir } from './options';
-import { BASES_DIR, baseStore, variantDir, isValidVariantId, isSafeManifestKey, repoRelativeKey } from './paths';
+import { baseStore, variantDir, isValidVariantId, isSafeManifestKey, repoRelativeKey } from './paths';
 
 /** Env files, private keys and credentials: a copy would sit in a directory
  *  that is committed by default. `.env.example` and the like are fine. */
@@ -80,19 +80,27 @@ export function writeVariant(opts: VariantsStoreOptions, v: OverlayVariant): voi
   if (!isPlausibleVariant(v)) throw new Error('Invalid variant manifest');
   const dir = variantDir(opts, v.id);
   if (!isWithin(variantsDir(opts), dir, { realpath: true })) throw new Error('Variant directory escapes the variants tree');
+  const store = baseStore(opts, v.id);
   mkdirSync(dir, { recursive: true });
   writeJson(join(dir, 'variant.json'), v);
-  pruneBases(join(dir, BASES_DIR), v);
+  pruneBases(store, v);
 }
+
+/** A kept base, or one being written. Nothing else in the store is ever deleted. */
+const BASE_FILE = /^[a-f0-9]{40}(?:[a-f0-9]{24})?(?:\.[a-f0-9-]{36}\.tmp)?$/;
 
 /** Drop the kept bases the manifest no longer names: a sync moved past
  *  them, a file left the variant, or git holds the new base instead. */
 function pruneBases(store: string, v: OverlayVariant): void {
   if (!existsSync(store)) return;
   const kept = new Set(Object.values(v.files).map((entry) => entry.base));
-  const names = readdirSync(store);
-  for (const name of names) if (!kept.has(name)) rmSync(join(store, name), { force: true });
-  if (names.every((name) => !kept.has(name))) rmSync(store, { recursive: true, force: true });
+  const bases = readdirSync(store).filter((name) => BASE_FILE.test(name));
+  for (const name of bases) if (!kept.has(name)) rmSync(join(store, name), { force: true });
+  if (bases.some((name) => kept.has(name))) return;
+  rmSync(join(store, BASES_ATTRIBUTES), { force: true });
+  try {
+    rmdirSync(store); // only when nothing else is in it
+  } catch {}
 }
 
 /** The marker `git merge-file` leaves at the top of a conflicted hunk, with

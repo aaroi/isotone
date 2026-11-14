@@ -175,7 +175,7 @@ describe('`variant sync` output', () => {
     const sync = sink(root);
     await runCli(['variant', 'sync', 'v'], sync);
     expect(sync.text.out).toContain('not merged: src/a.ts');
-    expect(sync.text.out).toContain('the base version it was made from can no longer be read');
+    expect(sync.text.out).toContain('the base it was made from could not be read or merged');
     expect(sync.text.out).toMatch(/promote v --force/);
   });
 });

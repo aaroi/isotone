@@ -1,6 +1,6 @@
 /** Paths inside the variants tree, and the guard every user-supplied path goes through. */
 
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { isEscaping, isWithin, toPosixPath } from '../fs/paths';
 import { type VariantsStoreOptions, variantsDir } from './options';
@@ -12,10 +12,16 @@ export function variantDir(opts: VariantsStoreOptions, id: string): string {
 
 /** Inside a variant's directory: the bases git could not store, because the
  *  copy was made or synced outside a repository. Named by blob hash. */
-export const BASES_DIR = '.isotone-base';
+const BASES_DIR = '.isotone-base';
 
+/** The variant's kept-bases directory. Variants are committed and shared, so
+ *  a store that is a link, or resolves outside the variant, is refused. */
 export function baseStore(opts: VariantsStoreOptions, id: string): string {
-  return join(variantDir(opts, id), BASES_DIR);
+  const dir = variantDir(opts, id);
+  const store = join(dir, BASES_DIR);
+  if (lstatSync(store, { throwIfNoEntry: false })?.isSymbolicLink() || !isWithin(dir, store, { realpath: true }))
+    throw new Error(`${store} is a link, not a directory of the variant's own. Remove it.`);
+  return store;
 }
 
 /**
@@ -45,6 +51,8 @@ export function repoRelativeKey(root: string, file: string): { abs: string; key:
   if (!typed || isEscaping(typed)) throw new Error(`"${file}" escapes the project root`);
   const rel = onDiskCase(root, typed);
   const abs = join(root, rel);
+  if (toPosixPath(rel).split('/')[0] === BASES_DIR)
+    throw new Error(`"${file}" is under ${BASES_DIR}/, which variants reserve for their bases`);
   if (!isSafeManifestKey(toPosixPath(rel)) || !isWithin(root, abs, { realpath: true })) {
     throw new Error(`"${file}" escapes the project root`);
   }

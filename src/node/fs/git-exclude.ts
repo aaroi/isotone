@@ -20,8 +20,8 @@ export function ensureFileIgnored(file: string): void {
 }
 
 /**
- * {@link ensureFileIgnored} for files of one repository, with the same two
- * git calls for all of them: cheap enough for every CLI command, so the
+ * {@link ensureFileIgnored} for files of one repository, with one git call
+ * for all of them: cheap enough for every CLI command, so the
  * files land in the exclude file even when the repository was made after
  * the dev server started.
  */
@@ -35,22 +35,13 @@ export function ensureFilesIgnored(files: string[]): void {
     const absolutes = files.map((file) => canonical(resolve(file)));
     let dir = dirname(absolutes[0] as string);
     while (!existsSync(dir)) dir = dirname(dir);
-    const gitRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
-      cwd: dir,
-      encoding: 'utf8',
-      // Outside a repo git writes "fatal: not a git repository" to stderr, and
-      // inheriting it prints that over the server's own startup banner. The
-      // throw is the signal we act on; the message is noise.
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-    const top = canonical(gitRoot);
+    const { top, infoExclude } = repoPaths(dir);
     // Each file and its side files: `.lock`, a takeover's lock, a crashed write's `.tmp`.
     const patterns = absolutes.flatMap((absolute) => {
       const pattern = excludePattern(top, absolute);
       return pattern ? [pattern, `${pattern}.*`] : [];
     });
     if (!patterns.length) return;
-    const infoExclude = excludeFile(dir);
     const existing = existsSync(infoExclude) ? readFileSync(infoExclude, 'utf8') : '';
     const missing = [...new Set(patterns)].filter((p) => !hasExcludePattern(existing, p));
     if (!missing.length) return;
@@ -83,15 +74,10 @@ function canonical(path: string): string {
 export function ensureDirIgnored(dir: string): void {
   try {
     const absolute = realPath(resolve(dir));
-    const gitRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
-      cwd: absolute,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-    const base = excludePattern(canonical(gitRoot), absolute);
+    const { top, infoExclude } = repoPaths(absolute);
+    const base = excludePattern(top, absolute);
     if (!base) return;
     const pattern = `${base}/`;
-    const infoExclude = excludeFile(absolute);
     const existing = existsSync(infoExclude) ? readFileSync(infoExclude, 'utf8') : '';
     if (hasExcludePattern(existing, pattern) || hasExcludePattern(existing, base)) return;
     const marker = existing && !existing.endsWith('\n') ? '\n' : '';
@@ -103,18 +89,24 @@ export function ensureDirIgnored(dir: string): void {
 }
 
 /**
- * Where git reads the repo-local exclude file from, asked from `cwd`. Not
+ * The repository's top level, canonical, and where git reads its exclude file
+ * from, asked from `cwd` in one call; throws outside a repository. Not
  * `<toplevel>/.git/info/exclude`: in a worktree `.git` is a file pointing at
  * the shared repository, and the exclude file lives in that common dir. Git
  * answers relative to the cwd when the file is under it, so resolve.
  */
-function excludeFile(cwd: string): string {
-  const reported = execFileSync('git', ['rev-parse', '--git-path', 'info/exclude'], {
+function repoPaths(cwd: string): { top: string; infoExclude: string } {
+  const [top = '', exclude = ''] = execFileSync('git', ['rev-parse', '--show-toplevel', '--git-path', 'info/exclude'], {
     cwd,
     encoding: 'utf8',
+    // Outside a repo git writes "fatal: not a git repository" to stderr, and
+    // inheriting it prints that over the server's own startup banner. The
+    // throw is the signal we act on; the message is noise.
     stdio: ['ignore', 'pipe', 'ignore'],
-  }).trim();
-  return resolve(cwd, reported);
+  })
+    .trim()
+    .split(/\r?\n/);
+  return { top: canonical(top), infoExclude: resolve(cwd, exclude) };
 }
 
 /**

@@ -271,7 +271,7 @@ describe('--done and variants', () => {
     expect(other.text.out).not.toContain('variant sync');
   });
 
-  it('leaves out a copy with no recorded base, and offers no sync without Git', async () => {
+  it('sends a copy with no recorded base to a comparison by hand, and offers no sync without Git', async () => {
     const root = repo();
     notes(root, [
       { id: 'aaaa1111', createdAt: ago(60_000) },
@@ -291,6 +291,7 @@ describe('--done and variants', () => {
     const io = captureIo(root);
     expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
     expect(io.text.out).toContain('new (src/App.jsx): npx isotone variant sync new');
+    expect(io.text.out).toContain('old (src/App.jsx): no base recorded, so compare the copy with the real file by hand');
     expect(io.text.out).not.toContain('variant sync old');
 
     vi.stubEnv('PATH', '');

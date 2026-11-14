@@ -1218,7 +1218,7 @@ describe('variants outside a Git repository', () => {
     const untracked = () => execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: root, encoding: 'utf8' });
     expect(untracked()).toContain('.isotone/notes.json');
 
-    for (const argv of [[], ['variant', 'list'], ['init']]) {
+    for (const argv of [[], ['variant', 'list']]) {
       rmSync(join(root, '.git/info/exclude'), { force: true });
       expect(await runCli(argv, makeIo(root))).toBe(0);
       const exclude = readFileSync(join(root, '.git/info/exclude'), 'utf8');

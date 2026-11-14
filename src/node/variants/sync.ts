@@ -13,13 +13,12 @@ import { baseStore, variantDir } from './paths';
  * Why a file was left as it was instead of merged:
  * - `no-base`: the manifest records no base, as Isotone 1.5.0 and earlier did
  *   for a copy made outside a Git repository;
- * - `base-missing`: the recorded base can no longer be read;
  * - `no-file`: the real file is gone;
  * - `appeared`: the variant adds the file, and the project now has its own;
  * - `no-git`: Git is not installed, so nothing can merge;
- * - `git-failed`: `git merge-file` failed outright.
+ * - `failed`: the base can no longer be read, or `git merge-file` failed.
  */
-export type SyncBlocker = 'no-base' | 'base-missing' | 'no-file' | 'appeared' | 'no-git' | 'git-failed';
+export type SyncBlocker = 'no-base' | 'no-file' | 'appeared' | 'no-git' | 'failed';
 
 export interface SyncResult {
   merged: string[];
@@ -43,7 +42,7 @@ export function syncVariant(opts: VariantsStoreOptions, id: string): SyncResult 
     const unchanged: string[] = [];
     const blocked: Record<string, SyncBlocker> = {};
     let dirty = false;
-    let git: boolean | undefined;
+    const git = hasGit();
 
     for (const [file, entry] of Object.entries(manifest.files)) {
       const currentAbs = join(root, file);
@@ -81,14 +80,13 @@ export function syncVariant(opts: VariantsStoreOptions, id: string): SyncResult 
         blocked[file] = 'no-file';
         continue;
       }
-      git ??= hasGit();
       if (!git) {
         blocked[file] = 'no-git';
         continue;
       }
       const baseContent = readBase(dirname(currentAbs), entry.base, store);
       if (baseContent === null) {
-        blocked[file] = 'base-missing';
+        blocked[file] = 'failed';
         continue;
       }
 
@@ -116,7 +114,7 @@ export function syncVariant(opts: VariantsStoreOptions, id: string): SyncResult 
         } else {
           // Git failed outright; its empty stdout must not replace the
           // override, and the base stays where it was.
-          blocked[file] = 'git-failed';
+          blocked[file] = 'failed';
         }
       } finally {
         rmSync(baseTmp, { force: true });

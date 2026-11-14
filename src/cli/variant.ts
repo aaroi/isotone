@@ -29,10 +29,11 @@ import {
   syncVariant,
   variantDir,
   writeActive,
+  hasGit,
+  NO_GIT_SYNC,
   type SyncBlocker,
   type VariantsStoreOptions,
 } from '../node/variants';
-import { hasGit, NO_GIT_SYNC } from '../node/variants/git';
 import { mutateVariants } from '../node/variants/options';
 import { repoRelativeKey } from '../node/variants/paths';
 import { docPath } from './docs';
@@ -224,7 +225,10 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
   );
   // A copy with no recorded base reads as stale, but nobody knows whether its
   // real file changed; it gets its own line rather than the merge advice.
-  const stale = rows.filter((v) => v.stale.some((file) => !filesWithoutBase(v).includes(file)));
+  const stale = rows.filter((v) => {
+    const unbased = filesWithoutBase(v);
+    return v.stale.some((file) => !unbased.includes(file));
+  });
   if (stale.length) {
     out(io);
     out(
@@ -573,21 +577,15 @@ function cmdSync(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreO
 }
 
 function notMergedAdvice(id: string, file: string, why: SyncBlocker): string {
-  const byHand = `Compare it with the real file by hand, then \`variant promote ${id} --force\` when it should win.`;
-  switch (why) {
-    case 'no-base':
-      return `${file}: no base recorded (not a git repo when the copy was made), so there is nothing to merge from and the copy was left as it is. ${byHand}`;
-    case 'no-git':
-      return `${file}: ${NO_GIT_SYNC}.`;
-    case 'no-file':
-      return `${file}: the real file no longer exists, so there is nothing to merge into. \`variant rm ${id} ${file}\` drops the copy; \`variant promote ${id} --force\` lands it as a new file.`;
-    case 'appeared':
-      return `${file}: the variant adds this file, and the project now has its own, so the copy was left as it is. ${byHand}`;
-    case 'git-failed':
-      return `${file}: \`git merge-file\` failed, so the copy was left as it is. ${byHand}`;
-    case 'base-missing':
-      return `${file}: the base version it was made from can no longer be read, so the copy was left as it is. ${byHand}`;
-  }
+  if (why === 'no-git') return `${file}: ${NO_GIT_SYNC}.`;
+  if (why === 'no-file')
+    return `${file}: the real file no longer exists. \`variant rm ${id} ${file}\` drops the copy; \`variant promote ${id} --force\` lands it as a new file.`;
+  const reason = {
+    'no-base': 'no base recorded (not a git repo when the copy was made)',
+    appeared: 'the variant adds this file, and the project now has its own',
+    failed: 'the base it was made from could not be read or merged',
+  }[why];
+  return `${file}: ${reason}, so the copy was left as it is. Compare it with the real file by hand, then \`variant promote ${id} --force\` when it should win.`;
 }
 
 function cmdPromote(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions): number {

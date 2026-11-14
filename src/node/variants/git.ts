@@ -48,8 +48,13 @@ function blobHash(contents: Buffer, sha256: boolean): string {
 /** Whether `contents` are the blob `base` names. A base is compared in its
  *  own format (SHA-1 or, 64 characters long, SHA-256), never the current
  *  repository's: one kept outside a repository stays SHA-1 after any `git init`. */
-export function matchesBase(contents: Buffer, base: string): boolean {
+function matchesBase(contents: Buffer, base: string): boolean {
   return blobHash(contents, base.length === 64) === base;
+}
+
+/** Both names the bytes can have as a base, to compare many bases at once. */
+export function blobHashes(contents: Buffer): string[] {
+  return [blobHash(contents, false), blobHash(contents, true)];
 }
 
 /** Git blob hashing is just a header and the file bytes. Existing bases tell
@@ -77,9 +82,9 @@ export function hasGit(): boolean {
   }
 }
 
-function catFile(cwd: string, hash: string): string | null {
+function catFile(cwd: string, hash: string): Buffer | null {
   try {
-    return execFileSync('git', ['cat-file', '-p', hash], { cwd, encoding: 'utf8', stdio: GIT_QUIET });
+    return execFileSync('git', ['cat-file', '-p', hash], { cwd, stdio: GIT_QUIET });
   } catch {
     return null; // the blob isn't reachable (gc'd, or never written)
   }
@@ -132,9 +137,14 @@ export function recordBase(absPath: string, store: string): string | null {
     const contents = readFileSync(absPath);
     const hash = blobHash(contents, false);
     mkdirSync(store, { recursive: true });
+    // Never through a link (`wx` refuses one), and once only: a checkout must
+    // not convert line endings, or the bases no longer match their names.
+    try {
+      writeFileSync(join(store, BASES_ATTRIBUTES), '* -text\n', { flag: 'wx' });
+    } catch {}
     // Written beside and renamed, so a crash never leaves a partial base.
     const temp = join(store, `${hash}.${randomUUID()}.tmp`);
-    writeFileSync(temp, contents);
+    writeFileSync(temp, contents, { flag: 'wx' });
     renameSync(temp, join(store, hash));
     return hash;
   } catch {
@@ -142,13 +152,16 @@ export function recordBase(absPath: string, store: string): string | null {
   }
 }
 
-/** A recorded base's contents: from the variant's bases directory, where a
+/** Committed in a variant's bases directory beside the kept bases. */
+export const BASES_ATTRIBUTES = '.gitattributes';
+
+/** A recorded base's bytes: from the variant's bases directory, where a
  *  base made outside a repository lives, or else from git's object store.
  *  A kept file that no longer hashes to its name is never a merge base. */
-export function readBase(cwd: string, hash: string, store: string): string | null {
+export function readBase(cwd: string, hash: string, store: string): Buffer | null {
   try {
     const contents = readFileSync(join(store, hash));
-    if (matchesBase(contents, hash)) return contents.toString('utf8');
+    if (matchesBase(contents, hash)) return contents;
   } catch {
     // Not kept here: git's object store has it, if anything does.
   }
