@@ -75,7 +75,7 @@ export function vitePlugin(cwd: string): { loaded: boolean; viteConfig: string |
 }
 
 /** A config's text without its comments, so a commented-out plugin or option does not count. */
-function readCode(file: string): string {
+export function readCode(file: string): string {
   return safeRead(file)
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/(^|[^:])\/\/.*$/gm, '$1');

@@ -470,9 +470,9 @@ function refuseUnserved(io: CliIO, opts: VariantsStoreOptions, args: string[], w
  * The store takes a variant anywhere, but only the Vite plugin serves one: in
  * a Next app, or under `isotone serve`, the panel lists nothing while the CLI
  * reports success. Said on stderr, so `--json` output stays parseable. Only
- * Next is certain (and refused without `--force`, so said only by `list`): a
- * sibling dev server can serve this project's variants (`variants: { root }`),
- * so the rest say "may".
+ * Next is certain (`new` and `use` refuse there, so this is printed by `add`
+ * and `list`): a sibling dev server can serve this project's variants
+ * (`variants: { root }`), so the rest say "may".
  */
 function warnUnserved(io: CliIO, opts: VariantsStoreOptions, args: string[] = []): void {
   const root = variantsProject(opts);
@@ -480,7 +480,7 @@ function warnUnserved(io: CliIO, opts: VariantsStoreOptions, args: string[] = []
   const { loaded, viteConfig } = vitePlugin(root);
   if (loaded) return;
   if (detectHost(root) === 'next') {
-    // A forced `new` or `use` was just refused with this.
+    // Without --force, new and use are refused with this; a forced one stays quiet.
     if (has(args, '--force')) return;
     errOut(
       io,

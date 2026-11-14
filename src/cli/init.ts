@@ -21,6 +21,7 @@ import {
   detectHost,
   frameworkPlugin,
   type Host,
+  readCode,
   safeRead,
   safeReaddir,
   safeReaddirent,
@@ -260,16 +261,20 @@ function installCommand(cwd: string): string | null {
 }
 
 /**
- * Whether every `isotone(...)` call in a config passes `panel: false`, the
- * endpoints for an app that mounts its own panel. Each call is read to its
- * matching parenthesis, so nested calls in its options do not cut it short.
+ * Whether every `isotone(...)` call in a config (comments left out) passes
+ * `panel: false`, the endpoints for an app that mounts its own panel. Each
+ * call is read to its matching parenthesis, past nested calls and strings.
  */
 function panelOff(text: string): boolean {
   const calls = [...text.matchAll(/\bisotone\s*\(/g)].map((match) => {
     let depth = 0;
     for (let i = (match.index ?? 0) + match[0].length - 1; i < text.length; i++) {
-      if (text[i] === '(') depth++;
-      else if (text[i] === ')' && --depth === 0) return text.slice(match.index, i + 1);
+      const char = text[i] as string;
+      if (char === '"' || char === "'" || char === '`') {
+        // To the closing quote, past escaped ones.
+        for (i++; i < text.length && text[i] !== char; i++) if (text[i] === '\\') i++;
+      } else if (char === '(') depth++;
+      else if (char === ')' && --depth === 0) return text.slice(match.index, i + 1);
     }
     return text.slice(match.index);
   });
@@ -284,7 +289,7 @@ function overlaySetUp(cwd: string): boolean {
   if (safeReaddirent(join(cwd, DEFAULT_VARIANTS_DIR)).some((entry) => entry.isDirectory())) return true;
   return safeReaddir(cwd).some((name) => {
     if (!/^[\w-]+\.config\.[cm]?[jt]s$/.test(name)) return false;
-    const text = safeRead(join(cwd, name));
+    const text = readCode(join(cwd, name));
     return /['"]isotone\/vite['"]/.test(text) && !panelOff(text);
   });
 }
@@ -343,25 +348,48 @@ function variantsNeed(cwd: string): string[][] {
     const includes = biomeIncludes(text);
     if ((biomeMajor(cwd) ?? (/schemas\/1\./.test(text) ? 1 : 2)) === 1) lint([biome], `in ${biome}, add ".isotone/**" to files.ignore.`);
     else if (!includes) lint([biome], `in ${biome}, give files "includes": ["**", "!.isotone"].`);
-    // Patterns such as "src/**" never reach .isotone.
-    else if (includes.some((glob) => /^(?:\*|\.isotone\b)/.test(glob))) lint([biome], `in ${biome}, add "!.isotone" to files.includes.`);
+    // Patterns such as "src/**" never reach .isotone; "**" and "./**" do.
+    else if (includes.some((glob) => /^(?:\.\/)?\*/.test(glob))) lint([biome], `in ${biome}, add "!.isotone" to files.includes.`);
   }
   if (ignores.length) steps.push(['Keep linters off variant copies, whose imports resolve from the real file:', ...ignores]);
   return steps;
 }
 
-/** The patterns of Biome's `files.includes`, or null when it has none (Biome then takes every file). */
+/**
+ * The patterns of Biome's `files.includes`, or null when it has none (Biome
+ * then takes every file). A config that does not parse gives no patterns, so
+ * no hint is a guess.
+ */
 function biomeIncludes(text: string): string[] | null {
-  const files = /"files"\s*:\s*\{/.exec(text);
-  if (!files) return null;
-  let depth = 0;
-  let end = files.index + files[0].length - 1;
-  for (; end < text.length; end++) {
-    if (text[end] === '{') depth++;
-    else if (text[end] === '}' && --depth === 0) break;
+  let config: unknown;
+  try {
+    config = JSON.parse(withoutJsonComments(text).replace(/,(\s*[}\]])/g, '$1'));
+  } catch {
+    return [];
   }
-  const list = /"includes"\s*:\s*\[([^\]]*)\]/.exec(text.slice(files.index, end));
-  return list ? [...(list[1] ?? '').matchAll(/"([^"]*)"/g)].map((m) => m[1] ?? '') : null;
+  const includes = (config as { files?: { includes?: unknown } } | null)?.files?.includes;
+  if (includes === undefined) return null;
+  return Array.isArray(includes) ? includes.filter((glob): glob is string => typeof glob === 'string') : [];
+}
+
+/** JSONC without its comments, leaving strings (`"src/**"`, `"//"`) whole. */
+function withoutJsonComments(text: string): string {
+  let out = '';
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i] as string;
+    if (char === '"') {
+      const start = i;
+      for (i++; i < text.length && text[i] !== '"'; i++) if (text[i] === '\\') i++;
+      out += text.slice(start, i + 1);
+    } else if (char === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i++;
+      out += '\n';
+    } else if (char === '/' && text[i + 1] === '*') {
+      const end = text.indexOf('*/', i + 2);
+      i = end === -1 ? text.length : end + 1;
+    } else out += char;
+  }
+  return out;
 }
 
 /** The CSS file that imports Tailwind, from the project; '' when none is found. */

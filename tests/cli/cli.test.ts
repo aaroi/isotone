@@ -1388,6 +1388,12 @@ describe('init fits the setup to what the project already has', () => {
     expect(await init(own)).toContain('in biome.json, add "!.isotone" to files.includes.');
     writeFileSync(join(own, 'biome.json'), '{ "files": { "includes": ["src/**"] } }\n');
     expect(await init(own)).not.toContain('Keep linters off');
+    // Read as JSONC: a bracket inside a pattern, comments and a trailing comma; "./**" reaches .isotone too.
+    writeFileSync(join(own, 'biome.jsonc'), '{\n  // ours\n  "files": { "includes": ["src/[ab]/**", /* all */ "./**",] },\n}\n');
+    rmSync(join(own, 'biome.json'));
+    expect(await init(own)).toContain('in biome.jsonc, add "!.isotone" to files.includes.');
+    writeFileSync(join(own, 'biome.jsonc'), '{ "files": { "includes": ["src/[ab]/**"] } } // "**"\n');
+    expect(await init(own)).not.toContain('Keep linters off');
     // A legacy .eslintrc already skips dot-directories.
     const legacy = project({ 'vite.config.ts': 'export default {};\n', '.eslintrc.json': '{}\n' }, { devDependencies: { vite: '^7.0.0' } });
     expect(await init(legacy)).not.toContain('Keep linters off');
@@ -1464,6 +1470,18 @@ describe('init fits the setup to what the project already has', () => {
       pkg,
     );
     expect(await init(host)).toContain('Recommended: host — this app already has its own VariantsSource (src/Review.tsx)');
+    // A parenthesis in a string, and a comment naming isotone(), leave a real `panel: false` as it is.
+    writeFileSync(
+      join(host, 'vite.config.ts'),
+      "import { isotone } from 'isotone/vite';\n// isotone() also works\nexport default { plugins: [isotone({ label: 'a)b', panel: false })] };\n",
+    );
+    expect(await init(host)).toContain('Recommended: host');
+    // A commented-out `panel: false` is not one.
+    writeFileSync(
+      join(host, 'vite.config.ts'),
+      "import { isotone } from 'isotone/vite';\nexport default { plugins: [isotone({ /* panel: false */ })] };\n",
+    );
+    expect(await init(host)).toContain('Recommended: overlay');
     // A variants folder left in a Next app sets up nothing: its own source is still the recommendation.
     const next = project(
       {
