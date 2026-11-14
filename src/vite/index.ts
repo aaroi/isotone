@@ -76,7 +76,10 @@ const SPECIAL_QUERY = /[?&](raw|url|inline|no-inline|worker|sharedworker|html-pr
  */
 function copy(file: string): { code: string; map: { version: 3; sources: string[]; names: []; mappings: string } } {
   const code = readFileSync(file, 'utf8');
-  return { code, map: { version: 3, sources: [file], names: [], mappings: `AAAA${';AACA'.repeat(code.split('\n').length - 1)}` } };
+  return {
+    code,
+    map: { version: 3, sources: [normalizePath(file)], names: [], mappings: `AAAA${';AACA'.repeat(code.split('\n').length - 1)}` },
+  };
 }
 
 /**
