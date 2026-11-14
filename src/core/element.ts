@@ -104,18 +104,17 @@ interface StackFrame {
 }
 
 /** Code that is not the app's: a dependency, or minified code vendored into the app. */
-const NOT_APP = /node_modules|\.min\.js(?:[?#:]|$)/;
+const NOT_APP = /node_modules|\.min\.[cm]?js(?:[?#:]|$)/;
 
 /** Receivers V8 prints before a method that are the runtime's, never a component. */
 const BUILT_IN = new Set(['Object', 'Array', 'Module', 'Function', 'Promise', 'Proxy']);
 
 /**
  * The component a stack frame's function name stands for: `Pricing`,
- * `Module.Pricing` and Firefox's `Pricing/<` (a closure inside it) are
- * `Pricing`; a class's `Card.render` is `Card`, and a bare `render` (Firefox,
- * Safari) is `render`, for the caller to name from the fiber. Callbacks,
- * helpers and built-in receivers (`Object.render` on a column definition) are
- * nothing.
+ * `Module.Pricing` and Firefox's `Pricing/<` are `Pricing`; a class's
+ * `Card.render` is `Card`, and a bare `render` (Firefox, Safari) is `render`,
+ * for the caller to name from the fiber. A built-in receiver
+ * (`Object.render`) and a lower-case name are nothing.
  */
 function frameComponent(raw: string | undefined): string | undefined {
   const name = raw?.replace(/^async\*/, '').replace(/\/.*$/, '');
@@ -133,12 +132,10 @@ function frameComponent(raw: string | undefined): string | undefined {
  * React 18 records the place as `_debugSource`. React 19 records a creation
  * stack: its first frame is the call that made the element (`jsxDEV`,
  * `createElement`, `cloneElement`, or the server-component client replaying
- * the server's stack), then any wrapping JSX runtime (Emotion's, a profiler's)
- * and library code, then the app's own frames, until React's bottom frame
- * (React calling the component). The first app frame is the place. The
- * component is the first one named in the run of app frames from there, which
- * reaches past a `.map` callback, a helper or a compiler's `_temp` to the
- * component around them, and ends at the next library frame.
+ * the server's stack), and its last before React's bottom frame is the
+ * function React called to render: the component. The first app frame after
+ * the factory is the place. A component in a dependency (a library calling a
+ * render prop or a column's `render`) names nothing.
  */
 function callsite(node: Made): { at: StackFrame; name?: string } | undefined {
   const legacy = node._debugSource;
@@ -148,26 +145,18 @@ function callsite(node: Made): { at: StackFrame; name?: string } | undefined {
       : { at: { url: legacy.fileName, line: legacy.lineNumber ?? 0, column: 0, legacy: true } };
   }
   const stack = node._debugStack ?? node.debugStack;
-  const lines = (typeof stack === 'string' ? stack : stack?.stack)?.split('\n') ?? [];
-  let factory = true;
-  let at: StackFrame | undefined;
-  for (const text of lines) {
+  const frames: (StackFrame & { name?: string })[] = [];
+  for (const text of (typeof stack === 'string' ? stack : stack?.stack)?.split('\n') ?? []) {
     if (/react[_-]stack[_-]bottom[_-]frame/.test(text)) break;
     const [, url, line, column] = text.match(/(?:\(|@|\bat )((?:[a-z-]+:\/\/\/?|\/)\S+?):(\d+):(\d+)\)?\s*$/i) ?? [];
-    if (!url) continue;
-    if (factory) {
-      factory = false;
-      continue;
-    }
-    if (NOT_APP.test(url)) {
-      if (at) break;
-      continue;
-    }
-    at ??= { url, line: Number(line), column: Number(column) };
-    const name = frameComponent(text.match(/^\s*at\s+(?:async\s+)?(?:new\s+)?([^\s(]+)\s+\(/)?.[1] ?? text.match(/^\s*([^@\s]+)@/)?.[1]);
-    if (name) return { at, name };
+    const name = text.match(/^\s*at\s+(?:async\s+)?(?:new\s+)?([^\s(]+)\s+\(/)?.[1] ?? text.match(/^\s*([^@\s]+)@/)?.[1];
+    if (url) frames.push({ url, line: Number(line), column: Number(column), name });
   }
-  return at && { at };
+  const app = frames.slice(1).filter((frame) => !NOT_APP.test(frame.url));
+  const render = frames.length > 1 ? frames[frames.length - 1] : undefined;
+  const at = app[0];
+  if (!at) return undefined;
+  return { at, name: render && !NOT_APP.test(render.url) ? frameComponent(render.name) : undefined };
 }
 
 /** A fiber's component name, where the stack names no function: React 18, or a bare `render`. */
@@ -178,15 +167,18 @@ function typeName(node: Made | null | undefined): string | undefined {
   return type.displayName ?? inner.displayName ?? inner.name;
 }
 
+/** Whether a fiber is a class component, whose render Firefox and Safari print as a bare `render`. */
+const isClass = (node: Made | null | undefined) =>
+  Boolean((node?.type as { prototype?: { isReactComponent?: unknown } } | undefined)?.prototype?.isReactComponent);
+
 /**
  * The components whose code wrote the element, outermost first, and the line
  * that wrote it. For the element and each of its owners (who rendered what,
- * not parents, so layout providers stay out), the app's own frames on its
- * creation stack name the component that wrote it: `at Pricing (…)`. Nodes a
- * library made carry no such frame and are passed, so an app component a
- * router, a framework, a `Slot` or a list renders is still named. `source` is
- * the first app frame. Absent on other frameworks and production builds,
- * which leaves the fields out.
+ * not parents, so layout providers stay out), the component React called to
+ * write it names that level, when the app wrote it. Nodes a library made are
+ * passed, so an app component a router, a framework, a `Slot` or a list
+ * renders is still named. `source` is the first app frame. Absent on other
+ * frameworks and production builds, which leaves the fields out.
  */
 function reactOwners(el: Element): { names: string[]; at?: StackFrame } {
   const key = Object.keys(el).find((name) => name.startsWith('__reactFiber$'));
@@ -199,8 +191,8 @@ function reactOwners(el: Element): { names: string[]; at?: StackFrame } {
     if (made) {
       // React's replay of a server component's stack names the server bundle, not a source file.
       if (!/^(?:about|rsc):/.test(made.at.url)) at ??= made.at;
-      // The frame is in the owner's code: where it names no component, the owner's type does.
-      const name = made.at.legacy || made.name === 'render' ? typeName(owner) : made.name;
+      // React 18 names no function, and a bare `render` is a class's: the owner's type names them.
+      const name = made.at.legacy || (made.name === 'render' && isClass(owner)) ? typeName(owner) : made.name;
       // Capitalized is a component; anything else is a minified or internal name.
       if (name && /^[A-Z]/.test(name) && !names.includes(name) && names.length < 5) names.unshift(name);
     }

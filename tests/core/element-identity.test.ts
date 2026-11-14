@@ -7,7 +7,7 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { act, createElement } from 'react';
+import { act, Children, Component, createElement, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -572,6 +572,32 @@ describe('the components that wrote an element React rendered', () => {
   it("names the table, not the column definition's object, for a cell a column renders", async () => {
     expect((await describeRendered(h(UsersPage), 'a.cell')).component).toEqual(['UsersPage', 'DataTable']);
   });
+
+  function MemoList({ items }: { items: string[] }) {
+    const rows = useMemo(() => items.map((item) => h('li', { key: item, 'data-memo': item }, item)), [items]);
+    return h('ul', null, rows);
+  }
+  function Wrapped({ children }: { children: ReturnType<typeof h>[] }) {
+    return h(
+      'ul',
+      null,
+      Children.map(children, (child) => h('li', { 'data-wrapped': '' }, child)),
+    );
+  }
+  function Cards() {
+    return h(Wrapped, null, [h('b', { key: 'a' }, 'a'), h('b', { key: 'b' }, 'b')]);
+  }
+  class Panel extends Component {
+    override render() {
+      return h('section', { className: 'panel' }, 'panel');
+    }
+  }
+
+  it('names the component whose render React called, past useMemo, Children.map and a class', async () => {
+    expect((await describeRendered(h(MemoList, { items: ['a', 'b'] }), 'li[data-memo=a]')).component).toEqual(['MemoList']);
+    expect((await describeRendered(h(Cards), 'li[data-wrapped]')).component).toEqual(['Cards', 'Wrapped']);
+    expect((await describeRendered(h(Panel), 'section.panel')).component).toEqual(['Panel']);
+  });
 });
 
 describe('reading Chrome, Firefox and Safari stack lines', () => {
@@ -604,7 +630,18 @@ describe('reading Chrome, Firefox and Safari stack lines', () => {
       'Pricing',
     ]);
     // A class component's render: the fiber names it.
-    expect(pin({ type: 'section', _debugStack: gecko(`render@${app('Card.tsx')}:5:40`), _debugOwner: owner }).component).toEqual(['Card']);
+    class Card {}
+    Object.assign(Card.prototype, { isReactComponent: {} });
+    const classOwner = { type: Card, _debugOwner: null };
+    expect(pin({ type: 'section', _debugStack: gecko(`render@${app('Card.tsx')}:5:40`), _debugOwner: classOwner }).component).toEqual([
+      'Card',
+    ]);
+    // A column definition's `render` arrow that a library's Cell calls: Firefox and Safari print it bare too.
+    const cell = { type: Object.defineProperty(() => {}, 'name', { value: 'Cell' }), _debugOwner: null };
+    const column = gecko(`render@${app('columns.tsx')}:3:30`, `Cell@${dep}/rc-table.js?v=1:40:9`);
+    expect(pin({ type: 'a', _debugStack: column, _debugOwner: cell })).toMatchObject({ source: '/src/columns.tsx:3' });
+    expect(pin({ type: 'a', _debugStack: column, _debugOwner: cell }).component).toBeUndefined();
+    expect(pin({ type: 'a', _debugStack: gecko(`render@${app('columns.tsx')}:3:30`), _debugOwner: owner }).component).toBeUndefined();
   });
 
   it('reads Safari anonymous frames and skips native ones', () => {
