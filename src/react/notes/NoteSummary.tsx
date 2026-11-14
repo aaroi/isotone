@@ -1,6 +1,24 @@
+import { createContext, useContext } from 'react';
 import { showOverflowTitle } from '../tooltips';
 import type { IsotoneNote } from '../../core/types';
 import { updateNoteText } from '../../core/update';
+import { axisSection, knobDelta, type VariantsSource } from '../../core/variants';
+
+/** The page's variants source, so a note's knobs read as the panel names them. */
+export const NoteAxes = createContext<VariantsSource | undefined>(undefined);
+
+/** Knob tags shown on a note; the rest are counted. */
+const KNOB_TAGS = 3;
+
+/** `Card radius 24px` for a knob on this page, `card-radius 24` for one elsewhere. */
+function knobTags(knobs: Record<string, string>, source: VariantsSource | undefined) {
+  const axes = source?.getAxes() ?? [];
+  return Object.entries(knobs).map(([id, value]) => {
+    const axis = axes.find((candidate) => candidate.id === id);
+    const shown = axis && knobDelta([axis], { [id]: value })[0]?.shown;
+    return { key: `knob:${id}`, label: axis ? `${axisSection(axis).label} ${shown ?? value}` : `${id} ${value}` };
+  });
+}
 
 /** Pinned references and saved defaults use the same compact tag. */
 function SummaryTag({ label }: { label: string }) {
@@ -24,6 +42,7 @@ function Reply({ note }: { note: IsotoneNote }) {
 
 /** Keep machine-directed requests readable without changing the agent's original text. */
 export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }) {
+  const source = useContext(NoteAxes);
   // The update request names no element: one compact tag says what it is.
   if (note.update)
     return (
@@ -48,18 +67,19 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
           ]
         : []),
       ...elements.map((element) => ({ key: element.selector, label: element.text || element.tag })),
-      // The knobs it was written under, tagged as a saved default's are.
-      ...Object.entries(note.knobs ?? {}).map(([id, value]) => ({ key: `knob:${id}`, label: `${id} ${value}` })),
     ];
+    // The knobs it was written under, tagged and capped as a saved default's are.
+    const knobs = knobTags(note.knobs ?? {}, source);
     return (
       <>
         <p>{note.feedback}</p>
         <Reply note={note} />
-        {references.length > 0 && (
+        {references.length + knobs.length > 0 && (
           <span className="isotone-meta">
-            {references.map((reference) => (
+            {[...references, ...knobs.slice(0, KNOB_TAGS)].map((reference) => (
               <SummaryTag key={reference.key} label={reference.label} />
             ))}
+            {knobs.length > KNOB_TAGS && <span className="isotone-request-more">+{knobs.length - KNOB_TAGS}</span>}
           </span>
         )}
       </>

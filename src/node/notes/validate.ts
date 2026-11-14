@@ -87,15 +87,19 @@ export function variantOf(value: unknown): VariantReference | null {
 }
 
 /** A knob's id, as `.isotone/knobs.json` allows it. */
-const KNOB_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
-
-/** Knob values by id from the browser, bounded; null when there are none. */
+/**
+ * The knobs a note was written under, from the browser: at most 32, each an id
+ * and what a knob can hold (a number, a hex colour or an option id). Anything
+ * else is dropped; null when nothing is left.
+ */
 export function knobsOf(value: unknown): Record<string, string> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const entries = Object.entries(value)
-    .filter((entry): entry is [string, string] => KNOB_ID.test(entry[0]) && typeof entry[1] === 'string' && entry[1] !== '')
-    .slice(0, 50)
-    .map(([id, text]): [string, string] => [id, cap(text, 200)]);
+    .filter(
+      (entry): entry is [string, string] =>
+        /^[a-z0-9][\w.-]{0,63}$/i.test(entry[0]) && typeof entry[1] === 'string' && /^[#\w.-]{1,64}$/.test(entry[1]),
+    )
+    .slice(0, 32);
   return entries.length ? Object.fromEntries(entries) : null;
 }
 

@@ -279,7 +279,7 @@ function serveNotesInPage(path: string) {
     const feedback = String(body.feedback ?? '').trim();
     if (!body.route || !feedback) return reply(400, { error: 'route and feedback are required' });
     const fields = Object.fromEntries(
-      ['element', 'elements', 'variant', 'variantAction', 'payload', 'viewport']
+      ['element', 'elements', 'variant', 'variantAction', 'payload', 'viewport', 'knobs']
         .filter((key) => body[key] !== undefined)
         .map((key) => [key, body[key]]),
     );

@@ -35,7 +35,7 @@
     },
     "knobs": {
       "type": "object",
-      "description": "Knobs the reviewer had moved off their defaults on this route when writing the note, by knob id, valued as .isotone/knobs.json writes them (a range's number without its unit). The pinned elements' styles show these values, not the source's: write a knob's value into the source only when the note asks for that.",
+      "description": "The knobs and selectors on this route that sat off their defaults when the note was written, by id: a range's number without its unit, a colour's hex, or the chosen option's id. The page showed these, the pinned elements' styles included, not what the source holds: write a value into the source only when the note asks for that.",
       "additionalProperties": { "type": "string" }
     },
     "variant": {

@@ -81,84 +81,18 @@ export function describeIsotoneElement(el: NodeLike, maxDepth = 4): IsotoneEleme
 const IDENTIFYING_ATTRIBUTES = ['role', 'type', 'name', 'href', 'aria-label', 'title', 'alt', 'placeholder'];
 
 /**
- * Components Next.js wraps every App Router segment in. On a page of server
- * components they are the only client fibers above an element, and naming
- * them would send the agent into the framework instead of the app.
+ * What React's dev build knows about who made a node: a fiber, or a server
+ * component's info (`{ name, env }`), each with its owner and the stack where
+ * its element was created.
  */
-const FRAMEWORK_COMPONENTS = new Set([
-  'AppDevOverlay',
-  'AppDevOverlayErrorBoundary',
-  'AppRouter',
-  'AppRouterAnnouncer',
-  'ClientPageRoot',
-  'ClientSegmentRoot',
-  'DevRootHTTPAccessFallbackBoundary',
-  'DevRootNotFoundBoundary',
-  'ErrorBoundaryHandler',
-  'HTTPAccessFallbackBoundary',
-  'HTTPAccessFallbackErrorBoundary',
-  'HandleISRError',
-  'HistoryUpdater',
-  'HotReload',
-  'InnerLayoutRouter',
-  'InnerScrollAndFocusHandler',
-  'LayoutRouter',
-  'LoadingBoundary',
-  'MetadataBoundary',
-  'MetadataOutlet',
-  'NotFoundBoundary',
-  'NotFoundErrorBoundary',
-  'OuterLayoutRouter',
-  'OutletBoundary',
-  'PathnameContextProviderAdapter',
-  'ReactDevOverlay',
-  'RedirectBoundary',
-  'RedirectErrorBoundary',
-  'RenderFromTemplateContext',
-  'ReplaySsrOnlyErrors',
-  'RootLayoutBoundary',
-  'RuntimeStyles',
-  'ScrollAndFocusHandler',
-  'SegmentBoundaryTrigger',
-  'SegmentBoundaryTriggerNode',
-  'SegmentStateProvider',
-  'SegmentViewNode',
-  'SegmentViewStateNode',
-  'ServerInsertedHTMLProvider',
-  'ServerRoot',
-  'ViewportBoundary',
-]);
-
-/** A file served from a dependency: Vite's `/node_modules/…`, Turbopack's `/_next/static/chunks/node_modules_…`. */
-const DEPENDENCY = /node_modules/;
-
-/** Names from React's dev-mode bookkeeping on the DOM node. Absent on other
- *  frameworks and production builds, which simply leaves the fields out. */
-function reactContext(el: Element): Pick<IsotoneElement, 'component' | 'source'> {
-  type Fiber = {
-    type?: unknown;
-    return?: Fiber | null;
-    _debugSource?: { fileName?: string; lineNumber?: number };
-    _debugStack?: { stack?: string } | string | null;
-  };
-  type Named = { displayName?: string; name?: string; render?: Named; type?: Named };
-  const key = Object.keys(el).find((name) => name.startsWith('__reactFiber$'));
-  let fiber: Fiber | null | undefined = key ? (el as unknown as Record<string, Fiber | null>)[key] : null;
-  const names: string[] = [];
-  let source: string | undefined;
-  while (fiber && names.length < 5) {
-    if (!source && fiber._debugSource?.fileName && !DEPENDENCY.test(fiber._debugSource.fileName)) {
-      source = `${fiber._debugSource.fileName}:${fiber._debugSource.lineNumber ?? 0}`;
-    }
-    source ??= stackSource(fiber._debugStack);
-    const type = fiber.type as Named | string | null | undefined;
-    const named = type && typeof type !== 'string' ? (type.render ?? type.type ?? type) : null;
-    const name = named?.displayName ?? named?.name;
-    // Capitalized is a component; anything else is a minified or internal name.
-    if (name && /^[A-Z]/.test(name) && !FRAMEWORK_COMPONENTS.has(name) && names[0] !== name) names.unshift(name);
-    fiber = fiber.return;
-  }
-  return { ...(names.length ? { component: names } : {}), ...(source ? { source } : {}) };
+interface Made {
+  type?: unknown;
+  name?: string;
+  _debugOwner?: Made | null;
+  owner?: Made | null;
+  _debugSource?: { fileName?: string; lineNumber?: number } | null;
+  _debugStack?: { stack?: string } | string | null;
+  debugStack?: { stack?: string } | string | null;
 }
 
 interface StackFrame {
@@ -168,22 +102,61 @@ interface StackFrame {
 }
 
 /**
- * React 19 dropped `_debugSource`; its `_debugStack` is an Error created where
- * the JSX ran. The first frame outside React's own runtime is that callsite, in
- * the module the dev server served: Vite, Next and webpack name the source file
- * with a query or loader prefix, at the transformed line.
+ * Where an element was written: React 18's `_debugSource`, or the first frame
+ * of React 19's creation stack after the frame that made the element (`jsxDEV`,
+ * `createElement`, or the server-component client replaying the server's
+ * stack). Frames below `react_stack_bottom_frame` are React calling the
+ * component, not the component.
  */
-function stackFrame(stack: { stack?: string } | string | null | undefined): StackFrame | undefined {
-  const text = typeof stack === 'string' ? stack : stack?.stack;
-  for (const frame of text?.split('\n').slice(1) ?? []) {
+function callsite(node: Made): (StackFrame & { legacy?: true }) | undefined {
+  const legacy = node._debugSource;
+  if (legacy?.fileName) return { url: legacy.fileName, line: legacy.lineNumber ?? 0, column: 0, legacy: true };
+  const stack = node._debugStack ?? node.debugStack;
+  const frames: StackFrame[] = [];
+  for (const frame of (typeof stack === 'string' ? stack : stack?.stack)?.split('\n') ?? []) {
+    if (frame.includes('react_stack_bottom_frame')) break;
     const [, url, line, column] = frame.match(/(?:\(|@|\bat )((?:[a-z-]+:\/\/\/?|\/)\S+?):(\d+):(\d+)\)?\s*$/i) ?? [];
-    // React's own frames, and any dependency's (a React Server Components
-    // client renders a server page from one), are not where the JSX was written.
-    if (!url || DEPENDENCY.test(url) || /react[-_]jsx|react-dom|react\.development|\/react\/|jsx-dev-runtime|jsx-runtime/i.test(url))
-      continue;
-    return { url, line: Number(line), column: Number(column) };
+    if (url) frames.push({ url, line: Number(line), column: Number(column) });
   }
-  return undefined;
+  return frames[1];
+}
+
+/**
+ * The components that wrote the element, outermost first, and the first place
+ * in the app's own code that did. The walk follows owners (who rendered what),
+ * not parents, so providers and layout boundaries that only pass children
+ * through never appear. A node made in a dependency, or by nothing on the
+ * stack, is not the app's: below the app's first component the walk climbs
+ * past such nodes (a library's insides), and above it the first one ends the
+ * walk (the framework that rendered the page). Absent on other frameworks and
+ * production builds, which leaves the fields out.
+ */
+function reactOwners(el: Element): { names: string[]; at?: ReturnType<typeof callsite> } {
+  const key = Object.keys(el).find((name) => name.startsWith('__reactFiber$'));
+  let node: Made | null | undefined = key ? (el as unknown as Record<string, Made | null>)[key] : null;
+  const names: string[] = [];
+  let at: ReturnType<typeof callsite>;
+  let seen = false;
+  for (let depth = 0; node && depth < 64 && names.length < 5; depth++) {
+    const made = callsite(node);
+    if (made && !/node_modules/.test(made.url)) {
+      // React's replay of a server component's stack names the server bundle, not a source file.
+      if (!/^(?:about|rsc):/.test(made.url)) at ??= made;
+      const type = node.type as { displayName?: string; name?: string; render?: Made; type?: Made } | string | undefined;
+      const named = type && typeof type !== 'string' ? (type.render ?? type.type ?? type) : node;
+      const name = (named as { displayName?: string }).displayName ?? named.name;
+      // The element itself is a tag. Capitalized is a component; anything else is a minified or internal name.
+      if (depth > 0 && name && /^[A-Z]/.test(name) && names[0] !== name) names.unshift(name);
+      seen = true;
+    } else if (seen) break;
+    node = node._debugOwner ?? node.owner;
+  }
+  return { names, at };
+}
+
+function reactContext(el: Element): Pick<IsotoneElement, 'component' | 'source'> {
+  const { names, at } = reactOwners(el);
+  return { ...(names.length ? { component: names } : {}), ...(at ? { source: `${sourcePath(at.url)}:${at.line}` } : {}) };
 }
 
 /** A served module URL as the source path it stands for. */
@@ -198,11 +171,6 @@ function sourcePath(location: string): string {
   } catch {}
   return path.replace(/^\.\//, '');
 }
-
-const stackSource = (stack: Parameters<typeof stackFrame>[0]) => {
-  const frame = stackFrame(stack);
-  return frame && `${sourcePath(frame.url)}:${frame.line}`;
-};
 
 const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
@@ -247,15 +215,8 @@ function mapPosition(mappings: string, line: number, column: number): { source: 
  * than what `describeIsotoneElement` already recorded.
  */
 export async function resolveElementSource(el: Element): Promise<string | undefined> {
-  type Fiber = { return?: Fiber | null; _debugSource?: unknown; _debugStack?: Parameters<typeof stackFrame>[0] };
-  const key = Object.keys(el).find((name) => name.startsWith('__reactFiber$'));
-  let fiber: Fiber | null | undefined = key ? (el as unknown as Record<string, Fiber | null>)[key] : null;
-  let frame: StackFrame | undefined;
-  for (; fiber && !frame; fiber = fiber.return) {
-    if (fiber._debugSource) return undefined;
-    frame = stackFrame(fiber._debugStack);
-  }
-  if (!frame || !/^https?:/.test(frame.url)) return undefined;
+  const frame = reactOwners(el).at;
+  if (!frame || frame.legacy || !/^https?:/.test(frame.url)) return undefined;
   try {
     const code = await (await fetch(frame.url)).text();
     const reference = code.match(/\/\/[#@] sourceMappingURL=(\S+)\s*$/)?.[1];
@@ -275,6 +236,9 @@ export async function resolveElementSource(el: Element): Promise<string | undefi
     return undefined;
   }
 }
+
+/** Text as one short line, for a label. */
+const oneLine = (text: string | null | undefined) => (text ?? '').trim().replace(/\s+/g, ' ').slice(0, 60);
 
 /** Everything about a pinned element that says which one it is, for the agent
  *  reading the note later and without the page open. */
@@ -302,12 +266,17 @@ function elementContext(el: Element): Partial<IsotoneElement> {
     }
     if (within.length === 4) continue;
     const tag = up.localName;
-    const label = up.getAttribute('aria-label');
+    // A label the page names explicitly comes first: the elements it points at, then its own text.
+    const labelledBy = (up.getAttribute('aria-labelledby') ?? '')
+      .split(/\s+/)
+      .map((id) => (id ? up.ownerDocument.getElementById(id)?.textContent : ''))
+      .join(' ');
+    const label = oneLine(labelledBy) || up.getAttribute('aria-label');
     const test = up.getAttribute('data-testid');
     const heading = ownHeading(up, el);
     if (label) within.unshift(`<${tag}> labelled "${label}"`);
     else if (test) within.unshift(`<${tag} data-testid="${test}">`);
-    else if (heading) within.unshift(`<${tag}> headed "${(heading.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 60)}"`);
+    else if (heading) within.unshift(`<${tag}> headed "${oneLine(heading.textContent)}"`);
   }
   const box = el.getBoundingClientRect();
   const view = el.ownerDocument?.defaultView;
@@ -334,72 +303,26 @@ function elementContext(el: Element): Partial<IsotoneElement> {
 
 const HEADING = 'h1,h2,h3,h4,h5,h6';
 
-/** Text-level elements a title wrapper may hold beside its heading. Not
- *  buttons or fields: a block with controls is a card, not a title. */
-const TEXT_LEVEL = new Set([
-  'a',
-  'abbr',
-  'b',
-  'bdi',
-  'bdo',
-  'br',
-  'cite',
-  'code',
-  'data',
-  'del',
-  'dfn',
-  'em',
-  'i',
-  'img',
-  'ins',
-  'kbd',
-  'mark',
-  'picture',
-  'q',
-  's',
-  'samp',
-  'small',
-  'source',
-  'span',
-  'strong',
-  'sub',
-  'sup',
-  'time',
-  'u',
-  'var',
-  'wbr',
-]);
-
 /**
  * The heading that titles `up` itself, above `el`: its own last heading child
- * before the branch holding `el`, or the heading of a title wrapper there (a
- * `header` or `hgroup`, or a `div`/`span` holding one heading and only text).
- * A heading inside the card or section that holds `el`, or inside a sibling
- * card or section, titles that block, not `up`. With no clear title there is
- * none: a missing label misleads nobody.
+ * before the branch holding `el`, or the first heading child of a wrapper
+ * there (a header, a title row, a card's header). Not a wrapper that is
+ * sectioning content, which titles itself, nor one shaped like the branch
+ * (same tag and classes): that is a sibling card, and its heading names that
+ * card. With no clear title there is none: a missing label misleads nobody.
  */
 function ownHeading(up: Element, el: Element): Element | null {
+  const children = Array.from(up.children);
+  const branch = children.find((child) => child === el || child.contains(el));
+  const shape = (node: Element) => `${node.localName} ${Array.from(node.classList).sort().join(' ')}`;
   let found: Element | null = null;
-  for (const child of Array.from(up.children)) {
-    if (child === el || child.contains(el)) break;
-    const heading = child.matches(HEADING) ? child : wrappedTitle(child);
-    if (heading) found = heading;
+  for (const child of children) {
+    if (child === branch) break;
+    if (child.matches(HEADING)) found = child;
+    else if (!child.matches('section,article,aside,nav') && (!branch || shape(child) !== shape(branch)))
+      found = Array.from(child.children).find((inner) => inner.matches(HEADING)) ?? found;
   }
   return found;
-}
-
-function wrappedTitle(wrapper: Element): Element | null {
-  const tag = wrapper.localName;
-  if (tag === 'header' || tag === 'hgroup') return Array.from(wrapper.children).find((child) => child.matches(HEADING)) ?? null;
-  if (tag !== 'div' && tag !== 'span') return null;
-  const headings = wrapper.querySelectorAll(HEADING);
-  const heading = headings[0];
-  if (headings.length !== 1 || !heading) return null;
-  for (const inner of Array.from(wrapper.querySelectorAll('*'))) {
-    if (heading.contains(inner) || TEXT_LEVEL.has(inner.localName) || inner.namespaceURI === 'http://www.w3.org/2000/svg') continue;
-    return null;
-  }
-  return heading;
 }
 
 /** `rgb(17, 17, 17)` as `#111111`, the form a stylesheet is searched for; anything else as it is. */

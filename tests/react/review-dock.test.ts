@@ -329,11 +329,41 @@ describe('review dock interactions', () => {
     await typeFeedback('Rounder still');
     await click(byText('Send note'));
     expect(posts[0]?.knobs).toEqual({ 'card-radius': '24' });
-    expect(container.querySelector('.isotone-note-hit')?.textContent).toContain('card-radius 24');
+    expect(container.querySelector('.isotone-note-hit')?.textContent).toContain('Card radius 24px');
     await click(container.querySelector('.isotone-note-hit'));
     await typeFeedback('Rounder still, and softer');
     await click(byText('Save edit'));
     expect(posts[1]).not.toHaveProperty('knobs');
+  });
+  it("records a host source's moved selectors and knobs too, and tags at most three", async () => {
+    const posts: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: unknown, init?: RequestInit) => {
+        if (init?.method === 'POST') posts.push(JSON.parse(String(init.body)));
+        return { ok: true, json: async () => (init?.method === 'POST' ? { id: 'saved' } : []) };
+      }),
+    );
+    const range = (id: string, label: string) => ({
+      kind: 'range' as const,
+      id,
+      label,
+      min: 0,
+      max: 40,
+      step: 1,
+      defaultValue: 0,
+      unit: 'px',
+    });
+    const axes: VariantAxis[] = [...AXES, range('pad', 'Cards > Padding'), range('gap', 'Gap'), range('radius', 'Radius')];
+    const source = createVariantsSource({ axes, selections: { headline: 'b', haze: '0.3', pad: '24', gap: '8', radius: '12' } });
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' }, variants: source }));
+    await click(container.querySelector('.isotone-fab'));
+    await typeFeedback('Tighter');
+    await click(byText('Send note'));
+    // The haze sits at its default.
+    expect(posts[0]?.knobs).toEqual({ headline: 'b', pad: '24', gap: '8', radius: '12' });
+    const tags = [...(container.querySelector('.isotone-note-hit .isotone-meta')?.children ?? [])].map((tag) => tag.textContent);
+    expect(tags).toEqual(['Headline Bold', 'Padding 24px', 'Gap 8px', '+1']);
   });
   it('pins several elements in one session, toggles a duplicate off, and saves every target', async () => {
     await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));

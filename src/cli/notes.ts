@@ -518,15 +518,11 @@ export function printNotes(io: CliIO, rows: StoredNote[], root: string): void {
         ),
       );
     }
-    if (n.knobs && Object.keys(n.knobs).length)
-      out(
-        io,
-        `  ⊙ knobs moved: ${oneLine(
-          Object.entries(n.knobs)
-            .map(([id, value]) => `${id}=${value}`)
-            .join(', '),
-        )} (styles show these values, not the source's)`,
-      );
+    if (n.knobs && Object.keys(n.knobs).length) {
+      const moved = Object.entries(n.knobs).map(([id, value]) => `${id}=${value}`);
+      const pinned = n.elements?.length || n.element;
+      out(io, `  ⊙ knobs moved: ${oneLine(moved.join(', '), 200)}${pinned ? " (styles show these values, not the source's)" : ''}`);
+    }
     const context = n.payload === undefined ? '' : describePayload(n.payload);
     if (context) out(io, `  · ${oneLine(context)}`);
     // An update note's text is Isotone's own; everything else is quoted.
