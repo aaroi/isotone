@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.6.0
+
 ### Added
 
 - **Isotone tells you whether a pick stays in its tab.** `init` names how picks switch in your project and what would change it: per tab, with `?v=` links, in a React app on Vite 6 or later; shared by every tab on Vite 5 or without React; knobs only with `isotone serve`. `init --json` has it as `switching`, and the first run has the agent pass it on. The variants guide has a table of what each setup does, including that knob values stay in the browser and never travel in a link.
