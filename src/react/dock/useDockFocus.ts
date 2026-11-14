@@ -62,11 +62,30 @@ export function useDockFocus(
     cancelAnimationFrame(frame.current);
     pending.current = null;
   }, []);
-  const later = useCallback((move: () => void) => {
-    cancelAnimationFrame(frame.current);
-    pending.current = null;
-    frame.current = requestAnimationFrame(move);
-  }, []);
+  // A move asked for earlier never takes focus back from a control on the page the reviewer turned to
+  // meanwhile, such as an input clicked while the panel slid in.
+  const unlessLeft = useCallback(
+    (move: () => void) => {
+      const before = document.activeElement;
+      return () => {
+        const now = document.activeElement;
+        const root = rootRef.current;
+        const shadow = root?.getRootNode();
+        const host = shadow instanceof ShadowRoot ? shadow.host : null;
+        const left = now !== before && now instanceof HTMLElement && now !== document.body && now !== host && !root?.contains(now);
+        if (!left) move();
+      };
+    },
+    [rootRef],
+  );
+  const later = useCallback(
+    (move: () => void) => {
+      cancelAnimationFrame(frame.current);
+      pending.current = null;
+      frame.current = requestAnimationFrame(unlessLeft(move));
+    },
+    [unlessLeft],
+  );
   const flush = useCallback(() => {
     const move = pending.current;
     pending.current = null;
@@ -80,9 +99,9 @@ export function useDockFocus(
   const atCommit = useCallback(
     (move: () => void) => {
       later(flush);
-      pending.current = move;
+      pending.current = unlessLeft(move);
     },
-    [later, flush],
+    [later, flush, unlessLeft],
   );
 
   /** Whether focus is in the dock, so closing it should put focus somewhere sensible. */

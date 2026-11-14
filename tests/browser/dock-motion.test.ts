@@ -72,7 +72,7 @@ window.record = () => {
   let eased = false;
   const sample = () => {
     if (!on) return;
-    const f = {};
+    const f = { at: performance.now() };
     const r = root();
     eased ||= r.querySelector('.isotone-root').dataset.easing === 'true';
     for (const p of r.querySelectorAll('.isotone-panel[data-open="true"]:not(.isotone-exit)')) {
@@ -122,9 +122,13 @@ interface Motion {
   eased: boolean;
 }
 
+/** A gap between samples, in ms, past which a step says nothing about an ease of 180 ms. */
+const SLOW_FRAME = 50;
+
 /** Measure a recording: `stay` matches the keys that must not move; the rest may glide, never jump. */
 function motion({ frames, eased }: { frames: Record<string, number>[]; eased: boolean }, stay: RegExp): Motion {
   const keys = new Set(frames.flatMap((f) => Object.keys(f)));
+  keys.delete('at');
   let still = 0;
   let moved: string | undefined;
   const jumps: string[] = [];
@@ -137,8 +141,12 @@ function motion({ frames, eased }: { frames: Record<string, number>[]; eased: bo
       const b = frames[i]?.[key];
       first ??= a ?? b;
       if (a === undefined || b === undefined) continue;
-      span = Math.max(span, Math.abs(b - a));
       travel = Math.max(travel, Math.abs(b - (first as number)));
+      // A step across a frame that took most of an ease (a loaded machine) shows nothing of how it moved:
+      // only steps between frames a 60 Hz screen could have shown count toward a jump. What must stay
+      // put counts at any speed.
+      const slow = (frames[i]?.at ?? 0) - (frames[i - 1]?.at ?? 0) > SLOW_FRAME;
+      if (!slow || stay.test(key)) span = Math.max(span, Math.abs(b - a));
     }
     if (stay.test(key) && Math.max(span, travel) > still) {
       still = Math.max(span, travel);

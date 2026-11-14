@@ -125,6 +125,20 @@ it('leaves an Escape pressed in a host input to the host', async () => {
   expect($('.isotone-notes-panel').dataset.open).toBe('false');
 });
 
+it('never takes focus back from a host input clicked while the panel opens', async () => {
+  await render();
+  const input = document.getElementById('host-input') as HTMLInputElement;
+  await act(async () => {
+    $('.isotone-fab').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, detail: 1 }));
+    // Before the frame that places the caret in the note field.
+    input.focus();
+  });
+  await frame();
+  await frame();
+  expect($('.isotone-notes-panel').dataset.open).toBe('true');
+  expect(document.activeElement).toBe(input);
+});
+
 it('swallows presses on the page while selecting, unless Shift is held', async () => {
   await render();
   await act(async () => {

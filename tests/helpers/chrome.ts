@@ -140,6 +140,8 @@ export async function launchChrome(binary: string): Promise<Chrome> {
   await send('Runtime.enable');
   // The OS setting otherwise decides: Windows Server, as on CI, has animations off, so Chrome
   // reports reduced motion and the panel (rightly) changes at once. These tests check the motion.
+  // `ISOTONE_CPU_THROTTLE=6` slows the page's CPU as a loaded CI runner or a slow laptop would.
+  await send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.ISOTONE_CPU_THROTTLE ?? 1) });
   await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
   const mouse = (type: string, x: number, y: number) =>
     send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
