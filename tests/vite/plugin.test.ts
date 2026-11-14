@@ -1610,7 +1610,8 @@ describe('Components compiled in parts: Vue, Svelte, Astro', () => {
     expect(await vite6('/src/Card.vue?vue&type=style&index=0&lang.css')).toBe('next');
     const vite5 = refusal(false);
     expect(await vite5('/src/Button.tsx?isotone=b')).toBe(404);
-    expect(await vite5(`/@fs${root}/src/Button.tsx?isotone=b`)).toBe(404);
+    // Vite's spelling on every OS: `/@fs/C:/…` on Windows, where `root` is `C:\…`.
+    expect(await vite5(`/@fs/${normalizePath(root).replace(/^\//, '')}/src/Button.tsx?isotone=b`)).toBe(404);
     expect(await vite5('/src/Button.tsx')).toBe('next');
     // Any other `?isotone=` is the app's own.
     expect(await vite5('/?isotone=x')).toBe('next');
