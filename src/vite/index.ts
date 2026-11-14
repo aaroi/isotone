@@ -70,6 +70,16 @@ const VITE_DENY = ['.env', '.env.*', '*.{crt,pem}', '**/.git/**'];
 const SPECIAL_QUERY = /[?&](raw|url|inline|no-inline|worker|sharedworker|html-proxy)(?:[&=]|$)/;
 
 /**
+ * A variant's copy, served under the real file's module id, with a line map
+ * that names the copy: a stack's source map then leads the agent to the file
+ * that ran, at a line of that file.
+ */
+function copy(file: string): { code: string; map: { version: 3; sources: string[]; names: []; mappings: string } } {
+  const code = readFileSync(file, 'utf8');
+  return { code, map: { version: 3, sources: [file], names: [], mappings: `AAAA${';AACA'.repeat(code.split('\n').length - 1)}` } };
+}
+
+/**
  * A part of a component that its framework plugin compiled from the whole
  * file, named by the framework in the query: `Card.vue?vue&type=style&index=0…`,
  * `Card.svelte?svelte&type=style&lang.css`, `Card.astro?astro&type=style…`.
@@ -351,7 +361,8 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
         // One version asked for in a server render obeys `server.fs.deny` too.
         if (!servable(path)) return null;
         const from = version === BASE_VERSION ? (existsSync(path) ? path : null) : overrides.copyOf(version, path);
-        return { code: from ? readFileSync(from, 'utf8') : 'export {};\n', map: null };
+        if (!from) return { code: 'export {};\n', map: null };
+        return from === path ? { code: readFileSync(from, 'utf8'), map: null } : copy(from);
       }
       // The browser gets a dispatcher; a server render keeps the whole-file
       // swap, since the server cannot know which tab it renders for.
@@ -364,7 +375,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
         }
       }
       const override = overrides.overrideFor(overrides.active(), path);
-      return override ? { code: readFileSync(override, 'utf8'), map: null } : null;
+      return override ? copy(override) : null;
     },
     // Vite 6 and later call this once per environment and skip
     // handleHotUpdate; Vite 5 only knows handleHotUpdate.

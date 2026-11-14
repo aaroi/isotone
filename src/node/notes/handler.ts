@@ -10,7 +10,7 @@ import { MAX_FEEDBACK_LENGTH, MAX_NOTES, MAX_ROUTE, PAYLOAD_MAX } from '../../co
 import { updateNoteText } from '../../core/update';
 import { LockBusyError, SERVER_LOCK_WAIT_MS, withFileLock } from '../fs/lock';
 import { type HandlerRequest, type HandlerResponse, jsonResponse } from '../http';
-import { notesProjectRoot, updateRequestOf } from '../update/request';
+import { notesApp, notesProjectRoot, updateRequestOf } from '../update/request';
 import { noteFingerprint, notesRevision, readNotes, replyView, type StoredNote, writeNotes } from './store';
 import { elementFields, elementOf, removalOf, selectionsOf, variantOf, viewportOf, withinPayloadCap } from './validate';
 
@@ -122,15 +122,17 @@ function handleNotesRequest(file: string, req: NotesRequest): NotesResponse {
     if (body.elements !== undefined && (!Array.isArray(body.elements) || body.elements.length > 50)) {
       return json(400, { error: 'elements must be an array of at most 50 elements' });
     }
+    // A page names some files by absolute path; the agent reads them from the app.
+    const app = notesApp(file);
     const elements =
       body.elements === undefined
         ? undefined
-        : (body.elements as unknown[]).map(elementOf).filter((el): el is IsotoneElement => el !== null);
+        : (body.elements as unknown[]).map((el) => elementOf(el, app)).filter((el): el is IsotoneElement => el !== null);
     const variant = body.variant === undefined ? undefined : variantOf(body.variant);
     const variantAction = removalOf(body.variantAction);
     if (body.variantAction !== undefined && !variantAction) return json(400, { error: 'Invalid variant action' });
     const selections = selectionsOf(body.selections);
-    const cleanElement = element && typeof element === 'object' && !Array.isArray(element) ? elementFields(element) : null;
+    const cleanElement = element && typeof element === 'object' && !Array.isArray(element) ? elementFields(element, app) : null;
     const notes = readNotes(file);
     const defaultsRequest = cleanFeedback.startsWith('[set-defaults]');
     const previousDefaults =

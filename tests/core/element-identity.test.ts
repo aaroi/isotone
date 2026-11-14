@@ -49,6 +49,74 @@ it('climbs past an id the page repeats', () => {
   expect(document.querySelector(describeIsotoneElement(elementAsNode(second)).selector)).toBe(second);
 });
 
+describe('a selector that names the element, not its place', () => {
+  const selectorOf = (target: Element | string, index = 0) =>
+    describeIsotoneElement(elementAsNode(typeof target === 'string' ? (document.querySelectorAll(target)[index] as Element) : target))
+      .selector;
+
+  it('takes a unique stable attribute or test id of the pinned element before its position', () => {
+    document.body.innerHTML = `
+      <nav><a href="/docs">Docs</a><a href="/pricing">Pricing</a></nav>
+      <form><input name="email"><label for="email">Email</label><img alt="Logo" src="/logo.svg"></form>
+      <button data-testid="save">Save</button><button>Cancel</button>`;
+    expect(selectorOf('a', 1)).toBe('a[href="/pricing"]');
+    expect(selectorOf('input')).toBe('input[name="email"]');
+    expect(selectorOf('label')).toBe('label[for="email"]');
+    expect(selectorOf('img')).toBe('img[alt="Logo"]');
+    expect(selectorOf('[data-testid]')).toBe('button[data-testid="save"]');
+  });
+
+  it('never takes a class, which state, a style fix or a variant changes', () => {
+    // A Tailwind toggle: the active button is the only `bg-blue-600`, until the other one is picked.
+    document.body.innerHTML = `
+      <div class="flex gap-1"><button class="px-3 py-1 rounded bg-blue-600 text-white">Monthly</button><button class="px-3 py-1 rounded text-gray-600">Yearly</button></div>
+      <div class="theme"><button class="theme-toggle" aria-label="Open menu" title="Menu">Dark</button></div>`;
+    expect(selectorOf('button', 0)).toBe('div:nth-child(1) > button:nth-child(1)');
+    expect(selectorOf('.theme-toggle')).toBe('div:nth-child(2) > button:nth-child(1)');
+  });
+
+  it("never takes an id the page generates on each render, as React's useId and the libraries on it do", () => {
+    for (const id of [
+      ':r1:',
+      '«r2»',
+      '_r_3_',
+      'app_r_1_',
+      'radix-:r4:',
+      'headlessui-menu-button-5',
+      'mantine-r1a',
+      '_R_1b6la9_',
+      '«R2mm9j6»',
+      ':R2mm9j6H1:',
+    ]) {
+      document.body.innerHTML = `<main><div><button>A</button><button id="${id}">B</button></div></main>`;
+      expect(selectorOf('button', 1), id).toBe('main:nth-child(1) > div:nth-child(1) > button:nth-child(2)');
+    }
+    document.body.innerHTML = '<main><div><button>A</button><button id="checkout">B</button></div></main>';
+    expect(selectorOf('button', 1)).toBe('#checkout');
+    // Nor such an id in an attribute that points at it.
+    document.body.innerHTML =
+      '<form><label for=":r1:">Email</label><label for=":r2:">Name</label><a href="#radix-:r3:">Tab</a><label for="_R_1b6la9_">Plan</label><a href="#«R2mm9j6»">Server</a></form>';
+    expect(selectorOf('label', 1)).toBe('form:nth-child(1) > label:nth-child(2)');
+    expect(selectorOf('a')).toBe('form:nth-child(1) > a:nth-child(3)');
+    // A server render's ids are longer: `_R_1b6la9_`, `«R2mm9j6»`.
+    expect(selectorOf('label', 2)).toBe('form:nth-child(1) > label:nth-child(4)');
+    expect(selectorOf('a', 1)).toBe('form:nth-child(1) > a:nth-child(5)');
+    // A test id is the author's, whatever it looks like.
+    document.body.innerHTML = '<div><button data-testid="cart:remove:btn">Remove</button><button>Keep</button></div>';
+    expect(selectorOf('button')).toBe('button[data-testid="cart:remove:btn"]');
+  });
+
+  it('anchors an ancestor only by its id or test id, so a moved state class cannot move the pin', () => {
+    document.body.innerHTML = `
+      <section><article class="card"><h2>Hobby</h2></article><article class="card highlighted"><h2>Pro</h2></article></section>
+      <div data-testid="team"><article class="card"><a href="/team">Team</a><h2>Team</h2></article></div>`;
+    const pro = selectorOf('h2', 1);
+    expect(pro).not.toContain('highlighted');
+    expect(document.querySelector(pro)?.textContent).toBe('Pro');
+    expect(selectorOf('h2', 2)).toBe('div[data-testid="team"] > article:nth-child(1) > h2:nth-child(2)');
+  });
+});
+
 it('says which element it is in terms an agent can search for', () => {
   document.body.innerHTML = `
     <section aria-label="Usage"><div data-testid="tabs">
@@ -164,6 +232,14 @@ describe('the React components that wrote the element', () => {
   /** A React 19 creation stack: the call that made the element, then where it was written. */
   const made = (...frames: string[]) => ({ stack: ['Error: react-stack-top-frame', ...frames.map((f) => `    at ${f}`)].join('\n') });
   const reactBottom = 'Object.react_stack_bottom_frame (http://localhost:3000/_next/static/chunks/react-dom_cjs_1.js:2859:93)';
+  /** A fetched module's response. */
+  const body = (code: string) => ({ arrayBuffer: async () => new TextEncoder().encode(code).buffer });
+  /** The page's own download of each URL, as Resource Timing reports it: `decodedBodySize` bytes. */
+  const pageLoaded = (sizes: Record<string, string>) =>
+    vi.stubGlobal('performance', {
+      getEntriesByType: () =>
+        Object.entries(sizes).map(([name, code]) => ({ name, decodedBodySize: new TextEncoder().encode(code).length })),
+    });
 
   const next = (file: string) => `webpack-internal:///(app-pages-browser)/./${file}`;
 
@@ -192,7 +268,7 @@ describe('the React components that wrote the element', () => {
       // The parents above it are the framework's and the layout's providers.
       return: { type: component('ThemeProvider'), return: { type: component('Providers'), return: { type: component('AppRouter') } } },
     });
-    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['Pricing'], source: 'src/app/pricing/page.tsx:24' });
+    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['Pricing'], source: 'src/app/pricing/page.tsx' });
   });
 
   // Node on Windows prints the files it loaded as `C:\…` paths: the tests' React runs there in CI.
@@ -206,7 +282,8 @@ describe('the React components that wrote the element', () => {
       ),
       _debugOwner: owner,
     });
-    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['Pricing'], source: 'C:/app/src/Pricing.tsx:12' });
+    // The file, with forward slashes; its line comes from the module's source map.
+    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['Pricing'], source: 'C:/app/src/Pricing.tsx' });
   });
 
   it('names the route a router created', () => {
@@ -228,7 +305,7 @@ describe('the React components that wrote the element', () => {
       _debugOwner: rendered,
     };
     const button = pin({ type: 'button', _debugStack: at('Pricing (http://localhost:5173/src/Pricing.tsx:12:7)'), _debugOwner: route });
-    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['Pricing'], source: '/src/Pricing.tsx:12' });
+    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['Pricing'], source: '/src/Pricing.tsx' });
   });
 
   it("names a framework component Turbopack serves from a hashed chunk, which looks like the app's", () => {
@@ -260,10 +337,10 @@ describe('the React components that wrote the element', () => {
       ),
       _debugOwner: page,
     });
-    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({
-      component: ['ClientPageRoot', 'Pricing'],
-      source: '/_next/static/chunks/src_app_client_page_tsx_1.js:24',
-    });
+    const described = describeIsotoneElement(elementAsNode(button));
+    expect(described.component).toEqual(['ClientPageRoot', 'Pricing']);
+    // The chunk names no file: its source map does, once read.
+    expect(described.source).toBeUndefined();
   });
 
   it('names server components from their debug info, with no source from the server bundle', () => {
@@ -299,14 +376,14 @@ describe('the React components that wrote the element', () => {
       _debugStack: viteStack(`ButtonBase (${vite('node_modules/.vite/deps/ui-kit.js')}:90:9)`),
       _debugOwner: base,
     });
-    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['App', 'Pricing'], source: '/src/Pricing.tsx:12' });
+    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['App', 'Pricing'], source: '/src/Pricing.tsx' });
   });
 
   it('looks past a wrapping JSX runtime such as Emotion', () => {
     const emotion = `jsxDEV (${vite('node_modules/.vite/deps/@emotion_react_jsx-dev-runtime.js')}:30:12)`;
     const page = fiber('Pricing', null, emotion, `App (${vite('src/App.tsx')}:5:3)`);
     const button = pin({ type: 'button', _debugStack: viteStack(emotion, `Pricing (${vite('src/Pricing.tsx')}:12:7)`), _debugOwner: page });
-    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['App', 'Pricing'], source: '/src/Pricing.tsx:12' });
+    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['App', 'Pricing'], source: '/src/Pricing.tsx' });
   });
 
   it('names the app component through a Slot that cloned it (asChild)', () => {
@@ -327,7 +404,7 @@ describe('the React components that wrote the element', () => {
     const button = pin({ type: 'button', _debugStack: viteStack(`Button (${vite('src/ui/button.tsx')}:20:3)`), _debugOwner: cloned });
     expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({
       component: ['App', 'Pricing', 'Button'],
-      source: '/src/ui/button.tsx:20',
+      source: '/src/ui/button.tsx',
     });
   });
 
@@ -344,7 +421,7 @@ describe('the React components that wrote the element', () => {
       ),
       _debugOwner: item,
     });
-    expect(describeIsotoneElement(elementAsNode(row))).toMatchObject({ component: ['App', 'Pricing'], source: '/src/Pricing.tsx:31' });
+    expect(describeIsotoneElement(elementAsNode(row))).toMatchObject({ component: ['App', 'Pricing'], source: '/src/Pricing.tsx' });
   });
 
   it("names a row component a list renders (react-window's rowComponent)", () => {
@@ -352,7 +429,7 @@ describe('the React components that wrote the element', () => {
     const list = fiber('List', page, `Pricing (${vite('src/Pricing.tsx')}:30:7)`);
     const rowFiber = fiber('Row', list, `List (${vite('node_modules/.vite/deps/react-window.js')}:400:9)`);
     const cell = pin({ type: 'div', _debugStack: viteStack(`Row (${vite('src/Row.tsx')}:6:10)`), _debugOwner: rowFiber });
-    expect(describeIsotoneElement(elementAsNode(cell))).toMatchObject({ component: ['App', 'Pricing', 'Row'], source: '/src/Row.tsx:6' });
+    expect(describeIsotoneElement(elementAsNode(cell))).toMatchObject({ component: ['App', 'Pricing', 'Row'], source: '/src/Row.tsx' });
   });
 
   it('names a forwardRef component by its render function, and an anonymous one not at all', () => {
@@ -364,7 +441,7 @@ describe('the React components that wrote the element', () => {
     const anonymous = pin({ type: 'button', _debugStack: viteStack(`${vite('src/ui/button.tsx')}:20:3`), _debugOwner: owner });
     expect(describeIsotoneElement(elementAsNode(anonymous))).toMatchObject({
       component: ['App', 'Pricing'],
-      source: '/src/ui/button.tsx:20',
+      source: '/src/ui/button.tsx',
     });
   });
 
@@ -386,44 +463,267 @@ describe('the React components that wrote the element', () => {
   it('reads the JSX callsite from React 19 debug stacks', () => {
     const jsx = 'exports.jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=1a2b:250:33)';
     const vite = made(jsx, 'TabButton (http://localhost:5173/src/tabs.tsx?t=1700000000:12:7)', reactBottom);
-    expect(describeIsotoneElement(elementAsNode(pin({ type: 'button', _debugStack: vite }))).source).toBe('/src/tabs.tsx:12');
+    expect(describeIsotoneElement(elementAsNode(pin({ type: 'button', _debugStack: vite }))).source).toBe('/src/tabs.tsx');
     const webpack = made(
       'jsxDEV (webpack-internal:///(app-pages-browser)/./node_modules/react/cjs/react-jsx-dev-runtime.development.js:10:1)',
       'TabButton (webpack-internal:///(app-pages-browser)/./src/app/tabs.tsx:30:5)',
     );
-    expect(describeIsotoneElement(elementAsNode(pin({ type: 'button', _debugStack: webpack }))).source).toBe('src/app/tabs.tsx:30');
+    expect(describeIsotoneElement(elementAsNode(pin({ type: 'button', _debugStack: webpack }))).source).toBe('src/app/tabs.tsx');
     // Firefox and Safari: no message line, `name@url` frames.
     const fs = [
       'jsxDEV@http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js:1:1',
       'TabButton@http://localhost:5173/@fs/Users/me/app/src/tabs.tsx:8:3',
     ].join('\n');
-    expect(describeIsotoneElement(elementAsNode(pin({ type: 'button', _debugStack: fs }))).source).toBe('/Users/me/app/src/tabs.tsx:8');
+    expect(describeIsotoneElement(elementAsNode(pin({ type: 'button', _debugStack: fs }))).source).toBe('/Users/me/app/src/tabs.tsx');
     // React 18's field still wins when present.
     const both = pin({ type: 'button', _debugSource: { fileName: 'src/old.tsx', lineNumber: 3 }, _debugStack: vite });
     expect(describeIsotoneElement(elementAsNode(both)).source).toBe('src/old.tsx:3');
   });
 
   it('maps a React 19 callsite back to the original line through the module source map', async () => {
-    const stack = made(
-      'exports.jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js:250:33)',
-      'TabButton (http://localhost:5173/src/tabs.tsx?t=1:2:7)',
-    );
-    const button = pin({ type: 'button', _debugStack: stack });
-    expect(describeIsotoneElement(elementAsNode(button)).source).toBe('/src/tabs.tsx:2');
-    // Generated line 2 maps to line 10 of tabs.tsx.
-    const map = btoa(JSON.stringify({ version: 3, sources: ['tabs.tsx'], mappings: ';AASA' }));
-    const fetch = vi.fn(async () => ({
-      text: async () => `import x;\njsxDEV("button");\n//# sourceMappingURL=data:application/json;base64,${map}\n`,
-    }));
+    const at = (line: number, column: number) =>
+      pin({
+        type: 'button',
+        _debugStack: made(
+          'exports.jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js:250:33)',
+          `TabButton (http://localhost:5173/src/tabs.tsx?t=1:${line}:${column})`,
+        ),
+      });
+    // Only the file until the map is read: the stack's line is the transformed code's.
+    expect(describeIsotoneElement(elementAsNode(at(2, 3))).source).toBe('/src/tabs.tsx');
+    // Generated line 2 maps to line 10 of tabs.tsx. V8 places a direct call at its callee.
+    const module = (mappings: string) =>
+      `import x;\n\t\t_jsxDEV("button", {});\n//# sourceMappingURL=data:application/json;base64,${btoa(JSON.stringify({ version: 3, sources: ['tabs.tsx'], mappings }))}\n`;
+    let served = module(';AASA');
+    const fetch = vi.fn(async () => body(served));
     vi.stubGlobal('fetch', fetch);
+    pageLoaded({ 'http://localhost:5173/src/tabs.tsx?t=1': served });
     try {
-      expect(await resolveElementSource(button)).toBe('/src/tabs.tsx:10');
+      expect(await resolveElementSource(at(2, 3))).toBe('/src/tabs.tsx:10');
       expect(fetch).toHaveBeenCalledWith('http://localhost:5173/src/tabs.tsx?t=1');
+      // A position that is no JSX call in that code is not the JSX that made the element: no line.
+      expect(await resolveElementSource(at(1, 1))).toBeUndefined();
+      expect(await resolveElementSource(at(2, 99))).toBeUndefined();
+      // A hot update loads the module again under a later stamp: the element may predate the edit.
+      pageLoaded({ 'http://localhost:5173/src/tabs.tsx?t=1': served, 'http://localhost:5173/src/tabs.tsx?t=2': served });
+      expect(await resolveElementSource(at(2, 3))).toBeUndefined();
+      // Other bytes than the page loaded say nothing about it…
+      pageLoaded({ 'http://localhost:5173/src/tabs.tsx?t=1': served });
+      served = module(';AAWAAAAA');
+      expect(await resolveElementSource(at(2, 3))).toBeUndefined();
+      // …unless only Vite's stamps on its imports differ: a hot update to a module it imports.
+      const importer = (stamp: string) => `import { Card } from "/src/Card.tsx${stamp}";\n${module(';;AASA')}`;
+      pageLoaded({ 'http://localhost:5173/src/tabs.tsx?t=1': importer('') });
+      served = importer('?t=1794647198723');
+      expect(await resolveElementSource(at(3, 3))).toBe('/src/tabs.tsx:10');
       // React 18's own field is already exact: nothing to fetch.
       expect(await resolveElementSource(pin({ type: 'button', _debugSource: { fileName: 'a.tsx', lineNumber: 1 } }))).toBeUndefined();
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it('reads Windows paths with forward slashes, without taking the drive for a URL scheme', () => {
+    const vite = made(
+      'exports.jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js:250:33)',
+      'TabButton (http://localhost:5173/@fs/C:/Users/me/app/src/tabs.tsx:8:3)',
+    );
+    expect(describeIsotoneElement(elementAsNode(pin({ type: 'button', _debugStack: vite }))).source).toBe('C:/Users/me/app/src/tabs.tsx');
+    const firefox = 'jsxDEV@file:///C:/x/react.js:1:1\nTabButton@file:///C:/Users/me/app/src/tabs.tsx:8:3';
+    expect(describeIsotoneElement(elementAsNode(pin({ type: 'button', _debugStack: firefox }))).source).toBe(
+      'C:/Users/me/app/src/tabs.tsx',
+    );
+    const legacy = pin({ type: 'button', _debugSource: { fileName: 'C:\\Users\\me\\app\\src\\old.tsx', lineNumber: 3 } });
+    expect(describeIsotoneElement(elementAsNode(legacy)).source).toBe('C:/Users/me/app/src/old.tsx:3');
+  });
+
+  /** A wrapped JSX call as webpack and Turbopack emit it; V8 places it at its arguments. */
+  const wrapped = (tag: string) => `    return (0, m["jsxDEV"])("${tag}", {});`;
+  const argumentsAt = wrapped('button').indexOf('("') + 1;
+
+  it('maps a Turbopack chunk through its index map while the server sends the chunk the page loaded', async () => {
+    const chunk = 'http://localhost:3000/_next/static/chunks/_1ngr3bx56_1ly._.js';
+    const at = (line: number) =>
+      pin({ type: 'button', _debugStack: made(`jsxDEV (${chunk}:1:1)`, `Counter (${chunk}:${line}:${argumentsAt})`, reactBottom) });
+    /** Two modules in one chunk, each with its own map from where it starts; `edit` lines added to Providers. */
+    const build = (edit: number) => {
+      const section = (line: number, file: string, mappings: string) => ({
+        offset: { line, column: 0 },
+        map: { version: 3, sources: [`file:///Users/me/app/src/components/${file}`], mappings },
+      });
+      const code = [
+        '(globalThis.TURBOPACK ||= []).push([document.currentScript,',
+        '"[project]/src/components/Providers.tsx [app-client] (ecmascript)", (ctx) => {',
+        ...Array.from({ length: edit }, () => '  _s();'),
+        wrapped('div'),
+        '}),',
+        '"[project]/src/components/Counter.tsx [app-client] (ecmascript)", (ctx) => {',
+        '  _s();',
+        '',
+        wrapped('button'),
+        '}),',
+        ']);',
+        '//# sourceMappingURL=_1ngr3bx56_1ly._.js.map',
+      ].join('\n');
+      const sections = [section(1, 'Providers.tsx', `${';'.repeat(1 + edit)}AAEA`), section(4 + edit, 'Counter.tsx', ';;;AAQA')];
+      return { code, map: { version: 3, sources: [], sections } };
+    };
+    let served = build(0);
+    const fetch = vi.fn(async (url: string | URL) => (String(url).endsWith('.map') ? { json: async () => served.map } : body(served.code)));
+    vi.stubGlobal('fetch', fetch);
+    // The page loaded build(0).
+    pageLoaded({ [chunk]: build(0).code });
+    try {
+      expect(describeIsotoneElement(elementAsNode(at(8))).source).toBeUndefined();
+      // The absolute path is made relative to the app by the notes endpoint.
+      expect(await resolveElementSource(at(8))).toBe('/Users/me/app/src/components/Counter.tsx:9');
+      expect(await resolveElementSource(at(8))).toBe('/Users/me/app/src/components/Counter.tsx:9');
+      // Unchanged code is mapped once: one map for two pins.
+      expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('.map'))).toHaveLength(1);
+      // An edit to Providers moves Counter two lines down the chunk, at the same URL. A fiber Fast
+      // Refresh kept ran build(0), one rendered since build(2); neither can be told from the other,
+      // and on a first pin after the edit build(2) would put Counter's line on another module's.
+      served = build(2);
+      expect(await resolveElementSource(at(8))).toBeUndefined();
+      expect(await resolveElementSource(at(10))).toBeUndefined();
+      // A hot update runs the module from the whole chunk (`?id=`): the query names its file.
+      const updated = `${chunk}?id=%255Bproject%255D/src/components/Counter.tsx%2520%255Bapp-client%255D`;
+      const hot = pin({ type: 'button', _debugStack: made(`jsxDEV (${chunk}:1:1)`, `Counter (${updated}:51:215)`, reactBottom) });
+      expect(describeIsotoneElement(elementAsNode(hot)).source).toBe('src/components/Counter.tsx');
+      expect(await resolveElementSource(hot)).toBeUndefined();
+      // A chunk the page's downloads do not show (a buffer that overflowed before the panel) gives no line.
+      vi.stubGlobal('performance', { getEntriesByType: () => [] });
+      served = build(0);
+      expect(await resolveElementSource(at(8))).toBeUndefined();
+      // Under a basePath the chunk still names no file.
+      const based = made(
+        'jsxDEV (http://localhost:3000/docs/_next/static/chunks/a.js:1:1)',
+        'Counter (http://localhost:3000/docs/_next/static/chunks/b.js:4:2)',
+      );
+      expect(describeIsotoneElement(elementAsNode(pin({ type: 'button', _debugStack: based }))).source).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("maps a webpack module through the version the fiber ran: the hot update's, or the one its chunk delivered", async () => {
+    const id = '(app-pages-browser)/./src/components/Counter.tsx';
+    /** Next's eval-source-map: the module's code and inline map, as a JSON string the factory evals. */
+    const factory = (edit: number, mappings: string) => {
+      const map = btoa(JSON.stringify({ version: 3, sources: ['/Users/me/app/src/components/Counter.tsx'], mappings }));
+      const code = ['"use strict";', ...Array.from({ length: edit }, () => '// edit'), '', wrapped('button')].join('\n');
+      const evaluated = `${code}\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,${map}\n//# sourceURL=webpack-internal:///${id}\n`;
+      return { toString: () => `(module) => { eval(__webpack_require__.ts(${JSON.stringify(evaluated)})); }` };
+    };
+    // The runtime hands a pushed chunk's callback its `require`; a hot update rewrites `require.m`.
+    const runtime = (require: object, chunks: unknown[]) =>
+      Object.assign(chunks, { push: ([, , callback]: [unknown, unknown, (r: unknown) => void]) => callback(require) });
+    const scope = globalThis as unknown as Record<string, unknown>;
+    // Another runtime on the page, without the module, is passed over.
+    scope.webpackChunk_widget = runtime({ m: {} }, []);
+    const require: { m: Record<string, { toString(): string }> } = { m: { [id]: factory(2, ';;;;AAUA') } };
+    scope.webpackChunk_N_E = runtime(require, [[['app/page'], { [id]: factory(0, ';;AAQA') }]]);
+    const at = (line: number) =>
+      pin({
+        type: 'button',
+        _debugStack: made(
+          'jsxDEV (webpack-internal:///(app-pages-browser)/./node_modules/react/jsx.js:1:1)',
+          `Counter (webpack-internal:///${id}:${line}:${argumentsAt})`,
+        ),
+      });
+    try {
+      // The eval'd line is never the file's: only the file until the map is read.
+      expect(describeIsotoneElement(elementAsNode(at(3))).source).toBe('src/components/Counter.tsx');
+      // Rendered since the hot update: the new factory.
+      expect(await resolveElementSource(at(5))).toBe('/Users/me/app/src/components/Counter.tsx:11');
+      // Kept by Fast Refresh: the factory its chunk delivered.
+      expect(await resolveElementSource(at(3))).toBe('/Users/me/app/src/components/Counter.tsx:9');
+      // A position no version has a JSX call at.
+      expect(await resolveElementSource(at(1))).toBeUndefined();
+      // A version that cannot be read leaves the others.
+      require.m[id] = { toString: () => '(module) => { eval("\\x41") }' };
+      expect(await resolveElementSource(at(3))).toBe('/Users/me/app/src/components/Counter.tsx:9');
+    } finally {
+      delete scope.webpackChunk_N_E;
+      delete scope.webpackChunk_widget;
+    }
+  });
+
+  it("names the file of a server component webpack built, without the server's line", async () => {
+    const flight = 'fakeJSXCallSite (webpack-internal:///(app-pages-browser)/./node_modules/next/dist/compiled/rsdw-client.js:3647:19)';
+    const card = { name: 'PricingCard', env: 'Prerender', debugStack: made(flight, 'Function.all (<anonymous>:1:21)'), owner: null };
+    const button = pin({
+      type: 'a',
+      _debugStack: made(
+        flight,
+        'PricingCard (about://React/Prerender/webpack-internal:///(rsc)/./src/components/PricingCard.tsx?20:49:88)',
+      ),
+      _debugOwner: card,
+    });
+    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({
+      component: ['PricingCard'],
+      source: 'src/components/PricingCard.tsx',
+    });
+    expect(await resolveElementSource(button)).toBeUndefined();
+  });
+
+  it("names a variant copy's own file where its module's map does", async () => {
+    // The Vite plugin serves a copy with a map that names it (see the plugin's tests).
+    const stack = made(
+      'exports.jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js:250:33)',
+      'Card (http://localhost:5173/src/Card.tsx?isotone=bold:2:1)',
+    );
+    const map = btoa(JSON.stringify({ version: 3, sources: ['../.isotone/variants/bold/src/Card.tsx'], mappings: ';AAcA' }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => body(`x;\n_jsxDEV("a");\n//# sourceMappingURL=data:application/json;base64,${map}\n`)),
+    );
+    try {
+      expect(await resolveElementSource(pin({ type: 'a', _debugStack: stack }))).toBe('/.isotone/variants/bold/src/Card.tsx:15');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("asks only the module's own server for its map", async () => {
+    const stack = made(
+      'exports.jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js:250:33)',
+      'Card (http://localhost:5173/src/Card.tsx:2:7)',
+    );
+    const fetch = vi.fn(async () => body('x;\n//# sourceMappingURL=http://elsewhere.test/Card.tsx.map\n'));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      expect(await resolveElementSource(pin({ type: 'a', _debugStack: stack }))).toBeUndefined();
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('the Vue components that wrote the element', () => {
+  /** A component instance as Vue's dev build keeps it, rendered by `owner`. */
+  const instance = (type: object, owner: object | null, parent: object | null = owner) => ({ type, vnode: { ctx: owner }, parent });
+
+  it('names app components outermost first, with the file of the one whose template wrote the element', () => {
+    const app = instance({ __name: 'App', __file: '/Users/me/app/src/App.vue' }, null);
+    const list = instance({ name: 'PlanList', __file: '/Users/me/app/src/components/PlanList.vue' }, app);
+    const card = instance({ __file: '/Users/me/app/src/components/PricingCard.vue' }, list);
+    const link = instance({ name: 'RouterLink' }, card);
+    document.body.innerHTML = '<p>Pro</p><a>Choose</a>';
+    const [p, a] = Array.from(document.body.children);
+    // Slot content: the card mounts it, but the list's template wrote it.
+    Object.assign(p as Element, { __vnode: { ctx: list }, __vueParentComponent: card });
+    expect(describeIsotoneElement(elementAsNode(p as Element))).toMatchObject({
+      component: ['App', 'PlanList'],
+      source: '/Users/me/app/src/components/PlanList.vue',
+    });
+    // A router's link rendered the anchor and is passed; the card, named from its file, wrote the link.
+    Object.assign(a as Element, { __vnode: { ctx: link }, __vueParentComponent: link });
+    expect(describeIsotoneElement(elementAsNode(a as Element))).toMatchObject({
+      component: ['App', 'PlanList', 'PricingCard'],
+      source: '/Users/me/app/src/components/PricingCard.vue',
+    });
   });
 });
 
@@ -577,7 +877,7 @@ describe('the components that wrote an element React rendered', () => {
   it('names the component around a .map callback, a helper and a compiler-outlined _temp', async () => {
     expect(await describeRendered(h(PlanList), 'li[data-plan=free]')).toEqual({
       component: ['PlanList'],
-      source: expect.stringMatching(/^element-identity\.test\.ts:\d+$/),
+      source: expect.stringMatching(/^element-identity\.test\.ts$/),
     });
     expect((await describeRendered(h(CompiledList), 'li[data-compiled=free]')).component).toEqual(['CompiledList']);
     expect((await describeRendered(h(Inbox), 'span.badge')).component).toEqual(['Inbox']);
@@ -638,7 +938,7 @@ describe('reading Chrome, Firefox and Safari stack lines', () => {
   it('reads Firefox closures, async frames and a bare render', () => {
     expect(pin({ type: 'li', _debugStack: gecko(`PlanList/<@${app('PlanList.tsx')}:5:40`), _debugOwner: owner })).toMatchObject({
       component: ['PlanList'],
-      source: '/src/PlanList.tsx:5',
+      source: '/src/PlanList.tsx',
     });
     expect(pin({ type: 'b', _debugStack: gecko(`async*Pricing@${app('Pricing.tsx')}:5:40`), _debugOwner: owner }).component).toEqual([
       'Pricing',
@@ -660,7 +960,7 @@ describe('reading Chrome, Firefox and Safari stack lines', () => {
     // A column definition's `render` arrow that a library's Cell calls: Firefox and Safari print it bare too.
     const cell = { type: Object.defineProperty(() => {}, 'name', { value: 'Cell' }), _debugOwner: null };
     const column = gecko(`render@${app('columns.tsx')}:3:30`, `Cell@${dep}/rc-table.js?v=1:40:9`);
-    expect(pin({ type: 'a', _debugStack: column, _debugOwner: cell })).toMatchObject({ source: '/src/columns.tsx:3' });
+    expect(pin({ type: 'a', _debugStack: column, _debugOwner: cell })).toMatchObject({ source: '/src/columns.tsx' });
     expect(pin({ type: 'a', _debugStack: column, _debugOwner: cell }).component).toBeUndefined();
     expect(pin({ type: 'a', _debugStack: gecko(`render@${app('columns.tsx')}:3:30`), _debugOwner: owner }).component).toBeUndefined();
   });
@@ -669,13 +969,13 @@ describe('reading Chrome, Firefox and Safari stack lines', () => {
     const stack = gecko(`@${app('PlanList.tsx')}:5:40`, 'map@[native code]', `PlanList@${app('PlanList.tsx')}:5:20`);
     expect(pin({ type: 'li', _debugStack: stack, _debugOwner: owner })).toMatchObject({
       component: ['PlanList'],
-      source: '/src/PlanList.tsx:5',
+      source: '/src/PlanList.tsx',
     });
   });
 
   it("takes a receiver only for a class's render, and never a built-in one", () => {
     const column = chrome(`Object.render (${app('columns.tsx')}:3:30)`, `Table (${dep}/antd.js?v=1:3:3)`);
-    expect(pin({ type: 'a', _debugStack: column, _debugOwner: null })).toMatchObject({ source: '/src/columns.tsx:3' });
+    expect(pin({ type: 'a', _debugStack: column, _debugOwner: null })).toMatchObject({ source: '/src/columns.tsx' });
     expect(pin({ type: 'a', _debugStack: column, _debugOwner: null }).component).toBeUndefined();
     const story = chrome(`Object.render (${app('Profile.stories.tsx')}:9:30)`, `Array.decorators (${app('Profile.stories.tsx')}:4:30)`);
     expect(pin({ type: 'p', _debugStack: story, _debugOwner: null }).component).toBeUndefined();
@@ -694,7 +994,7 @@ describe('reading Chrome, Firefox and Safari stack lines', () => {
         _debugStack: chrome(`${app('PlanList.tsx')}:5:40`, `PlanList (${app('PlanList.tsx')}:5:20)`, bottom, below),
         _debugOwner: null,
       }),
-    ).toMatchObject({ component: ['PlanList'], source: '/src/PlanList.tsx:5' });
+    ).toMatchObject({ component: ['PlanList'], source: '/src/PlanList.tsx' });
     // MobX's observer: React calls the library's wrapper, which calls the app's TodoView.
     const observed = Object.assign(() => {}, { displayName: 'TodoView' });
     const wrapper = { type: observed, _debugOwner: null };
@@ -708,7 +1008,7 @@ describe('reading Chrome, Firefox and Safari stack lines', () => {
     );
     expect(pin({ type: 'li', _debugStack: stack, _debugOwner: wrapper })).toMatchObject({
       component: ['TodoView'],
-      source: '/src/TodoView.tsx:24',
+      source: '/src/TodoView.tsx',
     });
     // A component the stack never shows is not credited, whatever the library's wrapper is called.
     const other = { type: Object.assign(() => {}, { displayName: 'Cell' }), _debugOwner: null };
@@ -719,7 +1019,7 @@ describe('reading Chrome, Firefox and Safari stack lines', () => {
     const vendored = chrome(`Xe (${app('vendor/ui.min.js')}:1:4021)`, `Pricing (${app('Pricing.tsx')}:12:7)`);
     expect(pin({ type: 'button', _debugStack: vendored, _debugOwner: null })).toMatchObject({
       component: ['Pricing'],
-      source: '/src/Pricing.tsx:12',
+      source: '/src/Pricing.tsx',
     });
   });
 });

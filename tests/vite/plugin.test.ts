@@ -645,6 +645,18 @@ describe('overlay variants in load()', () => {
     expect(fresh.load(source)?.code).toContain('variant b');
   });
 
+  it("serves a copy with a map naming it, so a pinned element's source is the copy's file", () => {
+    const { root, source, override } = tempProject();
+    writeFileSync(override, 'export const label = "variant b";\n\nexport const more = 1;\n');
+    writeActive({ root }, ['b']);
+    const map = (loaded: unknown) => (loaded as { map: { sources: string[]; mappings: string } | null } | null)?.map;
+    // Whole-file mode and a live version (`?isotone=b`) alike; the real file keeps Vite's own map.
+    expect(map(plugin(root, 'serve').load(source))).toMatchObject({ sources: [override], mappings: 'AAAA;AACA;AACA;AACA' });
+    const { hooks } = livePlugin(root);
+    expect(map(hooks.load(`${source}?isotone=b`))?.sources).toEqual([override]);
+    expect(map(hooks.load(`${source}?isotone=_base`))).toBeNull();
+  });
+
   it('strips the query and hash vite decorates module ids with', () => {
     const { root, source } = tempProject();
     writeActive({ root }, ['b']);

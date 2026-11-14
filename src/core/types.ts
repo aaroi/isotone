@@ -17,9 +17,9 @@ export interface IsotoneElement {
   selector: string;
   /** Identifying attributes: role, name, aria-label, data-*, class and so on. */
   attributes?: Record<string, string>;
-  /** React components around the element, outermost first. */
+  /** React or Vue components whose code wrote the element, outermost first. */
   component?: string[];
-  /** `file:line` of the JSX, where the host's React still records it. */
+  /** `file:line` that wrote the element, or the file alone where no line is known. */
   source?: string;
   /** Labelled or headed ancestors, outermost first. */
   within?: string[];

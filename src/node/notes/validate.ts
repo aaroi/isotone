@@ -5,26 +5,47 @@
  */
 import type { IsotoneElement, VariantReference, VariantRemoval } from '../../core/types';
 import { MAX_SELECTOR, PAYLOAD_MAX } from '../../core/limits';
+import { realPath } from '../fs/paths';
 
 function cap(v: string, max: number): string {
   return v.slice(0, max);
 }
 
-/** A pinned element, or null without an object and a selector. */
-export function elementOf(value: unknown): IsotoneElement | null {
+/**
+ * A `source` the page gave as an absolute path (Vue's `__file`, a source map's
+ * `file://` source) as a forward-slash path from `app`, the directory holding
+ * `.isotone/`. A file outside it stays as it is. Windows paths compare without
+ * case, as the file system does.
+ */
+export function fromApp(source: string, app: string, caseless = process.platform === 'win32'): string {
+  let real = app;
+  try {
+    real = realPath(app);
+  } catch {}
+  const fold = (path: string) => (caseless ? path.toLowerCase() : path);
+  const posix = source.replaceAll('\\', '/');
+  for (const dir of [app, real]) {
+    const base = dir.replaceAll('\\', '/').replace(/\/?$/, '/');
+    if (fold(posix).startsWith(fold(base))) return posix.slice(base.length);
+  }
+  return source;
+}
+
+/** A pinned element, or null without an object and a selector. `app` makes an absolute `source` relative. */
+export function elementOf(value: unknown, app?: string): IsotoneElement | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const selector = (value as { selector?: unknown }).selector;
-  return typeof selector === 'string' && selector ? elementFields(value) : null;
+  return typeof selector === 'string' && selector ? elementFields(value, app) : null;
 }
 
 /** Every element field, each bounded, from any object; a missing selector is empty. */
-export function elementFields(value: object): IsotoneElement {
+export function elementFields(value: object, app?: string): IsotoneElement {
   const v = value as { tag?: unknown; text?: unknown; selector?: unknown };
   return {
     tag: cap(String(v.tag ?? ''), 30),
     text: cap(String(v.text ?? ''), 120),
     selector: cap(String(v.selector ?? ''), MAX_SELECTOR),
-    ...elementContext(value),
+    ...elementContext(value, app),
   };
 }
 
@@ -38,7 +59,7 @@ function stringList(value: unknown, count: number, length: number): string[] {
 }
 
 /** The optional identifying fields, each bounded; anything malformed is dropped. */
-function elementContext(value: object): Partial<IsotoneElement> {
+function elementContext(value: object, app?: string): Partial<IsotoneElement> {
   const v = value as Record<string, unknown>;
   const out: Partial<IsotoneElement> = {};
   if (v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes)) {
@@ -52,7 +73,7 @@ function elementContext(value: object): Partial<IsotoneElement> {
   if (component.length) out.component = component;
   const within = stringList(v.within, 6, 120);
   if (within.length) out.within = within;
-  if (typeof v.source === 'string' && v.source) out.source = cap(v.source, 300);
+  if (typeof v.source === 'string' && v.source) out.source = cap(app ? fromApp(v.source, app) : v.source, 300);
   if (typeof v.near === 'string' && v.near) out.near = cap(v.near, 120);
   const rect = v.rect as Record<string, unknown> | null | undefined;
   if (rect && typeof rect === 'object' && [rect.x, rect.y, rect.w, rect.h].every((n) => typeof n === 'number' && Number.isFinite(n))) {
