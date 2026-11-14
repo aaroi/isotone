@@ -487,3 +487,64 @@ describe('a host source beside the knobs of the server that answers notes', () =
     await panel.off();
   });
 });
+
+// #60 (route-scoped knobs) with #64 (a host source beside knobs) and #62 (a knob sharing a
+// file group's id is left out): the route hook reaches the overlay inside the combined source.
+describe('route-scoped knobs beside a host source', () => {
+  it('moves knob values on and off <html> as the router navigates, and never applies a knob a group shadows', async () => {
+    vi.useRealTimers();
+    const knobs = [
+      { kind: 'color', id: 'header-border', label: 'Header border', defaultColor: '#e5e5e5', swatches: [], route: '/pricing' },
+      // Same id as the file variant group below, so the group keeps it (#62).
+      { kind: 'range', id: 'hero', label: 'Hero size', min: 0, max: 10, step: 1, defaultValue: 0, unit: 'px' },
+    ];
+    const variants = [
+      { id: 'hero-left', label: 'Left', group: 'hero', files: {}, createdAt: '2026-01-01T00:00:00Z', stale: [], missing: [] },
+    ];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      status: 200,
+      json: async () => (String(input).includes('/api/isotone/variants') ? { variants, active: [], knobs } : []),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    localStorage.setItem('isotone:knobs', JSON.stringify({ 'header-border': '#f59e0b', hero: '4' }));
+    const tick = () =>
+      act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+      });
+    const html = document.documentElement;
+    const border = () => html.style.getPropertyValue('--knob-header-border');
+    const source = createVariantsSource({
+      axes: [{ id: 'cta', label: 'Call to action', defaultOption: 'join', options: [{ id: 'join', label: 'Join' }] }],
+      onChange: () => {},
+    });
+    window.history.pushState(null, '', '/');
+
+    const off = mountIsotone({ endpoint: '/api/isotone/notes', variants: source });
+    try {
+      await tick();
+      await tick();
+      // Loaded at mount beside the host's source (#64), and off on another route (#60).
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/isotone/variants'))).toBe(true);
+      expect(border()).toBe('');
+      expect(html.style.getPropertyValue('--knob-hero')).toBe('');
+
+      window.history.pushState(null, '', '/pricing');
+      await tick();
+      expect(border()).toBe('#f59e0b');
+      expect(html.style.getPropertyValue('--knob-hero')).toBe('');
+
+      window.history.pushState(null, '', '/');
+      await tick();
+      expect(border()).toBe('');
+      expect(JSON.parse(localStorage.getItem('isotone:knobs') ?? '{}')).toMatchObject({ 'header-border': '#f59e0b' });
+    } finally {
+      off();
+      await tick();
+      html.removeAttribute('style');
+      localStorage.removeItem('isotone:knobs');
+      window.history.replaceState(null, '', '/');
+      vi.unstubAllGlobals();
+    }
+  });
+});
