@@ -442,7 +442,7 @@ export function createOverlayVariantsSource(cfg: {
   // A hold to compare shows these over the stored values, and stores nothing.
   let previewing: VariantSelections | null = null;
   const applyKnobs = () => {
-    if (knobRoot) applyKnobValues(list?.knobs ?? [], previewing ? { ...knobValues, ...previewing } : knobValues, knobRoot);
+    if (knobRoot) applyKnobValues(list ? overlayKnobs(list) : [], previewing ? { ...knobValues, ...previewing } : knobValues, knobRoot);
   };
   /** The active set with the given groups' members taken out: those groups at Default. */
   const withoutGroups = (axisIds: string[]): string[] => {
@@ -523,7 +523,8 @@ export function createOverlayVariantsSource(cfg: {
       const previousKnobs = list?.knobs ?? [];
       list = list && (wasActivating || activation !== null || startedRevision !== revision) ? { ...next, active: list.active } : next;
       if (knobRoot) applyKnobValues(previousKnobs, {}, knobRoot);
-      const valid = new Map((list.knobs ?? []).map((knob) => [knob.id, knob]));
+      // A stored value for a knob a group now hides is dropped too, so it cannot style the page unseen.
+      const valid = new Map(overlayKnobs(list).map((knob) => [knob.id, knob]));
       knobValues = Object.fromEntries(
         Object.entries(knobValues).filter(([id, value]) => {
           const knob = valid.get(id);
