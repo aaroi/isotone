@@ -140,15 +140,19 @@ export function knobStyle(doc: Document): CSSStyleDeclaration {
 /**
  * The page as `applyKnobValues` writes it: properties in {@link knobStyle},
  * select attributes and the event on `<html>`. React compares the attributes of
- * an `<html>` it renders while it hydrates, so while a React root on the document
- * has not yet hydrated it, the attributes wait.
+ * an `<html>` it renders while it hydrates, so the attributes wait until React
+ * has hydrated `<html>` while a React root on the document has not yet, or while
+ * a page {@link applyStoredKnobs} marked as hydrated by React has no React root
+ * at all. React's own markers on the nodes tell which.
  */
 function pageKnobRoot(doc: Document): Parameters<typeof applyKnobValues>[2] {
   const html = doc.documentElement;
   const has = (node: object, key: string) => Object.keys(node).some((k) => k.startsWith(key));
+  const marked = () => (doc.defaultView as { __isotoneHydrates?: boolean } | null)?.__isotoneHydrates === true;
+  const hydrating = () => !has(html, '__reactFiber$') && (has(doc, '__reactContainer$') || (marked() && !has(doc, '_reactListening')));
   const pending = new Map<string, string | null>();
   const flush = () => {
-    if (has(doc, '__reactContainer$') && !has(html, '__reactFiber$')) {
+    if (hydrating()) {
       setTimeout(flush, 50);
       return;
     }
@@ -176,25 +180,26 @@ function pageKnobRoot(doc: Document): Parameters<typeof applyKnobValues>[2] {
 /**
  * The stored knob values, on the page before it first paints: the Vite plugin
  * runs this in an inline `<head>` script with the requested route's knobs as
- * `[id, unit, default, select]`. A server-rendered page gets no attributes
- * (`attributes` false): React may hydrate its `<html>`, and the panel adds them
- * once it has. Self-contained, for that script; the panel checks each value
- * against its knob when it loads and puts the page right.
+ * `[id, unit, default, select]`. On a page React server-renders and hydrates
+ * (`hydrates`), select attributes wait for the panel, which adds them once React
+ * has hydrated `<html>`. Self-contained, for that script; the panel checks each
+ * value against its knob when it loads and puts the page right.
  */
 export function applyStoredKnobs(
   doc: Document,
   key: string,
   knobs: [id: string, unit: string, fallback: string, select: boolean][],
-  attributes: boolean,
+  hydrates: boolean,
   style: typeof knobStyle,
 ): void {
+  if (hydrates) (doc.defaultView as { __isotoneHydrates?: boolean }).__isotoneHydrates = true;
   try {
     const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
     for (const [id, unit, fallback, select] of knobs) {
       const value = stored[id];
       if (typeof value !== 'string' || value === fallback) continue;
       style(doc).setProperty(`--knob-${id}`, value + unit);
-      if (select && attributes) doc.documentElement.setAttribute(`data-knob-${id}`, value);
+      if (select && !hydrates) doc.documentElement.setAttribute(`data-knob-${id}`, value);
     }
   } catch {
     // Storage blocked or unreadable: the panel applies what it can when it loads.

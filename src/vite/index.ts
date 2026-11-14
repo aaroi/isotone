@@ -426,7 +426,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
         const knobs = overlayKnobs({ variants: overrides.readManifests(), knobs: readKnobs(overrides.opts) }, route);
         if (knobs.length === 0) return '';
         const rows = knobs.map((k) => [k.id, k.kind === 'range' ? (k.unit ?? '') : '', axisDefault(k), k.kind === 'select']);
-        return `(${applyStoredKnobs})(document, ${safeJson(KNOBS_STORAGE_KEY)}, ${safeJson(rows)}, ${!ssrHost}, ${knobStyle});`;
+        return `(${applyStoredKnobs})(document, ${safeJson(KNOBS_STORAGE_KEY)}, ${safeJson(rows)}, ${ssrHost && hasReact}, ${knobStyle});`;
       };
       const headScript = variantsOptions
         ? (url: string) => knobsScript(url) + (switching.live ? liveStoreScript(overrides.liveConfig(ssrHost)) : '')

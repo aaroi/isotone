@@ -45,6 +45,11 @@ let root: Root | null = null;
 afterEach(() => {
   root?.unmount();
   root = null;
+  // React leaves its markers behind on the document; the next test starts before any root.
+  for (const node of [document, document.documentElement] as unknown as Record<string, unknown>[]) {
+    for (const key of Object.keys(node)) if (/^_+react/.test(key)) delete node[key];
+  }
+  delete (window as { __isotoneHydrates?: boolean }).__isotoneHydrates;
   document.querySelector('style[data-isotone-knobs]')?.remove();
   document.documentElement.removeAttribute('data-knob-title');
   localStorage.clear();
@@ -62,8 +67,17 @@ function serverRender(): void {
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 120));
+const rows: [string, string, string, boolean][] = [
+  ['page-pad', 'px', '24', false],
+  ['title', '', 'plain', true],
+];
 
-it('puts knob values on the page during hydration without a mismatch, and the attributes after it', async () => {
+// The Vite plugin's head script runs first; the panel's listing arrives once the framework has
+// started hydrating, or, on a cold dev server, before its entry module has even loaded.
+it.each([
+  ['while React hydrates', true],
+  ['before React starts', false],
+])('puts knob values on the page %s without a mismatch, and the attributes after hydration', async (_, started) => {
   serverRender();
   const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.stubGlobal(
@@ -71,34 +85,34 @@ it('puts knob values on the page during hydration without a mismatch, and the at
     vi.fn(async () => Response.json({ variants: [], active: [], knobs })),
   );
   localStorage.setItem(KNOBS_STORAGE_KEY, JSON.stringify(stored));
+  applyStoredKnobs(document, KNOBS_STORAGE_KEY, rows, true, knobStyle);
+  expect(knobStyle(document).getPropertyValue('--knob-page-pad')).toBe('40px');
 
-  // The framework has started hydrating when the panel's listing arrives.
-  root = hydrateRoot(document, createElement(App));
+  if (started) root = hydrateRoot(document, createElement(App));
   const source = createOverlayVariantsSource({ endpoint: '/variants', getRoute: () => '/', live: null });
   await source.refresh();
-  expect(knobStyle(document).getPropertyValue('--knob-page-pad')).toBe('40px');
   expect(document.documentElement.hasAttribute('data-knob-title')).toBe(false);
+  if (!started) {
+    await settle();
+    expect(document.documentElement.hasAttribute('data-knob-title')).toBe(false);
+    root = hydrateRoot(document, createElement(App));
+  }
 
   await settle();
   expect(errors.mock.calls.map((call) => String(call[0])).filter((message) => /hydrat|match/i.test(message))).toEqual([]);
   expect(document.documentElement.hasAttribute('style')).toBe(false);
+  expect(knobStyle(document).getPropertyValue('--knob-page-pad')).toBe('40px');
   expect(document.documentElement.getAttribute('data-knob-title')).toBe('underlined');
   expect(document.body.textContent).toBe('Plans');
 });
 
-it('applies stored values from the head script, and leaves attributes to the panel on a server render', () => {
+it('sets select attributes from the head script where React does not hydrate the page', () => {
   localStorage.setItem(KNOBS_STORAGE_KEY, JSON.stringify({ ...stored, unknown: 'x' }));
-  const rows: [string, string, string, boolean][] = [
-    ['page-pad', 'px', '24', false],
-    ['title', '', 'plain', true],
-  ];
   applyStoredKnobs(document, KNOBS_STORAGE_KEY, rows, false, knobStyle);
   expect(knobStyle(document).getPropertyValue('--knob-page-pad')).toBe('40px');
   expect(knobStyle(document).getPropertyValue('--knob-title')).toBe('underlined');
-  expect(document.documentElement.hasAttribute('data-knob-title')).toBe(false);
-
-  applyStoredKnobs(document, KNOBS_STORAGE_KEY, rows, true, knobStyle);
   expect(document.documentElement.getAttribute('data-knob-title')).toBe('underlined');
   // One rule, reused.
+  applyStoredKnobs(document, KNOBS_STORAGE_KEY, rows, false, knobStyle);
   expect(document.querySelectorAll('style[data-isotone-knobs]')).toHaveLength(1);
 });
