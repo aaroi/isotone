@@ -20,6 +20,11 @@ const MANIFEST = 'variant.json';
 /** The variants lock every change takes (`.mutation.lock`, and its temporary files): not a change itself. */
 const MUTATION_LOCK = '.mutation.lock';
 
+/** A change under the variants dir that says something: not the dir itself,
+ *  which macOS reports (`addDir`) whenever the lock comes and goes, and not the lock. */
+const isVariantsChange = (dir: string, path: string): boolean =>
+  path !== dir && isWithin(dir, path) && !basename(path).startsWith(MUTATION_LOCK);
+
 /** The version a module id names (`?isotone=<id>`), or null for any other module. */
 function versionOfId(id: string | null): string | null {
   const at = id?.indexOf('?') ?? -1;
@@ -310,7 +315,7 @@ export function createSwitching(overrides: Overrides) {
       const path = resolve(changed);
       if (path === activeFile) {
         void activate(overrides.readActive());
-      } else if (isWithin(overrides.dir, path) && !basename(path).startsWith(MUTATION_LOCK)) {
+      } else if (isVariantsChange(overrides.dir, path)) {
         // Covers adds and unlinks, which hot updates never see.
         forgetManifests();
         // A variant deleted by hand leaves its id in the file. Pages are

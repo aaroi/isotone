@@ -973,9 +973,11 @@ describe('overlay variants in the dev server', () => {
     await vi.waitFor(() => expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:variants' }));
     expect(server.ws.send).not.toHaveBeenCalledWith(expect.objectContaining({ event: 'isotone:active' }));
 
-    // The lock every change takes is not a change.
+    // The lock every change takes is not a change, nor is the dir itself, which
+    // macOS reports as added whenever the lock comes and goes.
     server.ws.send.mockClear();
     onAll('add', join(root, '.isotone', 'variants', '.mutation.lock'));
+    onAll('addDir', join(root, '.isotone', 'variants'));
     onAll('unlink', join(root, '.isotone', 'variants', '.mutation.lock'));
     await new Promise((r) => setTimeout(r, 120));
     expect(server.ws.send).not.toHaveBeenCalled();
