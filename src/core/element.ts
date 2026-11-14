@@ -151,7 +151,8 @@ function callsite(node: Made): { at: StackFrame; name?: string; onStack?: (strin
   const frames: (StackFrame & { name?: string })[] = [];
   for (const text of (typeof stack === 'string' ? stack : stack?.stack)?.split('\n') ?? []) {
     if (/react[_-]stack[_-]bottom[_-]frame/.test(text)) break;
-    const [, url, line, column] = text.match(/(?:\(|@|\bat )((?:[a-z-]+:\/\/\/?|\/)\S+?):(\d+):(\d+)\)?\s*$/i) ?? [];
+    // A URL, an absolute POSIX path, or a Windows one (`C:\…`, as Node prints a file it loaded).
+    const [, url, line, column] = text.match(/(?:\(|@|\bat )((?:[a-z-]+:\/\/\/?|\/|[a-z]:[\\/])\S+?):(\d+):(\d+)\)?\s*$/i) ?? [];
     const name = text.match(/^\s*at\s+(?:async\s+)?(?:new\s+)?([^\s(]+)\s+\(/)?.[1] ?? text.match(/^\s*([^@\s]+)@/)?.[1];
     if (url) frames.push({ url, line: Number(line), column: Number(column), name });
   }
@@ -223,6 +224,8 @@ function reactContext(el: Element): Pick<IsotoneElement, 'component' | 'source'>
 /** A served module URL as the source path it stands for. */
 function sourcePath(location: string): string {
   let path = location.replace(/[?#].*$/, '').replace(/^webpack-internal:\/\/\/(?:\([^)]*\)\/)?/, '');
+  // A Windows path is no URL (`C:` would parse as its scheme): forward slashes, as a module id writes it.
+  if (/^[a-z]:[\\/]/i.test(path)) return path.replace(/\\/g, '/');
   try {
     const url = new URL(path);
     path = url.protocol === 'file:' ? url.pathname : url.pathname.replace(/^\/@fs(?=\/)/, '');

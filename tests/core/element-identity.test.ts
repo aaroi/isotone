@@ -195,6 +195,20 @@ describe('the React components that wrote the element', () => {
     expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['Pricing'], source: 'src/app/pricing/page.tsx:24' });
   });
 
+  // Node on Windows prints the files it loaded as `C:\…` paths: the tests' React runs there in CI.
+  it('reads a Windows path in a creation stack as the place and its component', () => {
+    const owner = { type: component('Pricing'), _debugStack: made('main (C:\\app\\src\\main.tsx:3:1)'), _debugOwner: null };
+    const button = pin({
+      type: 'button',
+      _debugStack: made(
+        'jsxDEV (C:\\app\\node_modules\\react\\cjs\\react-jsx-dev-runtime.development.js:1:1)',
+        'Pricing (C:\\app\\src\\Pricing.tsx:12:7)',
+      ),
+      _debugOwner: owner,
+    });
+    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['Pricing'], source: 'C:/app/src/Pricing.tsx:12' });
+  });
+
   it('names the route a router created', () => {
     const at = (file: string) =>
       made('exports.jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js:250:33)', file);
