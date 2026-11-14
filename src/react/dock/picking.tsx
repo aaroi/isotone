@@ -207,6 +207,9 @@ interface SelectModeOptions {
 export function useSelectMode({ mode, update, focus, rootRef, fieldRef, floatRef, targets, setTargets, touch }: SelectModeOptions) {
   // The dock keeps the composer's height while it floats, so the panel stays put.
   const slotHeight = useRef(0);
+  // Read by the field's input handler, which stays the same across renders so typing commits only the text.
+  const selecting = useRef(mode.picking);
+  selecting.current = mode.picking;
   const locate = usePicker({
     picking: mode.picking,
     rootRef,
@@ -228,6 +231,24 @@ export function useSelectMode({ mode, update, focus, rootRef, fieldRef, floatRef
     },
   });
   useFloatingComposer(floatRef, rootRef, mode.anchor, locate);
+  // Selecting is for the page. A press or focus anywhere in the dock but the feedback panel and its
+  // composer (Variants, the pill, a notice) ends it, keeping the pins, so the next click on the page
+  // after a pick in Variants follows a link rather than pinning it.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!mode.picking || !root) return;
+    const away = (event: Event) => {
+      const target = event.composedPath()[0];
+      if (target instanceof Element && root.contains(target) && !target.closest('.isotone-notes-panel, .isotone-float'))
+        update({ picking: false });
+    };
+    root.addEventListener('pointerdown', away, true);
+    root.addEventListener('focusin', away, true);
+    return () => {
+      root.removeEventListener('pointerdown', away, true);
+      root.removeEventListener('focusin', away, true);
+    };
+  }, [mode.picking, rootRef, update]);
   /** Stop selecting and write: the composer keeps what was pinned. */
   const done = useCallback(() => {
     update({ picking: false });
@@ -240,6 +261,11 @@ export function useSelectMode({ mode, update, focus, rootRef, fieldRef, floatRef
         if (!focus.pinning()) update({ picking: false });
       },
       onFieldPointerDown: () => update({ picking: false }),
+      // Text that reaches the field without a key event first (pasted, dictated or sent by automation) ends
+      // selecting too, as typing does, so it never sits unseen under the cover.
+      onFieldInput: () => {
+        if (selecting.current) update({ picking: false });
+      },
       onTogglePicking: () => {
         focus.cancel();
         update((m) => ({ picking: !m.picking, pickingWithPanel: false }));

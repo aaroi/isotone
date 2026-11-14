@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useEffect, useMemo, useRef } from 'react';
+import { type RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 
 export type Surface = 'notes' | 'variants';
 
@@ -31,13 +31,38 @@ export function useDockFocus(
   const frame = useRef(0);
   // Focusing the composer after a pin must not leave select mode.
   const pinning = useRef(false);
+  // A move asked for as a panel opens lands with the commit that shows its target, before the next key
+  // can arrive: a frame later, text typed during the entrance had nowhere to go. The frame is the fallback
+  // for an update that changes nothing and so commits nothing.
+  const pending = useRef<(() => void) | null>(null);
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
 
-  const cancel = useCallback(() => cancelAnimationFrame(frame.current), []);
+  const cancel = useCallback(() => {
+    cancelAnimationFrame(frame.current);
+    pending.current = null;
+  }, []);
   const later = useCallback((move: () => void) => {
     cancelAnimationFrame(frame.current);
+    pending.current = null;
     frame.current = requestAnimationFrame(move);
   }, []);
+  const flush = useCallback(() => {
+    const move = pending.current;
+    pending.current = null;
+    move?.();
+  }, []);
+  useLayoutEffect(() => {
+    if (!pending.current) return;
+    cancelAnimationFrame(frame.current);
+    flush();
+  });
+  const atCommit = useCallback(
+    (move: () => void) => {
+      later(flush);
+      pending.current = move;
+    },
+    [later, flush],
+  );
 
   /** Whether focus is in the dock, so closing it should put focus somewhere sensible. */
   const inDock = useCallback(() => {
@@ -73,6 +98,16 @@ export function useDockFocus(
       remember,
       launcher,
       composer: () => later(() => fieldRef.current?.focus()),
+      /**
+       * The caret in the note field of a panel that is opening, as it shows. While selecting it waits there
+       * under the select-mode cover, so whatever is typed next ends selecting and lands in the field.
+       */
+      openComposer: (selecting: boolean) =>
+        atCommit(() => {
+          pinning.current = selecting;
+          fieldRef.current?.focus({ preventScroll: true });
+          pinning.current = false;
+        }),
       /** Focus the composer beside a fresh pin without leaving select mode. */
       composerWhilePicking: () =>
         later(() => {
@@ -89,7 +124,7 @@ export function useDockFocus(
         else launcher();
       },
     }),
-    [cancel, inDock, remember, launcher, later, fieldRef],
+    [cancel, inDock, remember, launcher, later, atCommit, fieldRef],
   );
 }
 

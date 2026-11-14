@@ -3,7 +3,11 @@ import { MAX_ANIMATED_ITEMS, MOTION } from '../motion';
 
 type Position = { x: number; y: number; width: number; height: number; animation?: Animation };
 
-/** Move panels without scaling their text, hit targets or corner shapes. */
+/**
+ * Move panels without scaling their text, hit targets or corner shapes. The dock hangs from its
+ * bottom-right corner, so a panel moves when its bottom or right edge does: one that only grows or
+ * shrinks at its top stays still, and a panel above it slides out of the way.
+ */
 export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boolean) {
   useLayoutEffect(() => {
     const root = ref.current;
@@ -18,8 +22,11 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       exit.ghost.remove();
       exits.delete(element);
     };
+    // Panels already open at mount were open before a reload: they are simply there, without an entrance.
+    let first = true;
     const measure = () => {
-      const instant = root.dataset.instant === 'true' || root.dataset.resizing === 'true' || reduced?.matches;
+      const instant = first || root.dataset.instant === 'true' || root.dataset.resizing === 'true' || reduced?.matches;
+      first = false;
       // Finish all reads before cancelling animations or adding exit snapshots.
       const panels = Array.from(root.querySelectorAll<HTMLElement>('.isotone-panel:not(.isotone-exit)'), (element) => {
         const open = element.dataset.open === 'true';
@@ -77,9 +84,11 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         removeExit(element);
         const x = rect.x - dx;
         const y = rect.y - dy;
-        if (old && old.x === x && old.y === y) {
-          old.width = rect.width;
-          old.height = rect.height;
+        // How far its anchored edges moved: the right and the bottom.
+        const shiftX = old ? old.x + old.width - (x + rect.width) : 0;
+        const shiftY = old ? old.y + old.height - (y + rect.height) : 6;
+        if (old && Math.abs(shiftX) < 0.5 && Math.abs(shiftY) < 0.5) {
+          Object.assign(old, { x, y, width: rect.width, height: rect.height });
           if (instant) old.animation?.cancel();
           continue;
         }
@@ -88,7 +97,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
           !instant && typeof element.animate === 'function'
             ? element.animate(
                 [
-                  { transform: `translate(${old ? old.x + dx - x : 0}px, ${old ? old.y + dy - y : 6}px)`, opacity: old ? 1 : 0 },
+                  { transform: `translate(${shiftX + (old ? dx : 0)}px, ${shiftY + (old ? dy : 0)}px)`, opacity: old ? 1 : 0 },
                   { transform: 'translate(0, 0)', opacity: 1 },
                 ],
                 { duration: MOTION.enter, easing: MOTION.easeOut },

@@ -547,7 +547,8 @@ ${EDGES_CSS}
 .isotone-notices { position: absolute; z-index: 5; bottom: 10px; right: calc(var(--iso-rail-length) + 10px); display: flex; flex-direction: row-reverse; flex-wrap: wrap-reverse; align-items: center; justify-content: flex-start; gap: 6px; width: max-content; max-width: calc(100vw - var(--iso-rail-length) - 36px); pointer-events: none; }
 .isotone-root[data-tools='1'] .isotone-notices { right: calc(var(--iso-rail-size) + 10px); max-width: calc(100vw - var(--iso-rail-size) - 36px); }
 .isotone-notices > * { pointer-events: auto; }
-.isotone-update-trigger { white-space: nowrap; color: var(--iso-muted); font-size: 10px; padding: 4px 10px; border-radius: 999px; background: color-mix(in oklch, var(--iso-rail-base) 92%, transparent); -webkit-backdrop-filter: blur(20px) saturate(1.7); backdrop-filter: blur(20px) saturate(1.7); box-shadow: var(--iso-rail-base-shadow); }
+/* A quiet line beside the pill in the pill's glass: the update notice, and a link whose ?v= was not applied. */
+:is(.isotone-update-trigger, .isotone-link-hint) { white-space: nowrap; color: var(--iso-muted); font-size: 10px; padding: 4px 10px; border-radius: 999px; background: color-mix(in oklch, var(--iso-rail-base) 92%, transparent); -webkit-backdrop-filter: blur(20px) saturate(1.7); backdrop-filter: blur(20px) saturate(1.7); box-shadow: var(--iso-rail-base-shadow); }
 .isotone-update-dialog { position: absolute; right: calc(0px - var(--iso-rail-length) - 10px); bottom: 40px; width: min(var(--iso-dock-width), 260px); max-width: calc(100vw - 32px); max-height: calc(100dvh - 100px); overflow: auto; padding: 10px var(--iso-space) var(--iso-space); display: grid; gap: 8px; border-radius: 14px; background: var(--iso-popup-face); box-shadow: var(--iso-popup-shadow); font-size: 11px; }
 .isotone-root[data-tools='1'] .isotone-update-dialog { right: calc(0px - var(--iso-rail-size) - 10px); }
 .isotone-update-dialog .isotone-menu-title { padding: 0; background: none; }
@@ -567,7 +568,7 @@ ${EDGES_CSS}
 .isotone-root .isotone-update-dialog input { width: 100%; padding: 6px 8px; border-radius: 5px; background: var(--iso-well); box-shadow: var(--iso-well-shadow); font-size: 11px; }
 @media (pointer: coarse) { .isotone-root .isotone-update-quiet { padding: 9px 6px; } .isotone-update-actions { margin: -9px 0 -9px -6px; } }
 @media (pointer: coarse) { .isotone-compare::after { content: ''; position: absolute; inset: -8px -2px; } }
-@media (hover: hover) and (pointer: fine) { .isotone-update-trigger:hover, .isotone-root :is(.isotone-update-quiet, .isotone-compare):hover { color: var(--iso-fg); } }
+@media (hover: hover) and (pointer: fine) { :is(.isotone-update-trigger, .isotone-link-hint):hover, .isotone-root :is(.isotone-update-quiet, .isotone-compare):hover { color: var(--iso-fg); } }
 `;
 /**
  * Put the panel's styles in `target`, once. Idempotent: a second call with the

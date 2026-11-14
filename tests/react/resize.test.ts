@@ -86,7 +86,7 @@ const handle = (name: string) => element(dock(), `[role="separator"][aria-label=
 const width = () => handle('Resize panel width');
 const variantsTop = () => handle('Resize variants height');
 const notesTop = () => handle('Resize feedback height');
-const split = () => handle('Resize variants and feedback split');
+const split = () => handle('Resize feedback and variants split');
 const stored = () => JSON.parse(localStorage.getItem('isotone-feedback::dock') ?? 'null');
 const cssVar = (name: string) => dock().style.getPropertyValue(name);
 
@@ -154,7 +154,9 @@ it('shows only the handles that apply to the open panels', async () => {
   expect(shadow.querySelectorAll('[role="separator"]')).toHaveLength(2);
   await toggle('Feedback');
   expect(shadow.querySelectorAll('[role="separator"]')).toHaveLength(3);
+  // Feedback sits above Variants: its top edge stays its own, and Variants' becomes the split.
   expect(split().classList.contains('isotone-resize-split')).toBe(true);
+  expect(notesTop().classList.contains('isotone-resize-split')).toBe(false);
   await toggle('Variants');
   expect(notesTop().classList.contains('isotone-resize-split')).toBe(false);
 });
@@ -205,11 +207,11 @@ it('gives each panel its own minimum', async () => {
   size('variants', 300, 600);
   size('notes', 250, 400);
   await measure();
-  expect(split().getAttribute('aria-valuemin')).toBe('172');
+  expect(split().getAttribute('aria-valuemin')).toBe('212');
   await drag(split(), 400, 2000);
-  expect(stored()).toEqual({ notes: 172, variants: 378 });
+  expect(stored()).toEqual({ variants: 212, notes: 338 });
   await drag(split(), 400, -2000);
-  expect(stored()).toEqual({ notes: 400, variants: 212 });
+  expect(stored()).toEqual({ variants: 596, notes: 172 });
 });
 
 it('moves the split: one panel grows as the other shrinks', async () => {
@@ -219,12 +221,12 @@ it('moves the split: one panel grows as the other shrinks', async () => {
   size('notes', 250, 400);
   await pointer(split(), 'pointerdown', 0, 400);
   await pointer(split(), 'pointermove', 0, 370);
-  expect(cssVar('--iso-notes-height')).toBe('280px');
-  expect(cssVar('--iso-variants-height')).toBe('270px');
+  expect(cssVar('--iso-variants-height')).toBe('330px');
+  expect(cssVar('--iso-notes-height')).toBe('220px');
   await pointer(split(), 'pointerup', 0, 370);
-  expect(stored()).toEqual({ notes: 280, variants: 270 });
+  expect(stored()).toEqual({ variants: 330, notes: 220 });
   await key(split(), 'ArrowDown');
-  expect(stored()).toEqual({ notes: 234, variants: 316 });
+  expect(stored()).toEqual({ variants: 284, notes: 266 });
 });
 
 it('keeps the top edge of the feedback panel for itself when it is alone', async () => {

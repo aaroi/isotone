@@ -2,6 +2,7 @@ import {
   type HTMLAttributes,
   memo,
   type ReactNode,
+  type RefObject,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -49,6 +50,97 @@ const noop = () => {};
 
 function readNotice(source: VariantsSource): string | null {
   return source.getNotice?.() ?? null;
+}
+
+/**
+ * The panel sits on the pill, so it keeps its bottom edge whatever opens above it. When it has to give up
+ * room, as Feedback opens or grows over a long list, it gives it from its top edge and the list scrolls by
+ * as much, so every control in view stays where it was; given room back, it scrolls back. A change of its
+ * own (a section folding, a notice, a resize the reviewer drags, an open dialog) is left alone.
+ */
+function useSteadyBody(bodyRef: RefObject<HTMLDivElement | null>, active: boolean) {
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    const panel = body?.closest<HTMLElement>('.isotone-panel');
+    const root = body?.closest<HTMLElement>('.isotone-root');
+    if (!active || !body || !panel || !root || typeof ResizeObserver === 'undefined') return;
+    // Read after the browser's own layout, in the observer, so opening never forces one.
+    let last: { height: number; content: number; foot: number } | null = null;
+    const observer = new ResizeObserver(() => {
+      const now = {
+        height: body.clientHeight,
+        content: body.scrollHeight,
+        // Layout offsets, so a panel still moving into place reads where it will rest.
+        foot: root.offsetHeight - panel.offsetTop - panel.offsetHeight,
+      };
+      const before = last;
+      last = now;
+      if (!before || now.content !== before.content || now.foot !== before.foot) return;
+      if (root.dataset.resizing === 'true' || body.hasAttribute('inert') || panel.querySelector('.isotone-colour')) return;
+      const given = before.height - now.height;
+      if (given !== 0) body.scrollTop += given;
+    });
+    observer.observe(body);
+    return () => observer.disconnect();
+  }, [bodyRef, active]);
+}
+
+/**
+ * A reload, such as a variant switch on a host that reloads, comes back to the same place in the list,
+ * so the selector being compared is still under the pointer. The place is kept from the list's foot, which
+ * sits on the pill and so does not move, whatever height Feedback above it comes back with. Applied once
+ * the list has rendered that far.
+ */
+function useKeptScroll(bodyRef: RefObject<HTMLDivElement | null>, active: boolean, key: string | undefined) {
+  const saved = useRef<number | null | undefined>(undefined);
+  if (saved.current === undefined) {
+    saved.current = null;
+    try {
+      if (key && typeof sessionStorage !== 'undefined') {
+        saved.current = Number(sessionStorage.getItem(key)) || null;
+        sessionStorage.removeItem(key);
+      }
+    } catch {
+      /* Blocked storage: the list starts at the top. */
+    }
+  }
+  // While the dock settles (the list arriving in chunks, Feedback loading its notes), the place is held
+  // against each resize, until the reviewer scrolls or presses, or the moment has passed.
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    const want = saved.current;
+    saved.current = null;
+    if (!want || !active || !body) return;
+    const hold = () => {
+      const top = want - body.clientHeight;
+      if (top > 0) body.scrollTop = top;
+    };
+    hold();
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(hold);
+    observer?.observe(body);
+    for (const child of body.children) observer?.observe(child);
+    const release = () => {
+      observer?.disconnect();
+      clearTimeout(timer);
+      for (const type of ['wheel', 'pointerdown', 'keydown', 'touchstart']) body.removeEventListener(type, release);
+    };
+    const timer = setTimeout(release, 1000);
+    for (const type of ['wheel', 'pointerdown', 'keydown', 'touchstart']) body.addEventListener(type, release, { passive: true });
+    return release;
+  }, [bodyRef, active]);
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!key || !active || !body) return;
+    const save = () => {
+      try {
+        sessionStorage.setItem(key, String(Math.round(body.scrollTop + body.clientHeight)));
+      } catch {
+        /* Blocked storage only costs the position. */
+      }
+    };
+    window.addEventListener('pagehide', save);
+    return () => window.removeEventListener('pagehide', save);
+  }, [bodyRef, active, key]);
 }
 
 /** What the panel draws from a source: read once per change and shared by every view of it. */
@@ -134,6 +226,8 @@ interface VariantsViewProps {
   emptyText?: string;
   /** Whether the key under Escape also holds Compare, for its tooltip. */
   compareKey?: boolean;
+  /** Where the list keeps its scroll position across a reload of the tab (`sessionStorage`). */
+  scrollKey?: string;
 }
 
 export const VariantsView = memo(function VariantsView({
@@ -145,6 +239,7 @@ export const VariantsView = memo(function VariantsView({
   pendingActions = NO_PENDING_ACTIONS,
   emptyText = DEFAULT_EMPTY_TEXT,
   compareKey = false,
+  scrollKey,
 }: VariantsViewProps) {
   const { selections: stored, shown, sections, names, error: sourceError } = useVariantsSnapshot(source);
   // Settled by each opening's own refresh and kept until the panel closes: a notice coming or going
@@ -192,6 +287,8 @@ export const VariantsView = memo(function VariantsView({
   const bodyRef = useRef<HTMLDivElement | null>(null);
   // A long list arrives in chunks and is past the size that animates anyway.
   useLayoutMotion(bodyRef, shown, active && shown.length <= MAX_ANIMATED_ITEMS);
+  useSteadyBody(bodyRef, active);
+  useKeptScroll(bodyRef, active, scrollKey);
 
   // The action dialog: which selector, which option, and each opening's own session.
   const [menu, setMenu] = useState<{ axisId: string; optionId: string | null; session: number } | null>(null);

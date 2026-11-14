@@ -39,6 +39,9 @@ const INSET = 32;
 const STEP = 16;
 const DEFAULT_WIDTH = 340;
 const PANELS: Panel[] = ['variants', 'notes'];
+/** With both open, Feedback sits above Variants, and Variants' top edge is the split between them. */
+const UPPER: Panel = 'notes';
+const LOWER: Panel = 'variants';
 const LABEL: Record<Handle, string> = { width: 'Resize panel width', variants: 'Resize variants height', notes: 'Resize feedback height' };
 
 const maxWidth = () => window.innerWidth - INSET;
@@ -101,8 +104,8 @@ function measure(root: HTMLElement, open: Open): Frame {
  */
 function extent(panel: Panel, frame: Frame): Extent {
   const own = frame.panels[panel] as Measured;
-  const other = frame.panels[panel === 'variants' ? 'notes' : 'variants'];
-  const reserved = other ? (panel === 'notes' ? other.min : other.height) + frame.gap : 0;
+  const other = frame.panels[panel === LOWER ? UPPER : LOWER];
+  const reserved = other ? (panel === LOWER ? other.min : other.height) + frame.gap : 0;
   const max = Math.max(own.min, Math.min(own.content, frame.room - reserved));
   return { now: clamp(own.height, own.min, max), min: own.min, max };
 }
@@ -111,10 +114,10 @@ function extent(panel: Panel, frame: Frame): Extent {
 function resize(panel: Panel, target: number, frame: Frame): DockSize {
   const { min, max } = extent(panel, frame);
   const next = clamp(target, min, max);
-  const above = frame.panels.variants;
-  if (panel !== 'notes' || !above) return { [panel]: next };
-  const grown = next - (frame.panels.notes as Measured).height;
-  return { notes: next, variants: clamp(above.height - grown, above.min, above.content) };
+  const above = frame.panels[UPPER];
+  if (panel !== LOWER || !above) return { [panel]: next };
+  const grown = next - (frame.panels[LOWER] as Measured).height;
+  return { [LOWER]: next, [UPPER]: clamp(above.height - grown, above.min, above.content) };
 }
 
 /** The reviewer's dock size: CSS variables for the root and props for its three handles. */
@@ -135,7 +138,7 @@ export function useDockSize(rootRef: RefObject<HTMLElement | null>, key: string,
   );
   const reset = (handle: Handle) => {
     const next = { ...latest.current };
-    for (const name of handle === 'notes' && split ? PANELS : [handle]) delete next[name];
+    for (const name of handle === LOWER && split ? PANELS : [handle]) delete next[name];
     apply(next, true);
   };
   const stop = useCallback(() => {
@@ -200,10 +203,10 @@ export function useDockSize(rootRef: RefObject<HTMLElement | null>, key: string,
       className:
         name === 'width'
           ? 'isotone-resize isotone-resize-w'
-          : `isotone-resize isotone-resize-h${name === 'notes' && split ? ' isotone-resize-split' : ''}`,
+          : `isotone-resize isotone-resize-h${name === LOWER && split ? ' isotone-resize-split' : ''}`,
       role: 'separator' as const,
       'aria-orientation': horizontal ? ('horizontal' as const) : ('vertical' as const),
-      'aria-label': name === 'notes' && split ? 'Resize variants and feedback split' : LABEL[name],
+      'aria-label': name === LOWER && split ? 'Resize feedback and variants split' : LABEL[name],
       'aria-valuenow': range.now,
       'aria-valuemin': range.min,
       'aria-valuemax': range.max,

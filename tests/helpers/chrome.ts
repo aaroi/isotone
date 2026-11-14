@@ -39,6 +39,10 @@ export interface Chrome {
   viewport(width: number, height: number, mobile?: boolean): Promise<void>;
   move(x: number, y: number): Promise<void>;
   click(x: number, y: number): Promise<void>;
+  /** A key as a keyboard sends it: `key` and `code`, the modifiers held (Alt 1, Ctrl 2, Meta 4, Shift 8), and any text it types. */
+  key(key: string, code: string, modifiers?: number, text?: string): Promise<void>;
+  /** Text inserted without key events, as dictation, an IME or browser automation sends it. */
+  insertText(text: string): Promise<void>;
   /** Close Chrome, wait for it to exit and remove its profile. */
   close(): Promise<void>;
 }
@@ -161,6 +165,13 @@ export async function launchChrome(binary: string): Promise<Chrome> {
       await mouse('mouseMoved', x, y);
       await mouse('mousePressed', x, y);
       await mouse('mouseReleased', x, y);
+    },
+    async key(key, code, modifiers = 0, text) {
+      await send('Input.dispatchKeyEvent', { type: text ? 'keyDown' : 'rawKeyDown', key, code, modifiers, text });
+      await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, modifiers });
+    },
+    async insertText(text) {
+      await send('Input.insertText', { text });
     },
     async close() {
       ws.close();

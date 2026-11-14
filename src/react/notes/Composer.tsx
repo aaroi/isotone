@@ -23,6 +23,7 @@ interface ComposerProps {
   onUnpin: (selector: string) => void;
   onFieldFocus: () => void;
   onFieldPointerDown: () => void;
+  onFieldInput: () => void;
   onTogglePicking: () => void;
   onDonePicking: () => void;
 }
@@ -43,6 +44,7 @@ export const Composer = memo(function Composer({
   onUnpin,
   onFieldFocus,
   onFieldPointerDown,
+  onFieldInput,
   onTogglePicking,
   onDonePicking,
 }: ComposerProps) {
@@ -154,7 +156,10 @@ export const Composer = memo(function Composer({
           ref={fieldRef}
           value={text}
           aria-label="Feedback for the agent"
-          onChange={(e) => draft.set(e.target.value)}
+          onChange={(e) => {
+            draft.set(e.target.value);
+            onFieldInput();
+          }}
           onFocus={onFieldFocus}
           onPointerDown={onFieldPointerDown}
           onScroll={(event) => {

@@ -130,6 +130,9 @@ it('swallows presses on the page while selecting, unless Shift is held', async (
   await act(async () => {
     $('.isotone-fab').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, detail: 1 }));
   });
+  await act(async () => {
+    $('[aria-label="Select elements"]').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, detail: 1 }));
+  });
   expect($('[aria-label="Select elements"]').getAttribute('aria-pressed')).toBe('true');
   const button = document.getElementById('host-button') as HTMLButtonElement;
   const presses: string[] = [];

@@ -41,6 +41,8 @@ window.start = async (count) => {
     saveDefaults() { window.saves++; },
   };
   window.saves = 0;
+  // A fresh tab each time: the same one would reopen Variants as the last test left it.
+  sessionStorage.clear();
   window.__isotone.mount({ variants: source, theme: 'light', compareShortcut: false });
   let button;
   for (let tries = 0; !button && tries < 100; tries++) {
