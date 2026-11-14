@@ -3,6 +3,7 @@
  * servers. They live in core so the Vite plugin and `isotone/serve` can
  * describe notes and the panel's options without importing React.
  */
+import type { FeedbackClientConfig } from './feedback';
 import type { RouteGateOptions } from './routes';
 import type { UpdateRequest } from './update';
 import type { VariantSelections, VariantsSource } from './variants';
@@ -110,6 +111,9 @@ export interface IsotoneStoreConfig {
   /** localStorage namespace. Default-scoped to the package; set it per hosted
    *  app when two apps share an origin. */
   key?: string;
+  /** Collect feedback in a deployed app instead: notes are posted to the
+   *  host's own endpoint and `endpoint` is not used. */
+  feedback?: FeedbackClientConfig;
 }
 
 /** Auto follows the page at the dock; system follows the OS preference. */
@@ -138,6 +142,14 @@ export interface MountIsotoneOptions {
    *  it and the panel has no Notes tab: a production host that only wants
    *  variants passes a source and nothing else. */
   endpoint?: string;
+  /**
+   * Collect feedback in a deployed app: the URL of the app's own route that
+   * runs `feedback()` from `isotone/feedback`, or that with the reviewer's
+   * `name` and a `release` label. Each note is posted there, signed with
+   * the name in the panel's name field; nothing is read back and no agent is
+   * involved. `endpoint` is not used when this is set.
+   */
+  feedback?: string | FeedbackClientConfig;
   /**
    * Variants for the panel. A `VariantsSource` is rendered with the knobs of
    * its `variantsEndpoint`, if any; `'overlay'`

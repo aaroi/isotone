@@ -54,6 +54,7 @@ Layout constants live in `styles/panel.ts`:
 | Space between panels and between panel and pill | 8px |
 | Composer inset | 12px |
 | Composer controls | 30px round select toggle; 44 × 30px send capsule with a 16px icon |
+| Name field | Where feedback is collected and signed: between the two controls, 11.5px muted text set right so it reads as a signature beside Send; no well or border of its own, and like the text field its focus shows only the caret. Beside a pin, where the select hint needs the room, it shows only while the name is still missing |
 | Collapsed pill | 44 × 44px |
 | Expanded pill with two tools | 76 × 44px |
 | Tool faces | 28px, with 4px between faces and around them |

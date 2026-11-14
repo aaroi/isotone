@@ -79,12 +79,15 @@ const ISOTONE_NOTES = /\/api\/isotone\/notes\/?$/;
 
 export function mountIsotone(opts: MountIsotoneOptions): () => void {
   const getRoute = opts.getRoute ?? (() => window.location.pathname);
+  // A deployed app collecting feedback has no notes file and no agent: its
+  // notes go to the host's endpoint, and the development one is not used.
+  const collect = typeof opts.feedback === 'string' ? { endpoint: opts.feedback } : opts.feedback?.endpoint ? opts.feedback : undefined;
+  const endpoint = collect ? undefined : opts.endpoint;
   const app = typeof opts.variants === 'object' && opts.variants !== null ? opts.variants : undefined;
   // Knobs and file variants come from the Isotone server, beside a host's own
   // selectors too: the server that answers notes serves them next door.
   const overlayEndpoint = app
-    ? (opts.variantsEndpoint ??
-      (opts.endpoint && ISOTONE_NOTES.test(opts.endpoint) ? opts.endpoint.replace(ISOTONE_NOTES, VARIANTS_ENDPOINT) : undefined))
+    ? (opts.variantsEndpoint ?? (endpoint && ISOTONE_NOTES.test(endpoint) ? endpoint.replace(ISOTONE_NOTES, VARIANTS_ENDPOINT) : undefined))
     : opts.variants
       ? (opts.variantsEndpoint ?? VARIANTS_ENDPOINT)
       : undefined;
@@ -92,19 +95,18 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
   const takenIds = app ? () => app.getAxes().map((axis) => axis.id) : undefined;
   const overlay = overlayEndpoint ? createOverlayVariantsSource({ endpoint: overlayEndpoint, getRoute, takenIds }) : null;
   // A wrapper this mount owns, so Make default can be added without changing the host's source.
-  const combined =
-    app && overlay ? combineSources([app, overlay]) : app && opts.endpoint && !app.saveDefaults ? combineSources([app]) : null;
+  const combined = app && overlay ? combineSources([app, overlay]) : app && endpoint && !app.saveDefaults ? combineSources([app]) : null;
   const variants: VariantsSource | undefined = combined ?? app ?? overlay ?? undefined;
-  if (opts.endpoint && variants && variants !== app)
-    variants.saveDefaults = defaultsNote(variants, app, overlay, getRoute, opts.endpoint, opts.key);
+  if (endpoint && variants && variants !== app) variants.saveDefaults = defaultsNote(variants, app, overlay, getRoute, endpoint, opts.key);
+  const notes = Boolean(endpoint || collect);
   // Nothing to show: no notes to write and no variants to pick. A production
   // host that forgot its source gets no empty launcher in the corner.
-  if (!opts.endpoint && !variants) return () => {};
+  if (!notes && !variants) return () => {};
   // A variants-only host whose source has no axes on this page and no way to
   // get some later (no `refresh`) would mount an empty shadow root on every
   // such page. A hosted preview site is exactly that on axis-less
   // experiments, so skip the mount rather than leave a hollow host div.
-  if (!opts.endpoint && variants && variants.getAxes().length === 0 && typeof (variants as { refresh?: unknown }).refresh !== 'function') {
+  if (!notes && variants && variants.getAxes().length === 0 && typeof (variants as { refresh?: unknown }).refresh !== 'function') {
     return () => {};
   }
 
@@ -141,7 +143,7 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
     root.render(
       <IsotonePanel
         route={getRoute()}
-        store={{ endpoint: opts.endpoint, key: opts.key }}
+        store={{ endpoint, key: opts.key, feedback: collect }}
         rule={opts.rule}
         getPayload={opts.getPayload}
         variants={variants}

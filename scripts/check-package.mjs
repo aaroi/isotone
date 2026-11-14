@@ -61,7 +61,11 @@ import { npm } from './npm.mjs';
 // one ease and covers any change of Feedback's contents, no hold for a finger, and a reveal that keeps the
 // gap to the panel above.
 // Panel entry (#74) over 1.6.1: bundle 424 kB and tarball 500.5 kB (423.5 and 500.0 kB).
-const BUDGET = { bundle: 424_000, tarball: 500_500 };
+// Collecting feedback over 1.7.0: bundle 432 kB and tarball 532 kB (431.3 and 531.1 kB): the store that posts signed notes to a
+// host's own route, edits and deletes them with a per-note key, and the name field, which the bundle
+// carries so an app without React can collect too; the tarball also gains the `feedback` and `postgres`
+// entries and their guide.
+const BUDGET = { bundle: 432_000, tarball: 532_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));
@@ -113,7 +117,7 @@ assert.equal(existsSync('node_modules/react'), false, 'standalone must not requi
 const require = createRequire(import.meta.url);
 assert.equal(require('isotone/package.json').name, 'isotone');
 assert.equal((await import('isotone/package.json', { with: { type: 'json' } })).default.name, 'isotone');
-for (const entry of ['react', 'core', 'serve', 'vite', 'cli']) {
+for (const entry of ['react', 'core', 'serve', 'vite', 'cli', 'feedback', 'postgres']) {
   assert.ok(require.resolve('isotone/' + entry).endsWith('.js'), entry);
 }
 for (const entry of ['core', 'serve', 'cli']) {
