@@ -1,7 +1,20 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react';
 import { MAX_ANIMATED_ITEMS, MOTION } from './motion';
 
-type Position = { top: number; animation?: Animation };
+type Position = { top: number; stuck: boolean; animation?: Animation };
+
+/**
+ * Whether a sticky item is held at the scroller's edge or pushed past it, so that its position follows
+ * the scroll rather than the list. `offset` is a running transform to discount. Sticky offsets count
+ * from inside the scroller's padding.
+ */
+function stuckTest(container: HTMLElement) {
+  if (container.scrollTop <= 0) return null;
+  const edge =
+    container.getBoundingClientRect().top + container.clientTop + (Number.parseFloat(getComputedStyle(container).paddingTop) || 0);
+  return (element: HTMLElement, style = getComputedStyle(element), offset = 0) =>
+    style.position === 'sticky' && element.getBoundingClientRect().top - offset <= edge + (Number.parseFloat(style.top) || 0) + 0.5;
+}
 
 function clearPositions(positions: Map<string, Position>) {
   for (const item of positions.values()) item.animation?.cancel();
@@ -18,6 +31,10 @@ function clearPositions(positions: Map<string, Position>) {
  * would animate from where things used to be: the whole list jolts once. A
  * resize of any item therefore refreshes what is remembered, without moving
  * anything.
+ *
+ * A sticky item held at the scroller's edge (a section header while its rows
+ * pass) has a position that follows the scroll, not the list, so it neither
+ * animates while stuck nor from a position remembered while stuck.
  */
 export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: unknown, active = true) {
   const previous = useRef(new Map<string, Position>());
@@ -44,18 +61,21 @@ export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: un
       clear();
       return;
     }
+    const isStuck = stuckTest(container);
     const measurements = Array.from(elements, (element) => {
       const key = element.dataset.motionKey ?? '';
       const old = previous.current.get(key);
-      const transform = old?.animation ? getComputedStyle(element).transform : 'none';
+      const style = old?.animation || isStuck ? getComputedStyle(element) : null;
+      const transform = old?.animation ? (style?.transform ?? 'none') : 'none';
       const offset = transform !== 'none' && typeof DOMMatrix !== 'undefined' ? new DOMMatrix(transform).m42 : 0;
-      return { element, key, old, top: element.offsetTop, offset };
+      const stuck = Boolean(style && isStuck?.(element, style, offset));
+      return { element, key, old, top: element.offsetTop, offset, stuck };
     });
     const next = new Map<string, Position>();
-    for (const { element, key, old, top, offset } of measurements) {
+    for (const { element, key, old, top, offset, stuck } of measurements) {
       old?.animation?.cancel();
       let animation: Animation | undefined;
-      const delta = old ? old.top + offset - top : 0;
+      const delta = old && !old.stuck && !stuck ? old.top + offset - top : 0;
       if (typeof element.animate === 'function') {
         if (old && Math.abs(delta) > 0.5) {
           animation = element.animate([{ transform: `translateY(${delta}px)` }, { transform: 'translateY(0)' }], {
@@ -72,16 +92,19 @@ export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: un
           );
         }
       }
-      next.set(key, { top, animation });
+      next.set(key, { top, stuck, animation });
     }
     for (const [key, item] of previous.current) if (!next.has(key)) item.animation?.cancel();
     previous.current = next;
     if (typeof ResizeObserver === 'undefined') return;
     // Layout has already run when this is called, so the reads are cheap and nothing is written.
     const observer = new ResizeObserver(() => {
+      const isStuck = stuckTest(container);
       for (const element of elements) {
         const item = previous.current.get(element.dataset.motionKey ?? '');
-        if (item && element.isConnected) item.top = element.offsetTop;
+        if (!item || !element.isConnected) continue;
+        item.top = element.offsetTop;
+        item.stuck = isStuck?.(element) ?? false;
       }
     });
     for (const element of elements) observer.observe(element);
