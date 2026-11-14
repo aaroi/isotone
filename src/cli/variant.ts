@@ -6,7 +6,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { knobsFor, overlayGroups, splitSectionLabel, variantAppliesTo } from '../core/variants';
+import { knobsFor, overlayGroups, type SelectVariantAxis, sectionAxes, variantAppliesTo } from '../core/variants';
 import { isRouteModule, scanExports } from '../node/variants/exports';
 import { readNotes } from '../node/notes/store';
 import {
@@ -151,17 +151,29 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
   // Grouped over every variant, not the filtered rows: a sibling on another
   // route still decides which selector this one belongs to.
   const groupOf = new Map<string, string>();
-  const sectionOf = new Map<string, string>();
+  const selectors = new Map<SelectVariantAxis, string[]>();
   for (const group of overlayGroups(variants)) {
-    // The same rule as the panel: a member's `section`, else the label prefix.
     const explicit = group.members.find((m) => m.section !== undefined)?.section;
-    const section = splitSectionLabel(group.label, explicit).section;
-    for (const member of group.members) {
-      groupOf.set(member.id, group.id);
-      if (section) sectionOf.set(member.id, section);
-    }
+    const axis = {
+      id: group.id,
+      label: group.label,
+      ...(explicit !== undefined ? { section: explicit } : {}),
+      defaultOption: '',
+      options: [],
+    };
+    selectors.set(
+      axis,
+      group.members.map((m) => m.id),
+    );
+    for (const member of group.members) groupOf.set(member.id, group.id);
   }
   const knobs = knobReport(io, opts, scope);
+  // The panel's rule, knobs included: a selector named after a knob's section sits in it.
+  const sectionOf = new Map<string, string>();
+  for (const section of sectionAxes([...selectors.keys(), ...(knobs?.shown ?? [])])) {
+    if (section.name === null) continue;
+    for (const { axis } of section.axes) for (const id of selectors.get(axis as SelectVariantAxis) ?? []) sectionOf.set(id, section.name);
+  }
 
   if (has(args, '--json')) {
     out(

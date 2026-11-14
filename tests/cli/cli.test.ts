@@ -364,6 +364,21 @@ describe('variant', () => {
     expect(io.text.err).toContain('No variant "missing"');
   });
 
+  it("lists a group named after a knob's section in that section, as the panel shows it", async () => {
+    const root = tempRepo();
+    await runCli(['variant', 'new', 'pricing-a', '--group-label', 'Pricing card'], makeIo(root));
+    await runCli(['variant', 'new', 'apart', '--group-label', 'Pricing card'], makeIo(root));
+    expect(await runCli(['variant', 'section', 'apart', '--none'], makeIo(root))).toBe(0);
+    writeFileSync(
+      join(root, '.isotone/knobs.json'),
+      JSON.stringify([{ id: 'accent', label: 'Pricing card > Accent', kind: 'color', defaultColor: '#000000', swatches: [] }]),
+    );
+    const io = makeIo(root);
+    expect(await runCli(['variant', 'list', '--json'], io)).toBe(0);
+    const { variants } = JSON.parse(io.text.out) as { variants: { id: string; section: string | null }[] };
+    expect(Object.fromEntries(variants.map((v) => [v.id, v.section]))).toEqual({ 'pricing-a': 'Pricing card', apart: null });
+  });
+
   it('use activates alongside other groups and replaces only its own siblings', async () => {
     const root = tempRepo();
     commit(root, 'src/Table.tsx', 'export const Table = () => "rows";\n');

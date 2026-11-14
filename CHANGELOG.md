@@ -5,7 +5,7 @@
 ### Fixed
 
 - **The shortcuts work for agents driving a browser.** Automation tools often send a key event with a key (`.`) but no physical key code, so ⌘⇧. and the compare hold ignored them. Isotone still matches the physical key first and now reads the key when that's missing.
-- **A selector named after a section sits in it.** A file variant group labelled `Pricing card` no longer appears above a separate *Pricing card* heading holding a `Pricing card > Accent` knob; it joins that section.
+- **A selector named after a section sits in it.** A file variant group labelled `Pricing card` no longer appears above a separate *Pricing card* heading holding a `Pricing card > Accent` knob; it joins that section, and `variant list` reports it there too.
 - **The agent guide no longer promises colours as hex.** A pinned element's `styles` give opaque `rgb()` colours as hex and any other colour, such as Tailwind v4's `oklch(…)`, as the browser reports it. Only the docs changed.
 - **`variant drop` removes `.isotone/variants/` once it's empty**, as does promoting the last variant. A directory holding anything else, such as `init`'s README, stays.
 
