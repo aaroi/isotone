@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Added
+
+- **The panel comes back after a reload.** The tools you had open stay open when the page reloads, as it does for every variant switch on Vue, already in place and at the same spot in the Variants list, so comparing options is one click each. A new visit to a page starts with the panel folded, and select mode isn't restored. The pill reopens the tool you used last.
+
+### Changed
+
+- **Feedback never moves Variants.** Variants now sits on the pill with Feedback above it, so opening Feedback, saving a note or closing it leaves every selector where it was; a long list gives Feedback room from its top and scrolls by the same amount, and takes room back once the pointer leaves the dock. With both open, the split between them is now Variants' top edge.
+- **The notice in Variants is one quiet line.** A link's `?v=` that isn't applied, a knob left out for a taken id, or a copy with conflict markers now shows a short line above the selectors, such as “Link picks aren’t applied here”, and its full explanation when you hover, focus or tap it, over the selectors so nothing moves. A `VariantsSource` of your own can return its `getNotice()` as `{ text, detail }` as well as a string.
+
+### Fixed
+
+- **What you type right after opening Feedback is kept.** Opening Feedback in select mode (with ⌘/Ctrl + Shift + ., a click or, now, Enter on its button) used to leave no field focused, so typing, dictation or text sent by a browser-driving agent went nowhere, and text typed while the panel slid in could be lost. The caret now waits in the note field under the select-mode cover, and the first thing you type, or a Backspace or arrow key there, ends select mode and lands in the field. Tab or Shift+Tab still takes you to the page to pin with Space. A field on the page you click into while Feedback opens keeps the focus, and Escape or Enter in it is the page's, so it no longer ends select mode or pulls the caret into the panel.
+- **Select mode ends when you turn to Variants.** Opening Variants, or using it, ends select mode and keeps what you pinned, so the next click on a link in the page follows it instead of pinning it.
+- **No ring left on the pill after Escape.** Closing a panel you opened with the mouse no longer leaves a focus ring around a tool's button; opened from the keyboard, or after you moved about the panel with it, focus still returns to the pill.
+- **Panels never jump.** Folding a section, saving a note, or Feedback opening or closing beside Variants used to snap panels to their new size and move the selectors. While the pointer rests on the dock, the control under it now stays where it is, also as a note opens for editing: lists scroll instead and the rows after a fold glide into place, and a panel takes its new size in one ease once the pointer leaves. On a touch screen nothing waits: a tap's change eases at once. Feedback opening over a long Variants list eases Variants' edge while its selectors stay put, and a panel opening beside another is revealed from the pill. Panels a reload restored, resize steps from the keyboard and lists of more than 40 items change at once.
+
 ## 1.6.1
 
 ### Fixed

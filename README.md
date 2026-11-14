@@ -82,11 +82,14 @@ prompt. Isotone still never runs the agent; it only hands it the notes.
 
 ## Keys
 
-- **⌘/Ctrl + Shift + .** opens Feedback in select mode. With Feedback open, it
-  starts select mode again, or finishes it if it's on. Opening Feedback with the
-  mouse also starts select mode.
+- **⌘/Ctrl + Shift + .** opens Feedback in select mode, with the note field
+  ready: start typing and selecting ends. With Feedback open, it starts select
+  mode again, or finishes it if it's on. Opening Feedback any other way, by
+  mouse or by Enter on its button, also starts select mode; opening Variants
+  ends it.
 - In select mode: **click** pins or unpins an element, hold **Shift** to use the
-  page normally, **Enter** finishes, and **Escape** clears what you pinned.
+  page normally, **Enter** finishes, and **Escape** clears what you pinned. From
+  the keyboard, **Tab** or **Shift + Tab** to an element and press **Space**.
 - After a pin, the note field opens next to the element, ready for typing.
   Once you're done selecting, **Escape** moves it back into the panel.
 - **Enter** sends a note; **Shift + Enter** adds a newline.

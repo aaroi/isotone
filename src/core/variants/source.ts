@@ -52,7 +52,17 @@ export interface VariantsSource {
    * Read when the view opens and kept until it closes, so it never moves the
    * selectors under a pick.
    */
-  getNotice?: () => string | null;
+  getNotice?: () => VariantNotice | string | null;
+}
+
+/**
+ * A notice for the Variants view: one short, plain line, and the full
+ * explanation it reveals on hover or keyboard focus (and gives screen readers
+ * as its description).
+ */
+export interface VariantNotice {
+  text: string;
+  detail?: string;
 }
 
 /**

@@ -11,6 +11,8 @@ export type OpenMenu = (axis: VariantAxis, opener: HTMLButtonElement | null, opt
 
 interface AxisControlProps {
   source: VariantsSource;
+  /** One of the first screenful, laid out at its real height from the first frame. */
+  eager?: boolean;
   axis: VariantAxis;
   /** The selector's own name, without its section. */
   label: string;
@@ -32,6 +34,7 @@ interface AxisControlProps {
  */
 export const AxisControl = memo(function AxisControl({
   source,
+  eager = false,
   axis,
   label,
   fullLabel,
@@ -52,7 +55,7 @@ export const AxisControl = memo(function AxisControl({
     </OptionFrame>
   );
   return (
-    <div className="isotone-axis" data-motion-key={axis.id}>
+    <div className="isotone-axis" data-motion-key={axis.id} data-eager={eager || undefined}>
       <div className="isotone-axis-head">
         <button
           type="button"

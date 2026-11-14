@@ -84,8 +84,8 @@ describe('touch', () => {
   it('describes select mode in touch terms after a finger press, and in keyboard terms after a mouse press', async () => {
     await render();
     await click(container.querySelector('.isotone-fab') as Element);
+    // Opening Feedback starts select mode.
     await click(button('Feedback'));
-    await click(button('Select elements'));
     const cover = () => container.querySelector('.isotone-picking')?.textContent ?? '';
     expect(cover()).toContain('Click elements on the page');
     expect(cover()).toContain('Hold ⇧');
@@ -105,8 +105,8 @@ describe('touch', () => {
     matching = ['(hover: none) and (pointer: coarse)'];
     await render();
     await click(container.querySelector('.isotone-fab') as Element);
+    // Opening Feedback starts select mode.
     await click(button('Feedback'));
-    await click(button('Select elements'));
     expect(container.querySelector('.isotone-picking')?.textContent).toContain('Tap elements on the page');
   });
 
@@ -126,7 +126,6 @@ describe('touch', () => {
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
       return this.classList.contains('isotone-float') ? 100 : 0;
     });
-    await click(button('Select elements'));
     await press(card, 'touch');
     await act(async () => {
       card.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, clientX: 250, clientY: 230 }));

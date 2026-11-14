@@ -17,6 +17,7 @@ import { Icon } from '../icons';
 import { dotPulse, fadeInContent, MAX_ANIMATED_ITEMS } from '../motion';
 import { NoteSummary } from './NoteSummary';
 import type { Anchor } from '../dock/picking';
+import { useHoverHold } from '../dock/useHoverHold';
 import { showOverflowTitle } from '../tooltips';
 import { useLayoutMotion } from '../useLayoutMotion';
 import { useRenderLimit } from '../useRenderLimit';
@@ -40,6 +41,9 @@ interface NotesPanelProps {
 /** The feedback panel: its close control, the page filter, saved notes and the compose slot. */
 export function NotesPanel({ id, open, route, view, editingId, resizeHandle, compose, onClose, onEdit, onRemove }: NotesPanelProps) {
   const { pages, selectedPages, notes, working, togglePage } = view;
+  const panelRef = useRef<HTMLElement | null>(null);
+  // A change under a resting pointer scrolls the list rather than moving the composer or the rows.
+  useHoverHold(panelRef, open);
   return (
     <section
       id={id}
@@ -49,6 +53,7 @@ export function NotesPanel({ id, open, route, view, editingId, resizeHandle, com
       data-open={open}
       aria-hidden={!open}
       ref={(node) => {
+        panelRef.current = node;
         node?.toggleAttribute('inert', !open);
       }}
     >
@@ -118,21 +123,27 @@ const NoteList = memo(function NoteList({
   const filter = [...selectedPages].join('\n');
   const newest = notes.at(-1);
   const sent = newest && isUnsent(newest) ? newest.id : undefined;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each chunk adds rows above the reader, and any other change keeps their place.
+  useLayoutEffect(keepPlace, [count, notes, keepPlace]);
+  // After the place is kept, so a row's reflow starts from where it showed.
   useLayoutMotion(listRef, notes, open);
   // biome-ignore lint/correctness/useExhaustiveDependencies: these are the changes that go back to the newest note.
   useEffect(() => {
     fromEnd.current = 0;
     keepPlace();
   }, [open, filter, sent, keepPlace]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: each chunk adds rows above the reader, and any other change keeps their place.
-  useLayoutEffect(keepPlace, [count, notes, keepPlace]);
   // One Tab stop for the whole list: the row last focused, else the newest.
   const [focused, setFocused] = useState<string>();
   const stop = focused && shown.some((note) => note.id === focused) ? focused : shown.at(-1)?.id;
   useEffect(() => {
     const list = listRef.current;
     if (!list || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(keepPlace);
+    // A panel held under a resting pointer keeps its top edge, so the list resizes only at its foot (the
+    // composer below it growing as a note opens for editing): its rows stay where they are on screen.
+    const observer = new ResizeObserver(() => {
+      if (list.closest<HTMLElement>('.isotone-panel')?.dataset.held === undefined) keepPlace();
+      else if (list.clientHeight) fromEnd.current = list.scrollHeight - list.clientHeight - list.scrollTop;
+    });
     observer.observe(list);
     return () => observer.disconnect();
   }, [keepPlace]);

@@ -35,10 +35,17 @@ export function findChrome(): string | null {
 export interface Chrome {
   /** Evaluate an expression in the page, awaiting a promise, and return its JSON value. */
   eval<T>(expression: string): Promise<T>;
+  /** Navigate to `url`, or reload the page with an empty one; resolves once it has loaded. */
   goto(url: string): Promise<void>;
   viewport(width: number, height: number, mobile?: boolean): Promise<void>;
   move(x: number, y: number): Promise<void>;
   click(x: number, y: number): Promise<void>;
+  /** A finger's tap, as a touch screen sends it. */
+  tap(x: number, y: number): Promise<void>;
+  /** A key as a keyboard sends it: `key` and `code`, the modifiers held (Alt 1, Ctrl 2, Meta 4, Shift 8), and any text it types. */
+  key(key: string, code: string, modifiers?: number, text?: string): Promise<void>;
+  /** Text inserted without key events, as dictation, an IME or browser automation sends it. */
+  insertText(text: string): Promise<void>;
   /** Close Chrome, wait for it to exit and remove its profile. */
   close(): Promise<void>;
 }
@@ -131,6 +138,11 @@ export async function launchChrome(binary: string): Promise<Chrome> {
     });
   await send('Page.enable');
   await send('Runtime.enable');
+  // The OS setting otherwise decides: Windows Server, as on CI, has animations off, so Chrome
+  // reports reduced motion and the panel (rightly) changes at once. These tests check the motion.
+  // `ISOTONE_CPU_THROTTLE=6` slows the page's CPU as a loaded CI runner or a slow laptop would.
+  await send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.ISOTONE_CPU_THROTTLE ?? 1) });
+  await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
   const mouse = (type: string, x: number, y: number) =>
     send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
   return {
@@ -147,7 +159,7 @@ export async function launchChrome(binary: string): Promise<Chrome> {
         };
         loads.add(done);
       });
-      await send('Page.navigate', { url });
+      await send(url ? 'Page.navigate' : 'Page.reload', url ? { url } : {});
       await loaded;
     },
     async viewport(width, height, mobile = false) {
@@ -161,6 +173,17 @@ export async function launchChrome(binary: string): Promise<Chrome> {
       await mouse('mouseMoved', x, y);
       await mouse('mousePressed', x, y);
       await mouse('mouseReleased', x, y);
+    },
+    async tap(x, y) {
+      await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+      await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    },
+    async key(key, code, modifiers = 0, text) {
+      await send('Input.dispatchKeyEvent', { type: text ? 'keyDown' : 'rawKeyDown', key, code, modifiers, text });
+      await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, modifiers });
+    },
+    async insertText(text) {
+      await send('Input.insertText', { text });
     },
     async close() {
       ws.close();

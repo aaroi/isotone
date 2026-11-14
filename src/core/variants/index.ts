@@ -40,7 +40,7 @@ export {
 } from './helpers';
 export { createVariantsSource } from './source';
 export { combineVariantsSources } from './combine';
-export type { VariantsSource } from './source';
+export type { VariantNotice, VariantsSource } from './source';
 export {
   KNOBS_STORAGE_KEY,
   OVERLAY_DEFAULT_OPTION,

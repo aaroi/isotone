@@ -107,13 +107,13 @@ describe('review dock interactions', () => {
     await click(byText('Headline actions'));
     expect(byText('Remove Bold')?.hasAttribute('disabled')).toBe(true);
     await click(byText('Close selector actions'));
-    // Persisted requests never hide or mutate the source controls, even on remount.
+    // Persisted requests never hide or mutate the source controls, even on remount, which in the same tab
+    // (a reload) comes back with Variants open.
     await unmount();
     await render(createElement(IsotonePanel, props));
-    await click(container.querySelector('.isotone-fab'));
     expect(labels()).toEqual(['Headline', 'Tagline', 'Haze']);
-    // The rail button's name carries the count the badge shows.
-    await click(byText('Feedback, 1 note'));
+    // Feedback came back open too; its rail button's name carries the count the badge shows.
+    expect(byText('Feedback, 1 note')?.getAttribute('aria-expanded')).toBe('true');
     await click(container.querySelector('[title="Cancel removal"]'));
     expect(labels()).toEqual(['Headline', 'Tagline', 'Haze']);
     expect(source.getSelections().headline).toBe('b');
@@ -250,7 +250,8 @@ describe('review dock interactions', () => {
     });
     expect(container.querySelectorAll('.isotone-panel[data-open=true]')).toHaveLength(2);
     expect(container.querySelector('[aria-label="Select elements"]')?.getAttribute('aria-pressed')).toBe('true');
-    expect(document.activeElement).toBe(input);
+    // The caret waits in the note field under the select-mode cover, so what is typed next is kept.
+    expect(document.activeElement).toBe(container.querySelector('textarea'));
     expect(container.querySelector('.isotone-root')?.getAttribute('data-instant')).toBe('true');
     input.remove();
   });
@@ -507,7 +508,7 @@ describe('review dock interactions', () => {
     document.body.append(a, b);
     const hit = vi.fn(() => a);
     Object.defineProperty(document, 'elementFromPoint', { value: hit, configurable: true });
-    await click(byText('Select elements'));
+    // Opening Feedback started select mode.
     await click(a);
     hit.mockReturnValue(b);
     await click(b);
@@ -538,7 +539,7 @@ describe('review dock interactions', () => {
       });
     const overlay = () => container.querySelector('.isotone-picking');
 
-    await click(byText('Select elements'));
+    // Opening Feedback started select mode.
     expect(overlay()?.textContent).toContain('Click elements on the page');
     await press('Enter');
     expect(overlay()).toBeNull();
@@ -565,7 +566,7 @@ describe('review dock interactions', () => {
     expect(overlay()).toBeNull();
     expect(fetchMock).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'POST' }));
   });
-  it('starts selecting when feedback is opened with a pointer, and not from the keyboard', async () => {
+  it('starts selecting however Feedback opens, by pointer or key, with the caret waiting in the field', async () => {
     await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     // A real pointer over the dock hits the panel, which select mode ignores.
     Object.defineProperty(document, 'elementFromPoint', { value: () => container.querySelector('.isotone-root'), configurable: true });
@@ -573,22 +574,69 @@ describe('review dock interactions', () => {
       act(async () => {
         el?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
       });
+    const field = () => container.querySelector('textarea');
+    const selecting = () => byText('Select elements')?.getAttribute('aria-pressed');
     await pointer(container.querySelector('.isotone-fab'));
-    // It opens already covered, so the field never shows through the fade.
+    // It opens already covered, so the field never shows through the fade; the caret waits under the cover.
     expect(container.querySelector('.isotone-picking')?.getAttribute('data-still')).toBe('true');
-    expect(byText('Select elements')?.getAttribute('aria-pressed')).toBe('true');
+    expect(selecting()).toBe('true');
+    expect(document.activeElement).toBe(field());
     await pointer(byText('Feedback'));
     expect(container.querySelector('.isotone-notes-panel')?.getAttribute('data-open')).toBe('false');
     expect(container.querySelector('.isotone-picking')).toBeNull();
+    // Enter or Space on the face (a click with no pointer detail) does the same.
     await click(byText('Feedback'));
-    expect(container.querySelector('.isotone-picking')).toBeNull();
+    expect(selecting()).toBe('true');
+    expect(document.activeElement).toBe(field());
+  });
+  it('keeps the caret in the field while the shortcut selects, so text typed at once lands there', async () => {
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
+    const field = () => container.querySelector('textarea') as HTMLTextAreaElement;
+    // The panel opens covered, so the field never shows through the fade; the caret is already in it.
     await act(async () => {
-      await new Promise((r) => requestAnimationFrame(r));
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { code: 'Period', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }),
+      );
     });
-    expect(document.activeElement).toBe(container.querySelector('textarea'));
-    await click(byText('Feedback'));
-    await pointer(byText('Feedback'));
-    expect(container.querySelector('.isotone-picking')).not.toBeNull();
+    expect(container.querySelector('.isotone-picking')?.getAttribute('data-still')).toBe('true');
+    expect(document.activeElement).toBe(field());
+    // Text inserted without a key event (dictation, paste, browser automation) ends selecting too.
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+    await act(async () => {
+      set?.call(field(), 'Bigger');
+      field().dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(container.querySelector('.isotone-picking')).toBeNull();
+    expect(field().value).toBe('Bigger');
+  });
+  it('ends selecting when Variants opens or takes a press, keeping the pins', async () => {
+    const source = createVariantsSource({ axes: AXES });
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' }, variants: source }));
+    const shortcut = () =>
+      act(async () => {
+        window.dispatchEvent(
+          new KeyboardEvent('keydown', { code: 'Period', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }),
+        );
+      });
+    const selecting = () => byText('Select elements')?.getAttribute('aria-pressed');
+    await shortcut();
+    expect(selecting()).toBe('true');
+    await click(byText('Variants'));
+    expect(container.querySelector('.isotone-variants-panel')?.getAttribute('data-open')).toBe('true');
+    expect(selecting()).toBe('false');
+    // Selecting again with Variants open, then a press in Variants: the next page click is the page's.
+    await shortcut();
+    expect(selecting()).toBe('true');
+    await act(async () => {
+      container.querySelector('.isotone-variants-panel [role=radio]')?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    });
+    expect(selecting()).toBe('false');
+    // A press in the feedback panel itself leaves it on.
+    await click(byText('Select elements'));
+    await act(async () => {
+      container.querySelector('.isotone-notes-panel .isotone-compose')?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    });
+    expect(selecting()).toBe('true');
   });
   it('floats the composer next to a pinned element and brings it back to the dock', async () => {
     await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
@@ -616,7 +664,7 @@ describe('review dock interactions', () => {
         card.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, clientX: 150, clientY: 230 }));
       });
 
-    await click(byText('Select elements'));
+    // Opening Feedback started select mode.
     await pin();
     await frame();
     // The composer is now beside the click, focused, still selecting; the dock says where it went.
@@ -693,11 +741,12 @@ describe('review dock interactions', () => {
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       });
 
+    // Written first: text arriving while selecting ends it, as typing does.
+    await typeFeedback('Keep this text');
     await click(byText('Select elements'));
     await act(async () => {
       card.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1, clientX: 5, clientY: 5 }));
     });
-    await typeFeedback('Keep this text');
     expect(container.querySelector('.isotone-float')).not.toBeNull();
     await pressEscape();
     expect(container.querySelector('.isotone-float')).toBeNull();

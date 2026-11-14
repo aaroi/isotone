@@ -6,7 +6,7 @@ import { act, createElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { IsotonePanel } from '../../src/react/index';
-import { byText, click, container, render, setUpPanelFixture } from '../helpers/panel';
+import { click, container, render, setUpPanelFixture } from '../helpers/panel';
 
 setUpPanelFixture();
 
@@ -170,8 +170,8 @@ describe('page scope and agent progress', () => {
 
 it('pins a focused host control with Space without activating it', async () => {
   await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
+  // Opening Feedback starts select mode.
   await click(container.querySelector('.isotone-fab'));
-  await click(byText('Select elements'));
   const target = document.createElement('button');
   target.id = 'keyboard-target';
   target.textContent = 'Project actions';

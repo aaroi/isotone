@@ -54,6 +54,8 @@ beforeEach(() => {
   commits = 0;
   axesPerCommit = [];
   notes = [];
+  // Opening Feedback starts select mode, which reads what lies under a click; jsdom has no layout to ask.
+  document.elementFromPoint = () => null;
   vi.stubGlobal('matchMedia', () => Object.assign(new EventTarget(), { matches: false }));
   // A fresh copy per response, as from the network: equal notes, new objects.
   vi.stubGlobal(

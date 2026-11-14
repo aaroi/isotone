@@ -65,6 +65,61 @@ on it; the update notice beside it shares the glass. The expanded pill is the
 same material stretched, keeping its lower rim, inset and proportions. Panels stay anchored above it; opening one never moves the pill
 or rescales another's text.
 
+### Getting in
+
+A tool's face on the pill opens it and, pressed again, closes it; a click or
+tap on the folded pill, or Enter on it, reopens the tool used last in the tab
+(else the host's `defaultTab`). Opening Feedback, however it opens (a click,
+Enter or Space on a face or the pill, or the shortcut), starts select mode, with
+the caret already in the note field under the cover, placed in the commit that
+shows it, never a frame later, so nothing typed during the entrance is lost; a
+finger gets select mode with no caret, so no on-screen keyboard rises over the
+page. The crosshair turns select mode on and off. The
+first character, keyed or inserted, or a key that would edit or move the caret
+unseen (Backspace, Delete, arrows, Home, End, Page Up and Down, select all),
+ends selecting and acts in the field. Opening Variants, or a press anywhere in
+the dock outside Feedback, ends selecting and keeps the pins, so the next click
+on the page acts on the page. Focus passing through the dock does not: Tab and
+Shift+Tab are how the keyboard reaches the page, where Space pins. Tabbing back
+into the note field ends selecting, as a click there does, since the field is
+where the next keys go.
+
+The open panels are kept per tab (`sessionStorage`, `<namespace>::panels`, with
+the page and the document that wrote them) and come back when that page is
+reloaded, as a variant switch that reloads does, or when the panel remounts in
+the same document; a new visit starts folded, and writes that it did. They come
+back already in place, with no entrance for them or their contents until the
+first key or press, and Variants at the same place in its list, kept from its
+foot and held until the reviewer scrolls or presses there. Select mode and a
+floating composer never come back. Where panels take turns, only the one used
+last does.
+
+Variants sits on the pill and Feedback above it. Opening Feedback, a note
+saved into it or closing it never moves a selector: when room runs out,
+Variants gives it from its top edge and its list scrolls by as much; room given
+back is taken only as far as that scroll absorbs, and while the pointer rests on
+the dock the rest waits until it leaves (or a resize handle is taken up by
+pointer or key); closed from the keyboard, the list simply grows, easing (see
+Motion). Opening Variants under an open Feedback reveals Variants from the pill
+and glides Feedback up: the one movement left, caused by the reviewer's own
+click. In a full dock, a note saved while the pointer rests there scrolls the
+list rather than growing Feedback into Variants.
+
+Escape returns focus to the control that opened the dock: the host's, or the
+launcher when the dock was opened from the keyboard, or the keyboard (or a screen
+reader activating a control) has been used in the dock since; typing in a field
+does not count. Otherwise, opened with the pointer, it lets focus go, so the pill
+folds back with no ring on a face.
+
+A source's notice (a link whose `?v=` it did not apply, a knob left out for a
+taken id) is one quiet line at the top of Variants in the secondary text, plain
+words such as “Link picks aren’t applied here”, with a dotted underline. Its
+explanation is a popup over the selectors, in the popup material, shown while
+the pointer rests on the line or it has keyboard focus (a tap focuses it); it
+fades in and out and never moves a selector. The line is a button described by
+the explanation, so a screen reader reads both. Two notices share the line,
+joined by a middle dot, and their explanations stack in the popup.
+
 The defaults bar sits at the bottom of the variants panel while a pick differs
 from its default: a count, Compare and Make default, which files a request and
 keeps every alternative (the count briefly reads “Default request saved”). The
@@ -174,7 +229,8 @@ references.
 ### Tooltips
 
 Native tooltips are only for brief icon hints and labels that really overflow,
-never full notes, readable labels or internal selectors. Check overflow on
+never full notes, readable labels or internal selectors; a notice's explanation
+uses the popup above instead. Check overflow on
 pointer entry, not by measuring rows during render.
 
 ## Resizing the dock
@@ -182,7 +238,7 @@ pointer entry, not by measuring rows during render.
 Open panels resize by dragging invisible 8px edge handles, cued only by the
 resize cursor (nothing lights up). Width is the dock's left edge. Height is the
 top edge of the top-most open panel, and with both open the strip between them
-is the split (up grows feedback). A focused handle shows a 2px `--iso-focus`
+is the split (up grows variants). A focused handle shows a 2px `--iso-focus`
 line inset clear of the corners.
 
 Sizes are max-heights and a max-width in `localStorage` (`<namespace>::dock`,
@@ -284,7 +340,34 @@ Motion explains opening, closing and layout changes. Keyboard actions are
 immediate: the rail track, axis menus and colour popover drop their transition
 while the keyboard is in use, each named one by one (a rule over every
 descendant restyles the dock on each change of input). Reduced motion removes
-spatial movement; hover stays brief. The launcher expands on mouse or
+spatial movement; hover stays brief.
+
+Nothing in the dock moves suddenly, and nothing under a resting pointer moves
+at all. The dock hangs from its bottom-right corner, so a panel moves when its
+bottom or right edge does, and slides there. While the pointer rests on the
+dock, a panel keeps its height when its contents change (a note arriving or
+leaving, a note opened for editing or put back, a section folding or unfolding,
+Feedback closing over Variants): its list scrolls instead, keeping its scroll as
+Feedback closes, a fold keeps its toggle where it was and the rows after it
+glide into place, and the panel takes its new height in one ease once the
+pointer leaves or a resize handle is taken up. A finger never holds a size: the
+hover a tap leaves behind is no resting pointer, so a tap's change eases at
+once. A height that does change (Feedback
+opening over a long list, room given back, the pointer gone) eases the card's
+height from what showed to what it needs, every changed panel on the same clock;
+Variants' list scrolls by as much as its top edge moves, so its controls stay
+still, and the dock lets its stack run past its room at the top meanwhile, never
+over the pill. A panel opening beside another lays out at once and is revealed
+from its foot upward, fading in, by as much as the one above slides, so the gap
+between them stays the same the whole way; one opening alone
+rises 6px and fades in. Heights ease after a key too, since they follow from
+what the key did. Immediate: reduced motion, a resize the pointer drives (it
+tracks the pointer) or a key steps (each step lands exactly), a window resizing,
+panels a reload restored (until the first key or press) and long lists (over
+`MAX_ANIMATED_ITEMS`), whose size never animates. An ease never re-renders the
+dock: the resize handles are measured once it lands.
+`tests/browser/dock-motion.test.ts` samples every painted frame and fails when
+something that should stay moves, or anything jumps. The launcher expands on mouse or
 hovering-pen entry, even where the primary pointer reports coarse; touch opens
 it by tap. The pill's hit surface spans its rim and the gap between icons.
 
@@ -330,7 +413,8 @@ working note's glint moves its text's gradient, a repaint that content-visibilit
 keeps to the rows in view, on the dots' shared clock; text,
 corners and hit targets keep their size. Read positions before writing styles,
 retarget interrupted movement, cancel on cleanup. Only the pill's own width
-transitions; never animate the size of long lists. Lists above
+transitions, and a panel card's height eases as above (the card, never its
+rows, and never over a long list). Lists above
 `MAX_ANIMATED_ITEMS` (40) update immediately and skip cloned exit snapshots.
 Hidden lists do not measure on render, and typing must not remeasure unchanged
 selectors or notes.
@@ -367,7 +451,7 @@ Two limits are accepted rather than worked around:
 | `src/react/icons.tsx` | Icon choices, optical size and stroke |
 | `src/react/notes/NoteSummary.tsx` | Saved note summaries and their tags |
 | `src/react/IsotonePanel.tsx` | The dock, composing the hooks below |
-| `src/react/dock/useDockMode.ts`, `useDockFocus.ts`, `useDockEvents.ts` | Open surfaces; focus; hover, modality, shortcut, Escape and the host event fence |
+| `src/react/dock/useDockMode.ts`, `useDockFocus.ts`, `useDockEvents.ts` | Open surfaces and what a tab keeps across a reload; focus; hover, modality, shortcut, Escape and the host event fence |
 | `src/react/dock/Rail.tsx` | The launcher pill and the rail's tool buttons |
 | `src/react/notes/Composer.tsx`, `NotesPanel.tsx` | The composer; the feedback panel |
 | `src/react/dock/picking.tsx`, `useFloatingComposer.ts` | Select mode and outlines; the composer beside a pin |
