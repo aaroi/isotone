@@ -501,6 +501,14 @@ function warnNoHotSwap(io: CliIO, file: string, switching: ReturnType<typeof swi
     );
     return;
   }
+  // Astro reloads the page after any change to an `.astro` file, a switch included.
+  if (file.endsWith('.astro')) {
+    errOut(
+      io,
+      `warning: ${file} is an Astro component, so switching this variant reloads the page, as any edit of an .astro file does, and changes every tab. See "Vue components" in the variants guide.`,
+    );
+    return;
+  }
   // A host without React swaps the file over HMR, which its own components accept.
   if (switching === 'whole') return;
   const names = scanExports(readFileSync(resolve(io.cwd, file), 'utf8'));

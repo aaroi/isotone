@@ -205,7 +205,7 @@ describe('`variant add` on a file that cannot hot-swap', () => {
 
   // #63 keeps `variant add` quiet where a host without React swaps whole files; #65 makes a Vue
   // component switch, and an edit of its active copy, reload the page. That reload is worth a warning.
-  it('says a Vue component reloads the page on a switch, with or without React', async () => {
+  it('says a Vue or Astro component reloads the page on a switch, with or without React', async () => {
     for (const root of [served({ vue: '^3.5.0', vite: '^8.0.0' }), served({ ...react, vue: '^3.5.0', vite: '^8.0.0' })]) {
       writeFileSync(join(root, 'src', 'Card.vue'), '<template><div>Card</div></template>\n');
       const err = await add(root, 'src/Card.vue');
@@ -213,6 +213,12 @@ describe('`variant add` on a file that cannot hot-swap', () => {
       expect(err).toContain('reloads the page and changes every tab');
       expect(err).not.toContain('is served whole');
     }
+    // Astro reloads after any change to an .astro file, a switch included.
+    const astro = served({ astro: '^5.0.0', vite: '^8.0.0' });
+    writeFileSync(join(astro, 'src', 'Card.astro'), '---\n---\n<div>Card</div>\n');
+    const astroErr = await add(astro, 'src/Card.astro');
+    expect(astroErr).toContain('src/Card.astro is an Astro component, so switching this variant reloads the page');
+    expect(astroErr).not.toContain('is a Vue component');
     // Svelte's own hot update compiles the copy: nothing to say.
     const svelte = served({ svelte: '^5.0.0', vite: '^8.0.0' });
     writeFileSync(join(svelte, 'src', 'Card.svelte'), '<div>Card</div>\n');
