@@ -138,6 +138,9 @@ export async function launchChrome(binary: string): Promise<Chrome> {
     });
   await send('Page.enable');
   await send('Runtime.enable');
+  // The OS setting otherwise decides: Windows Server, as on CI, has animations off, so Chrome
+  // reports reduced motion and the panel (rightly) changes at once. These tests check the motion.
+  await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
   const mouse = (type: string, x: number, y: number) =>
     send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
   return {
