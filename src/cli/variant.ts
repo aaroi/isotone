@@ -155,7 +155,7 @@ function printVariantHelp(io: CliIO): void {
   out(io);
   out(io, 'File variants need the Vite plugin (isotone/vite). With `isotone serve` or another dev');
   out(io, 'server, use knobs in .isotone/knobs.json, or the app’s own VariantsSource. In a Next.js');
-  out(io, 'app, which runs no Vite plugin, new, add and use refuse unless given --force.');
+  out(io, 'app, which runs no Vite plugin, new and use refuse unless given --force.');
   out(io);
   out(io, 'Variants that override the same file are alternatives of one selector without a');
   out(io, '--group; use one when the alternatives touch different files.');
@@ -433,7 +433,6 @@ function cmdAdd(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
     errOut(io, 'Usage: isotone variant add <id> [--new] [--force] <file...>');
     return 1;
   }
-  refuseUnserved(io, opts, args, `Nothing was added to "${id}"`);
   for (const file of files) addVariantFile(opts, id, file, { create, force: has(args, '--force') });
   out(io, create ? `created ${files.length} new file(s) in "${id}"` : `added ${files.length} file(s) to "${id}"`);
   if (!create) {
@@ -441,7 +440,8 @@ function cmdAdd(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
     for (const file of files) warnNoHotSwap(io, file, switching);
   }
   warnOverlaps(io, opts, id);
-  warnUnserved(io, opts, args);
+  // Its --force is about the file copied, so it never silences this.
+  warnUnserved(io, opts);
   return 0;
 }
 
@@ -455,12 +455,14 @@ function alternatives(root: string): string {
 
 /**
  * Nothing serves a file variant in a Next.js app, so making or activating one
- * there would only look like it worked: refused, unless `--force`.
+ * there would only look like it worked: `new` and `use` refuse, unless
+ * `--force`. Both only write Isotone's own files; `add` warns instead, since
+ * its `--force` lets a secret-looking or git-ignored file through.
  */
 function refuseUnserved(io: CliIO, opts: VariantsStoreOptions, args: string[], what: string): void {
   if (has(args, '--force') || switchingOf(opts) !== 'none') return;
   throw new Error(
-    `${what}: file variants need the Vite plugin (isotone/vite), and Next.js does not run it, so the panel would never show it. ${alternatives(variantsProject(opts) ?? io.cwd)} --force goes ahead anyway.`,
+    `${what}: Next.js runs no Vite plugin, so nothing here serves file variants and the panel would never show it. ${alternatives(variantsProject(opts) ?? io.cwd)} If the user still wants file variants here (a sibling Vite dev server serves them), pass --force.`,
   );
 }
 
@@ -478,7 +480,8 @@ function warnUnserved(io: CliIO, opts: VariantsStoreOptions, args: string[] = []
   const { loaded, viteConfig } = vitePlugin(root);
   if (loaded) return;
   if (detectHost(root) === 'next') {
-    if (has(args, '--force')) return;
+    // A forced `new` or `use` was just refused with this; a sibling Vite server may serve them.
+    if (has(args, '--force') || fileVariantSwitching(root) !== 'none') return;
     errOut(
       io,
       `warning: file variants need the Vite plugin (isotone/vite), and Next.js does not run it, so the panel will not show them. ${alternatives(root)}`,

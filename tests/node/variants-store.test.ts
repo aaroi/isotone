@@ -534,7 +534,8 @@ describe('outside a Git repository', () => {
     writeFileSync(join(variantDir(opts, 'b'), 'src/Button.tsx'), 'B ONE\nline two\nline three\n');
 
     expect(promoteVariant(opts, 'a').rebased).toEqual(['b']);
-    expect(readVariant(opts, 'b')?.files['src/Button.tsx']?.base).toMatch(/^[0-9a-f]{64}$/);
+    // No commit holds the promoted file, so its base is kept with the variant, named as outside a repository.
+    expect(readVariant(opts, 'b')?.files['src/Button.tsx']?.base).toBe(sha1Blob('line one\nline two\nA THREE\n'));
     // b is an alternative to what was promoted, not a copy behind it.
     expect(syncVariant(opts, 'b').unchanged).toEqual(['src/Button.tsx']);
     expect(readFileSync(join(variantDir(opts, 'b'), 'src/Button.tsx'), 'utf8')).toBe('B ONE\nline two\nline three\n');

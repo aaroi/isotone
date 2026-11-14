@@ -16,6 +16,7 @@ import { scriptServePorts } from '../node/serve-owner';
 import { DEFAULT_VARIANTS_DIR, KNOBS_FILE } from '../node/variants';
 import { docPath } from './docs';
 import {
+  biomeMajor,
   componentExtensions,
   detectHost,
   frameworkPlugin,
@@ -79,7 +80,7 @@ export function runInit(args: string[], io: CliIO): number {
 
   const host = detectHost(io.cwd);
   const sources = scanSources(io.cwd);
-  const [recommended, reason] = recommend(host, sources);
+  const [recommended, reason] = recommend(host, sources, overlaySetUp(io.cwd));
   const approach = approachArg ?? recommended;
   if (!isApproach(approach)) {
     errOut(io, `Unknown approach "${approach}". Use host, overlay or serve.`);
@@ -257,6 +258,22 @@ function installCommand(cwd: string): string | null {
   }
 }
 
+/** A Vite plugin call that injects no panel: the endpoints for an app that mounts its own. */
+const PANEL_OFF = /\bisotone\s*\(\s*\{[^)]*\bpanel\s*:\s*false\b/;
+
+/**
+ * Whether file variants are set up here: a variant made, or the Vite plugin
+ * loaded with its own panel (`panel: false` serves an app's own mount).
+ */
+function overlaySetUp(cwd: string): boolean {
+  if (safeReaddirent(join(cwd, DEFAULT_VARIANTS_DIR)).some((entry) => entry.isDirectory())) return true;
+  return safeReaddir(cwd).some((name) => {
+    if (!/^[\w-]+\.config\.[cm]?[jt]s$/.test(name)) return false;
+    const text = safeRead(join(cwd, name));
+    return /['"]isotone\/vite['"]/.test(text) && !PANEL_OFF.test(text);
+  });
+}
+
 /** Whether the reviewer already has something to switch: overlay variants or knobs. */
 function hasReviewContent(cwd: string): boolean {
   if (existsSync(join(cwd, KNOBS_FILE))) return true;
@@ -268,7 +285,8 @@ const TAILWIND_IMPORT = /@import\s+["']tailwindcss["']/;
 const MENTIONS_VARIANTS = /\.isotone\b/;
 const CSS_ROOTS = ['src', 'app', 'styles', 'assets', 'css'];
 const ESLINT_FLAT = /^eslint\.config\.[cm]?[jt]s$/;
-const ESLINT_LEGACY = /^\.eslintrc(?:\.(?:c?js|json|ya?ml))?$/;
+/** `"linter": { "enabled": false }`: Biome only formats, and a copy's imports never matter. */
+const BIOME_LINT_OFF = /"linter"\s*:\s*\{[^{}]*"enabled"\s*:\s*false/;
 
 /**
  * What file variants need here beyond the plugin and is not in place yet:
@@ -294,21 +312,26 @@ function variantsNeed(cwd: string): string[][] {
     ]);
   }
   const files = safeReaddir(cwd);
+  const ignores: string[] = [];
   /** Unless one of `read` already names the variants. */
   const lint = (read: string[], line: string) => {
     if (read.some((file) => MENTIONS_VARIANTS.test(safeRead(join(cwd, file))))) return;
-    steps.push(['Keep the linter off variant copies, whose imports resolve from the real file:', line]);
+    ignores.push(line);
   };
+  // A legacy .eslintrc already skips dot-directories; a flat config does not.
   const flat = files.find((name) => ESLINT_FLAT.test(name));
-  const legacy = files.filter((name) => ESLINT_LEGACY.test(name));
   if (flat) lint([flat], `in ${flat}, add { ignores: ['.isotone/**'] } as an entry of its own.`);
-  else if (legacy.length) lint([...legacy, '.eslintignore'], 'add .isotone/ to .eslintignore.');
   const biome = files.find((name) => name === 'biome.json' || name === 'biome.jsonc');
-  if (biome) {
+  if (biome && !BIOME_LINT_OFF.test(safeRead(join(cwd, biome)))) {
     // Biome 1 ignores through files.ignore; 2 through a negated files.includes.
-    const v1 = /schemas\/1\./.test(safeRead(join(cwd, biome)));
-    lint([biome], v1 ? `in ${biome}, add ".isotone/**" to files.ignore.` : `in ${biome}, add "!.isotone" to files.includes.`);
+    lint(
+      [biome],
+      (biomeMajor(cwd) ?? (/schemas\/1\./.test(safeRead(join(cwd, biome))) ? 1 : 2)) === 1
+        ? `in ${biome}, add ".isotone/**" to files.ignore.`
+        : `in ${biome}, give files "includes": ["**", "!.isotone"], keeping any patterns there.`,
+    );
   }
+  if (ignores.length) steps.push(['Keep linters off variant copies, whose imports resolve from the real file:', ...ignores]);
   return steps;
 }
 
@@ -380,8 +403,9 @@ function hostLabel(host: Host): string {
   return host === 'vite' ? 'Vite' : host === 'next' ? 'Next' : 'other';
 }
 
-function recommend(host: Host, sources: Sources): [Approach, string] {
-  if (sources.hostSources.length) {
+function recommend(host: Host, sources: Sources, overlay: boolean): [Approach, string] {
+  // An overlay setup beside a source of the app's own stays overlay: its agents keep the variants guidance.
+  if (sources.hostSources.length && !overlay) {
     return ['host', `this app already has its own VariantsSource (${sources.hostSources[0]}), which the panel shows.`];
   }
   if (sources.hostOwnedAxes) {

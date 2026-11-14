@@ -8,24 +8,6 @@ import { basename, dirname, join } from 'node:path';
 /** A failed lookup is an answer here (`null`), not something to print. */
 const GIT_QUIET: ['ignore', 'pipe', 'ignore'] = ['ignore', 'pipe', 'ignore'];
 
-/**
- * `git hash-object` looks up the repository from its cwd, not from the
- * path it's hashing, so every call here runs with cwd set to the file's own
- * directory — always inside the right repo regardless of where the caller's
- * process happens to be.
- */
-function blobOf(absPath: string): string | null {
-  try {
-    return execFileSync('git', ['hash-object', '--no-filters', '-w', absPath], {
-      cwd: dirname(absPath),
-      encoding: 'utf8',
-      stdio: GIT_QUIET,
-    }).trim();
-  } catch {
-    return null;
-  }
-}
-
 /** Whether git ignores the file (an untracked file a `.gitignore` covers).
  *  Outside a repository nothing is ignored. */
 export function isGitIgnored(absPath: string): boolean {
@@ -123,7 +105,8 @@ export function isConflictStatus(status: number | null): boolean {
   return status !== null && status >= 1 && status <= 127;
 }
 
-/** The blob HEAD holds for the file, or null: no commit yet, untracked, or not a repository. */
+/** The blob HEAD holds for the file, or null: no commit yet, untracked, or not a repository. Run
+ *  from the file's own directory, since git finds the repository from its cwd. */
 function committedBlob(absPath: string): string | null {
   try {
     return execFileSync('git', ['rev-parse', '--verify', '-q', `HEAD:./${basename(absPath)}`], {
@@ -138,20 +121,19 @@ function committedBlob(absPath: string): string | null {
 
 /**
  * Record the file as a base a later sync can merge from, and return its hash.
- * When the file is as HEAD has it, the blob is in git's object store, reachable
- * from a commit, so a teammate's clone has it and `git gc` keeps it. Otherwise
- * (uncommitted changes, an untracked file, no commit yet, no repository or no
- * git) the bytes are kept in `store`, the variant's own bases directory, which
- * is committed with the variant, under the blob hash git would give them.
- * Null when the file can't be read.
+ * When the file is as HEAD has it, the blob is already in git's object store,
+ * reachable from a commit, so a teammate's clone has it and `git gc` keeps it.
+ * Otherwise (uncommitted changes, an untracked file, no commit yet, no
+ * repository or no git) the bytes are kept in `store`, the variant's own bases
+ * directory, which is committed with the variant, under the SHA-1 blob hash
+ * git would give them. Null when the file can't be read.
  */
 export function recordBase(absPath: string, store: string): string | null {
-  const blob = blobOf(absPath);
-  if (blob && blob === committedBlob(absPath)) return blob;
   try {
     const contents = readFileSync(absPath);
-    // In the repository's own format, so the name matches what git would hash.
-    const hash = blobHash(contents, blob?.length === 64);
+    const committed = committedBlob(absPath);
+    if (committed && blobHash(contents, committed.length === 64) === committed) return committed;
+    const hash = blobHash(contents, false);
     mkdirSync(store, { recursive: true });
     // Never through a link (`wx` refuses one), and once only: a checkout must
     // not convert line endings, or the bases no longer match their names.
