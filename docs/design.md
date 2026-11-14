@@ -65,6 +65,36 @@ on it; the update notice beside it shares the glass. The expanded pill is the
 same material stretched, keeping its lower rim, inset and proportions. Panels stay anchored above it; opening one never moves the pill
 or rescales another's text.
 
+### Getting in
+
+A tool opens from its face on the pill; a click or tap on the folded pill, or
+Enter on it, reopens the tool used last in the tab (else the host's
+`defaultTab`). Opening Feedback puts the caret in the note field in the commit
+that shows it, never a frame later, so nothing typed during the entrance is
+lost; a finger only opens it, so no on-screen keyboard rises over the page.
+Select mode is something the reviewer starts: the crosshair, or the shortcut,
+which also leaves the caret in the field under the cover so that the first
+character, keyed or inserted, ends selecting and lands there. Opening Variants,
+or a press or focus anywhere in the dock outside Feedback, ends selecting and
+keeps the pins, so the next click on the page acts on the page.
+
+The open panels are kept per tab (`sessionStorage`, `<namespace>::panels`) and
+come back after a reload, such as a variant switch that reloads the page,
+already in place with no entrance, and Variants at the same scroll position;
+select mode and a floating composer never do. Where panels take turns, only the
+one used last comes back.
+
+Variants sits on the pill and Feedback above it. Opening Feedback, a note
+saved into it or closing it never moves a selector; when room runs out, Variants
+gives it from its top edge and its list scrolls by as much, so every control in
+view stays where it was. Opening Variants under an open Feedback slides Feedback
+up: the one movement left, caused by the reviewer's own click.
+
+A link whose `?v=` the source did not apply (its `getNotice()` names `?v=`)
+gets one quiet line beside the pill in the update notice's glass: “This link’s
+variants aren’t shown”. It opens Variants, which says what the link asked for,
+and does not come back on that page once Variants has been open.
+
 The defaults bar sits at the bottom of the variants panel while a pick differs
 from its default: a count, Compare and Make default, which files a request and
 keeps every alternative (the count briefly reads “Default request saved”). The
@@ -182,7 +212,7 @@ pointer entry, not by measuring rows during render.
 Open panels resize by dragging invisible 8px edge handles, cued only by the
 resize cursor (nothing lights up). Width is the dock's left edge. Height is the
 top edge of the top-most open panel, and with both open the strip between them
-is the split (up grows feedback). A focused handle shows a 2px `--iso-focus`
+is the split (up grows variants). A focused handle shows a 2px `--iso-focus`
 line inset clear of the corners.
 
 Sizes are max-heights and a max-width in `localStorage` (`<namespace>::dock`,
@@ -284,7 +314,9 @@ Motion explains opening, closing and layout changes. Keyboard actions are
 immediate: the rail track, axis menus and colour popover drop their transition
 while the keyboard is in use, each named one by one (a rule over every
 descendant restyles the dock on each change of input). Reduced motion removes
-spatial movement; hover stays brief. The launcher expands on mouse or
+spatial movement; hover stays brief. The dock hangs from its bottom-right
+corner, so a panel moves only when its bottom or right edge does: one that grows
+or shrinks at its top stays still. The launcher expands on mouse or
 hovering-pen entry, even where the primary pointer reports coarse; touch opens
 it by tap. The pill's hit surface spans its rim and the gap between icons.
 
@@ -367,7 +399,7 @@ Two limits are accepted rather than worked around:
 | `src/react/icons.tsx` | Icon choices, optical size and stroke |
 | `src/react/notes/NoteSummary.tsx` | Saved note summaries and their tags |
 | `src/react/IsotonePanel.tsx` | The dock, composing the hooks below |
-| `src/react/dock/useDockMode.ts`, `useDockFocus.ts`, `useDockEvents.ts` | Open surfaces; focus; hover, modality, shortcut, Escape and the host event fence |
+| `src/react/dock/useDockMode.ts`, `useDockFocus.ts`, `useDockEvents.ts` | Open surfaces and what a tab keeps across a reload; focus; hover, modality, shortcut, Escape and the host event fence |
 | `src/react/dock/Rail.tsx` | The launcher pill and the rail's tool buttons |
 | `src/react/notes/Composer.tsx`, `NotesPanel.tsx` | The composer; the feedback panel |
 | `src/react/dock/picking.tsx`, `useFloatingComposer.ts` | Select mode and outlines; the composer beside a pin |
