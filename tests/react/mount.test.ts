@@ -365,6 +365,28 @@ describe('a host source beside the knobs of the server that answers notes', () =
     await panel.off();
   });
 
+  it('applies stored knob values on load, before the panel opens', async () => {
+    vi.useRealTimers();
+    localStorage.setItem('isotone:knobs', JSON.stringify({ 'card-radius': '16' }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => ({
+        ok: true,
+        status: 200,
+        json: async () => (String(input).includes('/api/isotone/variants') ? { variants: [], active: [], knobs: [knob] } : []),
+      })),
+    );
+    const off = mountIsotone({ endpoint: notesEndpoint, variants: createVariantsSource({ axes }) });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    expect(document.documentElement.style.getPropertyValue('--knob-card-radius')).toBe('16px');
+    off();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  });
+
   it('lets a host that saves its own defaults save them, and files only the knobs', async () => {
     const saveDefaults = vi.fn(async (_selections: Record<string, string>) => {});
     const source = createVariantsSource({ axes, selections: { cta: 'start' }, saveDefaults });

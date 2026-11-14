@@ -176,6 +176,9 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
   setTimeout(() => {
     if (disposed) return;
     render();
+    // The panel loads knobs as it opens, or at once when it has nothing to show. Beside a host's
+    // selectors it has, so load them here: stored knob values apply from the first paint.
+    if (app && overlay) void overlay.refresh().catch(() => {});
     window.addEventListener('popstate', notify);
     listeners.push(() => window.removeEventListener('popstate', notify));
     for (const evt of ['pushState', 'replaceState'] as const) {
