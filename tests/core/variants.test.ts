@@ -594,101 +594,124 @@ describe('what the overlay source says the page shows', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
-  const listing: OverlayVariantsList = {
-    variants: [
-      variant('card-bold', { label: 'Bold', group: 'pricing-card', files: ['src/Card.tsx'] }),
-      variant('card-compact', { label: 'Compact', group: 'pricing-card', files: ['src/Card.tsx'] }),
-      variant('card-merged', { label: 'Merged', group: 'pricing-card', files: ['src/Card.tsx'], conflicts: ['src/Card.tsx'] }),
-    ],
-    active: ['card-bold'],
-    hmr: '/@vite/client',
-  };
-  /** A source without a live store, as on Vite 5 or without React, with a stand-in HMR channel. */
+  /** A source without a live store, as on Vite 5 or without React, against a stand-in
+   *  server (what it shows, which copies hold conflict markers) and HMR channel. */
   function source(live: Parameters<typeof createOverlayVariantsSource>[0]['live'] = null) {
-    const posted: string[][] = [];
-    let answer: (() => void) | null = null;
-    let served = listing;
+    const server = { active: ['card-bold'], conflicts: new Set<string>(['card-merged']) };
+    const listing = (): OverlayVariantsList => ({
+      variants: [
+        ['card-bold', 'Bold'],
+        ['card-compact', 'Compact'],
+        ['card-merged', 'Merged'],
+      ].map(([id, label]) =>
+        variant(id as string, {
+          label,
+          group: 'pricing-card',
+          files: ['src/Card.tsx'],
+          conflicts: server.conflicts.has(id as string) ? ['src/Card.tsx'] : [],
+        }),
+      ),
+      active: server.active,
+      hmr: '/@vite/client',
+    });
+    const posted: { active: string[]; groups: string[] }[] = [];
+    let gets = 0;
     vi.stubGlobal(
       'fetch',
       vi.fn(async (_url: string, init?: RequestInit) => {
-        if (init?.method === 'POST') posted.push((JSON.parse(String(init.body)) as { active: string[] }).active);
-        const body = served;
-        if (answer === null) return Response.json(body);
-        // A listing held back until `release`, as a slow GET.
-        return new Promise<Response>((done) => {
-          answer = () => done(Response.json(body));
-        });
+        if (init?.method !== 'POST') {
+          gets++;
+          return Response.json(listing());
+        }
+        const body = JSON.parse(String(init.body)) as { active: string[]; groups: string[] };
+        posted.push(body);
+        // Like the endpoint: it answers with what it shows, never a conflicted copy.
+        server.active = body.active.filter((id) => !server.conflicts.has(id));
+        return Response.json({ active: server.active });
       }),
     );
-    const listeners = new Set<(data: { active?: unknown }) => void>();
+    const listeners = new Set<() => void>();
     const connected: string[] = [];
     const hot = async (client: string) => {
       connected.push(client);
       return {
-        on: (_event: string, listener: (data: { active?: unknown }) => void) => listeners.add(listener),
-        off: (_event: string, listener: (data: { active?: unknown }) => void) => listeners.delete(listener),
+        on: (_event: string, listener: () => void) => {
+          listeners.add(listener);
+        },
+        off: (_event: string, listener: () => void) => {
+          listeners.delete(listener);
+        },
       };
     };
     const overlay = createOverlayVariantsSource({ endpoint: '/variants', getRoute: () => '/', storage: null, knobRoot: null, live, hot });
     const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
-    return {
-      overlay,
-      posted,
-      connected,
-      listeners,
-      settle,
-      serverSwitched: (active: string[]) => {
-        for (const listener of listeners) listener({ active });
-      },
-      /** The next GET answers only on `release()`, with what the server had when asked. */
-      slow: () => {
-        answer = () => {};
-        served = { ...listing };
-        return () => answer?.();
-      },
+    const announce = async () => {
+      for (const listener of listeners) listener();
+      await settle();
     };
+    return { overlay, server, posted, connected, listeners, settle, announce, gets: () => gets };
   }
+  const disabled = (overlay: ReturnType<typeof createOverlayVariantsSource>) =>
+    (overlay.getAxes()[0] as { options: { id: string; disabled?: boolean }[] }).options.filter((o) => o.disabled).map((o) => o.id);
 
-  it('follows the server’s set on the HMR channel the listing names, without a live store', async () => {
-    const { overlay, connected, listeners, serverSwitched, settle } = source();
+  it('reads the listing again whenever the server says its variants changed', async () => {
+    const { overlay, server, connected, listeners, settle, announce, gets } = source();
     await overlay.refresh();
     await settle();
-    // Once, at the client the listing names, against the endpoint's origin.
+    // Connected once, at the client the listing names, and read again once connected.
     await overlay.refresh();
     await settle();
     expect(connected).toEqual(['http://localhost/@vite/client']);
+    expect(gets()).toBe(3);
     expect(overlay.getSelections()['pricing-card']).toBe('card-bold');
-    const changed = vi.fn();
-    overlay.subscribe(changed);
-    serverSwitched(['card-compact']);
-    expect(changed).toHaveBeenCalled();
-    // The panel's highlight and a new note's selections both read this.
+
+    // Another tab or the CLI picks: the highlight and a new note's selections follow.
+    server.active = ['card-compact'];
+    await announce();
     expect(overlay.getSelections()['pricing-card']).toBe('card-compact');
-    serverSwitched([]);
+
+    // The shown copy gains markers: Default shows, and the option cannot be picked.
+    server.conflicts.add('card-compact');
+    server.active = [];
+    await announce();
     expect(overlay.getSelections()['pricing-card']).toBe(OVERLAY_DEFAULT_OPTION);
+    expect(disabled(overlay)).toEqual(['card-compact', 'card-merged']);
+    // And back once they are resolved.
+    server.conflicts.delete('card-merged');
+    await announce();
+    expect(disabled(overlay)).toEqual(['card-compact']);
+
     overlay.dispose();
     await settle();
     expect(listeners.size).toBe(0);
   });
 
-  it('keeps an event over a listing that was already on its way', async () => {
-    const { overlay, serverSwitched, settle, slow } = source();
+  it('keeps what the server answers a pick with, not what it posted', async () => {
+    const { overlay, server, settle } = source();
     await overlay.refresh();
     await settle();
-    const release = slow();
-    const pending = overlay.refresh();
-    serverSwitched(['card-compact']);
-    release();
-    await pending;
-    expect(overlay.getSelections()['pricing-card']).toBe('card-compact');
+    // Markers arrive before the panel hears of them: the pick still goes out, and the
+    // server shows the real file.
+    server.conflicts.add('card-compact');
+    overlay.setSelection('pricing-card', 'card-compact');
+    await vi.waitFor(() => expect(overlay.getSelections()['pricing-card']).toBe(OVERLAY_DEFAULT_OPTION));
+  });
+
+  it('names the selectors the reviewer set, so a Default there drops a hidden pick', async () => {
+    const { overlay, posted, settle } = source();
+    await overlay.refresh();
+    await settle();
+    overlay.setSelection('pricing-card', OVERLAY_DEFAULT_OPTION);
+    await vi.waitFor(() => expect(posted).toEqual([{ active: [], groups: ['pricing-card'] }]));
+    overlay.reset?.();
+    await vi.waitFor(() => expect(posted[1]).toEqual({ active: [], groups: ['pricing-card'] }));
   });
 
   it('shows a copy with conflict markers as an option nobody can pick, and says why', async () => {
     const live = { active: ['card-bold'], select: vi.fn(() => false), subscribe: () => () => {}, reload: () => {} };
     const { overlay, posted, settle } = source(live);
     await overlay.refresh();
-    const options = (overlay.getAxes()[0] as { options: { id: string; disabled?: boolean }[] }).options;
-    expect(options.filter((o) => o.disabled).map((o) => o.id)).toEqual(['card-merged']);
+    expect(disabled(overlay)).toEqual(['card-merged']);
     expect(overlay.getNotice()).toBe(
       '"Merged" holds conflict markers from `variant sync` in src/Card.tsx, so it cannot be shown until they are resolved.',
     );

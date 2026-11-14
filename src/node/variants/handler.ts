@@ -72,7 +72,10 @@ function setActive(opts: VariantsStoreOptions, body: unknown): HandlerResponse {
       conflict,
     });
   }
-  // A tab posts what it shows, which leaves out a conflicted pick the file keeps.
-  writeActive(opts, withUnshown(opts, active));
+  // A tab posts what it shows, which leaves out a conflicted pick the file
+  // keeps, and the selectors the reviewer set, whose hidden picks go.
+  const groups = (body as { groups?: unknown }).groups;
+  const touched = Array.isArray(groups) ? groups.filter((id): id is string => typeof id === 'string') : [];
+  writeActive(opts, withUnshown(opts, active, touched));
   return json(200, { active: readActive(opts) });
 }

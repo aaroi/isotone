@@ -282,6 +282,16 @@ export function createSwitching(overrides: Overrides) {
     return settled;
   };
 
+  // One announcement per burst of changes, such as a sync writing several copies.
+  let announceTimer: ReturnType<typeof setTimeout> | null = null;
+  const announce = (server: ViteDevServer): void => {
+    if (announceTimer) clearTimeout(announceTimer);
+    announceTimer = setTimeout(() => {
+      announceTimer = null;
+      server.ws.send({ type: 'custom', event: ACTIVE_EVENT, data: { active: overrides.active() } });
+    }, 50);
+  };
+
   /**
    * Bring changes made without this server to the browser: the CLI's
    * `variant use` writes the active file, and an agent edits overrides in
@@ -306,6 +316,9 @@ export function createSwitching(overrides: Overrides) {
         const stillActive = overrides.readActive();
         const activeChanged = stillActive.join() !== overrides.active().join();
         if (activeChanged) void activate(stillActive);
+        // Anything else (a copy gaining or losing conflict markers, a new
+        // variant) changes what the panels list: tell them to read it again.
+        else announce(server);
         const now = signature();
         if (now !== listed) {
           listed = now;

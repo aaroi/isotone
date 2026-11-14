@@ -133,17 +133,19 @@ export function readActive(opts: VariantsStoreOptions): string[] {
 
 /**
  * `next` with the pointer's conflicted variants added back, unless `next`
- * picks another member of their group or another variant over their files. A
+ * picks another member of their group or another variant over their files, or
+ * the reviewer set their group (`touched`, by group id), Default included. A
  * set posted from what a tab shows never names them, and dropping them would
  * lose the pick that returns once their markers are resolved.
  */
-export function withUnshown(opts: VariantsStoreOptions, next: string[]): string[] {
+export function withUnshown(opts: VariantsStoreOptions, next: string[], touched: string[] = []): string[] {
   const groups = overlayGroups(readVariants(opts));
   const kept = [...next];
   for (const id of readPointer(opts)) {
     if (kept.includes(id) || conflictedCopies(opts, id).length === 0) continue;
-    const siblings = groups.find((group) => group.members.some((member) => member.id === id))?.members ?? [];
-    if (siblings.some((member) => kept.includes(member.id)) || activeConflict(opts, [...kept, id])) continue;
+    const group = groups.find((candidate) => candidate.members.some((member) => member.id === id));
+    if (group && touched.includes(group.id)) continue;
+    if (group?.members.some((member) => kept.includes(member.id)) || activeConflict(opts, [...kept, id])) continue;
     kept.push(id);
   }
   return kept;

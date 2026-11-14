@@ -935,6 +935,9 @@ describe('overlay variants in the dev server', () => {
     expect(pointer()).toEqual(['t', 'b']);
     expect((await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] })).status).toBe(200);
     expect(pointer()).toEqual(['b']);
+    // Default picked in its own selector (or a reset) drops it.
+    expect((await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: [], groups: ['b'] })).status).toBe(200);
+    expect(pointer()).toEqual([]);
     // Only a new pick of it is refused.
     writeActive({ root }, []);
     const refused = await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] });
@@ -958,6 +961,32 @@ describe('overlay variants in the dev server', () => {
     expect(hooks.load(source)).toBeNull();
     await vi.waitFor(() => expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: [] } }));
     expect(JSON.parse(readFileSync(join(root, ACTIVE_FILE), 'utf8')).active).toEqual(['b']);
+
+    // A copy nothing shows gaining markers changes no set, but what the panels
+    // list: they hear of it too.
+    writeActive({ root }, []);
+    onAll('change', join(root, ACTIVE_FILE));
+    server.ws.send.mockClear();
+    writeFileSync(join(variantDir({ root }, 't'), 'src', 'Table.tsx'), markers);
+    onAll('change', join(variantDir({ root }, 't'), 'src', 'Table.tsx'));
+    await vi.waitFor(() => expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: [] } }));
+  });
+
+  it('names the HMR client under the dev server’s origin, and none without a WebSocket server', async () => {
+    const { root } = tempProject();
+    const withOrigin = fakeServer(root);
+    Object.assign(withOrigin.config.server, { origin: 'http://127.0.0.1:5173' });
+    plugin(root, 'serve').configureServer(withOrigin);
+    expect((await request(withOrigin, VARIANTS_ENDPOINT, 'GET', '/')).body).toMatchObject({ hmr: 'http://127.0.0.1:5173/@vite/client' });
+    const noSocket = fakeServer(root);
+    Object.assign(noSocket.config.server, { ws: false, hmr: false });
+    plugin(root, 'serve').configureServer(noSocket);
+    expect((await request(noSocket, VARIANTS_ENDPOINT, 'GET', '/')).body).not.toHaveProperty('hmr');
+    // HMR off alone still has the socket, which custom events use.
+    const hmrOff = fakeServer(root);
+    Object.assign(hmrOff.config.server, { hmr: false });
+    plugin(root, 'serve').configureServer(hmrOff);
+    expect((await request(hmrOff, VARIANTS_ENDPOINT, 'GET', '/')).body).toMatchObject({ hmr: '/@vite/client' });
   });
 
   it('logs the variants dir after the banner when it exists', () => {

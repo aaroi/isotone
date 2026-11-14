@@ -267,7 +267,8 @@ mountIsotone({ variants: source, defaultTab: 'variants' });
 ```
 
 `selections` maps each axis id to a string; a range's value is a numeric string,
-and `onChange` must apply it to the app's state or styles. With `compare: true`
+and `onChange` must apply it to the app's state or styles. A select option with
+`disabled: true` shows but cannot be picked. With `compare: true`
 the panel offers [Compare](#hold-to-compare) for these selectors: while the
 reviewer holds it, `onChange` gets the defaults with `{ preview: true }` as its
 second argument, then the picks with `{ preview: false }`. Apply both, but keep

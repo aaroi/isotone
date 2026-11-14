@@ -165,9 +165,10 @@ export function knobDelta(knobs: KnobAxis[], values: VariantSelections): { axis:
 export const VARIANTS_ENDPOINT = '/api/isotone/variants';
 
 /**
- * The server's active set changed (another tab's pick, `variant use`, a copy
- * that gained or lost conflict markers): `{ active }`, sent over the dev
- * server's HMR channel. The overlay source follows it.
+ * The server's variants changed: its active set (another tab's pick, `variant
+ * use`) or anything under the variants dir, such as a copy gaining or losing
+ * conflict markers. `{ active }`, sent over the dev server's HMR channel; the
+ * overlay source reads its listing again.
  */
 export const ACTIVE_EVENT = 'isotone:active';
 
@@ -397,16 +398,18 @@ export function unappliedLinkNotice(list: OverlayVariantsList, active: string[],
   return `This link’s ?v= asks for ${asked.join('; ')}, but links don’t choose variants here. Pick ${asked.length > 1 ? 'them' : 'it'} below instead; a pick shows in every tab. Per-tab links need live switching (React on Vite 6+).`;
 }
 
-/** What the overlay source uses of a Vite hot context. */
+/** What the overlay source uses of a Vite hot context.
+ *  @internal */
 export interface HotChannel {
-  on(event: string, listener: (data: { active?: unknown } | null | undefined) => void): void;
-  off?(event: string, listener: (data: { active?: unknown } | null | undefined) => void): void;
+  on(event: string, listener: () => void): void;
+  off?(event: string, listener: () => void): void;
 }
 
 /** The page's own HMR client, at the URL the listing names: the same module,
  *  and so the same socket, as the page's. */
 function importHot(client: string): Promise<HotChannel> {
-  return import(/* @vite-ignore */ client).then((mod: { createHotContext: (owner: string) => HotChannel }) =>
+  // Neither Vite nor webpack (Next) should try to bundle a URL known only at run time.
+  return import(/* @vite-ignore */ /* webpackIgnore: true */ client).then((mod: { createHotContext: (owner: string) => HotChannel }) =>
     mod.createHotContext('/@isotone/active'),
   );
 }
@@ -444,7 +447,8 @@ export function createOverlayVariantsSource(cfg: {
    */
   takenIds?: () => Iterable<string>;
   /** Connect to the HMR client the listing names. Default: import it and
-   *  take a hot context, as a module of the page would. */
+   *  take a hot context, as a module of the page would.
+   *  @internal For tests. */
   hot?: (client: string) => Promise<HotChannel>;
 }): VariantsSource & {
   refresh(): Promise<void>;
@@ -466,6 +470,9 @@ export function createOverlayVariantsSource(cfg: {
   let list: OverlayVariantsList | null = null;
   let error: string | null = null;
   let intended: string[] | null = null;
+  // The selectors the reviewer set in the picks not yet posted: a Default
+  // among them also drops a pick the server keeps hidden for its conflicts.
+  let touched = new Set<string>();
   let activation: Promise<void> | null = null;
   let revision = 0;
   let refreshRevision = 0;
@@ -490,17 +497,12 @@ export function createOverlayVariantsSource(cfg: {
     }
   };
   // Without a live store every tab shows the server's set, which moves when
-  // another tab picks or the CLI runs `variant use`: follow it on the dev
-  // server's HMR channel, once the listing names it, so the panel and a note's
-  // selections name what the page shows. `events` lets a listing that was
-  // already on its way keep what an event said since.
-  let events = 0;
-  const onActive = (data: { active?: unknown } | null | undefined) => {
-    const next = data?.active;
-    if (!list || !Array.isArray(next)) return;
-    events++;
-    list = { ...list, active: next.filter((id): id is string => typeof id === 'string') };
-    emit();
+  // another tab picks or the CLI runs `variant use`, and a copy can gain or
+  // lose conflict markers at any time. The dev server says so on its HMR
+  // channel, which the listing names: read the listing again then, so the
+  // panel and a note's selections name what the page shows.
+  const onChange = () => {
+    void refresh().catch(() => {});
   };
   let channel: Promise<HotChannel | null> | null = null;
   let disposed = false;
@@ -509,8 +511,10 @@ export function createOverlayVariantsSource(cfg: {
     const base = new URL(cfg.endpoint, typeof location === 'undefined' ? 'http://localhost/' : location.href);
     channel = (cfg.hot ?? importHot)(new URL(client, base).href).then(
       (hot) => {
-        hot.on(ACTIVE_EVENT, onActive);
-        if (disposed) hot.off?.(ACTIVE_EVENT, onActive);
+        hot.on(ACTIVE_EVENT, onChange);
+        if (disposed) hot.off?.(ACTIVE_EVENT, onChange);
+        // Anything that changed while connecting.
+        else onChange();
         return hot;
       },
       () => null,
@@ -591,12 +595,14 @@ export function createOverlayVariantsSource(cfg: {
   async function drainActivations(): Promise<void> {
     while (intended !== null) {
       const active = intended;
+      const groups = [...touched];
+      touched = new Set();
       const sentRevision = revision;
       try {
         const res = await request(`${cfg.endpoint}/active`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ active }),
+          body: JSON.stringify({ active, groups }),
         });
         if (!res.ok) {
           // The server knows which variants and which file are in the way.
@@ -606,7 +612,13 @@ export function createOverlayVariantsSource(cfg: {
           );
           throw new Error(typeof reason === 'string' ? reason : `Activating variants failed (${res.status}). Try again.`);
         }
-        if (list) list = { ...list, active };
+        // What the server shows now, which leaves out a copy it cannot show.
+        const shown = await res.json().then(
+          (body: { active?: unknown }) =>
+            Array.isArray(body?.active) ? body.active.filter((id): id is string => typeof id === 'string') : active,
+          () => active,
+        );
+        if (list) list = { ...list, active: shown };
         error = null;
       } catch (cause) {
         error = cause instanceof Error ? cause.message : 'Could not activate this variant. Try again.';
@@ -627,6 +639,7 @@ export function createOverlayVariantsSource(cfg: {
   function activate(active: string[], groups: string[]): void {
     if (live?.select(active, groups)) reloadAfterPost = true;
     intended = active;
+    for (const group of groups) touched.add(group);
     revision++;
     error = null;
     emit();
@@ -640,6 +653,32 @@ export function createOverlayVariantsSource(cfg: {
         activation = null;
         if (intended !== null) scheduleActivation();
       });
+  }
+  async function refresh(): Promise<void> {
+    const refreshId = ++refreshRevision;
+    const startedRevision = revision;
+    const wasActivating = activation !== null;
+    const next = await request(cfg.endpoint, undefined, async (res) => {
+      if (!res.ok) throw new Error(`Loading variants failed (${res.status})`);
+      return (await res.json()) as OverlayVariantsList;
+    });
+    if (refreshId !== refreshRevision) return;
+    // An older GET must not roll back a successful POST that finished while
+    // the listing was loading. Definitions can still refresh independently.
+    const previousKnobs = list?.knobs ?? [];
+    list = list && (wasActivating || activation !== null || startedRevision !== revision) ? { ...next, active: list.active } : next;
+    if (next.hmr) follow(next.hmr);
+    if (knobRoot) applyKnobValues(previousKnobs, {}, knobRoot);
+    // A stored value for a knob a group now hides is dropped too, so it cannot style the page unseen.
+    const valid = new Map(overlayKnobs(list).map((knob) => [knob.id, knob]));
+    knobValues = Object.fromEntries(
+      Object.entries(knobValues).filter(([id, value]) => {
+        const knob = valid.get(id);
+        return knob && isValidSelection(knob, value);
+      }),
+    );
+    applyKnobs();
+    emit();
   }
   const search = cfg.getSearch ?? (() => (typeof location === 'undefined' ? '' : location.search));
   return {
@@ -669,7 +708,7 @@ export function createOverlayVariantsSource(cfg: {
     },
     dispose() {
       disposed = true;
-      void channel?.then((hot) => hot?.off?.(ACTIVE_EVENT, onActive));
+      void channel?.then((hot) => hot?.off?.(ACTIVE_EVENT, onChange));
     },
     routeChanged() {
       // Before the first listing nothing is on the page; `refresh` applies it.
@@ -677,36 +716,7 @@ export function createOverlayVariantsSource(cfg: {
       applyKnobs();
       emit();
     },
-    async refresh() {
-      const refreshId = ++refreshRevision;
-      const startedRevision = revision;
-      const startedEvents = events;
-      const wasActivating = activation !== null;
-      const next = await request(cfg.endpoint, undefined, async (res) => {
-        if (!res.ok) throw new Error(`Loading variants failed (${res.status})`);
-        return (await res.json()) as OverlayVariantsList;
-      });
-      if (refreshId !== refreshRevision) return;
-      // An older GET must not roll back a successful POST that finished while
-      // the listing was loading. Definitions can still refresh independently.
-      const previousKnobs = list?.knobs ?? [];
-      list =
-        list && (wasActivating || activation !== null || startedRevision !== revision || startedEvents !== events)
-          ? { ...next, active: list.active }
-          : next;
-      if (next.hmr) follow(next.hmr);
-      if (knobRoot) applyKnobValues(previousKnobs, {}, knobRoot);
-      // A stored value for a knob a group now hides is dropped too, so it cannot style the page unseen.
-      const valid = new Map(overlayKnobs(list).map((knob) => [knob.id, knob]));
-      knobValues = Object.fromEntries(
-        Object.entries(knobValues).filter(([id, value]) => {
-          const knob = valid.get(id);
-          return knob && isValidSelection(knob, value);
-        }),
-      );
-      applyKnobs();
-      emit();
-    },
+    refresh,
     getAxes: axes,
     // Knobs are properties on the page, so they switch at once. A file variant does only in live mode,
     // in this tab, when no export fixed at load differs; otherwise it is a server round trip or a reload.
