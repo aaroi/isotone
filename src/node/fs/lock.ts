@@ -67,10 +67,20 @@ interface LockOwner {
  * process's lock is recoverable; a busy store fails without discarding data. */
 export function withFileLock<T>(file: string, work: () => T, options: FileLockOptions = {}): T {
   const lock = `${file}.lock`;
+  const take = () => {
+    mkdirSync(dirname(file), { recursive: true });
+    return acquire(lock, file, options.waitMs ?? CLI_LOCK_WAIT_MS);
+  };
   let token: string;
   try {
-    mkdirSync(dirname(file), { recursive: true });
-    token = acquire(lock, file, options.waitMs ?? CLI_LOCK_WAIT_MS);
+    try {
+      token = take();
+    } catch (error) {
+      // Another process may remove the store's directory once it is empty (the
+      // last variant dropped) between the two steps; make it again, once.
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      token = take();
+    }
   } catch (error) {
     // Only an existing lock means busy; a permission or read-only failure
     // would never clear by waiting, so it is reported as what it is.

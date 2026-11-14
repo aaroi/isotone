@@ -34,7 +34,7 @@ interface DockEventsOptions {
   onLeave: () => void;
 }
 
-/** The key a US layout types each character with, shifted or not. */
+/** The key each character is typed with on a US layout, shifted or not, and § on a Mac ISO one. */
 const KEY_CODES: Record<string, string> = Object.fromEntries(
   Object.entries({
     Period: '.>',
@@ -63,6 +63,8 @@ function codeOf({ code, key = '' }: Pick<KeyboardEvent, 'code' | 'key'>): string
   if (code) return code;
   if (/^[a-z]$/i.test(key)) return `Key${key.toUpperCase()}`;
   if (/^\d$/.test(key)) return `Digit${key}`;
+  const shifted = '!@#$%^&*()'.indexOf(key);
+  if (shifted >= 0) return `Digit${(shifted + 1) % 10}`;
   return KEY_CODES[key] ?? key;
 }
 

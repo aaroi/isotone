@@ -112,7 +112,7 @@
         },
         "styles": {
           "type": "object",
-          "description": "Computed styles when pinned, by CSS property: spacing, type, layout, and colours as hex. Defaults (no padding, static position) are left out.",
+          "description": "Computed styles when pinned, by CSS property: spacing, type, layout, and colours: hex when opaque `rgb()`, else as the browser reports them, such as `oklch(…)`. Defaults (no padding, static position) are left out.",
           "additionalProperties": { "type": "string" }
         }
       }

@@ -9,6 +9,7 @@ import type { VariantAction, VariantAxis } from '../../src/core/variants';
 import { createVariantsSource, IsotonePanel } from '../../src/react/index';
 import { VariantsView } from '../../src/react/variants/VariantsView';
 import { PANEL_CSS } from '../../src/react/styles/panel';
+import { isShortcutKey } from '../../src/react/dock/useDockEvents';
 import { AXES, byText, click, container, labels, render, renderRemaining, rerender, unmount, setUpPanelFixture } from '../helpers/panel';
 
 setUpPanelFixture();
@@ -283,6 +284,17 @@ describe('review dock interactions', () => {
       await new Promise((r) => requestAnimationFrame(r));
     });
     expect(container.querySelector('.isotone-notes-panel')?.getAttribute('data-open')).toBe('true');
+  });
+  it('reads a key event without a code as a US layout types it, and a code first when there is one', () => {
+    const is = (init: KeyboardEventInit, code: string | string[]) => isShortcutKey(new KeyboardEvent('keydown', init), { code });
+    expect(is({ key: '>' }, 'Period')).toBe(true);
+    expect(is({ key: '!' }, 'Digit1')).toBe(true);
+    expect(is({ key: 'k' }, 'KeyK')).toBe(true);
+    expect(is({ key: 'F2' }, 'F2')).toBe(true);
+    expect(is({ key: '§' }, ['Backquote', 'IntlBackslash'])).toBe(true);
+    // A real keyboard's code wins over the character its layout typed.
+    expect(is({ key: '.', code: 'KeyE' }, 'Period')).toBe(false);
+    expect(is({ key: 'Unidentified' }, 'Period')).toBe(false);
   });
   it('attaches an option reference and keeps variants visible while writing', async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: 'saved' }) }));
