@@ -191,6 +191,18 @@ describe.skipIf(!binary)('Variants controls stay put (headless Chrome)', () => {
     await expectSteady(0);
   });
 
+  it('a resize while a header is stuck, then a pick back at the top, slides nothing', async () => {
+    await open(1024, 768, 12);
+    await chrome.eval('body().scrollTop = (body().scrollHeight - body().clientHeight) / 2');
+    await chrome.eval('settle()');
+    // The resize refreshes remembered positions while a header is stuck.
+    await chrome.viewport(1004, 728);
+    await chrome.eval('settle()');
+    await chrome.eval('body().scrollTop = 0');
+    await chrome.eval('settle()');
+    await expectSteady(0);
+  });
+
   it('with the bar hidden, the bottom band rests in the inset, so no control at rest is blurred', async () => {
     await open(1024, 768, 12);
     // At the end of the list the band is at rest; elsewhere it reaches further, over content passing under it.

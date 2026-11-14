@@ -3,6 +3,19 @@ import { MAX_ANIMATED_ITEMS, MOTION } from './motion';
 
 type Position = { top: number; stuck: boolean; animation?: Animation };
 
+/**
+ * Whether a sticky item is held at the scroller's edge or pushed past it, so that its position follows
+ * the scroll rather than the list. `offset` is a running transform to discount. Sticky offsets count
+ * from inside the scroller's padding.
+ */
+function stuckTest(container: HTMLElement) {
+  if (container.scrollTop <= 0) return null;
+  const edge =
+    container.getBoundingClientRect().top + container.clientTop + (Number.parseFloat(getComputedStyle(container).paddingTop) || 0);
+  return (element: HTMLElement, style = getComputedStyle(element), offset = 0) =>
+    style.position === 'sticky' && element.getBoundingClientRect().top - offset <= edge + (Number.parseFloat(style.top) || 0) + 0.5;
+}
+
 function clearPositions(positions: Map<string, Position>) {
   for (const item of positions.values()) item.animation?.cancel();
   positions.clear();
@@ -48,19 +61,14 @@ export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: un
       clear();
       return;
     }
-    // Sticky offsets count from inside the scroller's padding.
-    const edge =
-      container.scrollTop > 0
-        ? container.getBoundingClientRect().top + container.clientTop + (Number.parseFloat(getComputedStyle(container).paddingTop) || 0)
-        : 0;
+    const isStuck = stuckTest(container);
     const measurements = Array.from(elements, (element) => {
       const key = element.dataset.motionKey ?? '';
       const old = previous.current.get(key);
-      const style = old?.animation || container.scrollTop > 0 ? getComputedStyle(element) : null;
+      const style = old?.animation || isStuck ? getComputedStyle(element) : null;
       const transform = old?.animation ? (style?.transform ?? 'none') : 'none';
       const offset = transform !== 'none' && typeof DOMMatrix !== 'undefined' ? new DOMMatrix(transform).m42 : 0;
-      const stuck =
-        style?.position === 'sticky' && element.getBoundingClientRect().top - offset <= edge + (Number.parseFloat(style.top) || 0) + 0.5;
+      const stuck = Boolean(style && isStuck?.(element, style, offset));
       return { element, key, old, top: element.offsetTop, offset, stuck };
     });
     const next = new Map<string, Position>();
@@ -91,9 +99,12 @@ export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: un
     if (typeof ResizeObserver === 'undefined') return;
     // Layout has already run when this is called, so the reads are cheap and nothing is written.
     const observer = new ResizeObserver(() => {
+      const isStuck = stuckTest(container);
       for (const element of elements) {
         const item = previous.current.get(element.dataset.motionKey ?? '');
-        if (item && element.isConnected) item.top = element.offsetTop;
+        if (!item || !element.isConnected) continue;
+        item.top = element.offsetTop;
+        item.stuck = isStuck?.(element) ?? false;
       }
     });
     for (const element of elements) observer.observe(element);
