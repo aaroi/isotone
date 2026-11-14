@@ -375,7 +375,9 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
   // A copy Isotone 1.5.0 or earlier made outside a Git repository records no base: it reads as stale, but
   // `variant sync` has nothing to merge from, so it is compared by hand.
   const split = stale.map(({ variant, files }) => ({ id: variant.id, files, unbased: filesWithoutBase(variant) }));
-  const syncable = split.map((v) => ({ id: v.id, files: v.files.filter((file) => !v.unbased.includes(file)) })).filter((v) => v.files.length);
+  const syncable = split
+    .map((v) => ({ id: v.id, files: v.files.filter((file) => !v.unbased.includes(file)) }))
+    .filter((v) => v.files.length);
   const byHand = split.map((v) => ({ id: v.id, files: v.files.filter((file) => v.unbased.includes(file)) })).filter((v) => v.files.length);
   if (syncable.length) {
     // Merging needs a `git` executable, though no longer a repository.
