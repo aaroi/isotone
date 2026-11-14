@@ -119,7 +119,8 @@ A colour knob takes a `defaultColor` and named `swatches`, all as hex values:
 ```
 
 Ranges render as sliders and colours as swatches with a custom picker. An
-invalid entry is skipped, and `npx isotone variant list` names it. Knobs work
+invalid entry is skipped, and so is a knob whose id a file variant group already
+has; `npx isotone variant list` names each one. Knobs work
 with `isotone serve` too. A value reaches the page as `--knob-<id>` on `<html>`,
 unit appended, so the source reads it with the committed default as fallback:
 

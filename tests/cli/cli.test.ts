@@ -385,18 +385,37 @@ describe('variant', () => {
     await runCli(['variant', 'new', 'head-b', '--group-label', 'header > Logo', '--route', '/b'], makeIo(scoped));
     await runCli(['variant', 'new', 'nav-a', '--group-label', 'Header > Nav', '--route', '/a'], makeIo(scoped));
     await runCli(['variant', 'new', 'accent-a', '--group', 'accent', '--group-label', 'Accent colour'], makeIo(scoped));
+    await runCli(['variant', 'new', 'promo-a', '--group', 'promo', '--group-label', 'Promo'], makeIo(scoped));
+    const swatchless = { kind: 'color', defaultColor: '#000000', swatches: [] };
     writeFileSync(
       join(scoped, '.isotone/knobs.json'),
-      JSON.stringify([{ id: 'accent', label: 'Theme > Accent', kind: 'color', defaultColor: '#000000', swatches: [] }]),
+      JSON.stringify([
+        { ...swatchless, id: 'accent', label: 'Theme > Accent' },
+        // Shown only while promo-a is on: until then the panel has no Promo section.
+        { ...swatchless, id: 'promo-ink', label: 'Promo > Ink', showWhen: { axis: 'promo', equals: 'promo-a' } },
+      ]),
     );
-    const routed = makeIo(scoped);
-    expect(await runCli(['variant', 'list', '/a', '--json'], routed)).toBe(0);
-    const listed = JSON.parse(routed.text.out) as { variants: { id: string; section: string | null }[] };
+    const listScoped = async () => {
+      const routed = makeIo(scoped);
+      expect(await runCli(['variant', 'list', '/a', '--json'], routed)).toBe(0);
+      return JSON.parse(routed.text.out) as {
+        variants: { id: string; section: string | null }[];
+        knobs: { id: string }[];
+        skippedKnobs: { id: string; reason: string }[];
+      };
+    };
+    let listed = await listScoped();
     expect(Object.fromEntries(listed.variants.map((v) => [v.id, v.section]))).toEqual({
       'card-a': null,
       'nav-a': 'Header',
       'accent-a': null,
+      'promo-a': null,
     });
+    expect(listed.knobs.map((k) => k.id)).toEqual(['promo-ink']);
+    expect(listed.skippedKnobs).toEqual([{ index: 1, id: 'accent', reason: expect.stringContaining('a file variant group has this id') }]);
+    await runCli(['variant', 'use', 'promo-a'], makeIo(scoped));
+    listed = await listScoped();
+    expect(listed.variants.find((v) => v.id === 'promo-a')?.section).toBe('Promo');
   });
 
   it('use activates alongside other groups and replaces only its own siblings', async () => {

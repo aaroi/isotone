@@ -106,8 +106,9 @@ export function knobCssValue(axis: KnobAxis, value: string): string {
   return axis.kind === 'range' ? `${value}${axis.unit ?? ''}` : value;
 }
 
-/** The knobs that belong on `route`. */
-export function knobsFor(knobs: KnobAxis[] | undefined, route: string): KnobAxis[] {
+/** The knobs that belong on `route`; every knob without one. */
+export function knobsFor(knobs: KnobAxis[] | undefined, route?: string): KnobAxis[] {
+  if (route === undefined) return knobs ?? [];
   return (knobs ?? []).filter((k) => {
     const patterns = k.route === undefined ? [undefined] : ([] as (string | undefined)[]).concat(k.route);
     return patterns.some((p) => variantAppliesTo(p, route));
@@ -277,10 +278,11 @@ export function variantAppliesTo(pattern: string | undefined, route: string): bo
   return matchRoute(pattern, route);
 }
 
-export function overlayAxes(list: OverlayVariantsList, route: string): SelectVariantAxis[] {
+export function overlayAxes(list: OverlayVariantsList, route?: string): SelectVariantAxis[] {
   const axes: SelectVariantAxis[] = [];
   for (const group of overlayGroups(list.variants)) {
-    const mine = group.members.filter((v) => variantAppliesTo(v.route, route));
+    // No route, as in `variant list` without one: every group with every member.
+    const mine = route === undefined ? group.members : group.members.filter((v) => variantAppliesTo(v.route, route));
     if (mine.length === 0) continue;
     const section = group.members.find((m) => m.section !== undefined)?.section;
     axes.push({
@@ -295,6 +297,17 @@ export function overlayAxes(list: OverlayVariantsList, route: string): SelectVar
     });
   }
   return axes;
+}
+
+/**
+ * The listing's knobs on `route` (every one without a route), less any whose id
+ * a file-variant group has on any route. A knob and a group with one id would
+ * share a selection, a `?v=` entry and a note reference, so the group keeps it;
+ * `variant list` names the knob that is left out.
+ */
+export function overlayKnobs(list: Pick<OverlayVariantsList, 'variants' | 'knobs'>, route?: string): KnobAxis[] {
+  const groups = new Set(overlayGroups(list.variants).map((group) => group.id));
+  return knobsFor(list.knobs, route).filter((knob) => !groups.has(knob.id));
 }
 
 function overlayHint(v: OverlayVariantStatus): string {
@@ -386,7 +399,7 @@ export function createOverlayVariantsSource(cfg: {
   };
   const current = (): string[] => live?.active ?? intended ?? list?.active ?? [];
   const selects = (): SelectVariantAxis[] => (list ? overlayAxes(list, cfg.getRoute()) : []);
-  const knobAxes = (): KnobAxis[] => knobsFor(list?.knobs, cfg.getRoute());
+  const knobAxes = (): KnobAxis[] => (list ? overlayKnobs(list, cfg.getRoute()) : []);
   const axes = (): VariantAxis[] => [...selects(), ...knobAxes()];
 
   // Knob values are review-time state, kept in the browser rather than on

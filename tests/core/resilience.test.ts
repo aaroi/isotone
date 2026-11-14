@@ -6,6 +6,7 @@ import { MAX_FEEDBACK_LENGTH } from '../../src/core/limits';
 import {
   createOverlayVariantsSource,
   createVariantsSource,
+  OVERLAY_DEFAULT_OPTION,
   visibleAxes,
   type OverlayVariantsList,
   type SelectVariantAxis,
@@ -328,6 +329,25 @@ describe('overlay activation races', () => {
   };
   const source = () => createOverlayVariantsSource({ endpoint: '/variants', getRoute: () => '/', storage: null, knobRoot: null });
   const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+  it('leaves out a knob whose id a file variant group has, so the two never share a selection', async () => {
+    const accent = { kind: 'range' as const, label: 'Theme > Accent', min: 0, max: 10, step: 1, defaultValue: 0 };
+    const withKnobs = {
+      ...listing,
+      knobs: [
+        { ...accent, id: 'a' },
+        { ...accent, id: 'accent' },
+      ],
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json(withKnobs)),
+    );
+    const store = source();
+    await store.refresh();
+    expect(store.getAxes().map((axis) => axis.id)).toEqual(['a', 'b', 'accent']);
+    expect(store.getSelections()).toEqual({ a: OVERLAY_DEFAULT_OPTION, b: OVERLAY_DEFAULT_OPTION, accent: '0' });
+  });
 
   it('serializes rapid picks and keeps both groups when an earlier activation fails', async () => {
     let release!: (response: Response) => void;

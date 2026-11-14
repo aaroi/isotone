@@ -20,9 +20,9 @@ import { npm } from './npm.mjs';
 // blur bands, the header and defaults-bar materials, the rim drawn over content and rows that recede.
 // Bundle raised to 395 kB and tarball to 422.5 kB (393.8 and 420.8 kB; rolling figures): the component
 // that rolls changed characters, and its notes in the shipped design guide and changelog.
-// Tarball raised to 424 kB (423.4 kB; newcomer fixes): reading the key when an event has no code, and the
-// notes on section names, colours and the variants directory in the shipped docs and changelog.
-const BUDGET = { bundle: 395_000, tarball: 424_000 };
+// Tarball raised to 424.5 kB (424.4 kB; newcomer fixes): reading the key when an event has no code, knobs
+// that clash with a group, and the notes on those, section names, colours and the variants directory.
+const BUDGET = { bundle: 395_000, tarball: 424_500 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));
