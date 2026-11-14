@@ -492,8 +492,17 @@ function switchingOf(opts: VariantsStoreOptions): ReturnType<typeof fileVariantS
 /** Say up front what would otherwise look like a page that reloads for no
  *  reason. Reads the export names only, so a capitalized constant slips by. */
 function warnNoHotSwap(io: CliIO, file: string, switching: ReturnType<typeof switchingOf>): void {
+  if (switching === 'none') return;
+  // plugin-vue's hot update reads the real file, so the Vite plugin switches a Vue component by reloading.
+  if (file.endsWith('.vue')) {
+    errOut(
+      io,
+      `warning: ${file} is a Vue component, so switching this variant, or editing its copy while it is active, reloads the page and changes every tab. See "Vue components" in the variants guide.`,
+    );
+    return;
+  }
   // A host without React swaps the file over HMR, which its own components accept.
-  if (switching === 'whole' || switching === 'none') return;
+  if (switching === 'whole') return;
   const names = scanExports(readFileSync(resolve(io.cwd, file), 'utf8'));
   if (!names || isRouteModule(names)) {
     // Every file is served whole outside live mode; only there is this one the exception.
