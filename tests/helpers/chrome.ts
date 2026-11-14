@@ -39,7 +39,8 @@ export interface Chrome {
   viewport(width: number, height: number, mobile?: boolean): Promise<void>;
   move(x: number, y: number): Promise<void>;
   click(x: number, y: number): Promise<void>;
-  close(): void;
+  /** Close Chrome, wait for it to exit and remove its profile. */
+  close(): Promise<void>;
 }
 
 export async function launchChrome(binary: string): Promise<Chrome> {
@@ -58,26 +59,57 @@ export async function launchChrome(binary: string): Promise<Chrome> {
     ],
     { stdio: ['ignore', 'ignore', 'pipe'] },
   );
-  // Chrome prints the DevTools address it chose on stderr.
-  const browserUrl = await new Promise<string>((resolve, reject) => {
-    let seen = '';
-    const timer = setTimeout(() => reject(new Error(`Chrome did not start: ${seen}`)), 20_000);
-    proc.stderr.on('data', (chunk: Buffer) => {
-      seen += chunk.toString();
-      const match = /DevTools listening on (ws:\/\/\S+)/.exec(seen);
-      if (match) {
+  const exited = new Promise<void>((resolve) => proc.once('exit', () => resolve()));
+  const removeProfile = async () => {
+    // Windows can hold the profile a moment after Chrome exits.
+    try {
+      rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    } catch {}
+  };
+  const kill = async () => {
+    proc.kill();
+    await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 5_000))]);
+    await removeProfile();
+  };
+  let ws: WebSocket;
+  try {
+    // Chrome prints the DevTools address it chose on stderr.
+    const browserUrl = await new Promise<string>((resolve, reject) => {
+      let seen = '';
+      const timer = setTimeout(() => reject(new Error(`Chrome did not start: ${seen}`)), 20_000);
+      const fail = (error: Error) => {
         clearTimeout(timer);
-        resolve(match[1] as string);
-      }
+        reject(error);
+      };
+      proc.once('error', fail);
+      proc.once('exit', () => fail(new Error(`Chrome exited: ${seen}`)));
+      proc.stderr.on('data', (chunk: Buffer) => {
+        seen += chunk.toString();
+        const match = /DevTools listening on (ws:\/\/\S+)/.exec(seen);
+        if (match) {
+          clearTimeout(timer);
+          resolve(match[1] as string);
+        }
+      });
     });
-    proc.once('exit', () => reject(new Error(`Chrome exited: ${seen}`)));
-  });
-  const { port } = new URL(browserUrl);
-  const targets = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()) as { type: string; webSocketDebuggerUrl: string }[];
-  const page = targets.find((target) => target.type === 'page');
-  if (!page) throw new Error('Chrome opened no page');
-  const ws = new WebSocket(page.webSocketDebuggerUrl);
-  await new Promise((resolve) => ws.addEventListener('open', resolve, { once: true }));
+    const { port } = new URL(browserUrl);
+    // The first page can take a moment to be listed.
+    let page: { type: string; webSocketDebuggerUrl: string } | undefined;
+    for (let attempt = 0; !page && attempt < 50; attempt++) {
+      if (attempt) await new Promise((resolve) => setTimeout(resolve, 100));
+      const targets = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()) as { type: string; webSocketDebuggerUrl: string }[];
+      page = targets.find((target) => target.type === 'page');
+    }
+    if (!page) throw new Error('Chrome opened no page');
+    ws = new WebSocket(page.webSocketDebuggerUrl);
+    await new Promise((resolve, reject) => {
+      ws.addEventListener('open', resolve, { once: true });
+      ws.addEventListener('error', () => reject(new Error('Could not reach Chrome')), { once: true });
+    });
+  } catch (error) {
+    await kill();
+    throw error;
+  }
   let id = 0;
   const waiting = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
   const loads = new Set<() => void>();
@@ -130,10 +162,9 @@ export async function launchChrome(binary: string): Promise<Chrome> {
       await mouse('mousePressed', x, y);
       await mouse('mouseReleased', x, y);
     },
-    close() {
+    async close() {
       ws.close();
-      proc.kill();
-      proc.once('exit', () => rmSync(profile, { recursive: true, force: true }));
+      await kill();
     },
   };
 }

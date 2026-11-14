@@ -4,7 +4,8 @@
 
 ### Fixed
 
-- **Selectors no longer jump when the defaults bar appears.** The Variants panel used to grow by the bar's height on your first pick and shrink again when the last pick went back to Default, moving the selector you were about to click. It now keeps the bar's room at its foot, so picking and returning to Default leave every control where it was.
+- **Selectors no longer jump when the defaults bar appears.** The Variants panel used to grow by the bar's height on your first pick and shrink again when the last pick went back to Default, moving the selector you were about to click. It now keeps the bar's room at its foot, so picking and returning to Default leave every control where it was. An untouched panel shows that room as space below its last selector.
+- **A second click never lands on Make default by accident.** When a pick near the foot of a long list brings up the defaults bar under the pointer, the list scrolls that selector just clear of the bar, and clicking again without moving does nothing.
 
 ## 1.5.0
 

@@ -435,9 +435,7 @@ function Panel({ theme }: { theme: IsotoneTheme }) {
     if (screenshot) {
       const style = document.createElement('style');
       // Select mode draws fixed outlines and a hint, which a scaled root would displace.
-      // The defaults bar floats over the last selector until the list is scrolled; the still image shows the
-      // list as it sits when scrolled clear of the bar.
-      style.textContent = `${scene === 'pin' ? '' : '.isotone-root { transform: scale(1.1); transform-origin: bottom right; right: 22px; bottom: 22px; }'} .isotone-textarea { caret-color: transparent; } .isotone-vars[data-saving='true'] > .isotone-vars-body { padding-bottom: calc(var(--iso-save-bar-h) - var(--iso-space)); }`;
+      style.textContent = `${scene === 'pin' ? '' : '.isotone-root { transform: scale(1.1); transform-origin: bottom right; right: 22px; bottom: 22px; }'} .isotone-textarea { caret-color: transparent; }`;
       shadow.append(style);
     }
     const target = document.createElement('div');

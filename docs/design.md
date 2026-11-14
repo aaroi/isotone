@@ -253,7 +253,10 @@ only the empty space at its edge, so nothing at rest is ever blurred; once conte
 can pass under it, it reaches further in, and scroll padding keeps keyboard focus
 clear of that reach. The defaults bar never hides the end of a list: the list
 keeps room at its end for the bar, and the bottom band at rest spans that room,
-so the bar only ever covers content already fading out. The blur steps through layers, each
+so the bar rises over content already fading out. A pick on a control partly
+under it, in a list that scrolls, brings that control just clear; a press on the
+bar where the pointer last pressed in the list, without moving, does nothing, so
+a second click never files a default request. The blur steps through layers, each
 twice the last, so no faint blurred copy sits over sharp text as a glow. Every
 fade eases in and out, so neither end reads as a line. `styles/edges.ts` owns it.
 

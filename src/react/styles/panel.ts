@@ -278,11 +278,9 @@ ${APPEARANCE_CSS}
 /* The defaults bar floats over the panel's foot, in room the list keeps for it whenever the view can show it
    (--iso-bar-room, see .isotone-vars-tail): a short list ends clear of the bar, a long one scrolls its last row
    clear, and the bar coming or going never resizes the bottom-anchored panel, so no selector moves under the
-   pointer. Only the bar's material over the list (--iso-bar-veil, edges.ts) eases in and out with it; it is a
-   registered length (ensurePanelStyles), so it can transition. */
-.isotone-vars { --iso-save-bar-h: calc(var(--iso-space) * 3 + 26px); --iso-bar-room: 0px; --iso-bar-veil: 0px; transition: --iso-bar-veil var(--iso-enter) var(--iso-ease-out); }
-.isotone-vars:has(> .isotone-panel-head) { --iso-bar-room: calc(var(--iso-save-bar-h) - var(--iso-panel-inset)); }
-.isotone-vars[data-saving='true'] { --iso-bar-veil: var(--iso-bar-room); }
+   pointer. Only the bar's material over the list (--iso-bar-veil, edges.ts) eases in and out with it. */
+.isotone-vars { --iso-save-bar-h: calc(var(--iso-space) * 3 + 26px); --iso-bar-room: 0px; }
+.isotone-vars[data-bar='true'] { --iso-bar-room: calc(var(--iso-save-bar-h) - var(--iso-panel-inset)); }
 .isotone-root .isotone-vars > .isotone-panel-head { position: absolute; left: 0; right: 0; bottom: 0; height: var(--iso-save-bar-h); min-height: 0; margin: 0; padding-top: calc(var(--iso-space) * 2); transition: opacity var(--iso-enter) var(--iso-ease-out), transform var(--iso-enter) var(--iso-ease-out); }
 .isotone-root .isotone-vars > .isotone-panel-head[data-shown='false'] { opacity: 0; transform: translateY(6px); pointer-events: none; }
 /* The bar's room at the end of the list. It cancels its own gap, so the room is exactly the bar's overlap.
@@ -504,7 +502,6 @@ ${EDGES_CSS}
   .isotone-root .isotone-rail-track { transition: none; }
   .isotone-root .isotone-panel, .isotone-root .isotone-axis-menu, .isotone-root .isotone-rail-tools { transition-property: opacity, visibility; }
   .isotone-colour, .isotone-root .isotone-vars > .isotone-panel-head { transition-property: opacity; }
-  .isotone-vars { transition: none; }
   .isotone-root button { transition: opacity 125ms ease; }
   .isotone-note[data-working] .isotone-note-hit > p:not(.isotone-reply) { animation: none; background: none; color: var(--iso-muted); }
   .isotone-root button:not(:disabled):active > svg, .isotone-root button:not(:disabled):active { transform: none; }
@@ -586,12 +583,13 @@ export function ensurePanelStyles(target: Document | ShadowRoot): void {
 
 /**
  * A registered length can transition, so the defaults bar's material eases in and out with the bar
- * (see .isotone-vars). Registration is page-wide and reaches into shadow roots, where an
- * `@property` rule would not. Without it the material changes at once.
+ * (see the bottom band in edges.ts). It does not inherit, so the transition restyles only the band.
+ * Registration is page-wide and reaches into shadow roots, where an `@property` rule would not.
+ * Without it the material changes at once.
  */
 function registerBarVeil(): void {
   try {
-    CSS.registerProperty({ name: '--iso-bar-veil', syntax: '<length>', inherits: true, initialValue: '0px' });
+    CSS.registerProperty({ name: '--iso-bar-veil', syntax: '<length>', inherits: false, initialValue: '0px' });
   } catch {
     // Registered already, by an earlier mount or a second copy of Isotone, or not supported.
   }

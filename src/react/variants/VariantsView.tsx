@@ -294,12 +294,43 @@ export const VariantsView = memo(function VariantsView({
     .join('. ');
   const shownCount = lastCount.current;
   const saving = Boolean(source.saveDefaults) && dirty;
+  // Where the last press in the list landed, until the pointer moves away from it.
+  const pressed = useRef<{ x: number; y: number; target: Element } | null>(null);
+  useEffect(() => {
+    const moved = (e: PointerEvent) => {
+      const at = pressed.current;
+      if (at && Math.hypot(e.clientX - at.x, e.clientY - at.y) > 4) pressed.current = null;
+    };
+    window.addEventListener('pointermove', moved, { passive: true });
+    return () => window.removeEventListener('pointermove', moved);
+  }, []);
+  // The bar floats in room the list keeps for it, so in a list at rest it covers only what has already faded.
+  // A pick on a control partly under it, in a list that scrolls, brings that control just clear of the bar.
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    const bar = body?.parentElement?.querySelector<HTMLElement>(':scope > .isotone-panel-head');
+    const control = pressed.current?.target.closest('.isotone-axis');
+    if (!saving || !body || !bar || !control?.isConnected || !body.contains(control)) return;
+    const view = body.getBoundingClientRect();
+    const rect = control.getBoundingClientRect();
+    if (rect.top >= view.bottom || rect.bottom <= view.top) return;
+    const covered = rect.bottom - (bar.parentElement as HTMLElement).getBoundingClientRect().bottom + bar.offsetHeight;
+    if (covered > 0) body.scrollBy?.({ top: covered, behavior: stillMotion(body) ? 'auto' : 'smooth' });
+  }, [saving]);
+  // A press on the bar where the pointer last pressed in the list, without moving, was meant for the list: a
+  // second click on a pick the bar has just risen under must not file a default request.
+  const unmoved = (e: { clientX: number; clientY: number; preventDefault(): void; stopPropagation(): void }) => {
+    const at = pressed.current;
+    if (!at || Math.hypot(e.clientX - at.x, e.clientY - at.y) > 4) return;
+    e.preventDefault();
+    e.stopPropagation();
+  };
 
   return (
-    <div className="isotone-vars" data-saving={saving} data-comparing={held !== null}>
+    <div className="isotone-vars" data-bar={Boolean(source.saveDefaults)} data-saving={saving} data-comparing={held !== null}>
       {source.saveDefaults && (
         // Always mounted, floating in room the list keeps for it, so a pick never moves the selectors; it fades in once one differs.
-        <div className="isotone-panel-head" data-shown={dirty}>
+        <div className="isotone-panel-head" data-shown={dirty} onPointerDownCapture={unmoved} onClickCapture={unmoved}>
           <div
             className="isotone-head-actions"
             ref={(node) => {
@@ -323,6 +354,9 @@ export const VariantsView = memo(function VariantsView({
         ref={(node) => {
           bodyRef.current = node;
           node?.toggleAttribute('inert', menuShown);
+        }}
+        onPointerDownCapture={(e) => {
+          pressed.current = { x: e.clientX, y: e.clientY, target: e.target as Element };
         }}
         // While held, presses do nothing here; scrolling, Tab and Escape (the dock's) still work.
         onKeyDownCapture={(e) => {

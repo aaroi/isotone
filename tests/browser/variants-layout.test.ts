@@ -38,16 +38,31 @@ window.start = async (count) => {
     setSelection(id, value) { selections = { ...selections, [id]: value }; emit(); },
     reset() { selections = {}; emit(); },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
-    saveDefaults() {},
+    saveDefaults() { window.saves++; },
   };
+  window.saves = 0;
   window.__isotone.mount({ variants: source, theme: 'light', compareShortcut: false });
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  root().querySelector('button[aria-label="Variants"]').click();
+  let button;
+  for (let tries = 0; !button && tries < 100; tries++) {
+    await frame();
+    button = root()?.querySelector('button[aria-label="Variants"]');
+  }
+  button.click();
   await settle();
 };
-const root = () => document.querySelector('[data-isotone="root"]').shadowRoot;
-const settle = () => new Promise((resolve) => setTimeout(resolve, 600));
-window.settle = settle;
+const root = () => document.querySelector('[data-isotone="root"]')?.shadowRoot;
+const frame = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
+// Wait out every transition and clock-driven animation (scroll-driven ones never finish), then a frame more.
+window.settle = async () => {
+  await frame();
+  for (let tries = 0; tries < 50; tries++) {
+    const running = root().getAnimations().filter((animation) => animation.timeline === document.timeline && animation.playState === 'running');
+    if (!running.length) break;
+    await Promise.race([Promise.all(running.map((animation) => animation.finished.catch(() => {}))), new Promise((resolve) => setTimeout(resolve, 1000))]);
+  }
+  await frame();
+  await frame();
+};
 window.panel = () => root().querySelector('.isotone-variants-panel');
 window.body = () => root().querySelector('.isotone-vars-body');
 // Where every control in the panel sits, to the tenth of a pixel.
@@ -84,7 +99,7 @@ describe.skipIf(!binary)('Variants controls stay put (headless Chrome)', () => {
   });
 
   afterAll(async () => {
-    chrome?.close();
+    await chrome?.close();
     await new Promise((resolve) => server?.close(resolve));
   });
 
@@ -129,6 +144,28 @@ describe.skipIf(!binary)('Variants controls stay put (headless Chrome)', () => {
     await chrome.eval('settle()');
     expect(await chrome.eval('body().scrollHeight > body().clientHeight')).toBe(true);
     await expectSteady(11);
+  });
+
+  it('a pick the bar would cover, in a list that scrolls, comes clear of it, and a second click there files nothing', async () => {
+    await open(1024, 768, 12);
+    // Scroll so the options of the 9th selector, below the fold, sit 30px above the list's foot, where the bar will rise.
+    const [x, y] = await chrome.eval<[number, number]>(`(async () => {
+      body().scrollTop += option(8, 'Wide')[1] - (body().getBoundingClientRect().bottom - 30);
+      await settle();
+      return option(8, 'Wide');
+    })()`);
+    const foot = await chrome.eval<number>('panel().querySelector(".isotone-vars").getBoundingClientRect().bottom');
+    const bar = await chrome.eval<number>('panel().querySelector(".isotone-panel-head").offsetHeight');
+    expect(y).toBeGreaterThan(foot - bar);
+    await chrome.click(x, y);
+    await chrome.eval('settle()');
+    expect(await chrome.eval('barShown()')).toBe(true);
+    const bottom = await chrome.eval<number>('panel().querySelectorAll(".isotone-axis")[8].getBoundingClientRect().bottom');
+    expect(bottom).toBeLessThanOrEqual(foot - bar + 0.5);
+    // The pointer has not moved, and is now over the bar: pressing again is meant for the list, not Make default.
+    await chrome.click(x, y);
+    await chrome.eval('settle()');
+    expect(await chrome.eval('saves')).toBe(0);
   });
 
   it('hovering the panel, which shows its close button, moves nothing', async () => {
