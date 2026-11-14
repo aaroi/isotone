@@ -507,7 +507,7 @@ describe('a host source beside the knobs of the server that answers notes', () =
   it('takes a knob off the page when a host selector with its id arrives later, and back when it goes', async () => {
     const source = createVariantsSource({ axes: [], onChange: () => {} });
     const panel = await mountWithKnobs({ endpoint: notesEndpoint, variants: source, getRoute: () => '/' });
-    const radius = () => document.documentElement.style.getPropertyValue('--knob-card-radius');
+    const radius = () => knobValue('--knob-card-radius');
     expect(radius()).toBe('16px');
     await act(async () => {
       source.setAxes([{ id: 'card-radius', label: 'Card radius', defaultOption: 'soft', options: [{ id: 'soft', label: 'Soft' }] }]);
