@@ -108,12 +108,14 @@ Escape returns focus to the control that opened the dock: the host's, or the
 launcher when the dock was opened from the keyboard. Opened with the pointer, it
 lets focus go, so the pill folds back with no ring on a face.
 
-A link whose `?v=` the source did not apply (its optional `linkIgnored()`)
-gets one quiet line beside the pill in the update notice's glass: “This link’s
-variants aren’t shown”. It opens Variants, which says what the link asked for,
-and moves focus to Variants' face. Once Variants has been opened with that link
-in the tab, the line does not come back, after a reload included; a new `?v=`
-asks again.
+A source's notice (a link whose `?v=` it did not apply, a knob left out for a
+taken id) is one quiet line at the top of Variants in the secondary text, plain
+words such as “Link picks aren’t applied here”, with a dotted underline. Its
+explanation is a popup over the selectors, in the popup material, shown while
+the pointer rests on the line or it has keyboard focus (a tap focuses it); it
+fades in and out and never moves a selector. The line is a button described by
+the explanation, so a screen reader reads both. Two notices share the line,
+joined by a middle dot, and their explanations stack in the popup.
 
 The defaults bar sits at the bottom of the variants panel while a pick differs
 from its default: a count, Compare and Make default, which files a request and
@@ -224,7 +226,8 @@ references.
 ### Tooltips
 
 Native tooltips are only for brief icon hints and labels that really overflow,
-never full notes, readable labels or internal selectors. Check overflow on
+never full notes, readable labels or internal selectors; a notice's explanation
+uses the popup above instead. Check overflow on
 pointer entry, not by measuring rows during render.
 
 ## Resizing the dock

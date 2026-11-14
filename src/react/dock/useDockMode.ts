@@ -52,9 +52,8 @@ export function useDockMode(initial: () => Partial<Mode> = () => ({})): [Mode, U
 }
 
 /**
- * What a tab remembers: the panels it had open on which page, the tool opened last, and the link it
- * opened Variants with, whose unapplied `?v=` the reviewer has then read about. `doc` names the document
- * that wrote it.
+ * What a tab remembers: the panels it had open on which page, and the tool opened last. `doc` names the
+ * document that wrote it.
  */
 interface Remembered {
   notes?: boolean;
@@ -62,7 +61,6 @@ interface Remembered {
   last?: Surface;
   route?: string;
   doc?: number;
-  link?: string;
 }
 
 function recall(key: string): Remembered {
@@ -99,8 +97,7 @@ export function restoredMode(key: string, route: string, available: Record<Surfa
 
 /**
  * Keep which panels are open in this tab (`sessionStorage`), so a reload, such as a variant switch that
- * reloads the page, comes back to the same tools. Holds the tool opened last, which the launcher reopens,
- * and the link Variants was last opened with.
+ * reloads the page, comes back to the same tools. Holds the tool opened last, which the launcher reopens.
  */
 export function useDockMemory(key: string, route: string, { notesOpen, variantsOpen }: Pick<Mode, 'notesOpen' | 'variantsOpen'>) {
   const record = useRef<Remembered | null>(null);
@@ -111,12 +108,9 @@ export function useDockMemory(key: string, route: string, { notesOpen, variantsO
     const before = was.current;
     was.current = { notesOpen, variantsOpen };
     // Written at mount too, so a later reload of this visit restores this visit's panels, not an earlier
-    // one's. The panels at mount are the ones restored: the tool used last and the link stay as they were.
+    // one's. The panels at mount are the ones restored: the tool used last stays as it was.
     if (before && notesOpen && !before.notesOpen) saved.last = 'notes';
-    if (before && variantsOpen && !before.variantsOpen) {
-      saved.last = 'variants';
-      saved.link = location.search;
-    }
+    if (before && variantsOpen && !before.variantsOpen) saved.last = 'variants';
     Object.assign(saved, { notes: notesOpen, variants: variantsOpen, route, doc: thisDocument() });
     try {
       sessionStorage.setItem(key, JSON.stringify(saved));

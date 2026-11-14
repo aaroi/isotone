@@ -344,6 +344,12 @@ ${APPEARANCE_CSS}
 .isotone-empty { color: var(--iso-muted); font-size: 11px; line-height: 1.7; padding: 8px; }
 /* A note about what the page shows (a link's ?v= it does not apply): quiet, wrapping, above the selectors. */
 .isotone-vars-notice { flex: none; color: var(--iso-muted); font-size: 11px; line-height: 1.6; padding: 2px 8px; }
+/* A notice is one quiet line; its explanation floats over the selectors in the popup material on hover or
+   focus, above the sticky headers, so revealing it moves nothing. */
+.isotone-vars-notice:has(.isotone-notice-line) { position: relative; z-index: 6; }
+.isotone-root .isotone-notice-line { color: inherit; font: inherit; text-align: left; cursor: default; text-decoration: underline dotted color-mix(in oklch, currentColor 45%, transparent); text-underline-offset: 3px; }
+.isotone-notice-detail { position: absolute; left: 0; right: 0; top: calc(100% + 4px); padding: 9px 11px; border-radius: 14px; background: var(--iso-popup-face); box-shadow: var(--iso-popup-shadow); color: var(--iso-fg); font-size: 11px; line-height: 1.55; white-space: pre-line; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity var(--iso-exit) var(--iso-ease-out), visibility 0s var(--iso-exit); }
+.isotone-vars-notice:is(:hover, :focus-within) .isotone-notice-detail { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity var(--iso-enter) var(--iso-ease-out); }
 .isotone-note { position: relative; flex: none; }
 .isotone-request-more { flex: none; color: var(--iso-faint); font-size: 9px; }
 
@@ -547,8 +553,7 @@ ${EDGES_CSS}
 .isotone-notices { position: absolute; z-index: 5; bottom: 10px; right: calc(var(--iso-rail-length) + 10px); display: flex; flex-direction: row-reverse; flex-wrap: wrap-reverse; align-items: center; justify-content: flex-start; gap: 6px; width: max-content; max-width: calc(100vw - var(--iso-rail-length) - 36px); pointer-events: none; }
 .isotone-root[data-tools='1'] .isotone-notices { right: calc(var(--iso-rail-size) + 10px); max-width: calc(100vw - var(--iso-rail-size) - 36px); }
 .isotone-notices > * { pointer-events: auto; }
-/* A quiet line beside the pill in the pill's glass: the update notice, and a link whose ?v= was not applied. */
-:is(.isotone-update-trigger, .isotone-link-hint) { white-space: nowrap; color: var(--iso-muted); font-size: 10px; padding: 4px 10px; border-radius: 999px; background: color-mix(in oklch, var(--iso-rail-base) 92%, transparent); -webkit-backdrop-filter: blur(20px) saturate(1.7); backdrop-filter: blur(20px) saturate(1.7); box-shadow: var(--iso-rail-base-shadow); }
+.isotone-update-trigger { white-space: nowrap; color: var(--iso-muted); font-size: 10px; padding: 4px 10px; border-radius: 999px; background: color-mix(in oklch, var(--iso-rail-base) 92%, transparent); -webkit-backdrop-filter: blur(20px) saturate(1.7); backdrop-filter: blur(20px) saturate(1.7); box-shadow: var(--iso-rail-base-shadow); }
 .isotone-update-dialog { position: absolute; right: calc(0px - var(--iso-rail-length) - 10px); bottom: 40px; width: min(var(--iso-dock-width), 260px); max-width: calc(100vw - 32px); max-height: calc(100dvh - 100px); overflow: auto; padding: 10px var(--iso-space) var(--iso-space); display: grid; gap: 8px; border-radius: 14px; background: var(--iso-popup-face); box-shadow: var(--iso-popup-shadow); font-size: 11px; }
 .isotone-root[data-tools='1'] .isotone-update-dialog { right: calc(0px - var(--iso-rail-size) - 10px); }
 .isotone-update-dialog .isotone-menu-title { padding: 0; background: none; }
@@ -568,8 +573,7 @@ ${EDGES_CSS}
 .isotone-root .isotone-update-dialog input { width: 100%; padding: 6px 8px; border-radius: 5px; background: var(--iso-well); box-shadow: var(--iso-well-shadow); font-size: 11px; }
 @media (pointer: coarse) { .isotone-root .isotone-update-quiet { padding: 9px 6px; } .isotone-update-actions { margin: -9px 0 -9px -6px; } }
 @media (pointer: coarse) { .isotone-compare::after { content: ''; position: absolute; inset: -8px -2px; } }
-@media (pointer: coarse) { .isotone-link-hint { position: relative; } .isotone-link-hint::after { content: ''; position: absolute; inset: -10px 0; } }
-@media (hover: hover) and (pointer: fine) { :is(.isotone-update-trigger, .isotone-link-hint):hover, .isotone-root :is(.isotone-update-quiet, .isotone-compare):hover { color: var(--iso-fg); } }
+@media (hover: hover) and (pointer: fine) { .isotone-update-trigger:hover, .isotone-root :is(.isotone-update-quiet, .isotone-compare):hover { color: var(--iso-fg); } }
 `;
 /**
  * Put the panel's styles in `target`, once. Idempotent: a second call with the

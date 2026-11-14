@@ -1,6 +1,6 @@
 /**
  * The ways into the dock: what a reload brings back, what the pill reopens,
- * and the line by the pill for a link whose `?v=` was not applied.
+ * and what Variants says about a link whose `?v=` was not applied.
  */
 import { act, createElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -11,7 +11,6 @@ import { AXES, byText, click, container, render, setUpPanelFixture, unmount } fr
 setUpPanelFixture();
 
 const open = (name: 'variants' | 'notes') => container.querySelector(`.isotone-${name}-panel`)?.getAttribute('data-open') === 'true';
-const hint = () => container.querySelector<HTMLButtonElement>('.isotone-link-hint');
 const reload = async (props: Record<string, unknown>) => {
   await unmount();
   await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' }, ...props }));
@@ -116,50 +115,40 @@ describe('a link whose ?v= was not applied', () => {
     return combineVariantsSources(createVariantsSource({ axes: AXES }), overlay);
   };
 
-  it('says so by the pill, and opens Variants with focus on its face, which explains it', async () => {
+  it('says so in Variants alone: one short line, the full explanation on hover or focus, and nothing by the pill', async () => {
     await reload({ variants: await linked() });
-    expect(hint()?.textContent).toBe('This link’s variants aren’t shown');
-    await act(async () => {
-      hint()?.click();
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-    });
-    expect(open('variants')).toBe(true);
-    expect(document.activeElement).toBe(byText('Variants'));
-    expect(container.querySelector('.isotone-vars-notice')?.textContent).toContain('?v=');
-    expect(hint()).toBeNull();
-    // Once read, it stays away: closing Variants, or reloading with the same link.
-    await click(byText('Close variants'));
-    expect(hint()).toBeNull();
-    await reload({ variants: await linked() });
-    expect(hint()).toBeNull();
+    expect(container.querySelector('.isotone-notices')?.textContent).toBe('');
+    await click(byText('Variants'));
+    const line = container.querySelector<HTMLButtonElement>('.isotone-notice-line');
+    const detail = container.querySelector<HTMLElement>('.isotone-notice-detail');
+    expect(line?.textContent).toBe('Link picks aren’t applied here');
+    // Screen readers get the full sentence as the line's description.
+    expect(line?.getAttribute('aria-describedby')).toBe(detail?.id);
+    expect(detail?.getAttribute('role')).toBe('tooltip');
+    expect(detail?.textContent).toBe(
+      'This link asks for Headline: Bold. Here every tab shows the same picks, so a link can’t choose them: pick it below instead. Per-tab links need live switching (React on Vite 6+).',
+    );
   });
 
-  it('shows beside Feedback too, and not for a link the source applies or a notice about something else', async () => {
-    await reload({ variants: await linked() });
-    await click(byText('Feedback'));
-    expect(hint()).not.toBeNull();
-    sessionStorage.clear();
+  it('says nothing for a link the source applies', async () => {
     await reload({ variants: await linked('?v=headline:default') });
-    expect(hint()).toBeNull();
-    const other = createVariantsSource({ axes: AXES });
-    other.getNotice = () => 'This note mentions ?v= but no link was ignored.';
-    await reload({ variants: other });
-    expect(hint()).toBeNull();
+    await click(byText('Variants'));
+    expect(container.querySelector('.isotone-vars-notice')).toBeNull();
   });
 });
 
 describe('a new visit, then a reload', () => {
-  it("restores this visit's panels, not an earlier document's, and marks no link read", async () => {
-    // An earlier page in the tab left Variants open, read about its link and then navigated here.
+  it("restores this visit's panels, not an earlier document's", async () => {
+    // An earlier page in the tab left Variants open and then navigated here.
     sessionStorage.setItem(
       'isotone-feedback::panels',
-      JSON.stringify({ variants: true, notes: false, last: 'variants', route: '/', doc: -1, link: '?v=old' }),
+      JSON.stringify({ variants: true, notes: false, last: 'variants', route: '/', doc: -1 }),
     );
     const props = { variants: createVariantsSource({ axes: AXES }) };
     await reload(props);
     expect(open('variants')).toBe(false);
     const written = JSON.parse(sessionStorage.getItem('isotone-feedback::panels') ?? '{}');
-    expect(written).toMatchObject({ variants: false, notes: false, last: 'variants', link: '?v=old', route: '/' });
+    expect(written).toMatchObject({ variants: false, notes: false, last: 'variants', route: '/' });
     expect(written.doc).not.toBe(-1);
     // Reloading this visit brings back what it had open: nothing.
     vi.spyOn(performance, 'getEntriesByType').mockReturnValue([{ type: 'reload' } as unknown as PerformanceEntry]);

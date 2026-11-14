@@ -546,31 +546,33 @@ describe('a ?v= the overlay source does not apply', () => {
     expect(overlay.getNotice()).toBeNull();
     await overlay.refresh();
     // The card group is at Default already, and `theme` is not a group here: maybe the host's own.
-    expect(overlay.getNotice()).toBe(
-      'This link’s ?v= asks for Header › Hero: Split, but links don’t choose variants here. Pick it below instead; a pick shows in every tab. Per-tab links need live switching (React on Vite 6+).',
-    );
+    expect(overlay.getNotice()).toEqual({
+      text: 'Link picks aren’t applied here',
+      detail:
+        'This link asks for Header › Hero: Split. Here every tab shows the same picks, so a link can’t choose them: pick it below instead. Per-tab links need live switching (React on Vite 6+).',
+    });
   });
 
   it('follows the picks: gone once they match the link, back when they move away', async () => {
     const { overlay } = source('?v=hero:hero-split,card-highlight:card-highlight');
     await overlay.refresh();
-    expect(overlay.getNotice()).toContain('asks for Header › Hero: Split; Card.tsx: Highlight, but');
-    expect(overlay.getNotice()).toContain('Pick them below instead;');
+    expect(detailOf(overlay.getNotice())).toContain('asks for Header › Hero: Split; Card.tsx: Highlight.');
+    expect(detailOf(overlay.getNotice())).toContain('pick them below instead.');
     // The view keeps what it showed while the panel is open; the source says how things are now.
     overlay.setSelection('hero', 'hero-split');
     overlay.setSelection('card-highlight', 'card-highlight');
     expect(overlay.getNotice()).toBeNull();
     overlay.setSelection('hero', OVERLAY_DEFAULT_OPTION);
-    expect(overlay.getNotice()).toContain('asks for Header › Hero: Split, but');
+    expect(detailOf(overlay.getNotice())).toContain('asks for Header › Hero: Split.');
     await settle();
     await overlay.refresh();
-    expect(overlay.getNotice()).toContain('asks for Header › Hero: Split, but');
+    expect(detailOf(overlay.getNotice())).toContain('asks for Header › Hero: Split.');
   });
 
   it('names a Default the link asks for', async () => {
     const { overlay } = source('?v=hero:default');
     await overlay.refresh();
-    expect(overlay.getNotice()).toContain('asks for Header › Hero: Default, but');
+    expect(detailOf(overlay.getNotice())).toContain('asks for Header › Hero: Default.');
   });
 
   it('says nothing without ?v=, for pairs naming no member, or with a live store that applies the link', async () => {
@@ -589,3 +591,8 @@ describe('a ?v= the overlay source does not apply', () => {
     expect(inLive.getNotice()).toBeNull();
   });
 });
+
+/** A notice's full explanation, whichever shape the source gives it in. */
+function detailOf(notice: string | { detail?: string } | null | undefined) {
+  return typeof notice === 'string' ? notice : notice?.detail;
+}

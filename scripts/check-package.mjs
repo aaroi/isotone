@@ -48,7 +48,9 @@ import { npm } from './npm.mjs';
 // Bundle raised to 410 kB and tarball to 468 kB (409.1 and 466.8 kB; panels never jump): heights that
 // ease together, a panel unfolding beside another, focus let go after a pointer-opened dock closes,
 // and their changelog notes.
-const BUDGET = { bundle: 410_000, tarball: 468_000 };
+// Bundle raised to 410.5 kB (410.1 kB; notices): a source's notice as one line with its explanation in a
+// popup, in place of the line by the pill.
+const BUDGET = { bundle: 410_500, tarball: 468_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

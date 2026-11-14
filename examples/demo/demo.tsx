@@ -297,7 +297,6 @@ if (sharedLink) {
   const active = picked && picked !== 'row' ? [picked] : [];
   const notice = unappliedLinkNotice({ variants, active }, active, location.search);
   source.getNotice = () => notice;
-  source.linkIgnored = () => notice !== null;
 }
 
 type DemoNote = Record<string, unknown> & {
@@ -924,7 +923,7 @@ if (!screenshot && !hosted) {
   bar.setAttribute('role', 'group');
   bar.setAttribute('aria-label', 'Demo data');
   bar.style.cssText =
-    // On a phone it sits above the dock's row, where the panel's notices beside the pill would cover it.
+    // On a phone it sits above the dock's row, where the update notice beside the pill would cover it.
     `position:fixed;${matchMedia('(max-width: 640px)').matches ? 'left:16px;bottom:76px' : 'left:50%;bottom:16px;transform:translateX(-50%)'};z-index:10;display:flex;gap:2px;padding:2px;border-radius:8px;background:#e4e4e7;font:12px system-ui,sans-serif;box-shadow:0 1px 2px #0002`;
   for (const [value, text] of [
     [null, 'Demo data'],

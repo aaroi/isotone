@@ -14,8 +14,7 @@ import type { VariantsSource } from './source';
  * owner (no `preview` there means no), `getError` is the first source's error,
  * `refresh` refreshes them all, and `saveDefaults` calls each source's own
  * with that source's picks, in order. `reset` resets every source, and
- * `getNotice` is the first source's notice. `linkIgnored` holds when any
- * source's does.
+ * `getNotice` is the first source's notice.
  */
 export function combineVariantsSources(...sources: VariantsSource[]): VariantsSource {
   return combineSources(sources);
@@ -133,8 +132,9 @@ export function combineSources(sources: VariantsSource[]): VariantsSource & { di
       // A source with nothing on this page has nothing to save.
       for (const [source, part] of parts) await source.saveDefaults?.(part);
     };
-  if (some('getNotice')) combined.getNotice = () => sources.reduce<string | null>((notice, s) => notice ?? s.getNotice?.() ?? null, null);
-  if (some('linkIgnored')) combined.linkIgnored = () => sources.some((s) => s.linkIgnored?.() ?? false);
+  if (some('getNotice'))
+    combined.getNotice = () =>
+      sources.reduce<ReturnType<NonNullable<VariantsSource['getNotice']>>>((notice, s) => notice ?? s.getNotice?.() ?? null, null);
   if (sources.some((source) => typeof (source as { refresh?: unknown }).refresh === 'function'))
     combined.refresh = async () => {
       await Promise.all(sources.map((source) => (source as { refresh?: () => unknown }).refresh?.()));

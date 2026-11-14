@@ -7,7 +7,7 @@ import type { IsotoneElement } from '../types';
 import type { SelectVariantAxis, RangeVariantAxis, ColorVariantAxis, VariantAxis, VariantSelections } from './axes';
 import { axisDefault, isValidSelection, formatRangeValue } from './helpers';
 import { splitSectionLabel } from './sections';
-import type { VariantsSource } from './source';
+import type { VariantNotice, VariantsSource } from './source';
 
 /**
  * One overlay variant: a directory of alternative source files that the dev
@@ -352,7 +352,7 @@ export interface LiveVariantSelection {
  * live mode, or by hand, would otherwise be ignored without a word. Pairs that
  * name no group here are left alone: they may be the host's own.
  */
-export function unappliedLinkNotice(list: OverlayVariantsList, active: string[], search: string): string | null {
+export function unappliedLinkNotice(list: OverlayVariantsList, active: string[], search: string): VariantNotice | null {
   const raw = new URLSearchParams(search).get('v');
   if (!raw) return null;
   const groups = new Map(overlayGroups(list.variants).map((group) => [group.id, group]));
@@ -372,7 +372,10 @@ export function unappliedLinkNotice(list: OverlayVariantsList, active: string[],
   }
   if (asked.length === 0) return null;
   // Stays true while the panel keeps it, even once the reviewer has picked what the link asked for.
-  return `This link’s ?v= asks for ${asked.join('; ')}, but links don’t choose variants here. Pick ${asked.length > 1 ? 'them' : 'it'} below instead; a pick shows in every tab. Per-tab links need live switching (React on Vite 6+).`;
+  return {
+    text: 'Link picks aren’t applied here',
+    detail: `This link asks for ${asked.join('; ')}. Here every tab shows the same picks, so a link can’t choose them: pick ${asked.length > 1 ? 'them' : 'it'} below instead. Per-tab links need live switching (React on Vite 6+).`,
+  };
 }
 
 function pageLiveStore(): LiveVariantSelection | null {
@@ -410,8 +413,7 @@ export function createOverlayVariantsSource(cfg: {
 }): VariantsSource & {
   refresh(): Promise<void>;
   /** For the reviewer: the page's `?v=` names picks the page does not show; else null. */
-  getNotice(): string | null;
-  linkIgnored(): boolean;
+  getNotice(): VariantNotice | null;
   readonly list: OverlayVariantsList | null;
   /** The knobs on the current route and their values, for the save note. */
   readonly knobs: { axes: KnobAxis[]; values: VariantSelections };
@@ -577,13 +579,17 @@ export function createOverlayVariantsSource(cfg: {
       if (!list) return null;
       const taken = new Set(cfg.takenIds?.() ?? []);
       const clashes = overlayKnobs(list, cfg.getRoute()).filter((knob) => taken.has(knob.id));
-      const clash = clashes.length
-        ? `Left out of .isotone/knobs.json: ${clashes.map((knob) => knob.id).join(', ')}, since one of the app’s own selectors has ${clashes.length > 1 ? 'each' : 'this'} id, so the panel shows only that selector. Give ${clashes.length > 1 ? 'each knob its' : 'the knob its'} own id.`
+      const clash: VariantNotice | null = clashes.length
+        ? {
+            text: clashes.length > 1 ? `${clashes.length} knobs are left out` : 'A knob is left out',
+            detail: `Left out of .isotone/knobs.json: ${clashes.map((knob) => knob.id).join(', ')}, since one of the app’s own selectors has ${clashes.length > 1 ? 'each' : 'this'} id, so the panel shows only that selector. Give ${clashes.length > 1 ? 'each knob its' : 'the knob its'} own id.`,
+          }
         : null;
       const link = live ? null : unappliedLinkNotice(list, current(), search());
-      return [link, clash].filter(Boolean).join(' ') || null;
+      const notices = [link, clash].filter((notice): notice is VariantNotice => notice !== null);
+      // Both at once read as one line, and one explanation after the other.
+      return notices.length ? { text: notices.map((n) => n.text).join(' · '), detail: notices.map((n) => n.detail).join('\n\n') } : null;
     },
-    linkIgnored: () => Boolean(list && !live && unappliedLinkNotice(list, current(), search())),
     get list() {
       return list;
     },

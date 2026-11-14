@@ -24,6 +24,7 @@ import {
   type VariantAction,
   type VariantAxis,
   type VariantSection,
+  type VariantNotice,
   type VariantSelections,
   type VariantsSource,
   sectionAxes,
@@ -48,8 +49,34 @@ export function refreshSource(source: VariantsSource): Promise<void> {
 
 const noop = () => {};
 
-function readNotice(source: VariantsSource): string | null {
-  return source.getNotice?.() ?? null;
+function readNotice(source: VariantsSource): VariantNotice | null {
+  const notice = source.getNotice?.() ?? null;
+  return typeof notice === 'string' ? { text: notice } : notice;
+}
+
+/**
+ * A source's notice: one quiet line, and its explanation in the popup material over the selectors on
+ * hover or keyboard focus (a tap focuses it), so revealing it moves nothing. The line is described by
+ * the explanation for screen readers.
+ */
+function SourceNotice({ notice: { text, detail } }: { notice: VariantNotice }) {
+  const id = useId();
+  return (
+    <p className="isotone-vars-notice" role="status">
+      {detail ? (
+        <>
+          <button type="button" className="isotone-notice-line" aria-describedby={id}>
+            {text}
+          </button>
+          <span id={id} role="tooltip" className="isotone-notice-detail">
+            {detail}
+          </span>
+        </>
+      ) : (
+        text
+      )}
+    </p>
+  );
 }
 
 /**
@@ -272,7 +299,7 @@ export const VariantsView = memo(function VariantsView({
   const { selections: stored, shown, sections, names, error: sourceError } = useVariantsSnapshot(source);
   // Settled by each opening's own refresh and kept until the panel closes: a notice coming or going
   // while the reviewer picks (or when Feedback opening refreshes the source) would move the selectors.
-  const [notice, setNotice] = useState<string | null>(() => readNotice(source));
+  const [notice, setNotice] = useState<VariantNotice | null>(() => readNotice(source));
   useEffect(() => {
     if (!active) return;
     let open = true;
@@ -518,11 +545,7 @@ export const VariantsView = memo(function VariantsView({
           e.stopPropagation();
         }}
       >
-        {notice && (
-          <p className="isotone-vars-notice" role="status">
-            {notice}
-          </p>
-        )}
+        {notice && <SourceNotice notice={notice} />}
         {sourceError && (
           <p className="isotone-danger" role="alert">
             {sourceError}

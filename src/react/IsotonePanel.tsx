@@ -21,7 +21,6 @@ import { useNoteView } from './notes/useNoteView';
 import { refreshSource, useVariantsSnapshot, VariantsPanel } from './variants/VariantsView';
 import { DEFAULT_COMPARE_SHORTCUT, isUnderEscape, useCompareKey } from './variants/useCompare';
 import { useKeyboardInset } from './dock/viewport';
-import { fadeIn } from './motion';
 
 export interface IsotonePanelProps {
   /** Auto follows the page at the dock. System follows the OS preference. */
@@ -193,11 +192,6 @@ export function IsotonePanel({
     if (variants && (notesOpen || !variantsAvailable)) void refreshSource(variants);
   }, [variants, notesOpen]);
 
-  // A link whose `?v=` the source could not apply gets a quiet line by the pill, until Variants, which
-  // says what the link asked for, has been opened with it in this tab. Read each render, so a new
-  // `?v=` in the same document is asked about afresh.
-  const linkIgnored = !variantsOpen && memory.current.link !== location.search && Boolean(variants?.linkIgnored?.());
-
   if (!visible) return null;
   const composer = (
     <Composer
@@ -240,20 +234,6 @@ export function IsotonePanel({
         </div>
       )}
       <div className="isotone-notices">
-        {linkIgnored && (
-          <button
-            type="button"
-            ref={fadeIn}
-            className="isotone-link-hint"
-            onClick={() => {
-              // The line goes as Variants opens; focus moves on to Variants' face rather than the page.
-              update({ variantsOpen: true, expanded: false });
-              focus.launcher('variants');
-            }}
-          >
-            This link’s variants aren’t shown
-          </button>
-        )}
         <UpdateNotice
           endpoint={updateEndpoint}
           active={open}

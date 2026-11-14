@@ -37,7 +37,7 @@ window.start = async (count, { notice = false, theme = 'light' } = {}) => {
     reset() { selections = {}; listeners.forEach((l) => l()); },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     saveDefaults() {},
-    ...(notice ? { getNotice: () => 'This link’s ?v= asks for Selector 0: Bold, but links don’t choose variants here.', linkIgnored: () => true } : {}),
+    ...(notice ? { getNotice: () => ({ text: 'Link picks aren’t applied here', detail: 'This link asks for Part 0 › Selector 0: Bold. Here every tab shows the same picks, so a link can’t choose them: pick it below instead. Per-tab links need live switching (React on Vite 6+).' }) } : {}),
   };
   window.__isotone.mount({ variants: source, endpoint: '/notes', theme, compareShortcut: false });
   for (let tries = 0; !root()?.querySelector('.isotone-rail-track') && tries < 100; tries++) await frame();
@@ -382,7 +382,7 @@ describe.skipIf(!binary)('Getting into the panel (headless Chrome)', () => {
     expect(await chrome.eval<number>('panel("variants").offsetHeight')).toBeLessThan(height);
   });
 
-  it("brings back a new visit's own panels on reload, not an earlier page's, and leaves its link unread", async () => {
+  it("brings back a new visit's own panels on reload, not an earlier page's", async () => {
     await fresh(1024, 768);
     await start(3);
     await tool('Variants');
@@ -392,32 +392,41 @@ describe.skipIf(!binary)('Getting into the panel (headless Chrome)', () => {
     await chrome.goto('');
     await start(3, { notice: true });
     expect(await chrome.eval('isOpen("variants")')).toBe(false);
-    expect(await chrome.eval(`Boolean(root().querySelector('.isotone-link-hint'))`)).toBe(true);
   });
 
   it.each([
     [1024, 768, false],
     [375, 812, true],
-  ])('shows an unapplied ?v= by the pill at %ipx, whole, until Variants opens', async (width, height, mobile) => {
+  ])('explains a notice over the selectors on hover and focus at %ipx, moving none of them', async (width, height, mobile) => {
     await fresh(width, height, mobile);
     await start(3, { notice: true });
-    const hint = `root().querySelector('.isotone-link-hint')`;
-    expect(await chrome.eval(`${hint}?.textContent`)).toBe('This link’s variants aren’t shown');
-    // One line, inside the viewport, clear of the pill.
-    const box = await chrome.eval<{ left: number; right: number; height: number; clipped: boolean; pill: number }>(`(() => {
-      const r = ${hint}.getBoundingClientRect();
-      return { left: r.left, right: r.right, height: r.height, clipped: ${hint}.scrollWidth > ${hint}.clientWidth,
-        pill: root().querySelector('.isotone-rail-track').getBoundingClientRect().left };
-    })()`);
-    expect(box.left).toBeGreaterThanOrEqual(0);
-    expect(box.right).toBeLessThanOrEqual(box.pill);
-    expect(box.height).toBeLessThan(30);
-    expect(box.clipped).toBe(false);
-    const [x, y] = await chrome.eval<[number, number]>(`centre(${hint})`);
-    await chrome.click(x, y);
+    await tool('Variants');
+    const line = `panel('variants').querySelector('.isotone-notice-line')`;
+    const detail = `panel('variants').querySelector('.isotone-notice-detail')`;
+    const shown = () => chrome.eval<string>(`getComputedStyle(${detail}).visibility`);
+    // One quiet line, whole, nothing else by the pill.
+    expect(await chrome.eval(`${line}.textContent`)).toBe('Link picks aren’t applied here');
+    expect(await chrome.eval(`${line}.getBoundingClientRect().height < 24 && ${line}.scrollWidth <= ${line}.clientWidth`)).toBe(true);
+    expect(await chrome.eval(`root().querySelector('.isotone-notices').textContent`)).toBe('');
+    expect(await shown()).toBe('hidden');
+    const before = await chrome.eval<object>('controls()');
+    // Hover reveals it over the selectors.
+    const [x, y] = await chrome.eval<[number, number]>(`centre(${line})`);
+    await chrome.move(x, y);
     await chrome.eval('settle()');
-    expect(await chrome.eval('isOpen("variants")')).toBe(true);
-    expect(await chrome.eval(`${hint}`)).toBeNull();
-    expect(await chrome.eval(`panel('variants').querySelector('.isotone-vars-notice')?.textContent`)).toContain('?v=');
+    expect(await shown()).toBe('visible');
+    const result = await chrome.eval<{ count: number; moved: unknown[] }>(`kept(${JSON.stringify(before)})`);
+    expect(result.moved).toEqual([]);
+    const fits = await chrome.eval<boolean>(
+      `(() => { const r = ${detail}.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; })()`,
+    );
+    expect(fits).toBe(true);
+    // Away it goes; keyboard focus brings it back.
+    await chrome.move(20, 300);
+    await chrome.eval('settle()');
+    expect(await shown()).toBe('hidden');
+    await chrome.eval(`${line}.focus()`);
+    await chrome.eval('settle()');
+    expect(await shown()).toBe('visible');
   });
 });
