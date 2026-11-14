@@ -5,7 +5,7 @@
 import { act, createElement, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createOverlayVariantsSource, type VariantAction, type VariantAxis } from '../../src/core/variants';
+import { combineVariantsSources, createOverlayVariantsSource, type VariantAction, type VariantAxis } from '../../src/core/variants';
 import { createVariantsSource, IsotonePanel } from '../../src/react/index';
 import { VariantsView } from '../../src/react/variants/VariantsView';
 import { PANEL_CSS } from '../../src/react/styles/panel';
@@ -395,6 +395,74 @@ describe('review dock interactions', () => {
     const tags = [...(container.querySelector('.isotone-note-hit .isotone-meta')?.children ?? [])];
     expect(tags.map((tag) => tag.firstElementChild?.textContent)).toEqual(['3 picks']);
     expect(tags[0]?.getAttribute('title')).toBe('pad: 24\ngap: 8\nradius: 12');
+  });
+  // #69's selections from #64's combined source, as mountIsotone composes it: the host's picks and the
+  // overlay's, less the knobs #62 (a file group's id) and 14be786 (a host selector's id) leave out, and
+  // only the knobs of this route (#60). With #61's live store, the tab's own picks, not active.json.
+  async function noteSelections(live: { active: string[] } | null, active: string[]) {
+    const range = { kind: 'range' as const, min: 0, max: 40, step: 1, unit: 'px' };
+    const knobs = [
+      { ...range, id: 'card-radius', label: 'Card radius', defaultValue: 12 },
+      { ...range, id: 'cta', label: 'CTA size', defaultValue: 0 },
+      { ...range, id: 'hero', label: 'Hero size', defaultValue: 0 },
+      { ...range, id: 'other-page', label: 'Elsewhere', defaultValue: 4, route: '/settings' },
+    ];
+    const variants = [{ id: 'hero-left', label: 'Left', group: 'hero', files: {}, createdAt: '', stale: [], missing: [] }];
+    const posts: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: unknown, init?: RequestInit) => {
+        if (String(url).startsWith('/variants')) return { ok: true, json: async () => ({ variants, active, knobs }) };
+        if (init?.method === 'POST') {
+          posts.push(JSON.parse(String(init.body)));
+          return { ok: true, json: async () => ({ id: 'saved' }) };
+        }
+        return { ok: true, json: async () => [] };
+      }),
+    );
+    const stored = JSON.stringify({ 'card-radius': '24', cta: '30', hero: '5', 'other-page': '30' });
+    const storage = { getItem: () => stored, setItem() {}, removeItem() {} };
+    const host = createVariantsSource({
+      axes: [
+        {
+          id: 'cta',
+          label: 'Call to action',
+          defaultOption: 'join',
+          options: [
+            { id: 'join', label: 'Join' },
+            { id: 'start', label: 'Start' },
+          ],
+        },
+      ],
+      selections: { cta: 'start' },
+    });
+    const store = live && { ...live, select: () => false, subscribe: () => () => {}, reload() {} };
+    const overlay = createOverlayVariantsSource({
+      endpoint: '/variants',
+      getRoute: () => '/',
+      storage,
+      knobRoot: null,
+      live: store,
+      takenIds: () => host.getAxes().map((axis) => axis.id),
+    });
+    await overlay.refresh();
+    await render(
+      createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' }, variants: combineVariantsSources(host, overlay) }),
+    );
+    await click(container.querySelector('.isotone-fab'));
+    await typeFeedback('Bigger');
+    await click(byText('Send note'));
+    return posts[0]?.selections;
+  }
+  it("records a host source's picks beside the overlay's, less the knobs the panel leaves out", async () => {
+    expect(await noteSelections(null, ['hero-left'])).toEqual({ cta: 'start', hero: 'hero-left', 'card-radius': '24' });
+  });
+  it("records this tab's own variant picks, not .isotone/active.json's", async () => {
+    // Another tab picked Left; this one kept Default.
+    expect(await noteSelections({ active: [] }, ['hero-left'])).toEqual({ cta: 'start', 'card-radius': '24' });
+    await unmount();
+    // This tab picked Left; active.json has Default.
+    expect(await noteSelections({ active: ['hero-left'] }, [])).toEqual({ cta: 'start', hero: 'hero-left', 'card-radius': '24' });
   });
   it('shows one pin by its text and several as a count, beside the picks', async () => {
     const note = (id: string, texts: string[]) => ({
