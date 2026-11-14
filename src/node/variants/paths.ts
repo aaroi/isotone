@@ -1,6 +1,6 @@
 /** Paths inside the variants tree, and the guard every user-supplied path goes through. */
 
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { isEscaping, isWithin, toPosixPath } from '../fs/paths';
 import { type VariantsStoreOptions, variantsDir } from './options';
@@ -8,6 +8,36 @@ import { type VariantsStoreOptions, variantsDir } from './options';
 export function variantDir(opts: VariantsStoreOptions, id: string): string {
   if (!isValidVariantId(id)) throw new Error(`Invalid variant id "${id}"`);
   return join(variantsDir(opts), id);
+}
+
+/** Inside a variant's directory: the bases git could not store, because the
+ *  copy was made or synced outside a repository. Named by blob hash. */
+const BASES_DIR = '.isotone-base';
+
+/** A kept base, or one being written. Nothing else in the store is ever deleted. */
+export const BASE_FILE = /^[a-f0-9]{40}(?:[a-f0-9]{24})?(?:\.[a-f0-9-]{36}\.tmp)?$/;
+
+/** The first path segment, which a case-insensitive filesystem reads in any case. */
+function isReserved(key: string): boolean {
+  return key.split('/')[0]?.toLowerCase() === BASES_DIR;
+}
+
+/**
+ * The variant's kept-bases directory. Variants are committed and shared, so
+ * anything but a plain directory of regular base files (a link, a file, a
+ * checkout that turned a link into either) is refused before anything is written.
+ */
+export function baseStore(opts: VariantsStoreOptions, id: string): string {
+  const dir = variantDir(opts, id);
+  const store = join(dir, BASES_DIR);
+  const stat = lstatSync(store, { throwIfNoEntry: false });
+  const sound =
+    !stat ||
+    (stat.isDirectory() &&
+      isWithin(dir, store, { realpath: true }) &&
+      readdirSync(store, { withFileTypes: true }).every((entry) => entry.isFile() || !BASE_FILE.test(entry.name)));
+  if (!sound) throw new Error(`${store} is not a plain directory of kept bases, so "${id}" was left unchanged. Remove it.`);
+  return store;
 }
 
 /**
@@ -18,7 +48,7 @@ export function variantDir(opts: VariantsStoreOptions, id: string): string {
  * is not a variant at all.
  */
 export function isSafeManifestKey(key: string): boolean {
-  if (!key || isAbsolute(key) || /[\\:\0]/.test(key) || key === 'variant.json') return false;
+  if (!key || isAbsolute(key) || /[\\:\0]/.test(key) || key === 'variant.json' || isReserved(key)) return false;
   return !key.split('/').some((segment) => !segment || segment === '.' || segment === '..' || segment === '.git');
 }
 
@@ -37,6 +67,7 @@ export function repoRelativeKey(root: string, file: string): { abs: string; key:
   if (!typed || isEscaping(typed)) throw new Error(`"${file}" escapes the project root`);
   const rel = onDiskCase(root, typed);
   const abs = join(root, rel);
+  if (isReserved(toPosixPath(rel))) throw new Error(`"${file}" is under ${BASES_DIR}/, which variants reserve for their bases`);
   if (!isSafeManifestKey(toPosixPath(rel)) || !isWithin(root, abs, { realpath: true })) {
     throw new Error(`"${file}" escapes the project root`);
   }

@@ -76,6 +76,13 @@ it('reports a lock it cannot create as an error at once, not as a busy store', (
   }
 });
 
+it('makes the directory again when another process removed it before the lock was created', () => {
+  const file = join(root, 'store', 'notes.json');
+  openFails.code = 'ENOENT';
+  openFails.times = 1;
+  expect(withFileLock(file, () => 'ran')).toBe('ran');
+});
+
 it('waits out the moment Windows refuses to create over a lock another process just deleted', () => {
   const file = join(root, 'notes.json');
   vi.stubGlobal('process', { ...process, platform: 'win32', pid: process.pid });

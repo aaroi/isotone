@@ -246,6 +246,16 @@ describe('hold to compare', () => {
     expect(onChange).toHaveBeenLastCalledWith({ layout: 'list', radius: '11' }, { preview: false });
   });
 
+  it('holds for an automated key event that carries only the key', async () => {
+    const { onChange } = await panel();
+    expect((await key('keydown', { code: '', key: '`' })).defaultPrevented).toBe(true);
+    expect(onChange).toHaveBeenLastCalledWith({ layout: 'grid', radius: '11' }, { preview: true });
+    await key('keyup', { code: '', key: '`' });
+    expect(onChange).toHaveBeenLastCalledWith({ layout: 'list', radius: '11' }, { preview: false });
+    // Another key, with no code either, is the page's.
+    expect((await key('keydown', { code: '', key: 'a' })).defaultPrevented).toBe(false);
+  });
+
   it('ignores the key while typing, with a modifier, on a repeat it did not start, or when disabled', async () => {
     const { onChange } = await panel();
     const field = document.createElement('input');

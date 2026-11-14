@@ -58,11 +58,12 @@ const local = (req: IncomingMessage): boolean => isFromThisMachine(nodeRequestFa
 /**
  * Serve the panel to the dev server's pages: the bundle, and the scripts
  * added to every HTML navigation. `mount` is the mount module, or null when
- * the host mounts the panel itself; `head` is the live variant store, when
- * there is one. A device on the network gets the store, which the app's
- * modules need, but never the panel.
+ * the host mounts the panel itself; `head` is the script that runs before the
+ * page does (the live variant store, the stored knob values) for the requested
+ * URL, when there is one. A device on the network gets it, since the app's
+ * modules need the store, but never the panel.
  */
-export function servePanel(use: Use, mount: string | null, head: (() => string) | null): void {
+export function servePanel(use: Use, mount: string | null, head: ((url: string) => string) | null): void {
   if (mount === null && head === null) return;
   if (mount !== null) {
     // A self-contained bundle keeps the panel out of the host's dependency
@@ -90,12 +91,14 @@ export function servePanel(use: Use, mount: string | null, head: (() => string) 
     // gets 304 and never sees the panel. Ask for the full document.
     delete req.headers['if-none-match'];
     delete req.headers['if-modified-since'];
-    injectHtmlResponse(res, local(req) ? mount : null, head ?? undefined);
+    // The URL as asked for: an SPA fallback rewrites `req.url` before the page is sent.
+    const url = req.url ?? '/';
+    injectHtmlResponse(res, local(req) ? mount : null, () => head?.(url) ?? null);
     next();
   });
 }
 
-function injectHtmlResponse(res: ServerResponse, code: string | null, head: () => string | null = () => null): void {
+function injectHtmlResponse(res: ServerResponse, code: string | null, head: () => string | null): void {
   if (INJECTED.has(res)) return;
   INJECTED.add(res);
 
@@ -164,71 +167,61 @@ function injectHtmlResponse(res: ServerResponse, code: string | null, head: () =
     const cb = args.find((a): a is () => void => typeof a === 'function');
     buffering = false;
     const body = Buffer.concat(chunks).toString('utf8');
-    if (body.includes('<html') && (HEAD_OPEN.test(body) || body.includes('</body>'))) {
+    const page = body.includes('<html') && (HEAD_OPEN.test(body) || body.includes('</body>'));
+    // Classic, not a module: it runs during parsing, before any module.
+    const before = page ? head() : null;
+    if (page && (code !== null || before)) {
       const script = code === null ? '' : `<script type="module" data-isotone-inject>${code}</script>`;
-      // Classic, not a module: it runs during parsing, before any module.
-      const store = head();
-      const early = store ? `<script data-isotone-live>${store.replace(/<\/script/gi, '<\\/script')}</script>` : '';
+      const early = before ? `<script data-isotone-head>${before.replace(/<\/script/gi, '<\\/script')}</script>` : '';
       if (!res.headersSent) originalSetHeader('Cache-Control', 'no-store');
-      return originalEnd(withNativeFetch(injectIntoHead(body, `${early}${script}`)), cb);
+      const captured = withNativeFetch(body);
+      return originalEnd(intoHead(captured, `${early}${script}`) ?? `${captured}${early}${script}`, cb);
     }
     return originalEnd(Buffer.concat(chunks), cb);
   }) as unknown as ServerResponse['end'];
 }
 
-/**
- * Put the mount loader script in `<head>`, after the opening head tag. React
- * never hydrates head contents it receives as part of a server document —
- * `<head>` is a special host that React replaces wholesale, unlike `<body>`,
- * and any stray script inside it is inert for React — so this cannot trip the
- * "script tag while rendering React component" warning or the hydration
- * discard that follows it in a whole-document React Router app. Falls back to
- * just before `</head>`, then just before `</body>` for a fragment without a
- * head, then appends, matching what `withNativeFetch` does below.
- */
 /** The opening head tag, and not `<header>`. */
 const HEAD_OPEN = /<head(?=[\s/>])[^>]*>/i;
 
-function injectIntoHead(html: string, script: string): string {
-  const head = html.match(HEAD_OPEN);
-  if (head?.index !== undefined) {
-    const at = head.index + head[0].length;
-    return `${html.slice(0, at)}${script}${html.slice(at)}`;
-  }
-  const headEnd = html.match(/<\/head>/i);
-  if (headEnd?.index !== undefined) {
-    return `${html.slice(0, headEnd.index)}${script}${html.slice(headEnd.index)}`;
-  }
-  const body = html.match(/<body[^>]*>/i);
-  if (body?.index !== undefined) {
-    const at = body.index + body[0].length;
-    return `${html.slice(0, at)}${script}${html.slice(at)}`;
-  }
-  return `${html}${script}`;
+/**
+ * Put Isotone's scripts at the end of `<head>`, just before `</head>`: a classic
+ * script there still runs before any module and before `<body>` is parsed. At
+ * the start of `<head>`, React 19 claims an injected script for one the app
+ * renders in its own head, and React 18 fails to hydrate the whole document
+ * over any node it finds there. Never in `<body>`, which a whole-document React
+ * app hydrates. Without `</head>`, after the opening head tag, then after the
+ * opening body tag for a document without a head; null when it has neither.
+ */
+function intoHead(html: string, script: string): string | null {
+  const end = headEnd(html);
+  const open = html.match(HEAD_OPEN) ?? html.match(/<body[^>]*>/i);
+  const at = end ?? (open?.index === undefined ? undefined : open.index + open[0].length);
+  return at === undefined ? null : `${html.slice(0, at)}${script}${html.slice(at)}`;
 }
 
 /**
- * A one-line script as early in the document as possible that keeps a
- * reference to the browser's own `fetch`. Apps replace `window.fetch` for
- * their own reasons — a preview app answering its backend calls, a mock
- * layer, an auth shim — and a stub that answers 404 to anything it does not
- * know would swallow the panel's saves; the store then falls back to
- * localStorage and the reviewer's notes look lost. The store prefers this
- * reference when it exists. Placed right after `<head>` (or `<body>` when
- * there is no head) so it runs before any app module.
+ * Where `</head>` closes the head: the first one outside a comment, script or
+ * style, before `<body>`. A `</head>` written inside an inline script is text.
+ */
+function headEnd(html: string): number | undefined {
+  for (const match of html.matchAll(/<!--[\s\S]*?-->|<(script|style)\b[\s\S]*?<\/\1\s*>|<\/head\s*>|<body(?=[\s/>])/gi)) {
+    if (/^<\/head/i.test(match[0])) return match.index;
+    if (/^<body/i.test(match[0])) return undefined;
+  }
+  return undefined;
+}
+
+/**
+ * A one-line script that keeps a reference to the browser's own `fetch`. Apps
+ * replace `window.fetch` for their own reasons — a preview app answering its
+ * backend calls, a mock layer, an auth shim — and a stub that answers 404 to
+ * anything it does not know would swallow the panel's saves; the store then
+ * falls back to localStorage and the reviewer's notes look lost. The store
+ * prefers this reference when it exists. Placed as {@link intoHead} says, ahead
+ * of Isotone's other scripts, so it runs before any app module.
  */
 export function withNativeFetch(html: string): string {
-  if (html.includes('__isotoneFetch')) return html;
-  const capture = '<script data-isotone-native>window.__isotoneFetch=window.fetch.bind(window)</script>';
-  const head = html.match(HEAD_OPEN);
-  if (head?.index !== undefined) {
-    const at = head.index + head[0].length;
-    return `${html.slice(0, at)}${capture}${html.slice(at)}`;
-  }
-  const body = html.match(/<body[^>]*>/i);
-  if (body?.index !== undefined) {
-    const at = body.index + body[0].length;
-    return `${html.slice(0, at)}${capture}${html.slice(at)}`;
-  }
-  return html;
+  if (html.includes('data-isotone-native')) return html;
+  return intoHead(html, '<script data-isotone-native>window.__isotoneFetch=window.fetch.bind(window)</script>') ?? html;
 }

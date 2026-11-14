@@ -43,17 +43,12 @@ const minute = () => Math.floor(Date.now() / 60_000) * 60_000;
  * guards optimistic writes so an older response never restores a deleted note
  * or undoes an edit. `write` wraps one optimistic change and its request.
  */
-export function useNotes(config: IsotoneStoreConfig, visible: boolean, getSelections?: () => Record<string, string> | undefined) {
-  const selections = useRef(getSelections);
-  selections.current = getSelections;
+export function useNotes(config: IsotoneStoreConfig, visible: boolean) {
   const collect = config.feedback;
   // A new endpoint or storage key is a new store; the same config spelled anew each render is not.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the store depends on these fields only.
   const store = useMemo<NotesStore>(
-    () =>
-      collect
-        ? createFeedbackStore({ ...collect, key: config.key ?? FEEDBACK_STORAGE_KEY, getSelections: () => selections.current?.() })
-        : createIsotoneStore(config),
+    () => (collect ? createFeedbackStore({ ...collect, key: config.key ?? FEEDBACK_STORAGE_KEY }) : createIsotoneStore(config)),
     [config.endpoint, config.key, collect?.endpoint, collect?.name, collect?.release],
   );
   const available = Boolean(config.endpoint || collect);

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync,
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { version } from '../../package.json';
 import { docPath } from '../../src/cli/docs';
@@ -27,7 +27,17 @@ function write(root: string, file: string, text: string, mtime?: number): void {
   if (mtime !== undefined) utimesSync(abs, new Date(mtime), new Date(mtime));
 }
 
-function notes(root: string, list: { id: string; createdAt: string; route?: string; viewport?: { w: number; h: number } }[]): void {
+function notes(
+  root: string,
+  list: {
+    id: string;
+    createdAt: string;
+    route?: string;
+    viewport?: { w: number; h: number };
+    variant?: { axisId: string; label: string; optionId?: string; value?: string };
+    selections?: Record<string, string>;
+  }[],
+): void {
   write(
     root,
     NOTES,
@@ -69,6 +79,43 @@ describe('--done waits for the fix to land', () => {
     write(root, 'src/App.jsx', 'export default function App() { return <button>Get started</button>; }\n', Date.now() + 2000);
     expect(await runCli(['--done', 'aaaa'], captureIo(root))).toBe(0);
     expect(stored(root)[0]?.done).toBe(true);
+  });
+
+  // Any change counts, since a fix often lands away from the element's component; naming what was
+  // counted shows when that was someone else's change.
+  it('names the files it counted as the fix', async () => {
+    const root = repo();
+    notes(root, [{ id: 'aaaa1111', createdAt: new Date(Date.now() + 1000).toISOString() }]);
+    write(root, 'README.md', 'unrelated\n', Date.now() + 2000);
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    expect(io.text.out).toContain('Counted as its fix, changed since the note: README.md.');
+
+    notes(root, [{ id: 'bbbb2222', createdAt: ago(60_000) }]);
+    expect(await runCli(['--working', 'bbbb'], captureIo(root))).toBe(0);
+    for (const file of ['a.css', 'b.css', 'c.css', 'd.css', 'e.css', 'f.css']) write(root, `src/${file}`, 'a {}\n', Date.now() + 3000);
+    expect(await runCli(['variant', 'new', 'hero-a', '--force'], captureIo(root))).toBe(0);
+    const json = captureIo(join(root, 'src'));
+    expect(await runCli(['--done', 'bbbb', '--json'], json)).toBe(0);
+    expect(JSON.parse(json.text.out)).toHaveLength(1);
+    // From where the agent runs; a variant is one change; past five, a count.
+    expect(json.text.err).toContain('Counted as its fix, changed since --working: ../.isotone/variants/hero-a/, ../README.md, a.css,');
+    expect(json.text.err).toContain('b.css, c.css and 3 more.');
+    // A staged edit of a file written before is a change no modification time names.
+    const fresh = repo();
+    write(fresh, 'src/staged.css', 'a {}\n', Date.now() - 120_000);
+    notes(fresh, [{ id: 'dddd4444', createdAt: ago(60_000) }]);
+    expect(await runCli(['--working', 'dddd'], captureIo(fresh))).toBe(0);
+    execFileSync('git', ['add', 'src/staged.css'], { cwd: fresh });
+    const staged = captureIo(fresh);
+    expect(await runCli(['--done', 'dddd'], staged)).toBe(0);
+    expect(staged.text.out).toContain('Counted as its fix: a staged or committed change since --working.');
+
+    // --force counts nothing.
+    notes(root, [{ id: 'cccc3333', createdAt: ago(60_000) }]);
+    const forced = captureIo(root);
+    expect(await runCli(['--done', 'cccc', '--force'], forced)).toBe(0);
+    expect(forced.text.out).not.toContain('Counted');
   });
 
   it('counts a fix that was committed after the note', async () => {
@@ -263,12 +310,215 @@ describe('--done and variants', () => {
     expect(await runCli(['--done', 'bbbb', '--json'], json)).toBe(0);
     expect(JSON.parse(json.text.out)).toHaveLength(1);
     expect(json.text.err).toContain('npx isotone variant sync hero-left');
-    expect(json.text.err).toContain('Active now, so the page shows its copy instead of the real file: hero-left.');
+    expect(json.text.err).toContain('The reviewer may be looking at one of these copies, without your fix');
+    expect(json.text.err).toContain(
+      '  hero-left (src/App.jsx): active in .isotone/active.json, which tabs without a pick of their own show',
+    );
+    expect(json.text.err).not.toContain('hero-centered (src/App.jsx): active');
+    // Switching the server's default would move every tab that follows it, so it is not offered.
+    expect(json.text.err).not.toContain('variant use default');
 
     // Another page's note says nothing about these.
     const other = captureIo(root);
     expect(await runCli(['--done', 'cccc'], other)).toBe(0);
     expect(other.text.out).not.toContain('variant sync');
+  });
+
+  it('says nothing of an active variant that copies none of the files the fix changed', async () => {
+    const root = repo();
+    write(root, 'src/index.css', 'body { margin: 0; }\n', Date.now() - 120_000);
+    notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000) }]);
+    expect(await runCli(['variant', 'new', 'pricing-featured', '--route', '/'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'add', 'pricing-featured', 'src/App.jsx'], captureIo(root))).toBe(0);
+    // Another tab's pick, now the server's default.
+    expect(await runCli(['variant', 'use', 'pricing-featured'], captureIo(root))).toBe(0);
+    write(root, 'src/index.css', 'body { margin: 8px; }\n', Date.now() + 2000);
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    expect(io.text.out).not.toContain('pricing-featured (');
+    expect(io.text.out).not.toContain('variant use');
+  });
+
+  it("goes by the option a note is about, or the pick it was written with, over the server's default", async () => {
+    const root = repo();
+    const about = (optionId: string) => ({ axisId: 'hero', label: 'Hero', optionId });
+    // "Feedback on this selector" names no option, only the tab's pick as `value`.
+    const picked = (value: string) => ({ axisId: 'hero', label: 'Hero', value });
+    notes(root, [
+      { id: 'aaaa1111', createdAt: ago(60_000), variant: about('default') },
+      { id: 'bbbb2222', createdAt: ago(60_000), variant: about('hero-centered') },
+      { id: 'cccc3333', createdAt: ago(60_000), variant: picked('default') },
+      { id: 'dddd4444', createdAt: ago(60_000), variant: picked('hero-centered') },
+    ]);
+    for (const id of ['hero-left', 'hero-centered']) {
+      expect(await runCli(['variant', 'new', id, '--route', '/', '--group', 'hero'], captureIo(root))).toBe(0);
+      expect(await runCli(['variant', 'add', id, 'src/App.jsx'], captureIo(root))).toBe(0);
+    }
+    expect(await runCli(['variant', 'use', 'hero-left'], captureIo(root))).toBe(0);
+    write(root, 'src/App.jsx', 'export default function App() { return <button>Start</button>; }\n', Date.now() + 2000);
+
+    // Written on Default: the page showed the real file, whatever the server's default says.
+    const onDefault = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], onDefault)).toBe(0);
+    expect(onDefault.text.out).toContain('hero-left (src/App.jsx): npx isotone variant sync hero-left');
+    expect(onDefault.text.out).not.toContain('The reviewer may be looking');
+
+    const onCentered = captureIo(root);
+    expect(await runCli(['--done', 'bbbb'], onCentered)).toBe(0);
+    expect(onCentered.text.out).toContain('  hero-centered (src/App.jsx): the note is about this option');
+    expect(onCentered.text.out).not.toContain('hero-left (src/App.jsx): active');
+
+    const pickedDefault = captureIo(root);
+    expect(await runCli(['--done', 'cccc'], pickedDefault)).toBe(0);
+    expect(pickedDefault.text.out).not.toContain('The reviewer may be looking');
+
+    const pickedCentered = captureIo(root);
+    expect(await runCli(['--done', 'dddd'], pickedCentered)).toBe(0);
+    expect(pickedCentered.text.out).toContain('  hero-centered (src/App.jsx): picked when the note was written');
+  });
+
+  it('sends a copy with no recorded base to a comparison by hand, not to variant sync', async () => {
+    const root = repo();
+    notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000) }]);
+    expect(await runCli(['variant', 'new', 'hero-old', '--route', '/'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'add', 'hero-old', 'src/App.jsx'], captureIo(root))).toBe(0);
+    // What a copy made outside a Git repository records.
+    const manifest = join(root, '.isotone', 'variants', 'hero-old', 'variant.json');
+    const parsed = JSON.parse(readFileSync(manifest, 'utf8'));
+    parsed.files['src/App.jsx'].base = null;
+    writeFileSync(manifest, JSON.stringify(parsed));
+    write(root, 'src/App.jsx', 'export default function App() { return <button>Go</button>; }\n', Date.now() + 2000);
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    expect(io.text.out).not.toContain('variant sync hero-old');
+    expect(io.text.out).toContain(
+      'so `variant sync` cannot merge the fix. Compare each with its real file by hand:\n  hero-old (src/App.jsx)',
+    );
+  });
+
+  it('names an active copy of a stylesheet whatever the note was on, since every tab follows it', async () => {
+    const root = repo();
+    write(root, 'src/index.css', 'body { margin: 0; }\n', Date.now() - 120_000);
+    notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000), variant: { axisId: 'theme', label: 'Theme', value: 'default' } }]);
+    expect(await runCli(['variant', 'new', 'theme-dark', '--route', '/', '--group', 'theme'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'add', 'theme-dark', 'src/index.css'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'use', 'theme-dark'], captureIo(root))).toBe(0);
+    write(root, 'src/index.css', 'body { margin: 8px; }\n', Date.now() + 2000);
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    expect(io.text.out).toContain('  theme-dark (src/index.css): active in .isotone/active.json, which every tab follows for a stylesheet');
+    // A tab already on Default still shows the copy until Default is the latest pick.
+    expect(io.text.out).toContain('(a stylesheet: once Default is the latest pick in any tab)');
+  });
+
+  it('sends a copy with no recorded base to a comparison by hand, and offers no sync without Git', async () => {
+    const root = repo();
+    notes(root, [
+      { id: 'aaaa1111', createdAt: ago(60_000) },
+      { id: 'bbbb2222', createdAt: ago(60_000) },
+    ]);
+    for (const id of ['old', 'new']) {
+      expect(await runCli(['variant', 'new', id, '--route', '/'], captureIo(root))).toBe(0);
+      expect(await runCli(['variant', 'add', id, 'src/App.jsx'], captureIo(root))).toBe(0);
+    }
+    // What Isotone 1.5.0 recorded for a copy made outside a repository.
+    const manifest = join(root, '.isotone/variants/old/variant.json');
+    const old = JSON.parse(readFileSync(manifest, 'utf8'));
+    old.files['src/App.jsx'].base = null;
+    writeFileSync(manifest, JSON.stringify(old));
+    write(root, 'src/App.jsx', 'export default function App() { return <button>Get started</button>; }\n', Date.now() + 2000);
+
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    expect(io.text.out).toContain('new (src/App.jsx): npx isotone variant sync new');
+    // One list, by hand, for copies with no base (see the test above): the merge's combined wording.
+    expect(io.text.out).toContain('Compare each with its real file by hand:\n  old (src/App.jsx)');
+    expect(io.text.out).not.toContain('variant sync old');
+
+    vi.stubEnv('PATH', '');
+    try {
+      const noGit = captureIo(root);
+      expect(await runCli(['--done', 'bbbb'], noGit)).toBe(0);
+      expect(noGit.text.out).toContain('  new (src/App.jsx)\n');
+      expect(noGit.text.out).toContain('Git is not installed, so `variant sync` cannot merge the change in');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  // #61 trusts a note's own pick over .isotone/active.json because a live tab keeps its own; #63 tells
+  // the setups apart. Where picks are shared (no React, Vite 5, `live: false`), every tab shows
+  // active.json, whatever the note was written on.
+  it('names an active copy every tab shows where picks are shared, whatever the note was written on', async () => {
+    const root = repo();
+    write(root, 'package.json', JSON.stringify({ devDependencies: { vite: '^7.0.0', vue: '^3.5.0' } }));
+    write(root, 'vite.config.ts', "import { isotone } from 'isotone/vite';\nexport default { plugins: [isotone()] };\n");
+    notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000), variant: { axisId: 'hero', label: 'Hero', optionId: 'default' } }]);
+    for (const id of ['hero-left', 'hero-centered']) {
+      expect(await runCli(['variant', 'new', id, '--route', '/', '--group', 'hero'], captureIo(root))).toBe(0);
+      expect(await runCli(['variant', 'add', id, 'src/App.jsx'], captureIo(root))).toBe(0);
+    }
+    // Picked after the note was written: in this setup it changed every tab.
+    expect(await runCli(['variant', 'use', 'hero-left'], captureIo(root))).toBe(0);
+    write(root, 'src/App.jsx', 'export default function App() { return <button>Start</button>; }\n', Date.now() + 2000);
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    expect(io.text.out).toContain('  hero-left (src/App.jsx): active in .isotone/active.json, which every tab shows here');
+    expect(io.text.out).not.toContain('hero-centered (src/App.jsx): active');
+    expect(io.text.out).toContain('since `variant use` moves every tab here.');
+  });
+
+  // Next runs no Vite plugin, so no copy is served (#63): the page shows the fix, whatever is active,
+  // and a copy made there anyway (--force) needs no sync.
+  it('says nothing of variants where nothing serves them', async () => {
+    const root = repo();
+    write(root, 'package.json', JSON.stringify({ dependencies: { next: '16.0.0', react: '^19.0.0' } }));
+    write(root, 'next.config.ts', 'export default {};\n');
+    notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000), variant: { axisId: 'hero', label: 'Hero', optionId: 'hero-left' } }]);
+    expect(await runCli(['variant', 'new', 'hero-left', '--route', '/', '--group', 'hero', '--force'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'add', 'hero-left', 'src/App.jsx', '--force'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'use', 'hero-left', '--force'], captureIo(root))).toBe(0);
+    write(root, 'src/App.jsx', 'export default function App() { return <button>Start</button>; }\n', Date.now() + 2000);
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    expect(io.text.out).not.toContain('variant sync');
+    expect(io.text.out).not.toContain('The reviewer may be looking');
+  });
+
+  // #69 records the picks a note was written under. In live switching (#61) those are the tab's own,
+  // so a note pinned to an element (about no selector) still says which copy its reviewer saw.
+  it('names the copy a note was written under, from its selections, though active.json moved on', async () => {
+    const root = repo();
+    notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000), selections: { hero: 'hero-left' } }]);
+    for (const id of ['hero-left', 'hero-centered']) {
+      expect(await runCli(['variant', 'new', id, '--route', '/', '--group', 'hero'], captureIo(root))).toBe(0);
+      expect(await runCli(['variant', 'add', id, 'src/App.jsx'], captureIo(root))).toBe(0);
+    }
+    // Another tab went back to Default since.
+    expect(await runCli(['variant', 'use', 'default'], captureIo(root))).toBe(0);
+    write(root, 'src/App.jsx', 'export default function App() { return <button>Start</button>; }\n', Date.now() + 2000);
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    expect(io.text.out).toContain('  hero-left (src/App.jsx): picked when the note was written');
+    expect(io.text.out).not.toContain('hero-centered (src/App.jsx): picked');
+  });
+
+  // #69's listing names a pick that is a variant's id, read with listVariants; #66 leaves 1.5.0's
+  // copies without a base, which listVariants still lists.
+  it("says a note's pick ran a variant copy, even one with no recorded base", async () => {
+    const root = repo();
+    notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000), selections: { hero: 'hero-left' } }]);
+    expect(await runCli(['variant', 'new', 'hero-left', '--route', '/', '--group', 'hero'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'add', 'hero-left', 'src/App.jsx'], captureIo(root))).toBe(0);
+    const manifest = join(root, '.isotone/variants/hero-left/variant.json');
+    const parsed = JSON.parse(readFileSync(manifest, 'utf8'));
+    parsed.files['src/App.jsx'].base = null;
+    writeFileSync(manifest, JSON.stringify(parsed));
+    const io = captureIo(root);
+    expect(await runCli([], io)).toBe(0);
+    expect(io.text.out).toContain(
+      '⊙ selections: hero=hero-left (the page showed these, not the defaults; source lines may be lines of the active variant copy)',
+    );
   });
 
   it('names copies on the route that still hold conflict markers', async () => {

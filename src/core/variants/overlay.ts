@@ -6,6 +6,7 @@ import { matchRoute } from '../routes';
 import type { IsotoneElement } from '../types';
 import type { SelectVariantAxis, RangeVariantAxis, ColorVariantAxis, VariantAxis, VariantSelections } from './axes';
 import { axisDefault, isValidSelection, formatRangeValue } from './helpers';
+import { splitSectionLabel } from './sections';
 import type { VariantsSource } from './source';
 
 /**
@@ -44,9 +45,11 @@ export interface OverlayVariant {
   createdAt: string;
   /**
    * Repo-relative source path → what the override was derived from. `base`
-   * is the git blob id of the real file when the override was made (`null`
-   * when the file was not hashable), so a later change to the real file can
-   * be detected and three-way merged into the override.
+   * is the git blob id of the real file when the override was made (outside
+   * a repository its bytes sit in the variant's `.isotone-base/`; `null` for
+   * an added file, or a copy made outside one by Isotone 1.5.0 and earlier),
+   * so a later change to the real file can be detected and three-way merged
+   * into the override.
    */
   /** `added`: a file the project does not have; the variant introduces it. */
   files: Record<string, { base: string | null; added?: true }>;
@@ -67,7 +70,7 @@ export interface OverlayVariantStatus extends OverlayVariant {
  * A knob: a range, colour or select axis the host declares in `.isotone/knobs.json`
  * next to its overlay variants. The panel renders it as a slider (or a colour
  * pick) on the routes it names, and the value reaches the page as a CSS
- * custom property on `<html>`, `--knob-<id>`, with the axis unit appended
+ * custom property on `:root`, `--knob-<id>`, with the axis unit appended
  * (`--knob-fade-from: 40%`). The host reads it with a fallback that is the
  * committed default: `var(--knob-fade-from, 0%)`. "Make default" files
  * the moved knobs in the same `[set-defaults]` note as the variant picks, so
@@ -89,6 +92,9 @@ export interface OverlayVariantsList {
   active: string[];
   /** The host's knobs, every route; the client filters by route. */
   knobs?: KnobAxis[];
+  /** The dev server's HMR client (Vite's `/@vite/client`, under its base),
+   *  which sends {@link ACTIVE_EVENT}; absent without one. */
+  hmr?: string;
 }
 
 /** The custom property a knob writes: `--knob-<id>`. */
@@ -98,7 +104,7 @@ export function knobVar(id: string): string {
 
 /** Fired on `<html>`, bubbling, when a knob's value changes. `detail` is
  *  `{ id, value }` with the same value the custom property holds, or `null`
- *  when the knob went back to its default. */
+ *  when the knob went back to its default or the page left its route. */
 const KNOBS_EVENT = 'isotone:knob';
 
 /** The property's value: a range carries its unit, a colour is its hex, a select is the option id. */
@@ -106,12 +112,184 @@ export function knobCssValue(axis: KnobAxis, value: string): string {
   return axis.kind === 'range' ? `${value}${axis.unit ?? ''}` : value;
 }
 
-/** The knobs that belong on `route`. */
-export function knobsFor(knobs: KnobAxis[] | undefined, route: string): KnobAxis[] {
+/** The knobs that belong on `route`; every knob without one. */
+export function knobsFor(knobs: KnobAxis[] | undefined, route?: string): KnobAxis[] {
+  if (route === undefined) return knobs ?? [];
   return (knobs ?? []).filter((k) => {
     const patterns = k.route === undefined ? [undefined] : ([] as (string | undefined)[]).concat(k.route);
     return patterns.some((p) => variantAppliesTo(p, route));
   });
+}
+
+/**
+ * The declarations knob properties live in: the `:root` rule of a stylesheet
+ * adopted by the document (`document.adoptedStyleSheets`). It is no node, so
+ * a framework that renders `<html>` (React Router, Next.js) has nothing of it
+ * to hydrate, and nothing a head swap removes. Where a document cannot adopt
+ * sheets, a `<style>` at the end of `<head>`. Null when there is none yet and
+ * `create` is false, or when the page will not take styles; it never throws.
+ * Self-contained, so the Vite plugin's inline script carries it too.
+ */
+export function knobStyle(doc: Document, create: boolean): CSSStyleDeclaration | null {
+  try {
+    const win = doc.defaultView as (Window & typeof globalThis & { __isotoneKnobs?: CSSStyleSheet }) | null;
+    let sheet = win?.__isotoneKnobs ?? doc.querySelector<HTMLStyleElement>('style[data-isotone-knobs]')?.sheet ?? null;
+    if (!sheet && create) {
+      if (win && 'adoptedStyleSheets' in doc) {
+        sheet = win.__isotoneKnobs = new win.CSSStyleSheet();
+      } else {
+        const element = doc.createElement('style');
+        element.setAttribute('data-isotone-knobs', '');
+        doc.head.appendChild(element);
+        sheet = element.sheet;
+      }
+    }
+    if (!sheet) return null;
+    // The app may have replaced the adopted list since.
+    if (sheet === win?.__isotoneKnobs && !doc.adoptedStyleSheets.includes(sheet))
+      doc.adoptedStyleSheets = [...doc.adoptedStyleSheets, sheet];
+    if (sheet.cssRules.length === 0) sheet.insertRule(':root{}');
+    return (sheet.cssRules[0] as CSSStyleRule).style;
+  } catch {
+    return null;
+  }
+}
+
+/** How long select attributes wait for a hydration the page expects; after it they apply anyway. */
+const HYDRATION_WAIT_MS = 5000;
+/** How long the panel keeps watching for that hydration to write them again; after it, it gives up. */
+const HYDRATION_WATCH_MS = 60_000;
+
+/**
+ * What every knob source on a document has written there, kept on its window so
+ * that a remount, a second source or a second copy of Isotone shares it: the
+ * properties (the event compares against them), the attributes, and the wait
+ * for hydration they are held in.
+ */
+interface PageKnobs {
+  written: Map<string, string>;
+  attributes: Map<string, string | null>;
+  waitingSince: number | null;
+  gaveUp: boolean;
+  timer: ReturnType<typeof setTimeout> | null;
+  users: number;
+}
+
+function pageKnobs(doc: Document): PageKnobs {
+  const win = (doc.defaultView ?? {}) as { __isotoneKnobPage?: PageKnobs };
+  win.__isotoneKnobPage ??= { written: new Map(), attributes: new Map(), waitingSince: null, gaveUp: false, timer: null, users: 0 };
+  return win.__isotoneKnobPage;
+}
+
+/**
+ * The page as `applyKnobValues` writes it: properties in {@link knobStyle}, at
+ * `!important` so a host's own `:root` rule does not win, and select attributes
+ * and the event on `<html>`. The event compares against what was last written
+ * on the page ({@link PageKnobs}), so a full load announces each moved knob once
+ * even though the head script already put its value on.
+ *
+ * React compares the attributes of an `<html>` it renders while it hydrates, so
+ * the attributes wait while a React root on the document has not hydrated
+ * `<html>` yet, or while a page {@link applyStoredKnobs} marked as hydrated by
+ * React has no React root at all; React's own markers on the nodes tell which.
+ * After {@link HYDRATION_WAIT_MS} they apply anyway. When the wait ends, every
+ * attribute is written again, since React clears `<html>`'s when it falls back
+ * to rendering the page itself. A watch that runs out gives up for good: later
+ * writes apply at once. `dispose` stops the watch once no source needs it.
+ */
+function pageKnobRoot(doc: Document): Parameters<typeof applyKnobValues>[2] & { dispose(): void } {
+  // Read `<html>` each time: React 18 replaces it when it gives up hydrating the document.
+  const html = () => doc.documentElement;
+  const page = pageKnobs(doc);
+  page.users++;
+  const has = (node: object, key: string) => Object.keys(node).some((k) => k.startsWith(key));
+  const marked = () => (doc.defaultView as { __isotoneHydrates?: boolean } | null)?.__isotoneHydrates === true;
+  const hydrating = () => !has(html(), '__reactFiber$') && (has(doc, '__reactContainer$') || (marked() && !has(doc, '_reactListening')));
+  const writeAll = () => {
+    for (const [name, value] of page.attributes) {
+      if (value === null) html().removeAttribute(name);
+      else html().setAttribute(name, value);
+    }
+  };
+  const waited = () => (page.waitingSince === null ? 0 : Date.now() - page.waitingSince);
+  const settle = (capped: boolean) => {
+    page.timer = null;
+    if (page.waitingSince === null) return;
+    if (hydrating()) {
+      if (waited() < HYDRATION_WATCH_MS) {
+        if (!capped && waited() >= HYDRATION_WAIT_MS) writeAll();
+        page.timer = setTimeout(settle, 50, capped || waited() >= HYDRATION_WAIT_MS);
+        return;
+      }
+      page.gaveUp = true;
+    }
+    page.waitingSince = null;
+    writeAll();
+    // And the properties, should the render have taken a fallback `<style>` with it.
+    for (const [name, value] of page.written) knobStyle(doc, true)?.setProperty(name, value, 'important');
+  };
+  const write = (name: string, value: string | null) => {
+    page.attributes.set(name, value);
+    if (page.gaveUp || waited() >= HYDRATION_WAIT_MS) writeAll();
+    if (page.gaveUp || page.waitingSince !== null) return;
+    page.waitingSince = Date.now();
+    settle(false);
+  };
+  let disposed = false;
+  return {
+    style: {
+      setProperty: (name, value) => {
+        page.written.set(name, value);
+        knobStyle(doc, true)?.setProperty(name, value, 'important');
+      },
+      removeProperty: (name) => {
+        page.written.delete(name);
+        knobStyle(doc, false)?.removeProperty(name);
+      },
+      getPropertyValue: (name) => page.written.get(name) ?? '',
+    },
+    setAttribute: (name, value) => write(name, value),
+    removeAttribute: (name) => write(name, null),
+    dispatchEvent: (event) => html().dispatchEvent(event),
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      page.users--;
+      if (page.users > 0) return;
+      if (page.timer !== null) clearTimeout(page.timer);
+      page.timer = null;
+      page.waitingSince = null;
+    },
+  };
+}
+
+/**
+ * The stored knob values, on the page before it first paints: the Vite plugin
+ * runs this in an inline `<head>` script with the requested route's knobs as
+ * `[id, unit, default, select]`. On a page React server-renders and hydrates
+ * (`hydrates`), select attributes wait for the panel, which adds them once React
+ * has hydrated `<html>`. Self-contained, for that script; the panel checks each
+ * value against its knob when it loads and puts the page right.
+ */
+export function applyStoredKnobs(
+  doc: Document,
+  key: string,
+  knobs: [id: string, unit: string, fallback: string, select: boolean][],
+  hydrates: boolean,
+  style: typeof knobStyle,
+): void {
+  try {
+    if (hydrates) (doc.defaultView as { __isotoneHydrates?: boolean }).__isotoneHydrates = true;
+    const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
+    for (const [id, unit, fallback, select] of knobs) {
+      const value = stored[id];
+      if (typeof value !== 'string' || value === fallback) continue;
+      style(doc, true)?.setProperty(`--knob-${id}`, value + unit, 'important');
+      if (select && !hydrates) doc.documentElement.setAttribute(`data-knob-${id}`, value);
+    }
+  } catch {
+    // Storage blocked or unreadable, or no window: the panel applies what it can when it loads.
+  }
 }
 
 /** Write every knob's value onto the root element; missing values clear the property. */
@@ -119,7 +297,7 @@ export function applyKnobValues(
   knobs: KnobAxis[],
   values: VariantSelections,
   root: {
-    style: { setProperty(name: string, value: string): void; removeProperty(name: string): void };
+    style: { setProperty(name: string, value: string): void; removeProperty(name: string): void; getPropertyValue?(name: string): string };
     setAttribute?(name: string, value: string): void;
     removeAttribute?(name: string): void;
     getAttribute?(name: string): string | null;
@@ -130,7 +308,7 @@ export function applyKnobValues(
     const v = values[k.id];
     const cleared = v === undefined || v === axisDefault(k);
     const next = cleared ? null : knobCssValue(k, v);
-    const previous = (root.style as { getPropertyValue?(name: string): string }).getPropertyValue?.(knobVar(k.id)) || null;
+    const previous = root.style.getPropertyValue?.(knobVar(k.id)) || null;
     if (next === null) root.style.removeProperty(knobVar(k.id));
     else root.style.setProperty(knobVar(k.id), next);
     if (k.kind !== 'range' && k.kind !== 'color') {
@@ -156,6 +334,25 @@ export function knobDelta(knobs: KnobAxis[], values: VariantSelections): { axis:
 
 /** The endpoint path the client calls. */
 export const VARIANTS_ENDPOINT = '/api/isotone/variants';
+
+/**
+ * The server's active set changed (another tab's pick, `variant use`, a copy
+ * gaining or losing conflict markers): `{ active }`, sent over the dev
+ * server's HMR channel once a server render has the swap. A live tab without
+ * a pick of its own follows it; the overlay source reads its listing again.
+ */
+export const ACTIVE_EVENT = 'isotone:active';
+
+/** Something else under the variants dir changed, such as a copy gaining or
+ *  losing conflict markers. Only the overlay source listens: a live tab
+ *  follows the server's set on {@link ACTIVE_EVENT} alone. */
+export const VARIANTS_EVENT = 'isotone:variants';
+
+/** Why `id` cannot be shown: copies holding conflict markers from `variant sync`.
+ *  The CLI, the endpoint and the panel all refuse it with this. */
+export function conflictedReason(id: string, files: string[]): string {
+  return `"${id}" holds conflict markers from \`variant sync\` in ${files.join(', ')}, so it cannot be shown until they are resolved.`;
+}
 
 /** Where the browser keeps knob values between reloads. */
 export const KNOBS_STORAGE_KEY = 'isotone:knobs';
@@ -277,10 +474,11 @@ export function variantAppliesTo(pattern: string | undefined, route: string): bo
   return matchRoute(pattern, route);
 }
 
-export function overlayAxes(list: OverlayVariantsList, route: string): SelectVariantAxis[] {
+export function overlayAxes(list: OverlayVariantsList, route?: string): SelectVariantAxis[] {
   const axes: SelectVariantAxis[] = [];
   for (const group of overlayGroups(list.variants)) {
-    const mine = group.members.filter((v) => variantAppliesTo(v.route, route));
+    // No route, as in `variant list` without one: every group with every member.
+    const mine = route === undefined ? group.members : group.members.filter((v) => variantAppliesTo(v.route, route));
     if (mine.length === 0) continue;
     const section = group.members.find((m) => m.section !== undefined)?.section;
     axes.push({
@@ -290,11 +488,28 @@ export function overlayAxes(list: OverlayVariantsList, route: string): SelectVar
       defaultOption: OVERLAY_DEFAULT_OPTION,
       options: [
         { id: OVERLAY_DEFAULT_OPTION, label: 'Default', hint: 'The committed source' },
-        ...mine.map((v) => ({ id: v.id, label: v.label || v.id, hint: overlayHint(v) })),
+        // A copy with conflict markers cannot be shown, so it cannot be picked.
+        ...mine.map((v) => ({
+          id: v.id,
+          label: v.label || v.id,
+          hint: overlayHint(v),
+          ...(v.conflicts?.length ? { disabled: true } : {}),
+        })),
       ],
     });
   }
   return axes;
+}
+
+/**
+ * The listing's knobs on `route` (every one without a route), less any whose id
+ * a file-variant group has on any route. A knob and a group with one id would
+ * share a selection, a `?v=` entry and a note reference, so the group keeps it;
+ * `variant list` names the knob that is left out.
+ */
+export function overlayKnobs(list: { variants: OverlayVariant[]; knobs?: KnobAxis[] }, route?: string): KnobAxis[] {
+  const groups = new Set(overlayGroups(list.variants).map((group) => group.id));
+  return knobsFor(list.knobs, route).filter((knob) => !groups.has(knob.id));
 }
 
 function overlayHint(v: OverlayVariantStatus): string {
@@ -317,8 +532,9 @@ function overlayHint(v: OverlayVariantStatus): string {
  */
 export interface LiveVariantSelection {
   readonly active: string[];
-  /** Switch the tab; true when the page has to reload to show it. */
-  select(next: string[]): boolean;
+  /** Switch the tab and keep it there, `groups` (those the reviewer set) at
+   *  Default included; true when the page has to reload to show it. */
+  select(next: string[], groups?: string[]): boolean;
   subscribe(listener: () => void): () => void;
   reload(): void;
   /** Whether switching to `next` reloads the page. */
@@ -326,6 +542,52 @@ export interface LiveVariantSelection {
   /** Show `next` in this tab for a moment, outside the URL and the server; `null` ends it.
    *  False, changing nothing, when `next` would need a reload. */
   preview?(next: string[] | null): boolean;
+}
+
+/**
+ * What the panel says when the page's `?v=` names picks it does not show. Only
+ * live mode (React on Vite 6 or later) keeps picks per tab and reads `?v=`;
+ * everywhere else every tab shows `.isotone/active.json`, so a link made in
+ * live mode, or by hand, would otherwise be ignored without a word. Pairs that
+ * name no group here are left alone: they may be the host's own.
+ */
+export function unappliedLinkNotice(list: OverlayVariantsList, active: string[], search: string): string | null {
+  const raw = new URLSearchParams(search).get('v');
+  if (!raw) return null;
+  const groups = new Map(overlayGroups(list.variants).map((group) => [group.id, group]));
+  const shown = new Set(active);
+  const asked: string[] = [];
+  for (const pair of raw.split(',')) {
+    const at = pair.indexOf(':');
+    const group = at < 0 ? undefined : groups.get(pair.slice(0, at));
+    if (!group) continue;
+    const want = pair.slice(at + 1);
+    const member = group.members.find((m) => m.id === want);
+    if (!member && want !== OVERLAY_DEFAULT_OPTION) continue;
+    const current = group.members.find((m) => shown.has(m.id))?.id ?? OVERLAY_DEFAULT_OPTION;
+    if (current === want) continue;
+    const section = group.members.find((m) => m.section !== undefined)?.section;
+    asked.push(`${splitSectionLabel(group.label, section).fullLabel}: ${member ? member.label || member.id : 'Default'}`);
+  }
+  if (asked.length === 0) return null;
+  // Stays true while the panel keeps it, even once the reviewer has picked what the link asked for.
+  return `This link’s ?v= asks for ${asked.join('; ')}, but links don’t choose variants here. Pick ${asked.length > 1 ? 'them' : 'it'} below instead; a pick shows in every tab. Per-tab links need live switching (React on Vite 6+).`;
+}
+
+/** What the overlay source uses of a Vite hot context.
+ *  @internal */
+export interface HotChannel {
+  on(event: string, listener: () => void): void;
+  off?(event: string, listener: () => void): void;
+}
+
+/** The page's own HMR client, at the URL the listing names: the same module,
+ *  and so the same socket, as the page's. */
+function importHot(client: string): Promise<HotChannel> {
+  // Neither Vite nor webpack (Next) should try to bundle a URL known only at run time.
+  return import(/* @vite-ignore */ /* webpackIgnore: true */ client).then((mod: { createHotContext: (owner: string) => HotChannel }) =>
+    mod.createHotContext('/@isotone/active'),
+  );
 }
 
 function pageLiveStore(): LiveVariantSelection | null {
@@ -348,19 +610,45 @@ export function createOverlayVariantsSource(cfg: {
   getRoute: () => string;
   /** Where knob values live between reloads; omit for none (tests). Default: `localStorage`. */
   storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
-  /** The element knobs write their properties on. Default: `document.documentElement`. */
+  /** Where knobs write their properties and attributes. Default: the page, through {@link knobStyle} and `<html>`. */
   knobRoot?: Parameters<typeof applyKnobValues>[2] | null;
   /** The tab's live store. Default: the one the Vite plugin put on the page, if any. */
   live?: LiveVariantSelection | null;
+  /** The page's query string, for a `?v=` the source does not apply. Default: `location.search`. */
+  getSearch?: () => string;
+  /**
+   * Axis ids another source in the same panel already shows, such as a host's
+   * own selectors. A knob with one of them is left out, as one sharing a file
+   * group's id is: never shown, never on the page, and named in the notice.
+   */
+  takenIds?: () => Iterable<string>;
+  /** Connect to the HMR client the listing names. Default: import it and
+   *  take a hot context, as a module of the page would.
+   *  @internal For tests. */
+  hot?: (client: string) => Promise<HotChannel>;
 }): VariantsSource & {
   refresh(): Promise<void>;
+  /** For the reviewer: the page's `?v=` names picks the page does not show, or a variant here
+   *  cannot be shown for its conflict markers; else null. */
+  getNotice(): string | null;
   readonly list: OverlayVariantsList | null;
   /** The knobs on the current route and their values, for the save note. */
   readonly knobs: { axes: KnobAxis[]; values: VariantSelections };
+  /** Call after a client-side navigation: puts the new route's knobs on the page,
+   *  takes the others off and notifies. Does nothing while the route is the same. */
+  routeChanged(): void;
+  /** Call when the ids `takenIds` gives may have changed (a host source loaded
+   *  its axes): puts back or takes off the knobs they leave out. */
+  takenChanged(): void;
+  /** Call when the panel unmounts: stops following the server's set, and its wait for hydration once no other source on the page needs it. */
+  dispose(): void;
 } {
   let list: OverlayVariantsList | null = null;
   let error: string | null = null;
   let intended: string[] | null = null;
+  // The selectors the reviewer set in the picks not yet posted: a Default
+  // among them also drops a pick the server keeps hidden for its conflicts.
+  let touched = new Set<string>();
   let activation: Promise<void> | null = null;
   let revision = 0;
   let refreshRevision = 0;
@@ -384,9 +672,44 @@ export function createOverlayVariantsSource(cfg: {
       previewingLive = false;
     }
   };
+  // Without a live store every tab shows the server's set, which moves when
+  // another tab picks or the CLI runs `variant use`, and a copy can gain or
+  // lose conflict markers at any time. The dev server says so on its HMR
+  // channel, which the listing names: read the listing again then, so the
+  // panel and a note's selections name what the page shows.
+  const onChange = () => {
+    void refresh().catch(() => {});
+  };
+  let channel: Promise<HotChannel | null> | null = null;
+  let disposed = false;
+  const follow = (client: string) => {
+    if (channel || disposed) return;
+    const base = new URL(cfg.endpoint, typeof location === 'undefined' ? 'http://localhost/' : location.href);
+    channel = (cfg.hot ?? importHot)(new URL(client, base).href).then(
+      (hot) => {
+        for (const event of [ACTIVE_EVENT, VARIANTS_EVENT]) hot.on(event, onChange);
+        if (disposed) for (const event of [ACTIVE_EVENT, VARIANTS_EVENT]) hot.off?.(event, onChange);
+        // Anything that changed while connecting.
+        else onChange();
+        return hot;
+      },
+      () => null,
+    );
+  };
   const current = (): string[] => live?.active ?? intended ?? list?.active ?? [];
+  /** The variants on this route that cannot be shown. */
+  const conflicted = (): OverlayVariantStatus[] => {
+    const here = new Set(selects().flatMap((axis) => axis.options.map((o) => o.id)));
+    return (list?.variants ?? []).filter((v) => here.has(v.id) && v.conflicts?.length);
+  };
   const selects = (): SelectVariantAxis[] => (list ? overlayAxes(list, cfg.getRoute()) : []);
-  const knobAxes = (): KnobAxis[] => knobsFor(list?.knobs, cfg.getRoute());
+  /** The knobs on `route` (every route without one) that no other source's selector has taken. */
+  const ownKnobs = (route?: string): KnobAxis[] => {
+    if (!list) return [];
+    const taken = new Set(cfg.takenIds?.() ?? []);
+    return overlayKnobs(list, route).filter((knob) => !taken.has(knob.id));
+  };
+  const knobAxes = (): KnobAxis[] => ownKnobs(cfg.getRoute());
   const axes = (): VariantAxis[] => [...selects(), ...knobAxes()];
 
   // Knob values are review-time state, kept in the browser rather than on
@@ -399,7 +722,8 @@ export function createOverlayVariantsSource(cfg: {
       return null;
     }
   })();
-  const knobRoot = cfg.knobRoot === undefined ? (typeof document === 'undefined' ? null : document.documentElement) : cfg.knobRoot;
+  const pageRoot = cfg.knobRoot === undefined && typeof document !== 'undefined' ? pageKnobRoot(document) : null;
+  const knobRoot = cfg.knobRoot === undefined ? pageRoot : cfg.knobRoot;
   let knobValues: VariantSelections = (() => {
     const parse = (raw: string | null): VariantSelections => {
       try {
@@ -428,8 +752,19 @@ export function createOverlayVariantsSource(cfg: {
   };
   // A hold to compare shows these over the stored values, and stores nothing.
   let previewing: VariantSelections | null = null;
+  // The route whose knobs are on the page; `routeChanged` compares against it.
+  let knobsRoute: string | null = null;
+  // A knob is on the page only on its own routes, like its slider. Elsewhere its
+  // property and attribute come off, and the stored value waits for its route.
+  // Every listed knob is written, so one the page's head script put on and the
+  // panel does not show (a taken id, an invalid value) comes off too.
   const applyKnobs = () => {
-    if (knobRoot) applyKnobValues(list?.knobs ?? [], previewing ? { ...knobValues, ...previewing } : knobValues, knobRoot);
+    knobsRoute = cfg.getRoute();
+    if (!knobRoot) return;
+    const knobs = list?.knobs ?? [];
+    const here = new Set(ownKnobs(knobsRoute).map((k) => k.id));
+    const shown = previewing ? { ...knobValues, ...previewing } : knobValues;
+    applyKnobValues(knobs, Object.fromEntries(Object.entries(shown).filter(([id]) => here.has(id))), knobRoot);
   };
   /** The active set with the given groups' members taken out: those groups at Default. */
   const withoutGroups = (axisIds: string[]): string[] => {
@@ -439,12 +774,15 @@ export function createOverlayVariantsSource(cfg: {
   async function drainActivations(): Promise<void> {
     while (intended !== null) {
       const active = intended;
+      const groups = [...touched];
+      touched = new Set();
       const sentRevision = revision;
+      let sent = false;
       try {
         const res = await request(`${cfg.endpoint}/active`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ active }),
+          body: JSON.stringify({ active, groups }),
         });
         if (!res.ok) {
           // The server knows which variants and which file are in the way.
@@ -454,13 +792,22 @@ export function createOverlayVariantsSource(cfg: {
           );
           throw new Error(typeof reason === 'string' ? reason : `Activating variants failed (${res.status}). Try again.`);
         }
-        if (list) list = { ...list, active };
+        // What the server shows now, which leaves out a copy it cannot show.
+        const shown = await res.json().then(
+          (body: { active?: unknown }) =>
+            Array.isArray(body?.active) ? body.active.filter((id): id is string => typeof id === 'string') : active,
+          () => active,
+        );
+        if (list) list = { ...list, active: shown };
         error = null;
+        sent = true;
       } catch (cause) {
         error = cause instanceof Error ? cause.message : 'Could not activate this variant. Try again.';
       }
       // Newer picks include the full intended set, including other groups.
-      // Completing or failing an older request must not discard that intent.
+      // Completing or failing an older request must not discard that intent,
+      // nor the selectors it was set in.
+      if (!sent || sentRevision !== revision) for (const group of groups) touched.add(group);
       if (sentRevision === revision) intended = null;
       emit();
     }
@@ -471,9 +818,11 @@ export function createOverlayVariantsSource(cfg: {
       live.reload();
     }
   }
-  function activate(active: string[]): void {
-    if (live?.select(active)) reloadAfterPost = true;
+  /** `groups`: the selectors the reviewer set, which the tab keeps even at Default. */
+  function activate(active: string[], groups: string[]): void {
+    if (live?.select(active, groups)) reloadAfterPost = true;
     intended = active;
+    for (const group of groups) touched.add(group);
     revision++;
     error = null;
     emit();
@@ -488,38 +837,83 @@ export function createOverlayVariantsSource(cfg: {
         if (intended !== null) scheduleActivation();
       });
   }
+  async function refresh(): Promise<void> {
+    const refreshId = ++refreshRevision;
+    const startedRevision = revision;
+    const wasActivating = activation !== null;
+    const next = await request(cfg.endpoint, undefined, async (res) => {
+      if (!res.ok) throw new Error(`Loading variants failed (${res.status})`);
+      return (await res.json()) as OverlayVariantsList;
+    });
+    if (refreshId !== refreshRevision) return;
+    // An older GET must not roll back a successful POST that finished while
+    // the listing was loading. Definitions can still refresh independently.
+    const previousKnobs = list?.knobs ?? [];
+    list = list && (wasActivating || activation !== null || startedRevision !== revision) ? { ...next, active: list.active } : next;
+    if (next.hmr) follow(next.hmr);
+    // Knobs the listing dropped, or that now write differently (another kind drops a stale
+    // `data-knob-*`, another unit changes the value), come off; `applyKnobs` below writes every listed
+    // one, so re-reading the listing as the panel opens, or after a label edit, leaves the page and the
+    // `isotone:knob` event alone.
+    const writes = (knob: KnobAxis) => `${knob.id} ${knob.kind} ${knob.kind === 'range' ? (knob.unit ?? '') : ''}`;
+    const listed = new Set((list.knobs ?? []).map(writes));
+    if (knobRoot)
+      applyKnobValues(
+        previousKnobs.filter((knob) => !listed.has(writes(knob))),
+        {},
+        knobRoot,
+      );
+    // A stored value for a knob a group now hides is dropped too, so it cannot style the page unseen.
+    const valid = new Map(overlayKnobs(list).map((knob) => [knob.id, knob]));
+    knobValues = Object.fromEntries(
+      Object.entries(knobValues).filter(([id, value]) => {
+        const knob = valid.get(id);
+        return knob && isValidSelection(knob, value);
+      }),
+    );
+    applyKnobs();
+    emit();
+  }
+  const search = cfg.getSearch ?? (() => (typeof location === 'undefined' ? '' : location.search));
   return {
     getError: () => error,
+    // A live tab follows its own `?v=`, so only a source without one can leave a link unapplied.
+    // Read as the picks are now; the view keeps what it showed until the panel closes.
+    getNotice: () => {
+      if (!list) return null;
+      const taken = new Set(cfg.takenIds?.() ?? []);
+      const clashes = overlayKnobs(list, cfg.getRoute()).filter((knob) => taken.has(knob.id));
+      const clash = clashes.length
+        ? `Left out of .isotone/knobs.json: ${clashes.map((knob) => knob.id).join(', ')}, since one of the app’s own selectors has ${clashes.length > 1 ? 'each' : 'this'} id, so the panel shows only that selector. Give ${clashes.length > 1 ? 'each knob its' : 'the knob its'} own id.`
+        : null;
+      const link = live ? null : unappliedLinkNotice(list, current(), search());
+      const unshown = conflicted().map((v) => conflictedReason(v.label || v.id, v.conflicts ?? []));
+      return [link, clash, ...unshown].filter(Boolean).join(' ') || null;
+    },
     get list() {
       return list;
     },
     get knobs() {
       return { axes: knobAxes(), values: { ...knobValues } };
     },
-    async refresh() {
-      const refreshId = ++refreshRevision;
-      const startedRevision = revision;
-      const wasActivating = activation !== null;
-      const next = await request(cfg.endpoint, undefined, async (res) => {
-        if (!res.ok) throw new Error(`Loading variants failed (${res.status})`);
-        return (await res.json()) as OverlayVariantsList;
+    takenChanged() {
+      // The panel re-reads axes from the source that changed; only <html> needs this.
+      if (list) applyKnobs();
+    },
+    dispose() {
+      disposed = true;
+      pageRoot?.dispose();
+      void channel?.then((hot) => {
+        for (const event of [ACTIVE_EVENT, VARIANTS_EVENT]) hot?.off?.(event, onChange);
       });
-      if (refreshId !== refreshRevision) return;
-      // An older GET must not roll back a successful POST that finished while
-      // the listing was loading. Definitions can still refresh independently.
-      const previousKnobs = list?.knobs ?? [];
-      list = list && (wasActivating || activation !== null || startedRevision !== revision) ? { ...next, active: list.active } : next;
-      if (knobRoot) applyKnobValues(previousKnobs, {}, knobRoot);
-      const valid = new Map((list.knobs ?? []).map((knob) => [knob.id, knob]));
-      knobValues = Object.fromEntries(
-        Object.entries(knobValues).filter(([id, value]) => {
-          const knob = valid.get(id);
-          return knob && isValidSelection(knob, value);
-        }),
-      );
+    },
+    routeChanged() {
+      // Before the first listing nothing is on the page; `refresh` applies it.
+      if (!list || cfg.getRoute() === knobsRoute) return;
       applyKnobs();
       emit();
     },
+    refresh,
     getAxes: axes,
     // Knobs are properties on the page, so they switch at once. A file variant does only in live mode,
     // in this tab, when no export fixed at load differs; otherwise it is a server round trip or a reload.
@@ -559,19 +953,24 @@ export function createOverlayVariantsSource(cfg: {
         return;
       }
       const axis = selects().find((a) => a.id === axisId);
-      if (!axis || !isValidSelection(axis, value)) return;
+      // A disabled option (a copy with conflict markers) cannot be picked.
+      if (!axis || !isValidSelection(axis, value) || axis.options.find((o) => o.id === value)?.disabled) return;
       // The group's members leave the set and the pick joins it; the other
       // groups' picks ride along untouched.
       const members = new Set(axis.options.map((o) => o.id));
       const next = current().filter((id) => !members.has(id));
       if (value !== OVERLAY_DEFAULT_OPTION) next.push(value);
-      activate(next);
+      activate(next, [axis.id]);
     },
     reset() {
       knobValues = {};
       persistKnobs();
       applyKnobs();
-      activate([]);
+      // Every group, on every route: a reset leaves no pick anywhere, hidden ones included.
+      activate(
+        [],
+        overlayGroups(list?.variants ?? []).map((group) => group.id),
+      );
     },
     subscribe(listener) {
       listeners.add(listener);

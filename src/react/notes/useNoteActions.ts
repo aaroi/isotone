@@ -2,7 +2,7 @@ import { type Dispatch, type SetStateAction, useCallback, useMemo, useRef, useSt
 import { createNoteId } from '../../core/id';
 import { MAX_FEEDBACK_LENGTH } from '../../core/limits';
 import type { IsotoneElement, IsotoneNote, VariantReference } from '../../core/types';
-import type { VariantAction } from '../../core/variants';
+import type { VariantAction, VariantSelections } from '../../core/variants';
 import type { UpdateMode } from '../dock/useDockMode';
 import { createDraftText, type DraftText, useDraft } from './useDraft';
 import type { useNotes } from './useNotes';
@@ -17,6 +17,8 @@ interface NoteActionsOptions {
   write: Notes['write'];
   setNotes: Dispatch<SetStateAction<IsotoneNote[]>>;
   getPayload?: () => unknown;
+  /** Selectors off their defaults on this route, recorded with each new note. */
+  getSelections?: () => VariantSelections | undefined;
   update: UpdateMode;
   focusComposer: () => void;
   /** Where focus goes when a note needs a name before it can be sent. */
@@ -57,6 +59,7 @@ export function useNoteActions({
   write,
   setNotes,
   getPayload,
+  getSelections,
   update,
   focusComposer,
   focusName,
@@ -67,8 +70,8 @@ export function useNoteActions({
   const [editing, setEditing] = useState<IsotoneNote | null>(null);
   const [notice, setNotice] = useState('');
   // Handlers read the current render here, so they stay stable and memoized children skip unrelated renders.
-  const latest = useRef({ route, getPayload, targets, variantTarget, editing });
-  latest.current = { route, getPayload, targets, variantTarget, editing };
+  const latest = useRef({ route, getPayload, getSelections, targets, variantTarget, editing });
+  latest.current = { route, getPayload, getSelections, targets, variantTarget, editing };
   /** Saves in flight, by the temporary id of their optimistic note. */
   const saving = useRef(new Map<string, Promise<string>>());
 
@@ -92,11 +95,14 @@ export function useNoteActions({
       focusName();
       return;
     }
-    const { editing: previous, targets, variantTarget, route, getPayload } = latest.current;
+    const { editing: previous, targets, variantTarget, route, getPayload, getSelections } = latest.current;
+    // The selections a new note was filed under; an edit keeps the ones it has.
+    const selections = previous ? undefined : getSelections?.();
     const context = {
       elements: targets,
       variant: variantTarget,
       ...(previous?.variantAction ? { variantAction: previous.variantAction } : {}),
+      ...(selections ? { selections } : {}),
     };
     const noteRoute = previous?.route ?? route;
     const element = targets[0] ?? null;

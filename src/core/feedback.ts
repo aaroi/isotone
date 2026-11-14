@@ -17,9 +17,6 @@ export const MAX_RELEASE = 200;
  *  note with fifty pinned elements, and small enough that parsing one is cheap. */
 export const MAX_FEEDBACK_BODY = 262_144;
 
-/** Most selectors whose current choice a record carries. */
-export const MAX_SELECTIONS = 200;
-
 /** What the reviewer's browser was like. Every field is optional: a browser
  *  may not report one, and the server drops any that is malformed. */
 export interface FeedbackBrowser {
@@ -66,7 +63,7 @@ export interface FeedbackEntry {
   elements: IsotoneElement[];
   /** The selector or option the feedback is about. */
   variant?: VariantReference;
-  /** What every selector on the page was set to, by axis id. */
+  /** The selectors that sat off their defaults when the note was written, by axis id. */
   selections?: Record<string, string>;
   /** The window, in CSS pixels. */
   viewport?: { w: number; h: number };

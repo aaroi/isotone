@@ -114,6 +114,14 @@ const VITE_CONFIGS = ['vite.config.ts', 'vite.config.js', 'vite.config.mts', 'vi
  * port with another checkout. Otherwise it is the default.
  */
 function projectServePorts(dir: string): number[] {
+  const { ports, computed } = scriptServePorts(dir);
+  if (ports.length) return ports.slice(0, 4);
+  if (computed || usesVitePlugin(dir)) return [];
+  return [DEFAULT_PORT];
+}
+
+/** The literal ports package.json scripts hand `isotone serve`, and whether one computes its port in the shell. */
+export function scriptServePorts(dir: string): { ports: number[]; computed: boolean } {
   const ports = new Set<number>();
   let computed = false;
   try {
@@ -129,9 +137,7 @@ function projectServePorts(dir: string): number[] {
   } catch {
     /* No package.json, or not JSON. */
   }
-  if (ports.size) return [...ports].slice(0, 4);
-  if (computed || usesVitePlugin(dir)) return [];
-  return [DEFAULT_PORT];
+  return { ports: [...ports], computed };
 }
 
 function usesVitePlugin(dir: string): boolean {

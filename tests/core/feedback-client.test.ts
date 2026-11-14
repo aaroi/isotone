@@ -61,9 +61,17 @@ describe('a store that collects feedback', () => {
   it('posts a note once, signed, with the page and the browser around it', async () => {
     browser();
     const bodies = endpoint();
-    const notes = store({ name: 'Ada Lovelace', release: 'a1b2c3d', getSelections: () => ({ layout: 'grid' }) });
+    const notes = store({ name: 'Ada Lovelace', release: 'a1b2c3d' });
     const pin = { tag: 'h1', text: 'Projects', selector: 'main > h1' };
-    const id = await notes.saveNote('/projects', '  Too tight  ', pin, null, { plan: 'pro' }, { w: 1280, h: 720 }, { elements: [pin] });
+    const id = await notes.saveNote(
+      '/projects',
+      '  Too tight  ',
+      pin,
+      null,
+      { plan: 'pro' },
+      { w: 1280, h: 720 },
+      { elements: [pin], selections: { layout: 'grid' } },
+    );
     expect(fetch).toHaveBeenCalledWith('/api/feedback', expect.objectContaining({ method: 'POST' }));
     expect(bodies).toEqual([
       {

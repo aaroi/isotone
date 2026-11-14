@@ -1,7 +1,8 @@
 /**
  * Validators for note fields that arrive from the browser. Each one bounds
  * what it keeps and drops anything malformed, so a hostile or buggy page
- * cannot bloat or corrupt the notes file.
+ * cannot bloat or corrupt the notes file, or a host's feedback store. No Node
+ * here: the development endpoint and a deployed app's feedback route share them.
  */
 import type { IsotoneElement, VariantReference, VariantRemoval } from './types';
 import { MAX_SELECTOR, PAYLOAD_MAX } from './limits';
@@ -10,21 +11,24 @@ function cap(v: string, max: number): string {
   return v.slice(0, max);
 }
 
+/** How a server rewrites the `source` a page gave, such as an absolute path into one from the app. */
+type PlaceSource = (source: string) => string;
+
 /** A pinned element, or null without an object and a selector. */
-export function elementOf(value: unknown): IsotoneElement | null {
+export function elementOf(value: unknown, place?: PlaceSource): IsotoneElement | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const selector = (value as { selector?: unknown }).selector;
-  return typeof selector === 'string' && selector ? elementFields(value) : null;
+  return typeof selector === 'string' && selector ? elementFields(value, place) : null;
 }
 
 /** Every element field, each bounded, from any object; a missing selector is empty. */
-export function elementFields(value: object): IsotoneElement {
+export function elementFields(value: object, place?: PlaceSource): IsotoneElement {
   const v = value as { tag?: unknown; text?: unknown; selector?: unknown };
   return {
     tag: cap(textOf(v.tag), 30),
     text: cap(textOf(v.text), 120),
     selector: cap(textOf(v.selector), MAX_SELECTOR),
-    ...elementContext(value),
+    ...elementContext(value, place),
   };
 }
 
@@ -43,7 +47,7 @@ function stringList(value: unknown, count: number, length: number): string[] {
 }
 
 /** The optional identifying fields, each bounded; anything malformed is dropped. */
-function elementContext(value: object): Partial<IsotoneElement> {
+function elementContext(value: object, place?: PlaceSource): Partial<IsotoneElement> {
   const v = value as Record<string, unknown>;
   const out: Partial<IsotoneElement> = {};
   if (v.attributes && typeof v.attributes === 'object' && !Array.isArray(v.attributes)) {
@@ -57,7 +61,7 @@ function elementContext(value: object): Partial<IsotoneElement> {
   if (component.length) out.component = component;
   const within = stringList(v.within, 6, 120);
   if (within.length) out.within = within;
-  if (typeof v.source === 'string' && v.source) out.source = cap(v.source, 300);
+  if (typeof v.source === 'string' && v.source) out.source = cap(place ? place(v.source) : v.source, 300);
   if (typeof v.near === 'string' && v.near) out.near = cap(v.near, 120);
   const rect = v.rect as Record<string, unknown> | null | undefined;
   if (rect && typeof rect === 'object' && [rect.x, rect.y, rect.w, rect.h].every((n) => typeof n === 'number' && Number.isFinite(n))) {
@@ -77,7 +81,7 @@ function elementContext(value: object): Partial<IsotoneElement> {
 const STYLE_NAME = /^[a-z][a-z-]{0,39}$/;
 
 /** Keys that must never be copied from a request into an object. */
-export const UNSAFE_KEYS: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype']);
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 export function variantOf(value: unknown): VariantReference | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -90,6 +94,23 @@ export function variantOf(value: unknown): VariantReference | null {
     ...(typeof v.optionLabel === 'string' ? { optionLabel: cap(v.optionLabel, 200) } : {}),
     ...(typeof v.value === 'string' ? { value: cap(v.value, 200) } : {}),
   };
+}
+
+/**
+ * The selections a note was filed under, from the browser: at most 32, each an
+ * axis id (an overlay group without a name joins its members' ids with `+`)
+ * and a value of up to 64 printable characters. Anything else is dropped; null
+ * when nothing is left.
+ */
+export function selectionsOf(value: unknown): Record<string, string> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const entries = Object.entries(value)
+    .filter(
+      (entry): entry is [string, string] =>
+        /^[a-z0-9][\w.+-]{0,199}$/i.test(entry[0]) && typeof entry[1] === 'string' && /^[^\p{Cc}]{1,64}$/u.test(entry[1]),
+    )
+    .slice(0, 32);
+  return entries.length ? Object.fromEntries(entries) : null;
 }
 
 /** A sane `{ w, h }` from an untrusted viewport value, else null. */

@@ -207,7 +207,7 @@ column.
 | `viewport` | `viewport` | The window size, `{ "w": 1280, "h": 720 }` |
 | `elements` | `elements` | The pinned elements: selector, text, attributes, position and computed styles |
 | `variant` | `variant` | The selector or option the note is about |
-| `selections` | `selections` | What every selector on the page was set to |
+| `selections` | `selections` | The selectors that sat off their defaults, and what they were set to |
 | `browser` | `browser` | Language, time zone, screen size, pixel ratio, light or dark preference, touch |
 | `payload` | `payload` | Whatever the mount's `getPayload` returned |
 
@@ -375,7 +375,7 @@ page, since a browser otherwise blocks the request without a visible sign.
 
 The Variants tool works here with knobs and selectors the app defines itself:
 pass a [`createVariantsSource`](variants.md#a-host-source) source as `variants` beside
-`feedback`. Each note then records what the reviewer had selected. Swapping
+`feedback`. Each note then records the selectors the reviewer had moved off their defaults. Swapping
 source files needs the development server, and requests that ask an agent to
 remove a selector are not offered.
 

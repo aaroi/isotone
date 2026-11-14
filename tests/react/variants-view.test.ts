@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { VariantAxis } from '../../src/core/variants';
 import { createVariantsSource } from '../../src/react/index';
 import { VariantsView } from '../../src/react/variants/VariantsView';
-import { AXES, byText, click, container, labels, render, renderRemaining, setUpPanelFixture } from '../helpers/panel';
+import { AXES, byText, click, container, labels, render, renderRemaining, rerender, setUpPanelFixture } from '../helpers/panel';
 
 setUpPanelFixture();
 
@@ -24,6 +24,47 @@ describe('VariantsView', () => {
     message = null;
     await click(byText('Bold'));
     expect(container.querySelector('[role=alert]')).toBeNull();
+  });
+
+  it('shows a source’s notice quietly above the selectors, and keeps it while the panel is open', async () => {
+    const base = createVariantsSource({ axes: AXES });
+    const asked = 'This link’s ?v= asks for Headline: Bold, but links don’t choose variants here.';
+    // What the next refresh will find, as the overlay source settles it when its listing loads.
+    let next: string | null = asked;
+    let notice: string | null = null;
+    let listener = () => {};
+    const source = {
+      ...base,
+      getNotice: () => notice,
+      refresh: async () => {
+        notice = next;
+        listener();
+      },
+      subscribe: (fn: () => void) => {
+        listener = fn;
+        return base.subscribe(fn);
+      },
+    };
+    await render(createElement(VariantsView, { source }));
+    const shown = () => container.querySelector('.isotone-vars-notice');
+    // The opening's refresh brings it in, as a status rather than an alert.
+    expect(shown()?.getAttribute('role')).toBe('status');
+    expect(shown()?.textContent).toBe(asked);
+    expect(container.querySelector('[role=alert]')).toBeNull();
+    // Above the selectors, so it is read before them.
+    expect(shown()?.compareDocumentPosition(container.querySelector('[role=radiogroup]') as Node)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+    // A pick that matches the link, then another refresh (Feedback opening): the selectors stay where they were.
+    next = null;
+    await click(byText('Bold'));
+    await act(async () => source.refresh());
+    expect(shown()?.textContent).toBe(asked);
+
+    // Closed and opened again, the opening's own refresh settles it, over what the source said before it.
+    await act(async () => rerender(createElement(VariantsView, { source, active: false })));
+    notice = asked;
+    await act(async () => rerender(createElement(VariantsView, { source, active: true })));
+    expect(shown()).toBeNull();
   });
 
   it('opens an option-scoped dialog from the more button or a right click without changing the selection', async () => {
@@ -211,7 +252,8 @@ describe('VariantsView', () => {
     expect(bar()).not.toBeNull();
     expect(shown()).toBe(false);
     expect(actions()?.getAttribute('aria-hidden')).toBe('true');
-    // The list only gets room at its end, to scroll past the floating bar, while it shows.
+    // The list keeps room at its end for the floating bar either way; only the bar's material follows it.
+    // tests/browser/variants-layout.test.ts measures that nothing moves.
     const saving = () => container.querySelector('.isotone-vars')?.getAttribute('data-saving');
     expect(container.querySelector('.isotone-vars-body > .isotone-vars-tail')).not.toBeNull();
     expect(saving()).toBe('false');
@@ -289,6 +331,26 @@ describe('VariantsView', () => {
     }
     // Down goes to the next row and stops at the last; Right goes along and wraps.
     expect(picks).toEqual(['2', '2', '0', '1', '2', '0']);
+  });
+
+  it('shows a disabled option that neither a click nor the arrow keys pick', async () => {
+    const options = [
+      { id: 'plain', label: 'Plain' },
+      { id: 'merged', label: 'Merged', disabled: true },
+      { id: 'bold', label: 'Bold' },
+    ];
+    const source = createVariantsSource({ axes: [{ id: 'card', label: 'Card', options, defaultOption: 'plain' }] });
+    await render(createElement(VariantsView, { source }));
+    const merged = container.querySelector<HTMLButtonElement>('[role=radio][aria-label=Merged]');
+    expect(merged?.disabled).toBe(true);
+    await click(merged as HTMLElement);
+    expect(source.getSelections().card).toBe('plain');
+    await act(async () => {
+      const checked = container.querySelector<HTMLElement>('[role=radio][aria-checked=true]');
+      checked?.focus();
+      checked?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+    });
+    expect(source.getSelections().card).toBe('bold');
   });
 
   it('renders colour swatches and the custom picker', async () => {

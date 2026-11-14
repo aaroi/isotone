@@ -20,10 +20,36 @@ import { npm } from './npm.mjs';
 // blur bands, the header and defaults-bar materials, the rim drawn over content and rows that recede.
 // Bundle raised to 395 kB and tarball to 422.5 kB (393.8 and 420.8 kB; rolling figures): the component
 // that rolls changed characters, and its notes in the shipped design guide and changelog.
-// Bundle raised to 402 kB and tarball to 454 kB (collecting feedback): the store that posts signed notes to a
-// host's own route, edits and deletes them with a per-note key, and the name field, which the bundle carries so
-// an app without React can collect too; the tarball also gains the `feedback` and `postgres` entries and their guide.
-const BUDGET = { bundle: 402_000, tarball: 454_000 };
+// Tarball raised to 425.5 kB (423.9 kB; Default pinned per tab): the live store keeping `<group>:default`
+// in `?v=`, the `--done` hint's per-note variant context, and their notes in the shipped docs.
+// Tarball raised to 424.5 kB (424.4 kB; newcomer fixes): reading the key when an event has no code, knobs
+// that clash with a group, and the notes on those, section names, colours and the variants directory.
+// Bundle raised to 396.5 kB and tarball to 428.5 kB (395.1 and 427.4 kB; 1.5.0 shipped at 393.8 and
+// 421.9 kB; per tab or shared): the panel's note on a link's unapplied ?v=, settled as the panel opens,
+// init's switching paragraph, the variant commands' warning, and the guides and changelog that state it.
+// Bundle raised to 397.5 kB and tarball to 429 kB (396.1 and 427.2 kB; a host source beside knobs):
+// combining sources and the one set-defaults note across them, in every entry that mounts the panel,
+// and the shipped docs that describe it.
+// Tarball raised to 426 kB (425.1 kB; components compiled in parts): the part and reload handling
+// in the Vite plugin, and the Vue, Svelte and Astro notes in the shipped variants guide and changelog.
+// Tarball raised to 427.5 kB (426.5 kB; variants without Git): kept bases, the sync and
+// stale messages that say why a copy can't merge, and their docs.
+// Bundle raised to 397 kB and tarball to 428.5 kB (396.3 and 427.5 kB; note context): the selections a note
+// records and their tags, and how `within` and `component` are read, with the note field in the agent
+// guide, schema and changelog.
+// Tarball raised to 423.5 kB (422.9 kB; copies obey fs.deny): the file check for every served copy,
+// and its notes in the shipped variants guide and changelog.
+// The figures above are each change on its own over 1.5.0. Merged together (#60 to #69), the bundle is
+// 402.6 kB and the tarball 457.6 kB: bundle raised to 403.5 kB and tarball to 459 kB.
+// Bundle raised to 407 kB and tarball to 466.5 kB (406.1 and 465.7 kB; note source): source maps read
+// for Turbopack, webpack and variant copies, checked against the page's downloads, Vue components,
+// selectors without classes, sources relative to the app, and their docs.
+// #72, #73, #75 and #76 folded into #71: bundle 409.6 kB, tarball 483.2 kB.
+// Bundle raised to 418 kB and tarball to 516.5 kB (416.9 and 515.1 kB; collecting feedback): the store that
+// posts signed notes to a host's own route, edits and deletes them with a per-note key, and the name field,
+// which the bundle carries so an app without React can collect too; the tarball also gains the `feedback`
+// and `postgres` entries and their guide.
+const BUDGET = { bundle: 418_000, tarball: 516_500 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

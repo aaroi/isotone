@@ -123,8 +123,6 @@ function createAuthor(key: string, known: string | undefined): TextStore {
 export interface FeedbackStoreConfig extends FeedbackClientConfig {
   /** localStorage namespace, as for the development store. */
   key: string;
-  /** What every selector on the page is set to when a note is sent. */
-  getSelections?: () => Record<string, string> | undefined;
 }
 
 export function createFeedbackStore(cfg: FeedbackStoreConfig) {
@@ -292,7 +290,7 @@ export function createFeedbackStore(cfg: FeedbackStoreConfig) {
     const key = previous?.key ?? `${createNoteId()}${createNoteId()}`.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
     const createdAt = previous?.createdAt ?? new Date().toISOString();
     const elements = context?.elements ?? (element ? [element] : []);
-    const selections = cfg.getSelections?.();
+    const selections = context?.selections;
     const body: Wire = {
       id,
       key,

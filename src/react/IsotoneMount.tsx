@@ -2,13 +2,16 @@ import { createRoot } from 'react-dom/client';
 
 import { createIsotoneStore } from '../core/notes-client';
 import {
-  createOverlayVariantsSource,
   axisSection,
+  createOverlayVariantsSource,
   knobDelta,
   OVERLAY_DEFAULT_OPTION,
+  type VariantSelections,
   type VariantsSource,
   VARIANTS_ENDPOINT,
+  visibleAxes,
 } from '../core/variants';
+import { combineSources } from '../core/variants/combine';
 import { IsotonePanel } from './IsotonePanel';
 import { ensurePanelStyles } from './styles/panel';
 import type { MountIsotoneOptions } from '../core/types';
@@ -71,16 +74,30 @@ function withDocumentUntouched<T>(create: () => T): T {
 const KNOBS_EMPTY_TEXT =
   'No knobs on this page yet. Ask your agent to add knobs for this page to .isotone/knobs.json and they will appear here.';
 
+/** The notes path of an Isotone server (the Vite plugin, `isotone serve`), which serves knobs beside it. */
+const ISOTONE_NOTES = /\/api\/isotone\/notes\/?$/;
+
 export function mountIsotone(opts: MountIsotoneOptions): () => void {
   const getRoute = opts.getRoute ?? (() => window.location.pathname);
   // A deployed app collecting feedback has no notes file and no agent: its
   // notes go to the host's endpoint, and the development one is not used.
   const collect = typeof opts.feedback === 'string' ? { endpoint: opts.feedback } : opts.feedback?.endpoint ? opts.feedback : undefined;
   const endpoint = collect ? undefined : opts.endpoint;
-  const variants =
-    opts.variants === 'overlay' || opts.variants === 'knobs'
-      ? overlaySourceWithSave(getRoute, endpoint, opts.key, opts.variantsEndpoint)
-      : opts.variants;
+  const app = typeof opts.variants === 'object' && opts.variants !== null ? opts.variants : undefined;
+  // Knobs and file variants come from the Isotone server, beside a host's own
+  // selectors too: the server that answers notes serves them next door.
+  const overlayEndpoint = app
+    ? (opts.variantsEndpoint ?? (endpoint && ISOTONE_NOTES.test(endpoint) ? endpoint.replace(ISOTONE_NOTES, VARIANTS_ENDPOINT) : undefined))
+    : opts.variants
+      ? (opts.variantsEndpoint ?? VARIANTS_ENDPOINT)
+      : undefined;
+  // A knob whose id the host's own selectors have would style the page under the host's control: left out.
+  const takenIds = app ? () => app.getAxes().map((axis) => axis.id) : undefined;
+  const overlay = overlayEndpoint ? createOverlayVariantsSource({ endpoint: overlayEndpoint, getRoute, takenIds }) : null;
+  // A wrapper this mount owns, so Make default can be added without changing the host's source.
+  const combined = app && overlay ? combineSources([app, overlay]) : app && endpoint && !app.saveDefaults ? combineSources([app]) : null;
+  const variants: VariantsSource | undefined = combined ?? app ?? overlay ?? undefined;
+  if (endpoint && variants && variants !== app) variants.saveDefaults = defaultsNote(variants, app, overlay, getRoute, endpoint, opts.key);
   const notes = Boolean(endpoint || collect);
   // Nothing to show: no notes to write and no variants to pick. A production
   // host that forgot its source gets no empty launcher in the corner.
@@ -92,6 +109,9 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
   if (!notes && variants && variants.getAxes().length === 0 && typeof (variants as { refresh?: unknown }).refresh !== 'function') {
     return () => {};
   }
+
+  // A host whose selectors arrive later (loaded, or per route) may take a knob's id after the knobs applied.
+  const offTaken = app && overlay ? app.subscribe(() => overlay.takenChanged()) : null;
 
   const host = document.createElement('div');
   host.setAttribute('data-isotone', 'root');
@@ -150,7 +170,10 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
     pending = true;
     setTimeout(() => {
       pending = false;
-      if (!disposed) render();
+      if (disposed) return;
+      // Knobs live on <html>, outside the panel: move them to the new route's set.
+      overlay?.routeChanged();
+      render();
     }, 0);
   };
 
@@ -163,6 +186,9 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
   setTimeout(() => {
     if (disposed) return;
     render();
+    // The panel loads knobs as it opens, or at once when it has nothing to show. Beside a host's
+    // selectors it has, so load them here: stored knob values apply from the first paint.
+    if (app && overlay) void overlay.refresh().catch(() => {});
     window.addEventListener('popstate', notify);
     listeners.push(() => window.removeEventListener('popstate', notify));
     for (const evt of ['pushState', 'replaceState'] as const) {
@@ -183,7 +209,12 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
 
   return () => {
     disposed = true;
+    offTaken?.();
+    overlay?.dispose();
     for (const off of listeners) off();
+    // The host's source outlives this mount: leave it with none of this panel's listeners.
+    combined?.dispose();
+    overlay?.dispose();
     guard.disconnect();
     // Deferred, not synchronous: a React host calls this from an effect
     // cleanup, and unmounting our root while the host's render is in flight
@@ -198,34 +229,40 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
 }
 
 /**
- * The overlay adapter's source, with "Make default" wired to the notes
- * file. Landing an overlay variant means copying files over the real ones,
- * which is the agent's move (`variant promote`), so the button does what the
- * host with its own axes does: it files one `[set-defaults]` note naming the reviewer's picks
- * across every selector on the route, and the agent promotes those. The
- * other variants are untouched; only an explicit ask removes a variant.
- * Without a notes endpoint there is nobody to file to, and the row stays
- * hidden.
+ * "Make default", as one `[set-defaults]` note naming the reviewer's picks
+ * across every selector on the route, for the agent to land. Landing an
+ * overlay variant means copying files over the real ones (`variant promote`),
+ * a knob's value is written into the source, and a pick in the host's own
+ * selectors is a change to the host's code. A host source's own
+ * `saveDefaults` runs first with its picks; the note names them anyway, since
+ * a route keeps one open `[set-defaults]` request and this one replaces any
+ * the host filed. The other variants are untouched; only an explicit ask
+ * removes a variant.
  */
-function overlaySourceWithSave(
+function defaultsNote(
+  source: VariantsSource,
+  host: VariantsSource | undefined,
+  overlay: ReturnType<typeof createOverlayVariantsSource> | null,
   getRoute: () => string,
-  endpoint: string | undefined,
+  endpoint: string,
   key: string | undefined,
-  variantsEndpoint = VARIANTS_ENDPOINT,
-): VariantsSource {
-  const source = createOverlayVariantsSource({ endpoint: variantsEndpoint, getRoute });
-  if (!endpoint) return source;
+): (selections: VariantSelections) => Promise<void> {
   const notes = createIsotoneStore({ endpoint, key });
-  source.saveDefaults = async (selections) => {
+  return async (selections) => {
+    const hostIds = new Set(host?.getAxes().map((axis) => axis.id));
+    if (host?.saveDefaults) {
+      await host.saveDefaults(Object.fromEntries(Object.entries(selections).filter(([id]) => hostIds.has(id))));
+    }
+    const knobs = overlay?.knobs ?? { axes: [], values: {} };
     // In axis order, so the note reads top to bottom like the panel did.
-    const picked = source
-      .getAxes()
-      // Knobs ride in their own clause below, whatever their kind.
-      .filter((axis) => (axis.kind === undefined || axis.kind === 'select') && !source.knobs.axes.includes(axis))
+    const shown = visibleAxes(source.getAxes(), selections);
+    const picked = shown
+      // Knobs and the host's selectors ride in their own clauses below.
+      .filter((axis) => (axis.kind === undefined || axis.kind === 'select') && !hostIds.has(axis.id) && !knobs.axes.includes(axis))
       .flatMap((axis) => {
         const id = selections[axis.id];
         if (!id || id === OVERLAY_DEFAULT_OPTION) return [];
-        const variant = source.list?.variants.find((v) => v.id === id);
+        const variant = overlay?.list?.variants.find((v) => v.id === id);
         const label = variant?.label ?? id;
         // The group names the element and the variant names the alternative;
         // a lone variant whose group is named after it needs no prefix.
@@ -234,12 +271,24 @@ function overlaySourceWithSave(
         const named = selector === label || axis.label === label ? label : `${selector}: ${label}`;
         return [{ id, named, element: variant?.element ?? null }];
       });
+    // The host's selectors the reviewer moved, named as the panel showed them.
+    const app = knobDelta(
+      shown.filter((axis) => hostIds.has(axis.id)),
+      selections,
+    );
     // Knobs the reviewer moved off their defaults ride in the same note, as
-    // the value the panel showed, so the agent can write the number in.
-    const moved = knobDelta(source.knobs.axes, source.knobs.values);
+    // the value the panel showed, so the agent can write the number in. Only
+    // shown ones: a knob behind a host selector of its id was never in the panel.
+    const moved = knobDelta(
+      knobs.axes.filter((knob) => shown.includes(knob)),
+      knobs.values,
+    );
     // Only the decision, nothing about the other variants: they stay until
     // the reviewer says otherwise, in their own words.
     const parts: string[] = [];
+    if (app.length) {
+      parts.push(`App selectors: ${app.map((m) => `${axisSection(m.axis).fullLabel} → ${m.shown} (${m.axis.id})`).join('; ')}.`);
+    }
     if (picked.length) {
       parts.push(`Make the default: ${picked.map((p) => `"${p.named}" (${p.id})`).join('; ')}.`);
     }
@@ -247,17 +296,18 @@ function overlaySourceWithSave(
       parts.push(`Knobs: ${moved.map((m) => `${axisSection(m.axis).fullLabel} ${m.shown} (${m.axis.id})`).join('; ')}.`);
     }
     const feedback = parts.length ? `[set-defaults] ${parts.join(' ')}` : '[set-defaults] The current defaults stay on this route.';
+    const pairs = (list: { axis: { id: string }; value: string }[]) => list.map((m) => `${m.axis.id}:${m.value}`).join(', ');
     await notes.saveNote(
       getRoute(),
       feedback,
       picked[0]?.element ?? null,
       null,
       {
-        variants: picked.length ? picked.map((p) => p.id).join(', ') : OVERLAY_DEFAULT_OPTION,
-        ...(moved.length ? { knobs: moved.map((m) => `${m.axis.id}:${m.value}`).join(', ') } : {}),
+        ...(overlay ? { variants: picked.length ? picked.map((p) => p.id).join(', ') : OVERLAY_DEFAULT_OPTION } : {}),
+        ...(app.length ? { selectors: pairs(app) } : {}),
+        ...(moved.length ? { knobs: pairs(moved) } : {}),
       },
       { w: window.innerWidth, h: window.innerHeight },
     );
   };
-  return source;
 }

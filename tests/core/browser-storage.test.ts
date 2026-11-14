@@ -63,6 +63,25 @@ it('synchronizes offline feedback once and clears only acknowledged local copies
   expect(values.get(currentKey)).toBe('[]');
 });
 
+it('keeps the selections a note was filed under while it waits offline, and sends them', async () => {
+  const posted: Record<string, unknown>[] = [];
+  let online = false;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url: unknown, init?: RequestInit) => {
+      if (!online) throw new TypeError('Failed to fetch');
+      if (init?.method === 'POST') posted.push(JSON.parse(String(init.body)));
+      return { ok: true, json: async () => (init?.method === 'POST' ? { id: posted.at(-1)?.id } : posted) };
+    }),
+  );
+  const store = createIsotoneStore({ endpoint: '/notes' });
+  const id = await store.saveNote('/', 'Rounder', null, null, undefined, undefined, { selections: { 'card-radius': '24' } });
+  expect(JSON.parse(values.get(currentKey) ?? '[]')[0]).toMatchObject({ id, selections: { 'card-radius': '24' } });
+  online = true;
+  await store.listNotes();
+  expect(posted).toEqual([expect.objectContaining({ id, selections: { 'card-radius': '24' } })]);
+});
+
 it('restores saved knob values and reads blocked storage as empty', () => {
   values.set(KNOBS_STORAGE_KEY, JSON.stringify({ spacing: '12' }));
   const source = createOverlayVariantsSource({ endpoint: '/variants', getRoute: () => '/', storage, knobRoot: null });

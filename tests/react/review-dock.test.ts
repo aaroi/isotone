@@ -5,10 +5,11 @@
 import { act, createElement, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { VariantAction, VariantAxis } from '../../src/core/variants';
+import { combineVariantsSources, createOverlayVariantsSource, type VariantAction, type VariantAxis } from '../../src/core/variants';
 import { createVariantsSource, IsotonePanel } from '../../src/react/index';
 import { VariantsView } from '../../src/react/variants/VariantsView';
 import { PANEL_CSS } from '../../src/react/styles/panel';
+import { isShortcutKey } from '../../src/react/dock/useDockEvents';
 import { AXES, byText, click, container, labels, render, renderRemaining, rerender, unmount, setUpPanelFixture } from '../helpers/panel';
 
 setUpPanelFixture();
@@ -273,6 +274,28 @@ describe('review dock interactions', () => {
     expect(selecting()).toBe('true');
     expect(container.querySelector('.isotone-notes-panel')?.getAttribute('data-open')).toBe('true');
   });
+  it('takes the shortcut from an automated key event that carries only the key', async () => {
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
+    // What browser automation dispatches for ⌘⇧.: a key, no code.
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: '.', code: '', metaKey: true, shiftKey: true, bubbles: true, cancelable: true }),
+      );
+      await new Promise((r) => requestAnimationFrame(r));
+    });
+    expect(container.querySelector('.isotone-notes-panel')?.getAttribute('data-open')).toBe('true');
+  });
+  it('reads a key event without a code as a US layout types it, and a code first when there is one', () => {
+    const is = (init: KeyboardEventInit, code: string | string[]) => isShortcutKey(new KeyboardEvent('keydown', init), { code });
+    expect(is({ key: '>' }, 'Period')).toBe(true);
+    expect(is({ key: '!' }, 'Digit1')).toBe(true);
+    expect(is({ key: 'k' }, 'KeyK')).toBe(true);
+    expect(is({ key: 'F2' }, 'F2')).toBe(true);
+    expect(is({ key: '§' }, ['Backquote', 'IntlBackslash'])).toBe(true);
+    // A real keyboard's code wins over the character its layout typed.
+    expect(is({ key: '.', code: 'KeyE' }, 'Period')).toBe(false);
+    expect(is({ key: 'Unidentified' }, 'Period')).toBe(false);
+  });
   it('attaches an option reference and keeps variants visible while writing', async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ id: 'saved' }) }));
     await render(
@@ -299,6 +322,178 @@ describe('review dock interactions', () => {
       optionLabel: 'Bold',
       value: 'a',
     });
+  });
+  it('records the knobs moved on this route with a new note, and leaves its selections alone on an edit', async () => {
+    const range = { kind: 'range' as const, min: 0, max: 40, step: 1, unit: 'px' };
+    const knobs = [
+      { ...range, id: 'card-radius', label: 'Card radius', defaultValue: 12 },
+      { ...range, id: 'gap', label: 'Gap', defaultValue: 8 },
+      { ...range, id: 'other-page', label: 'Elsewhere', defaultValue: 4, route: '/settings' },
+    ];
+    const posts: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: unknown, init?: RequestInit) => {
+        if (String(url).startsWith('/variants')) return { ok: true, json: async () => ({ variants: [], active: [], knobs }) };
+        if (init?.method === 'POST') {
+          posts.push(JSON.parse(String(init.body)));
+          return { ok: true, json: async () => ({ id: 'saved' }) };
+        }
+        return { ok: true, json: async () => [] };
+      }),
+    );
+    // The gap sits at its default and the other knob belongs to another page.
+    const stored = JSON.stringify({ 'card-radius': '24', gap: '8', 'other-page': '30' });
+    const storage = { getItem: () => stored, setItem() {}, removeItem() {} };
+    const source = createOverlayVariantsSource({ endpoint: '/variants', getRoute: () => '/', storage, knobRoot: null, live: null });
+    await source.refresh();
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' }, variants: source }));
+    await click(container.querySelector('.isotone-fab'));
+    await typeFeedback('Rounder still');
+    await click(byText('Send note'));
+    expect(posts[0]?.selections).toEqual({ 'card-radius': '24' });
+    const tag = container.querySelector('.isotone-note-hit [title]');
+    expect(tag?.firstElementChild?.textContent).toBe('1 pick');
+    expect(tag?.textContent).toBe('1 pick: card-radius: 24');
+    expect(tag?.getAttribute('title')).toBe('card-radius: 24');
+    await click(container.querySelector('.isotone-note-hit'));
+    await typeFeedback('Rounder still, and softer');
+    await click(byText('Save edit'));
+    expect(posts[1]).not.toHaveProperty('selections');
+  });
+  it("records a host source's moved selectors that are shown, as one tag that lists them", async () => {
+    const posts: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: unknown, init?: RequestInit) => {
+        if (init?.method === 'POST') posts.push(JSON.parse(String(init.body)));
+        return { ok: true, json: async () => (init?.method === 'POST' ? { id: 'saved' } : []) };
+      }),
+    );
+    const range = (id: string, label: string) => ({
+      kind: 'range' as const,
+      id,
+      label,
+      min: 0,
+      max: 40,
+      step: 1,
+      defaultValue: 0,
+      unit: 'px',
+    });
+    const axes: VariantAxis[] = [...AXES, range('pad', 'Cards > Padding'), range('gap', 'Gap'), range('radius', 'Radius')];
+    // The tagline only shows with the bold headline.
+    const source = createVariantsSource({
+      axes,
+      selections: { headline: 'a', tagline: 'y', haze: '0.3', pad: '24', gap: '8', radius: '12' },
+    });
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' }, variants: source }));
+    await click(container.querySelector('.isotone-fab'));
+    await typeFeedback('Tighter');
+    await click(byText('Send note'));
+    // The headline and haze sit at their defaults, and the tagline is hidden.
+    expect(posts[0]?.selections).toEqual({ pad: '24', gap: '8', radius: '12' });
+    const tags = [...(container.querySelector('.isotone-note-hit .isotone-meta')?.children ?? [])];
+    expect(tags.map((tag) => tag.firstElementChild?.textContent)).toEqual(['3 picks']);
+    expect(tags[0]?.getAttribute('title')).toBe('pad: 24\ngap: 8\nradius: 12');
+  });
+  // #69's selections from #64's combined source, as mountIsotone composes it: the host's picks and the
+  // overlay's, less the knobs #62 (a file group's id) and 14be786 (a host selector's id) leave out, and
+  // only the knobs of this route (#60). With #61's live store, the tab's own picks, not active.json.
+  async function noteSelections(live: { active: string[] } | null, active: string[]) {
+    const range = { kind: 'range' as const, min: 0, max: 40, step: 1, unit: 'px' };
+    const knobs = [
+      { ...range, id: 'card-radius', label: 'Card radius', defaultValue: 12 },
+      { ...range, id: 'cta', label: 'CTA size', defaultValue: 0 },
+      { ...range, id: 'hero', label: 'Hero size', defaultValue: 0 },
+      { ...range, id: 'other-page', label: 'Elsewhere', defaultValue: 4, route: '/settings' },
+    ];
+    const variants = [{ id: 'hero-left', label: 'Left', group: 'hero', files: {}, createdAt: '', stale: [], missing: [] }];
+    const posts: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: unknown, init?: RequestInit) => {
+        if (String(url).startsWith('/variants')) return { ok: true, json: async () => ({ variants, active, knobs }) };
+        if (init?.method === 'POST') {
+          posts.push(JSON.parse(String(init.body)));
+          return { ok: true, json: async () => ({ id: 'saved' }) };
+        }
+        return { ok: true, json: async () => [] };
+      }),
+    );
+    const stored = JSON.stringify({ 'card-radius': '24', cta: '30', hero: '5', 'other-page': '30' });
+    const storage = { getItem: () => stored, setItem() {}, removeItem() {} };
+    const host = createVariantsSource({
+      axes: [
+        {
+          id: 'cta',
+          label: 'Call to action',
+          defaultOption: 'join',
+          options: [
+            { id: 'join', label: 'Join' },
+            { id: 'start', label: 'Start' },
+          ],
+        },
+      ],
+      selections: { cta: 'start' },
+    });
+    const store = live && { ...live, select: () => false, subscribe: () => () => {}, reload() {} };
+    const overlay = createOverlayVariantsSource({
+      endpoint: '/variants',
+      getRoute: () => '/',
+      storage,
+      knobRoot: null,
+      live: store,
+      takenIds: () => host.getAxes().map((axis) => axis.id),
+    });
+    await overlay.refresh();
+    await render(
+      createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' }, variants: combineVariantsSources(host, overlay) }),
+    );
+    await click(container.querySelector('.isotone-fab'));
+    await typeFeedback('Bigger');
+    await click(byText('Send note'));
+    return posts[0]?.selections;
+  }
+  it("records a host source's picks beside the overlay's, less the knobs the panel leaves out", async () => {
+    expect(await noteSelections(null, ['hero-left'])).toEqual({ cta: 'start', hero: 'hero-left', 'card-radius': '24' });
+  });
+  it("records this tab's own variant picks, not .isotone/active.json's", async () => {
+    // Another tab picked Left; this one kept Default.
+    expect(await noteSelections({ active: [] }, ['hero-left'])).toEqual({ cta: 'start', 'card-radius': '24' });
+    await unmount();
+    // This tab picked Left; active.json has Default.
+    expect(await noteSelections({ active: ['hero-left'] }, [])).toEqual({ cta: 'start', hero: 'hero-left', 'card-radius': '24' });
+  });
+  it('shows one pin by its text and several as a count, beside the picks', async () => {
+    const note = (id: string, texts: string[]) => ({
+      id,
+      route: '/',
+      feedback: `Note ${id}`,
+      element: null,
+      elements: texts.map((text, i) => ({ tag: 'button', text, selector: `#${id}-${i}` })),
+      selections: { pad: '24', gap: '8' },
+      done: false,
+      createdAt: new Date().toISOString(),
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => [note('one', ['Start free trial']), note('three', ['Free', 'Pro', 'Team'])] })),
+    );
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
+    await click(container.querySelector('.isotone-fab'));
+    const rows = [...container.querySelectorAll('.isotone-note-hit .isotone-meta')].map((meta) =>
+      [...meta.children].map((tag) => [tag.textContent, tag.getAttribute('title')]),
+    );
+    expect(rows).toEqual([
+      [
+        ['Start free trial', null],
+        ['2 picks: pad: 24, gap: 8', 'pad: 24\ngap: 8'],
+      ],
+      [
+        ['3 pins: Free, Pro, Team', 'Free\nPro\nTeam'],
+        ['2 picks: pad: 24, gap: 8', 'pad: 24\ngap: 8'],
+      ],
+    ]);
   });
   it('pins several elements in one session, toggles a duplicate off, and saves every target', async () => {
     await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));

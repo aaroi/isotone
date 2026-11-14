@@ -211,7 +211,7 @@ it('puts a refused note back in the field', async () => {
   expect(container.querySelector('.isotone-notice')?.textContent).toBe('Could not save. Your feedback is still here.');
 });
 
-it('says what every selector on the page was set to', async () => {
+it('says which selectors sat off their defaults when the note was written', async () => {
   const sent = endpoint();
   const variants = createVariantsSource({ axes: AXES, selections: { headline: 'b' }, onChange: () => {} });
   await render(panel({ endpoint: '/api/feedback', name: 'Ada' }, { variants }));
@@ -219,8 +219,8 @@ it('says what every selector on the page was set to', async () => {
   await type(field, 'Bold reads better');
   await press(field);
   await settle();
-  // The pick and the defaults around it: what the reviewer was looking at.
-  expect(sent[0]?.body.selections).toEqual({ headline: 'b', haze: '0.3', tagline: 'x' });
+  // What the page showed that the defaults would not, as a development note records it.
+  expect(sent[0]?.body.selections).toEqual({ headline: 'b' });
 });
 
 it('has no name field in development, where notes go to the agent', async () => {

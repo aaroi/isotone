@@ -1,10 +1,13 @@
-import { rmSync } from 'node:fs';
+import { mkdirSync, realpathSync, rmSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { afterEach, assert, describe, expect, it } from 'vitest';
 
 import { notesResponse } from '../../src/node/notes/handler';
 import { readNotes, updateNotes } from '../../src/node/notes/store';
+import { elementOf, fromApp } from '../../src/node/notes/validate';
 import { PAYLOAD_MAX } from '../../src/core/limits';
+import { overlayGroups } from '../../src/core/variants';
 import { tempNotesFile } from '../helpers/fs';
 
 const dirs: string[] = [];
@@ -241,5 +244,95 @@ describe('pinned styles', () => {
     });
     const styles = readNotes(file)[0]?.elements?.[0]?.styles;
     expect(styles).toEqual({ padding: '8px 12px', 'font-size': '14px', color: 'x'.repeat(160) });
+  });
+});
+
+describe("a pinned element's source", () => {
+  it('is relative to the app holding .isotone/ when the page gave an absolute path inside it', () => {
+    const dir = dirname(tempFile());
+    const app = join(dir, 'app');
+    const file = join(app, '.isotone', 'notes.json');
+    mkdirSync(dirname(file), { recursive: true });
+    const sources = [
+      `${app}/src/components/PricingCard.vue`,
+      // A source map names the file after symlinks (macOS's /var is /private/var).
+      `${realpathSync(app)}/src/components/Counter.tsx:9`,
+      '/src/components/Header.tsx:6',
+      '/elsewhere/packages/ui/Button.tsx:3',
+    ];
+    const body = {
+      route: '/',
+      feedback: 'here',
+      element: null,
+      elements: sources.map((source, at) => ({ tag: 'a', text: '', selector: `#a${at}`, source })),
+    };
+    expect(notesResponse(file, { method: 'POST', url: '/api/notes', body }).status).toBe(201);
+    expect(readNotes(file)[0]?.elements?.map((el) => el.source)).toEqual([
+      'src/components/PricingCard.vue',
+      'src/components/Counter.tsx:9',
+      '/src/components/Header.tsx:6',
+      '/elsewhere/packages/ui/Button.tsx:3',
+    ]);
+  });
+
+  it('compares a Windows path without case, and relativizes before it bounds the length', () => {
+    expect(fromApp('C:\\Users\\Me\\app\\src\\Card.vue', 'c:\\users\\me\\app', true)).toBe('src/Card.vue');
+    expect(fromApp('C:/Users/Me/app/src/Card.tsx:4', 'C:\\Users\\Me\\app', true)).toBe('src/Card.tsx:4');
+    expect(fromApp('C:\\Users\\Me\\app\\src\\Card.vue', 'c:\\users\\me\\app', false)).toBe('C:\\Users\\Me\\app\\src\\Card.vue');
+    const app = `/projects/${'deep/'.repeat(70)}app`;
+    expect(elementOf({ selector: '#a', source: `${app}/src/Card.tsx:12` }, app)?.source).toBe('src/Card.tsx:12');
+  });
+});
+
+describe('the selections a note was filed under', () => {
+  const post = (file: string, body: Record<string, unknown>) => notesResponse(file, { method: 'POST', url: '/api/notes', body });
+
+  it('keeps them beside a host payload, through an edit, and drops what no selector holds', () => {
+    const file = tempFile();
+    const payload = { flags: { beta: true } };
+    // An overlay group without a name is its members' ids joined with `+`, which runs long.
+    const group = overlayGroups([
+      { id: 'hero-bold-with-a-long-descriptive-name', files: { 'src/Hero.tsx': {} }, createdAt: '' },
+      { id: 'hero-minimal-with-a-long-descriptive-name', files: { 'src/Hero.tsx': {} }, createdAt: '' },
+    ] as never)[0]?.id as string;
+    expect(group.length).toBeGreaterThan(64);
+    const selections = {
+      'card-radius': '24',
+      [group]: 'hero-bold-with-a-long-descriptive-name',
+      'Not An Id': '1',
+      gap: 7,
+      empty: '',
+      accent: '#2f6f4e',
+      size: 'Large / 2:1',
+      newline: 'a\nb',
+      long: 'x'.repeat(65),
+      _private: '1',
+    };
+    const kept = { 'card-radius': '24', [group]: 'hero-bold-with-a-long-descriptive-name', accent: '#2f6f4e', size: 'Large / 2:1' };
+    const id = (post(file, { route: '/', feedback: 'rounder', element: null, payload, selections }).body as { id: string }).id;
+    expect(readNotes(file)[0]?.selections).toEqual(kept);
+    expect(readNotes(file)[0]?.payload).toEqual(payload);
+    post(file, { id, route: '/', feedback: 'rounder still', element: null });
+    const [row] = notesResponse(file, { method: 'GET', url: '/api/notes?route=/' }).body as Array<Record<string, unknown>>;
+    expect(row).toMatchObject({ feedback: 'rounder still', payload, selections: kept });
+
+    post(file, { route: '/plain', feedback: 'none moved', element: null, selections: ['card-radius'] });
+    expect(readNotes(file).find((n) => n.route === '/plain')).not.toHaveProperty('selections');
+  });
+
+  it('keeps at most 32', () => {
+    const file = tempFile();
+    const selections = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`knob-${i}`, String(i)]));
+    post(file, { route: '/', feedback: 'many', element: null, selections });
+    expect(Object.keys(readNotes(file)[0]?.selections ?? {})).toHaveLength(32);
+  });
+
+  it('leaves them off a saved default that replaces an earlier one', () => {
+    const file = tempFile();
+    post(file, { route: '/', feedback: '[set-defaults] Use Bold.', element: null, selections: { 'card-radius': '24' } });
+    post(file, { route: '/', feedback: '[set-defaults] Use Plain.', element: null });
+    const [defaults] = readNotes(file);
+    expect(defaults?.feedback).toBe('[set-defaults] Use Plain.');
+    expect(defaults).not.toHaveProperty('selections');
   });
 });

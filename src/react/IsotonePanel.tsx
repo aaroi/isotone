@@ -2,7 +2,7 @@ import { FEEDBACK_STORAGE_KEY } from '../core/browser-storage';
 import type { IsotoneStoreConfig } from '../core/types';
 import { isRouteVisible, normalizeRoute, type RouteGateOptions } from '../core/routes';
 import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
-import type { VariantsSource } from '../core/variants';
+import { knobDelta, type VariantSelections, type VariantsSource, visibleAxes } from '../core/variants';
 import { type ReactElement, useCallback, useEffect, useId, useRef } from 'react';
 import { Composer } from './notes/Composer';
 import { AwayButton, NotesPanel } from './notes/NotesPanel';
@@ -43,6 +43,17 @@ export interface IsotonePanelProps {
 }
 
 /**
+ * Every selector shown on this page that sits off its default, by id, from
+ * any source. A note written under them says so: what the page showed, the
+ * pinned element's styles included, is not what the source holds.
+ */
+function offDefault(source: VariantsSource | undefined): VariantSelections | undefined {
+  const selections = source?.getSelections() ?? {};
+  const moved = source ? knobDelta(visibleAxes(source.getAxes(), selections), selections) : [];
+  return moved.length ? Object.fromEntries(moved.map((m) => [m.axis.id, m.value])) : undefined;
+}
+
+/**
  * The dock: the launcher, the rail of tools, and the variants and feedback
  * panels. Each concern lives in its own hook; this composes them and holds the
  * rules that join them: what opens what, and where focus goes.
@@ -79,14 +90,7 @@ export function IsotonePanel({
   const notesAvailable = Boolean(storeCfg.endpoint) || collecting;
   const variantsAvailable = useVariantsSnapshot(variants).shown.length > 0;
   const visible = isRouteVisible(route, rule) && (notesAvailable || variantsAvailable || variantsOpen);
-  const {
-    store,
-    notes,
-    setNotes,
-    clock,
-    load: loadNotes,
-    write,
-  } = useNotes(storeCfg, visible, variants ? () => variants.getSelections() : undefined);
+  const { store, notes, setNotes, clock, load: loadNotes, write } = useNotes(storeCfg, visible);
   const focusName = useCallback(() => requestAnimationFrame(() => nameRef.current?.focus()), []);
   const { view, updateRequested, pendingActions } = useNoteView(notes, route, clock);
   useDockMotion(rootRef, visible);
@@ -101,6 +105,7 @@ export function IsotonePanel({
     write,
     setNotes,
     getPayload,
+    getSelections: () => offDefault(variants),
     update,
     focusComposer: focus.composer,
     focusName,
@@ -176,7 +181,7 @@ export function IsotonePanel({
   // name, and so does a mount while it is empty: a network-backed source starts that way.
   // biome-ignore lint/correctness/useExhaustiveDependencies: these moments only.
   useEffect(() => {
-    if (variants && (notesOpen || !variantsAvailable)) refreshSource(variants);
+    if (variants && (notesOpen || !variantsAvailable)) void refreshSource(variants);
   }, [variants, notesOpen]);
 
   if (!visible) return null;

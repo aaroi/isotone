@@ -21,6 +21,10 @@ segmented choices, colour swatches or sliders, and switching one updates the
 live page. **Make default** files your picks for the agent to apply, or leave feedback
 on a single option.
 
+Whether a pick stays in its tab, with a `?v=` link that shares it, or changes every
+open tab depends on your setup; `init` says which, and knob values stay in your
+browser ([details](docs/variants.md#per-tab-or-shared)).
+
 ![The Variants panel with thumbnail, segmented, colour and range selectors above the feedback notes](https://raw.githubusercontent.com/aaroi/isotone/main/docs/assets/preview.png)
 
 When something needs changing, open Feedback with **⌘/Ctrl + Shift + .**, click

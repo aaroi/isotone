@@ -61,11 +61,14 @@ export function notesEndpoint(file: () => string, gate: Gate): Middleware {
 }
 
 /** The variants endpoint. A successful POST answers once `activate` has put
- *  the new set in place, so the panel can reload straight into it. */
+ *  the new set in place, so the panel can reload straight into it. A listing
+ *  names `hmr`, the dev server's HMR client, which the panel listens on for
+ *  the server's set changing. */
 export function variantsEndpoint(
   vopts: () => VariantsStoreOptions,
   activate: (active: string[], changedFiles?: string[]) => Promise<void>,
   gate: Gate,
+  hmr: () => string | null = () => null,
 ): Middleware {
   return (req, res, next) => {
     if (!guard(req, res, gate)) return;
@@ -85,6 +88,8 @@ export function variantsEndpoint(
           sendFailure(res, error);
           return;
         }
+        const client = hmr();
+        if (method === 'GET' && result.status === 200 && client) result = { ...result, body: { ...(result.body as object), hmr: client } };
         const send = () => {
           writeResponse(res, () => result);
         };

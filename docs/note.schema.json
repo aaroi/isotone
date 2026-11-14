@@ -33,6 +33,13 @@
       "description": "The pinned elements, in order.",
       "items": { "$ref": "#/$defs/element" }
     },
+    "selections": {
+      "type": "object",
+      "description": "The panel's selectors that sat off their defaults on this route, by axis id: a range's number without its unit, a colour's hex, or the chosen option's id. The page showed these when the note was sent; the pinned elements' styles were read when each was pinned. Write a value into the source only when the note asks for that.",
+      "maxProperties": 32,
+      "propertyNames": { "pattern": "^[a-zA-Z0-9][\\w.+-]{0,199}$" },
+      "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 64 }
+    },
     "variant": {
       "type": "object",
       "description": "The selector the note is about.",
@@ -97,10 +104,20 @@
       "properties": {
         "tag": { "type": "string", "description": "Lowercase tag name." },
         "text": { "type": "string" },
-        "selector": { "type": "string", "description": "Matches only this element on that page." },
+        "selector": {
+          "type": "string",
+          "description": "Matches only this element on that page: by an id or test id, or the element's own stable attribute (href, name, for, alt, placeholder), where one is unique; else by position. Never a class."
+        },
         "attributes": { "type": "object", "additionalProperties": { "type": "string" } },
-        "component": { "type": "array", "items": { "type": "string" }, "description": "React components, outermost first." },
-        "source": { "type": "string", "description": "file:line of the JSX, where React records it." },
+        "component": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "React or Vue components whose code wrote the element, outermost first."
+        },
+        "source": {
+          "type": "string",
+          "description": "file:line that wrote the element, from the app's directory where the file is in it, or just the file where the line is not known for sure (Vue, a server component under webpack, a module changed since the page loaded it). A variant copy's own path when the page ran the copy."
+        },
         "within": { "type": "array", "items": { "type": "string" }, "description": "Labelled ancestors, outermost first." },
         "near": { "type": "string", "description": "Nearby text, for an element with none of its own." },
         "rect": {
@@ -112,7 +129,7 @@
         },
         "styles": {
           "type": "object",
-          "description": "Computed styles when pinned, by CSS property: spacing, type, layout, and colours as hex. Defaults (no padding, static position) are left out.",
+          "description": "Computed styles when pinned, by CSS property: spacing, type, layout, and colours: hex when opaque `rgb()`, else as the browser reports them, such as `oklch(…)`. Defaults (no padding, static position) are left out.",
           "additionalProperties": { "type": "string" }
         }
       }

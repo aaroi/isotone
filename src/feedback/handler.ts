@@ -1,8 +1,8 @@
-import { type FeedbackBrowser, type FeedbackEntry, MAX_AUTHOR, MAX_FEEDBACK_BODY, MAX_RELEASE, MAX_SELECTIONS } from '../core/feedback';
+import { type FeedbackBrowser, type FeedbackEntry, MAX_AUTHOR, MAX_FEEDBACK_BODY, MAX_RELEASE } from '../core/feedback';
 import { NOTE_ID } from '../core/id';
 import { MAX_FEEDBACK_LENGTH, MAX_ROUTE, PAYLOAD_MAX } from '../core/limits';
 import type { IsotoneElement } from '../core/types';
-import { elementOf, UNSAFE_KEYS, variantOf, viewportOf, withinPayloadCap } from '../core/validate';
+import { elementOf, selectionsOf, variantOf, viewportOf, withinPayloadCap } from '../core/validate';
 
 /** Where records are kept. `postgres(url)` and `postgresStore(client)` are stores; so is any object like this. */
 export interface FeedbackStore {
@@ -254,7 +254,9 @@ function entryOf(b: Record<string, unknown>, id: string, keyHash: string, reques
     feedback: text,
     route: b.route,
     ...(url ? { url } : {}),
-    elements: ((b.elements as unknown[] | undefined) ?? []).map(elementOf).filter((el): el is IsotoneElement => el !== null),
+    elements: ((b.elements as unknown[] | undefined) ?? [])
+      .map((element) => elementOf(element))
+      .filter((el): el is IsotoneElement => el !== null),
     ...(variant ? { variant } : {}),
     ...(selections ? { selections } : {}),
     ...(viewport ? { viewport } : {}),
@@ -298,15 +300,6 @@ function pageUrl(value: unknown): string | undefined {
   } catch {
     return;
   }
-}
-
-function selectionsOf(value: unknown): Record<string, string> | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return;
-  const entries = Object.entries(value)
-    .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && !UNSAFE_KEYS.has(entry[0]))
-    .slice(0, MAX_SELECTIONS)
-    .map(([axis, choice]): [string, string] => [axis.slice(0, 200), choice.slice(0, 200)]);
-  return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
 function browserOf(value: unknown, userAgent: string | null): FeedbackBrowser {

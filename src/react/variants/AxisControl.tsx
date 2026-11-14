@@ -145,6 +145,7 @@ export const AxisControl = memo(function AxisControl({
                 aria-label={o.label}
                 aria-checked={checked}
                 aria-keyshortcuts="Shift+F10"
+                disabled={o.disabled}
                 tabIndex={tabbable ? 0 : -1}
                 className={`${thumbnails ? 'isotone-thumb' : 'isotone-seg'}${checked ? ' isotone-seg-on' : ''}${o.id === axis.defaultOption ? ' isotone-is-default' : ''}`}
                 onClick={(e) => {
@@ -172,7 +173,7 @@ export const AxisControl = memo(function AxisControl({
 function moveChoice(event: KeyboardEvent<HTMLElement>) {
   const target = event.target as HTMLElement;
   if (target.getAttribute('role') !== 'radio') return;
-  const radios = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+  const radios = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)'));
   const at = radios.indexOf(target as HTMLButtonElement);
   const row = event.currentTarget.classList.contains('isotone-grid') ? GRID_COLUMNS : 1;
   const wrap = (index: number) => (index + radios.length) % radios.length;
