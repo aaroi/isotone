@@ -176,13 +176,22 @@ if (worst) {
  * server's `.isotone/active.json`.
  */
 const LATEST_PICK = 'isotone-demo-active';
-const tabGroups = screenshot
-  ? []
-  : axes.flatMap((axis) =>
-      (axis.id === 'layout' || axis.id === 'spacing') && 'options' in axis
-        ? [{ id: axis.id, fallback: axis.defaultOption, members: axis.options.map((o) => o.id).filter((id) => id !== axis.defaultOption) }]
-        : [],
-    );
+/** `?shared=1` shows a setup where picks are shared by every tab (below), so no tab keeps its own. */
+const sharedLink = !screenshot && params.get('shared') === '1';
+const tabGroups =
+  screenshot || sharedLink
+    ? []
+    : axes.flatMap((axis) =>
+        (axis.id === 'layout' || axis.id === 'spacing') && 'options' in axis
+          ? [
+              {
+                id: axis.id,
+                fallback: axis.defaultOption,
+                members: axis.options.map((o) => o.id).filter((id) => id !== axis.defaultOption),
+              },
+            ]
+          : [],
+      );
 function latestPick(): string[] | null {
   try {
     const saved: unknown = JSON.parse(localStorage.getItem(LATEST_PICK) ?? 'null');
@@ -264,7 +273,6 @@ if (tab) {
  * options stand in for the file variants such a setup lists, and the link asks for Feature
  * unless it names another. Like the real panel, it stays while the reviewer picks.
  */
-const sharedLink = !screenshot && params.get('shared') === '1';
 if (sharedLink) {
   if (!params.has('v')) {
     const next = new URLSearchParams(location.search);
