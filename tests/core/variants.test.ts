@@ -317,6 +317,16 @@ describe('overlay knobs and the route', () => {
     expect(source.getSelections()).toMatchObject({ 'header-border': '#f59e0b', density: 'compact' });
   });
 
+  it('announces a stored value once, and leaves it alone when the listing is read again', async () => {
+    const { source, props, events } = fixture('/pricing', { 'header-border': '#f59e0b' });
+    await source.refresh();
+    expect(events).toEqual([{ id: 'header-border', value: '#f59e0b' }]);
+    // The panel re-reads the listing as it opens.
+    await source.refresh();
+    expect(events).toHaveLength(1);
+    expect(props.get(knobVar('header-border'))).toBe('#f59e0b');
+  });
+
   it('keeps a held compare off other routes’ knobs', async () => {
     const { source, page, props } = fixture('/', { 'header-border': '#f59e0b' });
     await source.refresh();

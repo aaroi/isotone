@@ -748,7 +748,15 @@ export function createOverlayVariantsSource(cfg: {
       // the listing was loading. Definitions can still refresh independently.
       const previousKnobs = list?.knobs ?? [];
       list = list && (wasActivating || activation !== null || startedRevision !== revision) ? { ...next, active: list.active } : next;
-      if (knobRoot) applyKnobValues(previousKnobs, {}, knobRoot);
+      // Knobs the listing dropped or redefined come off; `applyKnobs` below writes every listed one, so
+      // re-reading an unchanged listing as the panel opens leaves the page, and the `isotone:knob` event, alone.
+      const listed = new Set((list.knobs ?? []).map((knob) => JSON.stringify(knob)));
+      if (knobRoot)
+        applyKnobValues(
+          previousKnobs.filter((knob) => !listed.has(JSON.stringify(knob))),
+          {},
+          knobRoot,
+        );
       // A stored value for a knob a group now hides is dropped too, so it cannot style the page unseen.
       const valid = new Map(overlayKnobs(list).map((knob) => [knob.id, knob]));
       knobValues = Object.fromEntries(
