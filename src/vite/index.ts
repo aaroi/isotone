@@ -8,7 +8,7 @@
  * (the endpoints), and ./html-inject (the panel in each page).
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { basename, dirname, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 
 // `normalizePath` is a plain function, so importing it as a value does not
 // pull vite's nominal `Plugin` type into the structural return type below.
@@ -31,6 +31,7 @@ import { VARIANTS_ENDPOINT } from '../core/variants';
 import { blastFile } from '../node/blast';
 import { defaultNotesFile, LEGACY_NOTES_FILE, NOTES_FILE } from '../node/notes/location';
 import { ensureFileIgnored } from '../node/fs/git-exclude';
+import { realPath } from '../node/fs/paths';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
 import { autoUpdateNote } from '../node/update/note';
@@ -107,9 +108,11 @@ function componentBlock(env: LoadEnvironment | undefined, path: string): Promise
  * a plain 404, rather than the page's file, which would pass an agent's check
  * of a copy it never compiled. For a `.vue` file: plugin-vue keeps one parse
  * of each component, shared by every tab, so a copy compiled on its own would
- * replace the page's. On Vite 5: see load().
+ * replace the page's. On Vite 5: see load(). Only files a variant tracks:
+ * `tracked` maps a request path to that answer, and any other `?isotone=` is
+ * the app's own.
  */
-function refuseVersion(vite6: () => boolean) {
+function refuseVersion(vite6: () => boolean, tracked: (path: string) => boolean) {
   return (
     req: { url?: string },
     res: { statusCode: number; setHeader(name: string, value: string): void; end(body: string): void },
@@ -127,6 +130,10 @@ function refuseVersion(vite6: () => boolean) {
     } catch {
       /* Left as written; Vite answers a malformed path itself. */
     }
+    if (!tracked(path)) {
+      next();
+      return;
+    }
     const reason = isSingleFileComponent(path)
       ? 'isotone serves no copy of a .vue file on its own'
       : vite6()
@@ -140,6 +147,25 @@ function refuseVersion(vite6: () => boolean) {
     res.setHeader('content-type', 'text/plain; charset=utf-8');
     res.end(`${reason}: switch to its variant with \`npx isotone variant use <id>\` instead.\n`);
   };
+}
+
+/** The file a dev server request path names, as module ids write it: under
+ *  the configured base and the Vite root, or `/@fs/<absolute path>`. */
+function requestedFile(server: ViteDevServer, path: string): string {
+  const base = server.config.base ?? '/';
+  const local = base !== '/' && path.startsWith(base) ? path.slice(base.length - 1) : path;
+  if (local.startsWith('/@fs/')) {
+    const absolute = local.slice('/@fs'.length);
+    // `/@fs/C:/…` on Windows.
+    return normalizePath(/^\/[A-Za-z]:/.test(absolute) ? absolute.slice(1) : absolute);
+  }
+  let root = server.config.root;
+  try {
+    root = realPath(root);
+  } catch {
+    /* A root that does not exist yet names nothing a variant tracks. */
+  }
+  return normalizePath(join(root, local));
 }
 
 /** Say where the notes go after Vite's own banner, so it is not buried under
@@ -312,7 +338,12 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
           VARIANTS_ENDPOINT,
           variantsEndpoint(() => overrides.opts, activate, allowedHosts),
         );
-        server.middlewares.use(refuseVersion(() => vite6));
+        server.middlewares.use(
+          refuseVersion(
+            () => vite6,
+            (path) => overrides.versionsByFile().has(requestedFile(server, path)),
+          ),
+        );
       }
 
       // The tab's variant store has to exist before the app's modules run,

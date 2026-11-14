@@ -1483,7 +1483,12 @@ describe('Vue single-file components', () => {
     expect(await vite6('/src/Card.vue?vue&type=style&index=0&lang.css')).toBe('next');
     const vite5 = refusal(false);
     expect(await vite5('/src/Button.tsx?isotone=b')).toBe(404);
+    expect(await vite5(`/@fs${root}/src/Button.tsx?isotone=b`)).toBe(404);
     expect(await vite5('/src/Button.tsx')).toBe('next');
+    // Any other `?isotone=` is the app's own.
+    expect(await vite5('/?isotone=x')).toBe('next');
+    expect(await vite5('/api/items?isotone=1')).toBe('next');
+    expect(await vite6('/src/Other.vue?isotone=v')).toBe('next');
   });
 
   it('reloads the page when a component switches or its active copy changes', async () => {
