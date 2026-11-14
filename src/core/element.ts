@@ -34,7 +34,7 @@ export interface NodeLike {
  * React's `useId` (`:r1:`, `«r1»`, `_r_1_`, with any `identifierPrefix`) and
  * the libraries built on it.
  */
-const GENERATED_ID = /:r[\da-z]{1,5}:|«r[\da-z]{1,5}»|_r_[\da-z]{1,5}_|^(?:radix|headlessui|mui|mantine|react-aria|downshift)-/i;
+const GENERATED_ID = /:r[\da-z]*:|«r[\da-z]*»|_r_[\da-z]+_|^(?:radix|headlessui|mui|mantine|react-aria|downshift)-/i;
 
 /**
  * Descriptor of a picked element for locating it in code. Walks up the tree
@@ -396,9 +396,12 @@ const record = (entries: PerformanceEntryList, into: Map<string, number>) => {
   for (const entry of entries as PerformanceResourceTiming[]) if (!into.has(entry.name)) into.set(entry.name, entry.decodedBodySize);
   return into;
 };
-try {
-  new PerformanceObserver((list) => record(list.getEntries(), downloads)).observe({ type: 'resource', buffered: true });
-} catch {}
+// Only in a browser: a server render has no downloads to keep.
+if (typeof document !== 'undefined') {
+  try {
+    new PerformanceObserver((list) => record(list.getEntries(), downloads)).observe({ type: 'resource', buffered: true });
+  } catch {}
+}
 
 /** The page's downloads: those the observer kept, and any still in Resource Timing's buffer. */
 const pageDownloads = () => record(globalThis.performance?.getEntriesByType?.('resource') ?? [], new Map(downloads));
@@ -412,7 +415,7 @@ function stamped(url: string): [string, number] {
 }
 
 /** Code without the stamps Vite adds to an importer's imports after a hot update (`./Header.tsx?t=…`). */
-const unstamped = (code: string) => code.replace(/\?t=\d+&/g, '?').replace(/\?t=\d+/g, '');
+const unstamped = (code: string) => code.replace(/\?t=\d{13}&/g, '?').replace(/\?t=\d{13}(?=["'])/g, '');
 
 /**
  * A served module as the page loaded it, or nothing once that code may have
@@ -427,12 +430,20 @@ const unstamped = (code: string) => code.replace(/\?t=\d+&/g, '?').replace(/\?t=
 async function servedModule(url: string): Promise<Loaded | undefined> {
   const loads = pageDownloads();
   const [bare, at] = stamped(url);
-  if ([...loads.keys()].some((name) => /^https?:/.test(name) && stamped(name)[0] === bare && stamped(name)[1] > at)) return undefined;
+  const reloaded = [...loads.keys()].some((name) => {
+    if (!/^https?:/.test(name)) return false;
+    const [other, since] = stamped(name);
+    return other === bare && since > at;
+  });
+  if (reloaded) return undefined;
   const loaded = loads.get(url);
-  if (!loaded && url.includes('/_next/static/')) return undefined;
+  const chunk = url.includes('/_next/static/');
+  if (!loaded && chunk) return undefined;
   const bytes = await (await fetch(url)).arrayBuffer();
   const code = new TextDecoder().decode(bytes);
-  if (loaded && loaded !== bytes.byteLength && loaded !== new TextEncoder().encode(unstamped(code)).length) return undefined;
+  // Vite's stamps on imports are the only difference allowed, and only for Vite's modules.
+  const restamped = !chunk && loaded === new TextEncoder().encode(unstamped(code)).length;
+  if (loaded && loaded !== bytes.byteLength && !restamped) return undefined;
   const known = served.get(url);
   if (known?.code === code) return known;
   const module = await withMap(url, code);

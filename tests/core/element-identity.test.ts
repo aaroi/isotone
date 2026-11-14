@@ -76,16 +76,31 @@ describe('a selector that names the element, not its place', () => {
   });
 
   it("never takes an id the page generates on each render, as React's useId and the libraries on it do", () => {
-    for (const id of [':r1:', '«r2»', '_r_3_', 'app_r_1_', 'radix-:r4:', 'headlessui-menu-button-5', 'mantine-r1a']) {
+    for (const id of [
+      ':r1:',
+      '«r2»',
+      '_r_3_',
+      'app_r_1_',
+      'radix-:r4:',
+      'headlessui-menu-button-5',
+      'mantine-r1a',
+      '_R_1b6la9_',
+      '«R2mm9j6»',
+      ':R2mm9j6H1:',
+    ]) {
       document.body.innerHTML = `<main><div><button>A</button><button id="${id}">B</button></div></main>`;
       expect(selectorOf('button', 1), id).toBe('main:nth-child(1) > div:nth-child(1) > button:nth-child(2)');
     }
     document.body.innerHTML = '<main><div><button>A</button><button id="checkout">B</button></div></main>';
     expect(selectorOf('button', 1)).toBe('#checkout');
     // Nor such an id in an attribute that points at it.
-    document.body.innerHTML = '<form><label for=":r1:">Email</label><label for=":r2:">Name</label><a href="#radix-:r3:">Tab</a></form>';
+    document.body.innerHTML =
+      '<form><label for=":r1:">Email</label><label for=":r2:">Name</label><a href="#radix-:r3:">Tab</a><label for="_R_1b6la9_">Plan</label><a href="#«R2mm9j6»">Server</a></form>';
     expect(selectorOf('label', 1)).toBe('form:nth-child(1) > label:nth-child(2)');
     expect(selectorOf('a')).toBe('form:nth-child(1) > a:nth-child(3)');
+    // A server render's ids are longer: `_R_1b6la9_`, `«R2mm9j6»`.
+    expect(selectorOf('label', 2)).toBe('form:nth-child(1) > label:nth-child(4)');
+    expect(selectorOf('a', 1)).toBe('form:nth-child(1) > a:nth-child(5)');
     // A test id is the author's, whatever it looks like.
     document.body.innerHTML = '<div><button data-testid="cart:remove:btn">Remove</button><button>Keep</button></div>';
     expect(selectorOf('button')).toBe('button[data-testid="cart:remove:btn"]');
