@@ -32,6 +32,7 @@ import {
   listVariants,
   promoteVariant,
   readActive,
+  readPointer,
   knobProblem,
   readKnobs,
   readVariant,
@@ -569,7 +570,7 @@ function cmdUse(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOp
   // Under the same lock as every other variants change, and refused like the
   // panel's request when another group already overrides one of its files.
   const message = mutateVariants(opts, () => {
-    const active = readActive(opts);
+    const active = readPointer(opts);
     const groups = overlayGroups(listVariants(opts));
     if (id === 'default') {
       if (!groupId) {
@@ -621,7 +622,7 @@ function cmdOff(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOp
   mutateVariants(opts, () =>
     writeActive(
       opts,
-      readActive(opts).filter((a) => a !== id),
+      readPointer(opts).filter((a) => a !== id),
     ),
   );
   out(io, `off: "${id}"${describeActive(readActive(opts))}`);

@@ -3,7 +3,7 @@
 import { conflictedReason, overlayGroups } from '../../core/variants/overlay';
 import { LockBusyError, SERVER_LOCK_WAIT_MS } from '../fs/lock';
 import { type HandlerRequest, type HandlerResponse, jsonResponse } from '../http';
-import { activeConflict, conflictedCopies, readActive, writeActive } from './active';
+import { activeConflict, conflictedCopies, readActive, readPointer, withUnshown, writeActive } from './active';
 import { readKnobs } from './knobs';
 import { readVariant, readVariants, listVariants } from './manifest';
 import { mutateVariants, type VariantsStoreOptions } from './options';
@@ -51,9 +51,12 @@ function setActive(opts: VariantsStoreOptions, body: unknown): HandlerResponse {
     // Malformed, not merely unknown: a 404 would imply the shape was fine.
     if (!isValidVariantId(id)) return json(400, { error: `invalid variant id "${id}"` });
   }
+  const pointer = readPointer(opts);
   for (const id of active) {
     if (!readVariant(opts, id)) return json(404, { error: `unknown variant "${id}"` });
-    const conflicted = conflictedCopies(opts, id);
+    // Only a new pick: a tab that still names one already in the set, while
+    // it picks in another group, keeps it as the file does.
+    const conflicted = pointer.includes(id) ? [] : conflictedCopies(opts, id);
     if (conflicted.length > 0) return json(409, { error: conflictedReason(id, conflicted) });
   }
   const conflict = activeConflict(opts, active);
@@ -69,6 +72,7 @@ function setActive(opts: VariantsStoreOptions, body: unknown): HandlerResponse {
       conflict,
     });
   }
-  writeActive(opts, active);
-  return json(200, { active });
+  // A tab posts what it shows, which leaves out a conflicted pick the file keeps.
+  writeActive(opts, withUnshown(opts, active));
+  return json(200, { active: readActive(opts) });
 }

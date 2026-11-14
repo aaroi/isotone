@@ -113,11 +113,6 @@ describe('the Vite adapter, served', () => {
     expect(script.length).toBeGreaterThan(200);
     // Variants are on by default, so the mount asks for the overlay source.
     expect(script).toContain('overlay');
-    // And the page passes the server's active-set changes on to it, from
-    // the dev server's own HMR client, in either switching mode.
-    const follow = html.slice(html.indexOf('data-isotone-active'), html.indexOf('data-isotone-inject'));
-    expect(follow).toContain('import("/@vite/client")');
-    expect(follow).toContain('"isotone:active"');
   });
 
   it('injects into <head>, never into the body a react tree owns', async () => {
@@ -140,7 +135,7 @@ describe('the Vite adapter, served', () => {
   it('serves the variants endpoint, path-relative to its mount', async () => {
     const res = await fetch(`${origin}${VARIANTS_ENDPOINT}`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ variants: [], active: [], knobs: [] });
+    expect(await res.json()).toEqual({ variants: [], active: [], knobs: [], hmr: '/@vite/client' });
     const unknown = await fetch(`${origin}${VARIANTS_ENDPOINT}/active`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -284,12 +279,16 @@ describe('the Vite adapter, served', () => {
       const address = manual.httpServer?.address();
       const url = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
       const html = await (await fetch(url, { headers: { accept: 'text/html' } })).text();
-      expect(html).not.toContain('data-isotone-inject');
+      expect(html).not.toContain('data-isotone');
       expect(html).not.toContain('/@isotone/panel.js');
-      // The app's own mount of the panel still hears the server's set change.
-      expect(html).toContain('data-isotone-active');
       expect(await (await fetch(`${url}${NOTES_ENDPOINT}`)).json()).toEqual([]);
-      expect(await (await fetch(`${url}${VARIANTS_ENDPOINT}`)).json()).toEqual({ variants: [], active: [], knobs: [] });
+      // The listing names the dev server's HMR client, which the panel listens on for the set changing.
+      expect(await (await fetch(`${url}${VARIANTS_ENDPOINT}`)).json()).toEqual({
+        variants: [],
+        active: [],
+        knobs: [],
+        hmr: '/@vite/client',
+      });
       const update = await fetch(`${url}${UPDATE_ENDPOINT}`);
       expect(update.headers.get('cache-control')).toBe('no-store');
       expect(await update.json()).toMatchObject({ status: 'disabled', upgrade: null });
@@ -926,11 +925,24 @@ describe('overlay variants in the dev server', () => {
     // and the listing does not call it active.
     expect(hooks.load(source)).toBeNull();
     expect((await request(server, VARIANTS_ENDPOINT, 'GET', '/')).body).toMatchObject({ active: [] });
+    const pointer = () => JSON.parse(readFileSync(join(root, ACTIVE_FILE), 'utf8')).active;
+    // A tab posts what it shows: a pick in another group keeps it in the file,
+    // and so does a stale tab that still names it.
+    expect(await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['t'] })).toMatchObject({
+      status: 200,
+      body: { active: ['t'] },
+    });
+    expect(pointer()).toEqual(['t', 'b']);
+    expect((await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] })).status).toBe(200);
+    expect(pointer()).toEqual(['b']);
+    // Only a new pick of it is refused.
+    writeActive({ root }, []);
     const refused = await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] });
     expect(refused.status).toBe(409);
     expect((refused.body as { error: string }).error).toBe(
       '"b" holds conflict markers from `variant sync` in src/Button.tsx, so it cannot be shown until they are resolved.',
     );
+    writeActive({ root }, ['b']);
 
     // Resolved: the pick it kept shows, and every panel hears so.
     writeFileSync(override, 'export const label = "variant b";\n');
@@ -1037,7 +1049,6 @@ describe('other devices on the network', () => {
     const page = navigate(server, '/', {}, PHONE);
     expect(page.body).toContain('app');
     expect(page.body).not.toContain('data-isotone-inject');
-    expect(page.body).not.toContain('data-isotone-active');
     expect((await request(server, '/@isotone/panel.js', 'GET', '/', undefined, { host: LAN_HOST }, PHONE)).status).toBe(403);
     // This machine, on the same exposed server, gets everything.
     expect(navigate(server, '/', { host: 'localhost:5173' }, '127.0.0.1').body).toContain('data-isotone-inject');
@@ -1298,7 +1309,9 @@ describe('live variants', () => {
       expect(dispatcher).toContain('"./Button.tsx?isotone=_base"');
       expect(dispatcher).not.toContain('?isotone=b');
       // Nor can a tab pick it, from the panel or a `?v=` link: its group has no such member.
-      expect(hooks.load('\0isotone-live')?.code).toContain('"groups":[{"id":"b","members":[]},{"id":"t","members":["t"]}]');
+      expect(hooks.load('\0isotone-live')?.code).toContain(
+        '"groups":[{"id":"b","members":["b"]},{"id":"t","members":["t"]}],"conflicted":["b"]',
+      );
       writeFileSync(override, 'export const label = "variant b";\n');
       const client = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([{ id: source }]) } };
       expect(hooks.hotUpdate.call({ environment: client }, { file: override })).toEqual([]);

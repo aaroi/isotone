@@ -35,6 +35,7 @@ export {
   crossGroupOverlaps,
   overrideSourcePath,
   readActive,
+  readPointer,
   resolveOverride,
   writeActive,
 } from './active';

@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { overlayGroups, type OverlayVariant } from '../../core/variants/overlay';
-import { readActive, writeActive } from './active';
+import { readPointer, writeActive } from './active';
 import { blobHashes, hasGit, NO_GIT_SYNC, recordBase } from './git';
 import { filesWithoutBase, readVariant, writeVariant, readVariants, listVariants } from './manifest';
 import { type VariantsStoreOptions, mutateVariants, variantsDir } from './options';
@@ -29,7 +29,7 @@ export function promoteVariant(
     if (!isValidVariantId(id)) throw new Error(`Invalid variant id "${id}"`);
     const manifest = readVariant(opts, id);
     if (!manifest) throw new Error(`No variant "${id}"`);
-    const active = readActive(opts);
+    const active = readPointer(opts);
     const root = resolve(opts.root);
     const vDir = variantDir(opts, id);
     const missing = Object.keys(manifest.files).filter((key) => !existsSync(join(vDir, key)));
@@ -152,7 +152,7 @@ export function dropVariant(opts: VariantsStoreOptions, id: string): void {
     // `variant drop ..` would otherwise resolve to the variants dir's parent
     // and rmSync it, recursively.
     if (!isValidVariantId(id)) throw new Error(`Invalid variant id "${id}"`);
-    const active = readActive(opts);
+    const active = readPointer(opts);
     rmSync(variantDir(opts, id), { recursive: true, force: true });
     if (active.includes(id))
       writeActive(

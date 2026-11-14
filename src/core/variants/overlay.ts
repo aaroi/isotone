@@ -92,6 +92,9 @@ export interface OverlayVariantsList {
   active: string[];
   /** The host's knobs, every route; the client filters by route. */
   knobs?: KnobAxis[];
+  /** The dev server's HMR client (Vite's `/@vite/client`, under its base),
+   *  which sends {@link ACTIVE_EVENT}; absent without one. */
+  hmr?: string;
 }
 
 /** The custom property a knob writes: `--knob-<id>`. */
@@ -163,9 +166,8 @@ export const VARIANTS_ENDPOINT = '/api/isotone/variants';
 
 /**
  * The server's active set changed (another tab's pick, `variant use`, a copy
- * that gained or lost conflict markers): `{ active }`. Sent over Vite's HMR
- * channel, and passed on to the page as a `window` event of the same name,
- * which the overlay source follows.
+ * that gained or lost conflict markers): `{ active }`, sent over the dev
+ * server's HMR channel. The overlay source follows it.
  */
 export const ACTIVE_EVENT = 'isotone:active';
 
@@ -309,7 +311,13 @@ export function overlayAxes(list: OverlayVariantsList, route?: string): SelectVa
       defaultOption: OVERLAY_DEFAULT_OPTION,
       options: [
         { id: OVERLAY_DEFAULT_OPTION, label: 'Default', hint: 'The committed source' },
-        ...mine.map((v) => ({ id: v.id, label: v.label || v.id, hint: overlayHint(v) })),
+        // A copy with conflict markers cannot be shown, so it cannot be picked.
+        ...mine.map((v) => ({
+          id: v.id,
+          label: v.label || v.id,
+          hint: overlayHint(v),
+          ...(v.conflicts?.length ? { disabled: true } : {}),
+        })),
       ],
     });
   }
@@ -389,6 +397,20 @@ export function unappliedLinkNotice(list: OverlayVariantsList, active: string[],
   return `This link’s ?v= asks for ${asked.join('; ')}, but links don’t choose variants here. Pick ${asked.length > 1 ? 'them' : 'it'} below instead; a pick shows in every tab. Per-tab links need live switching (React on Vite 6+).`;
 }
 
+/** What the overlay source uses of a Vite hot context. */
+export interface HotChannel {
+  on(event: string, listener: (data: { active?: unknown } | null | undefined) => void): void;
+  off?(event: string, listener: (data: { active?: unknown } | null | undefined) => void): void;
+}
+
+/** The page's own HMR client, at the URL the listing names: the same module,
+ *  and so the same socket, as the page's. */
+function importHot(client: string): Promise<HotChannel> {
+  return import(/* @vite-ignore */ client).then((mod: { createHotContext: (owner: string) => HotChannel }) =>
+    mod.createHotContext('/@isotone/active'),
+  );
+}
+
 function pageLiveStore(): LiveVariantSelection | null {
   if (typeof window === 'undefined') return null;
   const store = (window as { __isotoneLive?: LiveVariantSelection & { version?: number } }).__isotoneLive;
@@ -421,6 +443,9 @@ export function createOverlayVariantsSource(cfg: {
    * group's id is: never shown, never on the page, and named in the notice.
    */
   takenIds?: () => Iterable<string>;
+  /** Connect to the HMR client the listing names. Default: import it and
+   *  take a hot context, as a module of the page would. */
+  hot?: (client: string) => Promise<HotChannel>;
 }): VariantsSource & {
   refresh(): Promise<void>;
   /** For the reviewer: the page's `?v=` names picks the page does not show, or a variant here
@@ -435,6 +460,8 @@ export function createOverlayVariantsSource(cfg: {
   /** Call when the ids `takenIds` gives may have changed (a host source loaded
    *  its axes): puts back or takes off the knobs they leave out. */
   takenChanged(): void;
+  /** Stop following the server's set. */
+  dispose(): void;
 } {
   let list: OverlayVariantsList | null = null;
   let error: string | null = null;
@@ -463,15 +490,32 @@ export function createOverlayVariantsSource(cfg: {
     }
   };
   // Without a live store every tab shows the server's set, which moves when
-  // another tab picks or the CLI runs `variant use`: follow it, so the panel
-  // and a note's selections name what the page shows.
-  const page = typeof window === 'undefined' ? null : window;
-  page?.addEventListener?.(ACTIVE_EVENT, (event) => {
-    const next = (event as CustomEvent<{ active?: unknown } | null>).detail?.active;
+  // another tab picks or the CLI runs `variant use`: follow it on the dev
+  // server's HMR channel, once the listing names it, so the panel and a note's
+  // selections name what the page shows. `events` lets a listing that was
+  // already on its way keep what an event said since.
+  let events = 0;
+  const onActive = (data: { active?: unknown } | null | undefined) => {
+    const next = data?.active;
     if (!list || !Array.isArray(next)) return;
+    events++;
     list = { ...list, active: next.filter((id): id is string => typeof id === 'string') };
     emit();
-  });
+  };
+  let channel: Promise<HotChannel | null> | null = null;
+  let disposed = false;
+  const follow = (client: string) => {
+    if (channel || disposed) return;
+    const base = new URL(cfg.endpoint, typeof location === 'undefined' ? 'http://localhost/' : location.href);
+    channel = (cfg.hot ?? importHot)(new URL(client, base).href).then(
+      (hot) => {
+        hot.on(ACTIVE_EVENT, onActive);
+        if (disposed) hot.off?.(ACTIVE_EVENT, onActive);
+        return hot;
+      },
+      () => null,
+    );
+  };
   const current = (): string[] => live?.active ?? intended ?? list?.active ?? [];
   /** The variants on this route that cannot be shown. */
   const conflicted = (): OverlayVariantStatus[] => {
@@ -623,6 +667,10 @@ export function createOverlayVariantsSource(cfg: {
       // The panel re-reads axes from the source that changed; only <html> needs this.
       if (list) applyKnobs();
     },
+    dispose() {
+      disposed = true;
+      void channel?.then((hot) => hot?.off?.(ACTIVE_EVENT, onActive));
+    },
     routeChanged() {
       // Before the first listing nothing is on the page; `refresh` applies it.
       if (!list || cfg.getRoute() === knobsRoute) return;
@@ -632,6 +680,7 @@ export function createOverlayVariantsSource(cfg: {
     async refresh() {
       const refreshId = ++refreshRevision;
       const startedRevision = revision;
+      const startedEvents = events;
       const wasActivating = activation !== null;
       const next = await request(cfg.endpoint, undefined, async (res) => {
         if (!res.ok) throw new Error(`Loading variants failed (${res.status})`);
@@ -641,7 +690,11 @@ export function createOverlayVariantsSource(cfg: {
       // An older GET must not roll back a successful POST that finished while
       // the listing was loading. Definitions can still refresh independently.
       const previousKnobs = list?.knobs ?? [];
-      list = list && (wasActivating || activation !== null || startedRevision !== revision) ? { ...next, active: list.active } : next;
+      list =
+        list && (wasActivating || activation !== null || startedRevision !== revision || startedEvents !== events)
+          ? { ...next, active: list.active }
+          : next;
+      if (next.hmr) follow(next.hmr);
       if (knobRoot) applyKnobValues(previousKnobs, {}, knobRoot);
       // A stored value for a knob a group now hides is dropped too, so it cannot style the page unseen.
       const valid = new Map(overlayKnobs(list).map((knob) => [knob.id, knob]));
@@ -693,14 +746,8 @@ export function createOverlayVariantsSource(cfg: {
         return;
       }
       const axis = selects().find((a) => a.id === axisId);
-      if (!axis || !isValidSelection(axis, value)) return;
-      // Refused here, before the tab switches: the server would refuse it too.
-      const unshowable = conflicted().find((v) => v.id === value);
-      if (unshowable) {
-        error = conflictedReason(unshowable.label || unshowable.id, unshowable.conflicts ?? []);
-        emit();
-        return;
-      }
+      // A disabled option (a copy with conflict markers) cannot be picked.
+      if (!axis || !isValidSelection(axis, value) || axis.options.find((o) => o.id === value)?.disabled) return;
       // The group's members leave the set and the pick joins it; the other
       // groups' picks ride along untouched.
       const members = new Set(axis.options.map((o) => o.id));

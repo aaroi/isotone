@@ -211,6 +211,7 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
     for (const off of listeners) off();
     // The host's source outlives this mount: leave it with none of this panel's listeners.
     combined?.dispose();
+    overlay?.dispose();
     guard.disconnect();
     // Deferred, not synchronous: a React host calls this from an effect
     // cleanup, and unmounting our root while the host's render is in flight

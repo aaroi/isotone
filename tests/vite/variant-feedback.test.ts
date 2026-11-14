@@ -303,6 +303,18 @@ describe('`variant sync` conflict advice', () => {
     );
     expect(existsSync(join(root, '.isotone', 'active.json'))).toBe(false);
 
+    // A pick it already had stays in the file through other picks, to show
+    // again once the markers are resolved.
+    writeFileSync(join(root, 'src', 'b.ts'), 'b\n');
+    await runCli(['variant', 'new', 'w'], sink(root));
+    await runCli(['variant', 'add', 'w', 'src/b.ts'], sink(root));
+    writeActive({ root }, ['v']);
+    const pointer = () => JSON.parse(readFileSync(join(root, '.isotone', 'active.json'), 'utf8')).active;
+    expect(await runCli(['variant', 'use', 'w'], sink(root))).toBe(0);
+    expect(pointer()).toEqual(['v', 'w']);
+    expect(await runCli(['variant', 'off', 'w'], sink(root))).toBe(0);
+    expect(pointer()).toEqual(['v']);
+
     // The list says so too, as text and as JSON, until the markers go.
     const listed = sink(root);
     await runCli(['variant', 'list'], listed);

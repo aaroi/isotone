@@ -71,7 +71,7 @@ committed with the variant, so teammates can sync it too. `variant sync <id>` me
 untracked files included; it needs Git installed and says so when it is not.
 Where both sides changed the same lines the copy gets conflict markers: `sync`
 exits 1, `variant list` counts them under CONFLICTS, and the copy cannot be
-shown until they are resolved: `variant use` and the panel refuse it, and if it
+shown until they are resolved: `variant use` refuses it, the panel shows it disabled, and if it
 was active the real files show meanwhile (it returns once they are). A copy made outside a repository by Isotone 1.5.0 or earlier has no
 recorded version: `variant list` names it under NO BASE, since nobody knows
 whether its real file changed, and `sync` cannot merge it (unless the copy still

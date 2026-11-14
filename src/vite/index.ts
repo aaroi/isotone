@@ -37,7 +37,7 @@ import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
 import { autoUpdateNote } from '../node/update/note';
 import { listVariants, variantsDir } from '../node/variants';
 import { isLoopback } from '../node/http';
-import { activeEventSource, mountModuleSource, servePanel } from './html-inject';
+import { mountModuleSource, servePanel } from './html-inject';
 import {
   BASE_VERSION,
   dispatcherModule,
@@ -406,7 +406,13 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
         const activate = switching.attach(server, { live, ignored: variantsOptions.ignored });
         server.middlewares.use(
           VARIANTS_ENDPOINT,
-          variantsEndpoint(() => overrides.opts, activate, allowedHosts),
+          variantsEndpoint(
+            () => overrides.opts,
+            activate,
+            allowedHosts,
+            // Where the page's Vite client lives, which the server's set changes reach.
+            () => (server.config.server.hmr === false ? null : `${server.config.base ?? '/'}@vite/client`),
+          ),
         );
         server.middlewares.use(
           refuseVersion(
@@ -430,8 +436,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
               options.theme,
               options.compareShortcut,
             );
-      const follow = variantsOptions ? activeEventSource(server.config.base ?? '/') : null;
-      servePanel(server.middlewares.use.bind(server.middlewares) as never, mount, liveScript, follow);
+      servePanel(server.middlewares.use.bind(server.middlewares) as never, mount, liveScript);
     },
   } satisfies Plugin;
 
