@@ -41,11 +41,11 @@ import { npm } from './npm.mjs';
 // and its notes in the shipped variants guide and changelog.
 // The figures above are each change on its own over 1.5.0. Merged together (#60 to #69), the bundle is
 // 402.6 kB and the tarball 457.6 kB: bundle raised to 403.5 kB and tarball to 459 kB.
-// Bundle raised to 408.5 kB and tarball to 465 kB (407.6 and 464.1 kB; panel entry): the tab's
+// Bundle raised to 408.5 kB and tarball to 466 kB (407.8 and 464.9 kB over #71; panel entry): the tab's
 // remembered panels and Variants scroll, the caret placed as Feedback opens, select mode ending at
 // Variants, the list that yields room from its top and holds its height as room returns, the line by
 // the pill for a link's unapplied ?v=, and their changelog and README notes.
-const BUDGET = { bundle: 408_500, tarball: 465_000 };
+const BUDGET = { bundle: 408_500, tarball: 466_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));
