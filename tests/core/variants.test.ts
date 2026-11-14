@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   OVERLAY_DEFAULT_OPTION,
+  createOverlayVariantsSource,
   createVariantsSource,
+  KNOBS_STORAGE_KEY,
   type OverlayVariantStatus,
   overlayAxes,
   overlayGroups,
@@ -200,6 +202,129 @@ describe('knobs', () => {
   it('reports only the knobs off their default, as the panel showed them', () => {
     const moved = knobDelta([fade, dots], { 'fade-from': '40', 'dot-alpha': '0.1' });
     expect(moved.map((m) => [m.axis.id, m.value, m.shown])).toEqual([['fade-from', '40', '40%']]);
+  });
+});
+
+describe('overlay knobs and the route', () => {
+  // Regression: a knob scoped to /pricing showed its slider only there, but its value
+  // stayed on <html> everywhere, where the panel had no control to reset it.
+  const border: KnobAxis = {
+    kind: 'color',
+    id: 'header-border',
+    label: 'Header > Border',
+    defaultColor: '#e5e5e5',
+    swatches: [],
+    route: '/pricing',
+  };
+  const density: KnobAxis = {
+    kind: 'select',
+    id: 'density',
+    label: 'Density',
+    defaultOption: 'cozy',
+    options: [
+      { id: 'cozy', label: 'Cozy' },
+      { id: 'compact', label: 'Compact' },
+    ],
+    route: '/pricing',
+  };
+  const gap: KnobAxis = { kind: 'range', id: 'gap', label: 'Gap', min: 0, max: 40, step: 1, defaultValue: 16, unit: 'px' };
+
+  function fixture(route: string, stored: Record<string, string>) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ variants: [], active: [], knobs: [border, density, gap] })),
+    );
+    const values = new Map([[KNOBS_STORAGE_KEY, JSON.stringify(stored)]]);
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: vi.fn((key: string, value: string) => void values.set(key, value)),
+      removeItem: vi.fn((key: string) => void values.delete(key)),
+    };
+    const props = new Map<string, string>();
+    const attrs = new Map<string, string>();
+    const events: unknown[] = [];
+    const knobRoot = {
+      style: {
+        setProperty: (name: string, value: string) => void props.set(name, value),
+        removeProperty: (name: string) => void props.delete(name),
+        getPropertyValue: (name: string) => props.get(name) ?? '',
+      },
+      setAttribute: (name: string, value: string) => void attrs.set(name, value),
+      removeAttribute: (name: string) => void attrs.delete(name),
+      dispatchEvent: (event: Event) => events.push((event as CustomEvent).detail) > 0,
+    };
+    const page = { route };
+    const source = createOverlayVariantsSource({ endpoint: '/variants', getRoute: () => page.route, storage, knobRoot, live: null });
+    return { source, page, props, attrs, events, values, storage };
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('applies a stored value only on the knob’s own route, on a full load', async () => {
+    const stored = { 'header-border': '#f59e0b', density: 'compact', gap: '24' };
+    const home = fixture('/', stored);
+    await home.source.refresh();
+    expect(home.props.has(knobVar('header-border'))).toBe(false);
+    expect(home.attrs.has('data-knob-density')).toBe(false);
+    // A knob without a route belongs everywhere.
+    expect(home.props.get(knobVar('gap'))).toBe('24px');
+    expect(home.source.getAxes().map((a) => a.id)).toEqual(['gap']);
+    expect(home.source.knobs.values).toEqual(stored);
+
+    const pricing = fixture('/pricing', stored);
+    await pricing.source.refresh();
+    expect(pricing.props.get(knobVar('header-border'))).toBe('#f59e0b');
+    expect(pricing.attrs.get('data-knob-density')).toBe('compact');
+  });
+
+  it('takes the knob off on client-side navigation and restores it on the way back, keeping storage', async () => {
+    const { source, page, props, attrs, events, values, storage } = fixture('/pricing', {});
+    await source.refresh();
+    source.setSelection('header-border', '#f59e0b');
+    source.setSelection('density', 'compact');
+    expect(props.get(knobVar('header-border'))).toBe('#f59e0b');
+    const stored = values.get(KNOBS_STORAGE_KEY);
+    storage.setItem.mockClear();
+    const notified = vi.fn();
+    source.subscribe(notified);
+    events.length = 0;
+
+    page.route = '/';
+    source.routeChanged();
+    expect(props.has(knobVar('header-border'))).toBe(false);
+    expect(attrs.has('data-knob-density')).toBe(false);
+    expect(events).toEqual([
+      { id: 'header-border', value: null },
+      { id: 'density', value: null },
+    ]);
+    expect(notified).toHaveBeenCalledTimes(1);
+    expect(source.getSelections()).toEqual({ gap: '16' });
+    expect(values.get(KNOBS_STORAGE_KEY)).toBe(stored);
+    expect(storage.setItem).not.toHaveBeenCalled();
+    expect(storage.removeItem).not.toHaveBeenCalled();
+
+    // The same route again (a replaceState for a query string) changes nothing.
+    source.routeChanged();
+    expect(notified).toHaveBeenCalledTimes(1);
+
+    page.route = '/pricing';
+    source.routeChanged();
+    expect(props.get(knobVar('header-border'))).toBe('#f59e0b');
+    expect(attrs.get('data-knob-density')).toBe('compact');
+    expect(source.getSelections()).toMatchObject({ 'header-border': '#f59e0b', density: 'compact' });
+  });
+
+  it('keeps a held compare off other routes’ knobs', async () => {
+    const { source, page, props } = fixture('/', { 'header-border': '#f59e0b' });
+    await source.refresh();
+    source.preview?.({ 'header-border': '#000000' });
+    expect(props.has(knobVar('header-border'))).toBe(false);
+    source.preview?.(null);
+    page.route = '/pricing';
+    source.routeChanged();
+    expect(props.get(knobVar('header-border'))).toBe('#f59e0b');
   });
 });
 

@@ -98,7 +98,7 @@ export function knobVar(id: string): string {
 
 /** Fired on `<html>`, bubbling, when a knob's value changes. `detail` is
  *  `{ id, value }` with the same value the custom property holds, or `null`
- *  when the knob went back to its default. */
+ *  when the knob went back to its default or the page left its route. */
 const KNOBS_EVENT = 'isotone:knob';
 
 /** The property's value: a range carries its unit, a colour is its hex, a select is the option id. */
@@ -357,6 +357,9 @@ export function createOverlayVariantsSource(cfg: {
   readonly list: OverlayVariantsList | null;
   /** The knobs on the current route and their values, for the save note. */
   readonly knobs: { axes: KnobAxis[]; values: VariantSelections };
+  /** Call after a client-side navigation: puts the new route's knobs on the page,
+   *  takes the others off and notifies. Does nothing while the route is the same. */
+  routeChanged(): void;
 } {
   let list: OverlayVariantsList | null = null;
   let error: string | null = null;
@@ -428,8 +431,16 @@ export function createOverlayVariantsSource(cfg: {
   };
   // A hold to compare shows these over the stored values, and stores nothing.
   let previewing: VariantSelections | null = null;
+  // The route whose knobs are on the page; `routeChanged` compares against it.
+  let knobsRoute: string | null = null;
+  // A knob is on the page only on its own routes, like its slider. Elsewhere its
+  // property and attribute come off, and the stored value waits for its route.
   const applyKnobs = () => {
-    if (knobRoot) applyKnobValues(list?.knobs ?? [], previewing ? { ...knobValues, ...previewing } : knobValues, knobRoot);
+    knobsRoute = cfg.getRoute();
+    if (!knobRoot) return;
+    const here = new Set(knobsFor(list?.knobs, knobsRoute).map((k) => k.id));
+    const shown = previewing ? { ...knobValues, ...previewing } : knobValues;
+    applyKnobValues(list?.knobs ?? [], Object.fromEntries(Object.entries(shown).filter(([id]) => here.has(id))), knobRoot);
   };
   /** The active set with the given groups' members taken out: those groups at Default. */
   const withoutGroups = (axisIds: string[]): string[] => {
@@ -495,6 +506,12 @@ export function createOverlayVariantsSource(cfg: {
     },
     get knobs() {
       return { axes: knobAxes(), values: { ...knobValues } };
+    },
+    routeChanged() {
+      // Before the first listing nothing is on the page; `refresh` applies it.
+      if (!list || cfg.getRoute() === knobsRoute) return;
+      applyKnobs();
+      emit();
     },
     async refresh() {
       const refreshId = ++refreshRevision;

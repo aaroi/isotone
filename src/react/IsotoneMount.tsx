@@ -73,10 +73,11 @@ const KNOBS_EMPTY_TEXT =
 
 export function mountIsotone(opts: MountIsotoneOptions): () => void {
   const getRoute = opts.getRoute ?? (() => window.location.pathname);
-  const variants =
+  const overlay =
     opts.variants === 'overlay' || opts.variants === 'knobs'
       ? overlaySourceWithSave(getRoute, opts.endpoint, opts.key, opts.variantsEndpoint)
-      : opts.variants;
+      : null;
+  const variants = overlay ?? (typeof opts.variants === 'object' ? opts.variants : undefined);
   // Nothing to show: no notes to write and no variants to pick. A production
   // host that forgot its source gets no empty launcher in the corner.
   if (!opts.endpoint && !variants) return () => {};
@@ -145,7 +146,10 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
     pending = true;
     setTimeout(() => {
       pending = false;
-      if (!disposed) render();
+      if (disposed) return;
+      // Knobs live on <html>, outside the panel: move them to the new route's set.
+      overlay?.routeChanged();
+      render();
     }, 0);
   };
 
@@ -207,7 +211,7 @@ function overlaySourceWithSave(
   endpoint: string | undefined,
   key: string | undefined,
   variantsEndpoint = VARIANTS_ENDPOINT,
-): VariantsSource {
+): VariantsSource & { routeChanged(): void } {
   const source = createOverlayVariantsSource({ endpoint: variantsEndpoint, getRoute });
   if (!endpoint) return source;
   const notes = createIsotoneStore({ endpoint, key });

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **A knob for one page no longer changes the others.** A knob whose `route` names `/pricing` showed its control only there, but its value applied on every page, including ones where the panel had no control to set it back. It now applies only on its own routes, after a full load or a client-side navigation, and comes back when you return to that page.
+
 ## 1.5.0
 
 ### Changed
