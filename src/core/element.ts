@@ -111,13 +111,14 @@ const BUILT_IN = new Set(['Object', 'Array', 'Module', 'Function', 'Promise', 'P
 
 /**
  * The component a stack frame's function name stands for: `Pricing`,
- * `Module.Pricing` and Firefox's `Pricing/<` are `Pricing`; a class's
+ * `Module.Pricing` and Firefox's `Pricing/<` and `Pricing<` (an anonymous
+ * function inside it, or assigned to it) are `Pricing`; a class's
  * `Card.render` is `Card`, and a bare `render` (Firefox, Safari) is `render`,
  * for the caller to name from the fiber. A built-in receiver
  * (`Object.render`) and a lower-case name are nothing.
  */
 function frameComponent(raw: string | undefined): string | undefined {
-  const name = raw?.replace(/^async\*/, '').replace(/\/.*$/, '');
+  const name = raw?.replace(/^async\*/, '').replace(/[/<].*$/, '');
   if (!name) return undefined;
   if (name === 'render') return name;
   const parts = name.split('.');
@@ -134,10 +135,12 @@ function frameComponent(raw: string | undefined): string | undefined {
  * `createElement`, `cloneElement`, or the server-component client replaying
  * the server's stack), and its last before React's bottom frame is the
  * function React called to render: the component. The first app frame after
- * the factory is the place. A component in a dependency (a library calling a
- * render prop or a column's `render`) names nothing.
+ * the factory is the place. When React called a dependency (a library calling
+ * a render prop or a column's `render`, or wrapping the app's component as
+ * MobX's `observer` does), `onStack` holds the components the app's frames
+ * name, for the caller to check the fiber against.
  */
-function callsite(node: Made): { at: StackFrame; name?: string } | undefined {
+function callsite(node: Made): { at: StackFrame; name?: string; onStack?: (string | undefined)[] } | undefined {
   const legacy = node._debugSource;
   if (legacy?.fileName) {
     return NOT_APP.test(legacy.fileName)
@@ -156,7 +159,8 @@ function callsite(node: Made): { at: StackFrame; name?: string } | undefined {
   const render = frames.length > 1 ? frames[frames.length - 1] : undefined;
   const at = app[0];
   if (!at) return undefined;
-  return { at, name: render && !NOT_APP.test(render.url) ? frameComponent(render.name) : undefined };
+  if (render && !NOT_APP.test(render.url)) return { at, name: frameComponent(render.name) };
+  return { at, onStack: app.map((frame) => frameComponent(frame.name)) };
 }
 
 /** A fiber's component name, where the stack names no function: React 18, or a bare `render`. */
@@ -192,7 +196,17 @@ function reactOwners(el: Element): { names: string[]; at?: StackFrame } {
       // React's replay of a server component's stack names the server bundle, not a source file.
       if (!/^(?:about|rsc):/.test(made.at.url)) at ??= made.at;
       // React 18 names no function, and a bare `render` is a class's: the owner's type names them.
-      const name = made.at.legacy || (made.name === 'render' && isClass(owner)) ? typeName(owner) : made.name;
+      // A library that wraps the app's component (MobX's `observer`) is named for it, when the
+      // app's own frame on the stack is that component; a table's `Cell` calling a column is not.
+      const wrapped = made.onStack && typeName(owner);
+      const name =
+        made.at.legacy || (made.name === 'render' && isClass(owner))
+          ? typeName(owner)
+          : made.onStack
+            ? wrapped && made.onStack.includes(wrapped)
+              ? wrapped
+              : undefined
+            : made.name;
       // Capitalized is a component; anything else is a minified or internal name.
       if (name && /^[A-Z]/.test(name) && !names.includes(name) && names.length < 5) names.unshift(name);
     }

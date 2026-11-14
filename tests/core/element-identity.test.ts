@@ -629,6 +629,13 @@ describe('reading Chrome, Firefox and Safari stack lines', () => {
     expect(pin({ type: 'b', _debugStack: gecko(`async*Pricing@${app('Pricing.tsx')}:5:40`), _debugOwner: owner }).component).toEqual([
       'Pricing',
     ]);
+    // An anonymous function in a declaration's initializer, as shadcn's `const Button = forwardRef((…) => …)`.
+    expect(pin({ type: 'button', _debugStack: gecko(`Button<@${app('ui/button.tsx')}:9:3`), _debugOwner: owner }).component).toEqual([
+      'Button',
+    ]);
+    expect(pin({ type: 'button', _debugStack: gecko(`Button</<@${app('ui/button.tsx')}:9:3`), _debugOwner: owner }).component).toEqual([
+      'Button',
+    ]);
     // A class component's render: the fiber names it.
     class Card {}
     Object.assign(Card.prototype, { isReactComponent: {} });
@@ -662,6 +669,36 @@ describe('reading Chrome, Firefox and Safari stack lines', () => {
     expect(pin({ type: 'p', _debugStack: chrome(`Module.Pricing (${app('Pricing.tsx')}:3:30)`), _debugOwner: null }).component).toEqual([
       'Pricing',
     ]);
+  });
+
+  it("reads Chrome stacks up to React's bottom frame, and names a component a library wraps by its own frame", () => {
+    const bottom = `Object.react_stack_bottom_frame (${dep}/react-dom_client.js?v=1:25904:20)`;
+    const below = `renderWithHooks (${dep}/react-dom_client.js?v=1:7662:22)`;
+    expect(
+      pin({
+        type: 'li',
+        _debugStack: chrome(`${app('PlanList.tsx')}:5:40`, `PlanList (${app('PlanList.tsx')}:5:20)`, bottom, below),
+        _debugOwner: null,
+      }),
+    ).toMatchObject({ component: ['PlanList'], source: '/src/PlanList.tsx:5' });
+    // MobX's observer: React calls the library's wrapper, which calls the app's TodoView.
+    const observed = Object.assign(() => {}, { displayName: 'TodoView' });
+    const wrapper = { type: observed, _debugOwner: null };
+    const stack = chrome(
+      `TodoView (${app('TodoView.tsx')}:24:30)`,
+      `${dep}/mobx-react-lite.js?v=1:5:63`,
+      `useObserver (${dep}/mobx-react-lite.js?v=1:3:42)`,
+      `observerComponent (${dep}/mobx-react-lite.js?v=1:5:45)`,
+      bottom,
+      below,
+    );
+    expect(pin({ type: 'li', _debugStack: stack, _debugOwner: wrapper })).toMatchObject({
+      component: ['TodoView'],
+      source: '/src/TodoView.tsx:24',
+    });
+    // A component the stack never shows is not credited, whatever the library's wrapper is called.
+    const other = { type: Object.assign(() => {}, { displayName: 'Cell' }), _debugOwner: null };
+    expect(pin({ type: 'li', _debugStack: stack, _debugOwner: other }).component).toBeUndefined();
   });
 
   it('treats minified code vendored into the app as a dependency', () => {
