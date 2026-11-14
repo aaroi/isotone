@@ -387,7 +387,7 @@ export function createOverlayVariantsSource(cfg: {
   getSearch?: () => string;
 }): VariantsSource & {
   refresh(): Promise<void>;
-  /** For the reviewer: the page's `?v=` names picks it does not show, as of the last `refresh()`; else null. */
+  /** For the reviewer: the page's `?v=` names picks the page does not show; else null. */
   getNotice(): string | null;
   readonly list: OverlayVariantsList | null;
   /** The knobs on the current route and their values, for the save note. */
@@ -524,12 +524,11 @@ export function createOverlayVariantsSource(cfg: {
       });
   }
   const search = cfg.getSearch ?? (() => (typeof location === 'undefined' ? '' : location.search));
-  // Settled when the listing loads, not on each pick: a notice coming and going above the
-  // selectors would move them under the reviewer's pointer. The view keeps it while open.
-  let notice: string | null = null;
   return {
     getError: () => error,
-    getNotice: () => notice,
+    // A live tab follows its own `?v=`, so only a source without one can leave a link unapplied.
+    // Read as the picks are now; the view keeps what it showed until the panel closes.
+    getNotice: () => (live || !list ? null : unappliedLinkNotice(list, current(), search())),
     get list() {
       return list;
     },
@@ -558,8 +557,6 @@ export function createOverlayVariantsSource(cfg: {
         }),
       );
       applyKnobs();
-      // A live tab follows its own `?v=`, so only a source without one can leave a link unapplied.
-      notice = live ? null : unappliedLinkNotice(list, current(), search());
       emit();
     },
     getAxes: axes,

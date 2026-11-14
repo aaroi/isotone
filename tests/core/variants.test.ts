@@ -407,20 +407,17 @@ describe('a ?v= the overlay source does not apply', () => {
     );
   });
 
-  it('stays put while the reviewer picks, and is gone on the next load once the picks match', async () => {
+  it('follows the picks: gone once they match the link, back when they move away', async () => {
     const { overlay } = source('?v=hero:hero-split,card-highlight:card-highlight');
     await overlay.refresh();
-    const notice = overlay.getNotice();
-    expect(notice).toContain('asks for Header › Hero: Split; Card.tsx: Highlight, but');
-    expect(notice).toContain('Pick them below instead;');
+    expect(overlay.getNotice()).toContain('asks for Header › Hero: Split; Card.tsx: Highlight, but');
+    expect(overlay.getNotice()).toContain('Pick them below instead;');
+    // The view keeps what it showed while the panel is open; the source says how things are now.
     overlay.setSelection('hero', 'hero-split');
     overlay.setSelection('card-highlight', 'card-highlight');
-    await settle();
-    // Above the selectors, so it does not move them under the pointer.
-    expect(overlay.getNotice()).toBe(notice);
-    await overlay.refresh();
     expect(overlay.getNotice()).toBeNull();
     overlay.setSelection('hero', OVERLAY_DEFAULT_OPTION);
+    expect(overlay.getNotice()).toContain('asks for Header › Hero: Split, but');
     await settle();
     await overlay.refresh();
     expect(overlay.getNotice()).toContain('asks for Header › Hero: Split, but');

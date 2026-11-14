@@ -322,7 +322,12 @@ function printExisting(print: Print, files: string[], rename: string | null): vo
 }
 
 function printOverlay(print: Print, host: Host): void {
-  if (host !== 'vite') {
+  if (host === 'next') {
+    print('This is a Next.js app, and Next does not run Vite plugins (a vite.config for Vitest');
+    print('serves no pages). Overlay variants need the Vite plugin; use --approach serve for');
+    print('notes and knobs, or host for variants.');
+    print();
+  } else if (host !== 'vite') {
     print('No vite.config or react-router.config found here. Overlay variants need the Vite');
     print('plugin; for another dev server use --approach serve for notes, or host for variants.');
     print();

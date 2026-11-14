@@ -1095,8 +1095,42 @@ describe('init names how picks switch', () => {
     expect(recommended.json).toMatchObject({ host: 'next', approach: 'serve', switching: 'knobs' });
     const overlay = await init(root, '--approach', 'overlay');
     expect(overlay.json.switching).toBe('knobs');
-    expect(overlay.text).toContain('Overlay variants need the Vite');
+    expect(overlay.text).toContain('This is a Next.js app, and Next does not run Vite plugins (a vite.config for Vitest');
+    expect(overlay.text).not.toContain('No vite.config');
     expect(overlay.text).not.toContain('Switching: per tab');
+  });
+
+  it('takes a Vite app that loads the plugin, or runs Vite as its dev script, as Vite even with `next` installed', async () => {
+    const loaded = project(
+      { 'vite.config.ts': "import { isotone } from 'isotone/vite';\nexport default { plugins: [isotone()] };\n" },
+      { devDependencies: { ...react, vite: '^8.0.0', next: '16.0.0' } },
+      '8.0.0',
+    );
+    expect((await init(loaded)).json).toMatchObject({ host: 'vite', switching: 'per-tab', integration: 'present' });
+    const vinext = project(
+      { 'next.config.ts': 'export default {};\n' },
+      { scripts: { dev: 'vinext dev' }, dependencies: { ...react, next: '16.0.0' } },
+    );
+    expect((await init(vinext)).json).toMatchObject({ host: 'vite', approach: 'overlay' });
+    const nextDev = project(viteConfig, { scripts: { dev: 'next dev' }, devDependencies: { ...react, vite: '^7.0.0' } });
+    expect((await init(nextDev)).json).toMatchObject({ host: 'next', approach: 'serve' });
+  });
+
+  it('ignores a commented-out plugin or `live: false`', async () => {
+    const root = project(
+      {
+        'vite.config.ts':
+          "// import { isotone } from 'isotone/vite';\n/* isotone({ variants: { live: false } }) */\nexport default { base: 'http://localhost/' };\n",
+      },
+      { devDependencies: { ...react, vite: '^8.0.0' } },
+      '8.0.0',
+    );
+    const { text, json } = await init(root);
+    expect(json.switching).toBe('per-tab');
+    expect(text).toContain('Switching: per tab.');
+    const io = makeIo(root);
+    expect(await runCli(['variant', 'new', 'hero-a'], io)).toBe(0);
+    expect(io.text.err).toContain('vite.config.ts does not import isotone/vite');
   });
 
   it('finds a Vite hoisted to the workspace root, and stops looking at the Git root', async () => {

@@ -16,11 +16,21 @@ const VITE_PLUGIN = /['"]isotone\/vite['"]/;
 /** The plugin's `variants: { live: false }`, which turns per-tab switching off. */
 const LIVE_OFF = /\blive\s*:\s*false\b/;
 
-/** Next first: a Next app may keep a `vite.config` for Vitest, which serves no pages. */
+/**
+ * The dev server that serves the pages. A config loading the plugin settles it,
+ * then the `dev` script; past those, Next goes first, since a Next app may keep
+ * a `vite.config` for Vitest, which serves no pages.
+ */
 export function detectHost(cwd: string): Host {
+  if (vitePlugin(cwd).loaded) return 'vite';
   const files = safeReaddir(cwd);
   const has = (prefix: string) => files.some((f) => f === prefix || f.startsWith(`${prefix}.`));
+  const pkg = readManifest(cwd);
   const deps = declaredDependencies(cwd);
+  // `vinext` (Next on Vite) has no word boundary before its `next`.
+  const dev = typeof pkg.scripts?.dev === 'string' ? pkg.scripts.dev : '';
+  if (/\b(?:vite|vinext|react-router)\b/.test(dev)) return 'vite';
+  if (/\bnext\b/.test(dev)) return 'next';
   if (has('next.config') || deps.next) return 'next';
   if (has('vite.config') || has('react-router.config') || deps.vite) return 'vite';
   return 'other';
@@ -42,7 +52,7 @@ export function viteSwitching(cwd: string): {
   if (typeof deps.react !== 'string') return { mode: 'shared', why: 'no-react', vite };
   if (vite !== null && vite < 6) return { mode: 'shared', why: 'old-vite', vite };
   const configs = safeReaddir(cwd).filter((name) => name.startsWith('vite.config.') && CONFIG_FILE.test(name));
-  if (configs.some((name) => LIVE_OFF.test(safeRead(join(cwd, name))))) return { mode: 'shared', why: 'live-off', vite };
+  if (configs.some((name) => LIVE_OFF.test(readCode(join(cwd, name))))) return { mode: 'shared', why: 'live-off', vite };
   return { mode: vite === null ? 'unknown' : 'per-tab', why: null, vite };
 }
 
@@ -56,20 +66,36 @@ export function vitePlugin(cwd: string): { loaded: boolean; viteConfig: string |
     .filter((name) => CONFIG_FILE.test(name))
     .sort();
   return {
-    loaded: configs.some((name) => VITE_PLUGIN.test(safeRead(join(cwd, name)))),
+    loaded: configs.some((name) => VITE_PLUGIN.test(readCode(join(cwd, name)))),
     viteConfig: configs.find((name) => name.startsWith('vite.config.')) ?? null,
   };
 }
 
-/** The dependencies and dev dependencies package.json declares; none without one. */
-function declaredDependencies(cwd: string): Record<string, unknown> {
+/** A config's text without its comments, so a commented-out plugin or option does not count. */
+function readCode(file: string): string {
+  return safeRead(file)
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1');
+}
+
+/** package.json, or nothing: a manifest is optional for static HTML projects. */
+function readManifest(cwd: string): {
+  dependencies?: Record<string, unknown>;
+  devDependencies?: Record<string, unknown>;
+  scripts?: Record<string, unknown>;
+} {
   try {
-    const pkg = JSON.parse(safeRead(join(cwd, 'package.json')));
-    return { ...pkg.dependencies, ...pkg.devDependencies };
+    const pkg: unknown = JSON.parse(safeRead(join(cwd, 'package.json')));
+    return pkg && typeof pkg === 'object' ? pkg : {};
   } catch {
-    // A manifest is optional for static HTML projects.
     return {};
   }
+}
+
+/** The dependencies and dev dependencies package.json declares. */
+function declaredDependencies(cwd: string): Record<string, unknown> {
+  const pkg = readManifest(cwd);
+  return { ...pkg.dependencies, ...pkg.devDependencies };
 }
 
 /** The installed Vite's major version, up to the Git root (a hoisted workspace), else the declared range's. */
