@@ -108,6 +108,9 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
     return () => {};
   }
 
+  // A host whose selectors arrive later (loaded, or per route) may take a knob's id after the knobs applied.
+  const offTaken = app && overlay ? app.subscribe(() => overlay.takenChanged()) : null;
+
   const host = document.createElement('div');
   host.setAttribute('data-isotone', 'root');
   const attachHost = () => {
@@ -204,6 +207,7 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
 
   return () => {
     disposed = true;
+    offTaken?.();
     for (const off of listeners) off();
     // The host's source outlives this mount: leave it with none of this panel's listeners.
     combined?.dispose();

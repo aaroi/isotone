@@ -417,6 +417,9 @@ export function createOverlayVariantsSource(cfg: {
   /** Call after a client-side navigation: puts the new route's knobs on the page,
    *  takes the others off and notifies. Does nothing while the route is the same. */
   routeChanged(): void;
+  /** Call when the ids `takenIds` gives may have changed (a host source loaded
+   *  its axes): puts back or takes off the knobs they leave out. */
+  takenChanged(): void;
 } {
   let list: OverlayVariantsList | null = null;
   let error: string | null = null;
@@ -584,6 +587,10 @@ export function createOverlayVariantsSource(cfg: {
     },
     get knobs() {
       return { axes: knobAxes(), values: { ...knobValues } };
+    },
+    takenChanged() {
+      // The panel re-reads axes from the source that changed; only <html> needs this.
+      if (list) applyKnobs();
     },
     routeChanged() {
       // Before the first listing nothing is on the page; `refresh` applies it.

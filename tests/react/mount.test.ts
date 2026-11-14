@@ -497,6 +497,27 @@ describe('a host source beside the knobs of the server that answers notes', () =
     await panel.off();
   });
 
+  // 14be786 leaves out a knob whose id a host selector has; a host that loads its selectors after the
+  // knobs applied takes the knob off <html> then, and gives it back when the selector goes.
+  it('takes a knob off the page when a host selector with its id arrives later, and back when it goes', async () => {
+    const source = createVariantsSource({ axes: [], onChange: () => {} });
+    const panel = await mountWithKnobs({ endpoint: notesEndpoint, variants: source, getRoute: () => '/' });
+    const radius = () => document.documentElement.style.getPropertyValue('--knob-card-radius');
+    expect(radius()).toBe('16px');
+    await act(async () => {
+      source.setAxes([{ id: 'card-radius', label: 'Card radius', defaultOption: 'soft', options: [{ id: 'soft', label: 'Soft' }] }]);
+    });
+    expect(radius()).toBe('');
+    await act(async () => {
+      source.setAxes([]);
+    });
+    expect(radius()).toBe('16px');
+    await panel.off();
+    // Gone with the mount: a later change of the host's axes no longer reaches the knobs.
+    source.setAxes([{ id: 'card-radius', label: 'Card radius', defaultOption: 'soft', options: [{ id: 'soft', label: 'Soft' }] }]);
+    expect(radius()).toBe('16px');
+  });
+
   it('reads no knobs beside a notes endpoint that is not an Isotone server, and still files the host’s picks', async () => {
     const source = createVariantsSource({ axes, selections: { cta: 'start' } });
     const panel = await mountWithKnobs({ endpoint: '/review/notes', variants: source });
