@@ -97,7 +97,7 @@ it('edits a sent note in place and deletes it, at the host too', async () => {
   expect(row()).toBeNull();
   const [created, edited, removed] = sent.map((request) => request.body);
   expect(edited).toMatchObject({ id: created?.id, key: created?.key, feedback: 'First draft' });
-  expect(removed).toEqual({ id: created?.id, key: created?.key, remove: true, createdAt: expect.any(String) });
+  expect(removed).toEqual({ id: created?.id, key: created?.key, remove: true });
   // Every request is a write: the endpoint is never asked for notes.
   expect(sent.every((request) => request.method === 'POST')).toBe(true);
 });
@@ -167,11 +167,19 @@ it('keeps the name field beside a pin while a name is still missing, and the sel
     });
     await settle();
     const floating = container.querySelector('.isotone-float');
-    if (!floating) return; // jsdom did not place the composer beside the pin: nothing to check here.
+    if (!floating) throw new Error('The composer did not move beside the pin');
     expect(floating.querySelector('.isotone-name')).not.toBeNull();
     expect(floating.querySelector('.isotone-float-hint')).toBeNull();
     const name = floating.querySelector<HTMLInputElement>('.isotone-name');
-    if (name) await type(name, 'Grace');
+    if (!name) throw new Error('Missing name field');
+    // Typed a letter at a time, the field stays under the cursor until the reviewer leaves it.
+    await act(async () => name.focus());
+    for (const typed of ['G', 'Gr', 'Grace']) {
+      await type(name, typed);
+      expect(floating.querySelector('.isotone-name')).toBe(name);
+      expect(document.activeElement).toBe(name);
+    }
+    await act(async () => name.blur());
     expect(floating.querySelector('.isotone-float-hint')).not.toBeNull();
     expect(floating.querySelector('.isotone-name')).toBeNull();
   } finally {

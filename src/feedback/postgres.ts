@@ -41,8 +41,9 @@ const COLUMNS = [
   'payload jsonb',
 ] as const;
 const JSON_FROM = COLUMNS.findIndex((column) => column.includes('jsonb'));
-/** What an edit never changes. */
-const KEPT = ['id', 'key_hash', 'created_at'];
+/** What an edit can change: what the writer says, about what, under which name. The page, window and
+ *  browser a note was first written in stay as they were, wherever it is edited from. */
+const EDITED = ['author', 'feedback', 'elements', 'variant'];
 /** The stored row, where a statement tells it from the one being written. */
 const ALIAS = 'stored';
 
@@ -89,20 +90,15 @@ export function postgresStore(client: PostgresClient, options: PostgresOptions =
   if (!TABLE_NAME.test(table)) throw new TypeError(`table must be a plain name such as "${DEFAULT_TABLE}" or "app.feedback"`);
   const names = COLUMNS.map((column) => column.slice(0, column.indexOf(' ')));
   const create = `create table if not exists ${table} (${COLUMNS.join(', ')}, updated_at timestamptz)`;
-  // An edit keeps what it does not send again: the payload a host attaches only when a note is new.
-  const replaced = names
-    .filter((name) => !KEPT.includes(name))
-    .map((name) =>
-      name === 'payload'
-        ? `payload = coalesce(excluded.payload, ${ALIAS}.payload)`
-        : // Who the app said wrote it stays, whoever holds the key later (signed out, say).
-          name === 'identity'
-          ? `identity = coalesce(${ALIAS}.identity, excluded.identity)`
-          : `${name} = excluded.${name}`,
-    );
+  const replaced = [
+    ...EDITED.map((name) => `${name} = excluded.${name}`),
+    // Who the app first said wrote it stays, whoever holds the key later (signed out, say);
+    // and the payload a host attaches only to a new note is not lost to an edit without one.
+    `identity = coalesce(${ALIAS}.identity, excluded.identity)`,
+    `payload = coalesce(excluded.payload, ${ALIAS}.payload)`,
+  ];
   // The same note sent again (a retry after a lost answer) is not an edit.
-  const told = ['author', 'feedback', 'elements', 'variant'];
-  const changed = `(${told.map((name) => `${ALIAS}.${name}`).join(', ')}) is distinct from (${told.map((name) => `excluded.${name}`).join(', ')})`;
+  const changed = `(${EDITED.map((name) => `${ALIAS}.${name}`).join(', ')}) is distinct from (${EDITED.map((name) => `excluded.${name}`).join(', ')})`;
   // JSON goes over as text and becomes jsonb here. The text cast first matters: a driver that
   // sees a jsonb parameter (postgres.js) would encode the string again and store a string.
   const upsert = `insert into ${table} as ${ALIAS} (${names.join(', ')}) values (${names

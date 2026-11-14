@@ -2,7 +2,7 @@ import { type FeedbackBrowser, type FeedbackEntry, MAX_AUTHOR, MAX_FEEDBACK_BODY
 import { NOTE_ID } from '../core/id';
 import { MAX_FEEDBACK_LENGTH, MAX_ROUTE, PAYLOAD_MAX } from '../core/limits';
 import type { IsotoneElement } from '../core/types';
-import { elementOf, variantOf, viewportOf, withinPayloadCap } from '../core/validate';
+import { elementOf, UNSAFE_KEYS, variantOf, viewportOf, withinPayloadCap } from '../core/validate';
 
 /** Where records are kept. `postgres(url)` and `postgresStore(client)` are stores; so is any object like this. */
 export interface FeedbackStore {
@@ -80,7 +80,8 @@ export function feedback(options: FeedbackOptions): (request: Request) => Promis
     try {
       if (request.method !== 'POST') return json(405, { error: 'method not allowed' }, { allow: 'POST' });
       checkOrigin(request, options.origins);
-      const body = await readJson(request);
+      // Made storable before anything is checked, so a name of nothing but NUL is no name.
+      const body = wellFormed(await readJson(request));
       if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Refused(400, 'a JSON object is required');
       const b = body as Record<string, unknown>;
       if (typeof b.id !== 'string' || !NOTE_ID.test(b.id)) {
@@ -89,7 +90,7 @@ export function feedback(options: FeedbackOptions): (request: Request) => Promis
       if (typeof b.key !== 'string' || !NOTE_KEY.test(b.key)) throw new Refused(400, 'key must be 16-128 letters, digits, - or _');
       id = b.id;
       keyHash = await sha256(b.key);
-      entry = b.remove === true ? null : wellFormed(entryOf(b, id, keyHash, request));
+      entry = b.remove === true ? null : entryOf(b, id, keyHash, request);
     } catch (error) {
       if (error instanceof Refused) return json(error.status, { error: error.message });
       // Whatever else a hostile body trips over is the body's fault, not the server's.
@@ -174,16 +175,13 @@ function checkOrigin(request: Request, allowed: readonly string[] | undefined): 
   if (!origin) return;
   let host: string;
   try {
-    if (allowed) {
-      if (isAllowed(origin, allowed)) return;
-      throw new Refused(403, 'origin not allowed');
-    }
+    if (allowed && isAllowed(origin, allowed)) return;
     const page = new URL(origin);
-    if (page.protocol !== 'http:' && page.protocol !== 'https:') throw new Refused(403, 'origin not allowed');
-    host = page.host;
+    host = allowed || (page.protocol !== 'http:' && page.protocol !== 'https:') ? '' : page.host;
   } catch {
-    throw new Refused(403, 'origin not allowed');
+    host = '';
   }
+  if (!host) throw new Refused(403, 'origin not allowed');
   // A chain of proxies lists every host it forwarded for, the public one among them.
   const forwarded = (request.headers.get('x-forwarded-host') ?? '').split(',');
   const hosts = [new URL(request.url).host, request.headers.get('host'), ...forwarded];
@@ -301,8 +299,6 @@ function pageUrl(value: unknown): string | undefined {
     return;
   }
 }
-
-const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 function selectionsOf(value: unknown): Record<string, string> | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return;

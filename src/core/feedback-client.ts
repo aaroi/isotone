@@ -34,11 +34,15 @@ const MAX_WAITING = 50;
 /** How long a note waits for an endpoint that keeps turning it away before it is given up. */
 const MAX_WAIT_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** A request body: a note, or `remove: true` for a note the reviewer deleted. */
-type Wire = Record<string, unknown> & { id: string; key: string; createdAt?: string; remove?: true };
+/**
+ * A write as it waits in the outbox: a note's request body, or `remove: true`
+ * for a note the reviewer deleted. `queuedAt` is when this write was made,
+ * which is what its week of waiting counts from; it is not sent.
+ */
+type Wire = Record<string, unknown> & { id: string; key: string; queuedAt?: string; remove?: true };
 
-/** A sent note as this browser keeps it, with the key that proves it wrote it. */
-type Kept = IsotoneNote & { key: string };
+/** A sent note as this browser keeps it: with the key that proves it wrote it, and whether the endpoint has it. */
+type Kept = IsotoneNote & { key: string; arrived?: boolean };
 
 type Posted = { state: 'saved' } | { state: 'later'; answered: boolean } | { state: 'refused'; status: number; error?: string };
 
@@ -129,8 +133,6 @@ export function createFeedbackStore(cfg: FeedbackStoreConfig) {
   const outboxKey = `${cfg.key}::outbox`;
   const author = createAuthor(`${cfg.key}::author`, cfg.name);
   let flushing: Promise<boolean> | null = null;
-  /** Notes with a request out right now: a retry run leaves them to it. */
-  const sending = new Set<string>();
   try {
     // A browser blocks this silently, and the note would wait in the outbox as if the server were away.
     if (new URL(endpoint, window.location.href).origin !== window.location.origin) {
@@ -152,7 +154,7 @@ export function createFeedbackStore(cfg: FeedbackStoreConfig) {
     );
 
   /** 'saved', 'refused' for good, or 'later': the endpoint answered with something that may pass, or not at all. */
-  async function post(body: Wire): Promise<Posted> {
+  async function post({ queuedAt: _local, ...body }: Wire): Promise<Posted> {
     try {
       return await request(
         endpoint,
@@ -169,15 +171,32 @@ export function createFeedbackStore(cfg: FeedbackStoreConfig) {
     }
   }
 
-  /** Runs one request for a note while a retry run keeps its hands off that note. */
-  async function alone<T>(id: string, run: () => Promise<T>): Promise<T> {
-    sending.add(id);
-    try {
-      return await run();
-    } finally {
-      sending.delete(id);
-    }
+  /**
+   * A note's requests go out one at a time, in the order they were made: an
+   * edit never overtakes the save before it, and a retry never lands after a
+   * delete. In this tab that is a queue per note; across tabs of the same
+   * site, a Web Lock where the browser has them.
+   */
+  const turns = new Map<string, Promise<unknown>>();
+  function inTurn<T>(id: string, run: () => Promise<T>): Promise<T> {
+    const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;
+    const locked = () => (locks ? (locks.request(`${cfg.key}::${id}`, run) as Promise<T>) : run());
+    const mine = (turns.get(id) ?? Promise.resolve()).then(locked, locked);
+    const done = mine.catch(() => {});
+    turns.set(id, done);
+    void done.then(() => {
+      if (turns.get(id) === done) turns.delete(id);
+    });
+    return mine;
   }
+
+  const isQueued = (body: Wire) => {
+    const snapshot = JSON.stringify(body);
+    return outbox().some((item) => JSON.stringify(item) === snapshot);
+  };
+
+  /** One write per note waits at a time: the latest replaces whatever was queued for it. */
+  const queue = (body: Wire) => writeList(outboxKey, [...outbox().filter((item) => item.id !== body.id), body]);
 
   /** Takes a write the endpoint answered out of the outbox, unless a newer one for the note took its place. */
   function settle(body: Wire): void {
@@ -188,40 +207,55 @@ export function createFeedbackStore(cfg: FeedbackStoreConfig) {
     );
   }
 
-  /** A write that will not be sent is dropped once and loudly; a note that never arrived comes off the list too. */
+  /**
+   * Sends one write in its note's turn. A queued write that a newer one
+   * replaced while it waited its turn is not sent: the answer is `null`.
+   * `queued` is false only where storage could not keep the write.
+   */
+  function send(body: Wire, queued = true): Promise<Posted | null> {
+    return inTurn(body.id, async () => {
+      if (queued && !isQueued(body)) return null;
+      const result = await post(body);
+      if (result.state !== 'later') settle(body);
+      if (result.state === 'saved' && !body.remove) {
+        writeList(
+          sentKey,
+          sent().map((note) => (note.id === body.id ? { ...note, arrived: true } : note)),
+        );
+      }
+      return result;
+    });
+  }
+
+  /**
+   * A write that will not be sent is dropped, once and loudly. A note that
+   * never reached the endpoint comes off the list with it; one that did stays,
+   * since its row and the key to it are still good.
+   */
   function giveUp(body: Wire, why: string): void {
     settle(body);
-    if (!body.remove) withoutId(sentKey, body.id);
+    if (!body.remove && !sent().find((note) => note.id === body.id)?.arrived) withoutId(sentKey, body.id);
     const { key: _secret, ...shown } = body;
     console.warn(`Isotone dropped feedback ${why}.`, shown);
   }
 
-  /** One write per note waits at a time: the latest replaces whatever was queued for it. */
-  const queue = (body: Wire) => writeList(outboxKey, [...outbox().filter((item) => item.id !== body.id), body]);
-
   /**
    * Send what is waiting, oldest first, one run at a time. Resolves false
    * while something still waits. An endpoint that does not answer ends the
-   * run; one that turns a note away for now does not hold up the notes behind
-   * it, and a note it has turned away for a week is given up.
+   * run; one that turns a write away for now does not hold up the ones behind
+   * it, and a write it has turned away for a week is given up.
    */
   function flush(): Promise<boolean> {
     flushing ??= (async () => {
       let waiting = false;
       for (const body of outbox()) {
-        // Replaced by an edit or a delete, or sent by another tab, since this run began.
-        if (!outbox().some((item) => JSON.stringify(item) === JSON.stringify(body))) continue;
-        if (sending.has(body.id)) {
-          waiting = true;
-          continue;
-        }
-        const result = await post(body);
-        if (result.state === 'saved') settle(body);
-        else if (result.state === 'refused') {
+        const result = await send(body);
+        if (!result || result.state === 'saved') continue;
+        if (result.state === 'refused') {
           giveUp(body, `the endpoint refuses (${result.status}${result.error ? `: ${result.error}` : ''})`);
         } else if (!result.answered) return false;
         // A write with no readable time is as old as can be.
-        else if (!(Date.now() - Date.parse(body.createdAt ?? '') <= MAX_WAIT_MS)) giveUp(body, 'the endpoint turned away for a week');
+        else if (!(Date.now() - Date.parse(body.queuedAt ?? '') <= MAX_WAIT_MS)) giveUp(body, 'the endpoint turned away for a week');
         else waiting = true;
       }
       return !waiting;
@@ -234,7 +268,7 @@ export function createFeedbackStore(cfg: FeedbackStoreConfig) {
   const newestFirst = (a: IsotoneNote, b: IsotoneNote) => b.createdAt.localeCompare(a.createdAt);
   const listed = () =>
     sent()
-      .map(({ key: _secret, ...note }): IsotoneNote => note)
+      .map(({ key: _secret, arrived: _state, ...note }): IsotoneNote => note)
       .sort(newestFirst);
 
   async function saveNote(
@@ -262,6 +296,7 @@ export function createFeedbackStore(cfg: FeedbackStoreConfig) {
     const body: Wire = {
       id,
       key,
+      queuedAt: new Date().toISOString(),
       createdAt,
       author: name,
       feedback: text,
@@ -279,11 +314,12 @@ export function createFeedbackStore(cfg: FeedbackStoreConfig) {
     // Kept before it is sent, so closing the tab mid-request loses nothing; the id makes a second send harmless.
     const waitingBefore = outbox().find((item) => item.id === id);
     const kept = queue(body);
-    const result = await alone(id, () => post(body));
-    if (result.state !== 'later') settle(body);
-    // A refused edit leaves the earlier version waiting, if it still was.
-    if (result.state === 'refused' && waitingBefore) queue(waitingBefore);
+    const result = await send(body, kept);
+    // A newer edit, or a delete, took this write's place while it waited its turn: that one speaks for the note.
+    if (!result) return id;
     if (result.state === 'refused') {
+      // A refused edit leaves the earlier version waiting, if it still was.
+      if (waitingBefore) queue(waitingBefore);
       throw new Error(`Sending feedback failed (${result.status})${result.error ? `: ${result.error}` : ''}`);
     }
     // Neither sent nor kept: it stays in the composer rather than vanish.
@@ -299,6 +335,7 @@ export function createFeedbackStore(cfg: FeedbackStoreConfig) {
       done: false,
       createdAt,
       ...(viewport ? { viewport } : {}),
+      ...(result.state === 'saved' || previous?.arrived ? { arrived: true } : {}),
     };
     writeList(sentKey, [...sent().filter((item) => item.id !== id), note].slice(-MAX_SHOWN));
     return id;
@@ -322,17 +359,16 @@ export function createFeedbackStore(cfg: FeedbackStoreConfig) {
     async deleteNote(id: string): Promise<void> {
       const note = sent().find((item) => item.id === id);
       if (!note) return;
-      const body: Wire = { id, key: note.key, remove: true, createdAt: new Date().toISOString() };
+      const body: Wire = { id, key: note.key, remove: true, queuedAt: new Date().toISOString() };
       const waitingBefore = outbox().find((item) => item.id === id);
       // In place of any write still waiting for this note, which must not land after the delete.
       const kept = queue(body);
-      const result = await alone(id, () => post(body));
-      if (result.state !== 'later') settle(body);
-      if (result.state === 'refused') {
+      const result = await send(body, kept);
+      if (result?.state === 'refused') {
         if (waitingBefore) queue(waitingBefore);
         throw new Error(`Deleting feedback failed (${result.status})${result.error ? `: ${result.error}` : ''}`);
       }
-      if (result.state === 'later' && !kept)
+      if (result?.state === 'later' && !kept)
         throw new Error('Feedback could not be deleted, and this browser cannot keep the request for later.');
       withoutId(sentKey, id);
     },

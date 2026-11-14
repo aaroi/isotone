@@ -33,40 +33,55 @@ export interface NodeResponseLike {
  */
 export function toNode(handle: (request: Request) => Promise<Response>): (req: NodeRequestLike, res: NodeResponseLike) => Promise<void> {
   return async (req, res) => {
-    const headers = new Headers();
-    for (const [name, value] of Object.entries(req.headers)) {
-      if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(', ') : value);
-    }
-    const method = req.method ?? 'GET';
-    let body: ReadableStream<Uint8Array> | string | undefined;
-    if (method !== 'GET' && method !== 'HEAD') {
-      if (req.body === undefined) {
-        // Pulled chunk by chunk, so the handler's size cap stops the read.
-        const chunks = req[Symbol.asyncIterator]();
-        body = new ReadableStream<Uint8Array>({
-          async pull(controller) {
-            const { done, value } = await chunks.next();
-            if (done) controller.close();
-            else controller.enqueue(value);
-          },
-          cancel: () => void chunks.return?.(),
-        });
-      } else {
-        // A parser consumed the stream: send what it made of it, at its new length.
-        body =
-          typeof req.body === 'string'
-            ? req.body
-            : req.body instanceof Uint8Array
-              ? new TextDecoder().decode(req.body)
-              : JSON.stringify(req.body);
-        headers.delete('content-length');
+    const answer = (response: { status: number; headers?: Headers; text: string }) => {
+      res.statusCode = response.status;
+      response.headers?.forEach((value, name) => void res.setHeader(name, value));
+      res.end(response.text);
+    };
+    let request: Request;
+    try {
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(req.headers)) {
+        if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(', ') : value);
       }
+      const method = req.method ?? 'GET';
+      let body: ReadableStream<Uint8Array> | string | undefined;
+      if (method !== 'GET' && method !== 'HEAD') {
+        if (req.body === undefined) {
+          // Pulled chunk by chunk, so the handler's size cap stops the read.
+          const chunks = req[Symbol.asyncIterator]();
+          body = new ReadableStream<Uint8Array>({
+            async pull(controller) {
+              const { done, value } = await chunks.next();
+              if (done) controller.close();
+              else controller.enqueue(value);
+            },
+            cancel: () => void chunks.return?.(),
+          });
+        } else {
+          // A parser consumed the stream: send what it made of it, at its new length.
+          body =
+            typeof req.body === 'string'
+              ? req.body
+              : req.body instanceof Uint8Array
+                ? new TextDecoder().decode(req.body)
+                : JSON.stringify(req.body);
+          headers.delete('content-length');
+        }
+      }
+      // The address's own host is a placeholder: the handler compares the page's origin with the Host header.
+      const url = new URL(req.originalUrl ?? req.url ?? '/', 'http://node.invalid');
+      request = new Request(url, { method, headers, body, ...(body ? { duplex: 'half' } : {}) } as RequestInit);
+    } catch {
+      // A method or header the Fetch API will not carry: a request this route never takes.
+      return answer({ status: 400, text: '{"error":"the request could not be read"}' });
     }
-    // Only the host matters to the handler, which compares it with the page's origin.
-    const url = `http://${headers.get('host') ?? 'localhost'}${req.originalUrl ?? req.url ?? '/'}`;
-    const response = await handle(new Request(url, { method, headers, body, ...(body ? { duplex: 'half' } : {}) } as RequestInit));
-    res.statusCode = response.status;
-    response.headers.forEach((value, name) => void res.setHeader(name, value));
-    res.end(await response.text());
+    try {
+      const response = await handle(request);
+      answer({ status: response.status, headers: response.headers, text: await response.text() });
+    } catch (error) {
+      console.error('[isotone] The feedback route failed:', error);
+      answer({ status: 500, text: '{"error":"Could not save feedback."}' });
+    }
   };
 }

@@ -19,7 +19,7 @@ const page = params.get('route') ?? '/';
 const stress = !screenshot && !hosted && params.get('stress') === '1';
 const session = screenshot ? capture : hosted ? 'hosted' : stress ? 'stress' : 'interactive';
 const endpoint = `/demo-notes/${session}`;
-// `?collect=1`: the panel as a deployed app mounts it for teammates. Feedback is signed and posted once to
+// `?collect=1`: the panel as a deployed app mounts it for teammates. Feedback is signed and posted to
 // the app's own route; no agent is involved and nothing is read back.
 const collect = !screenshot && params.get('collect') === '1';
 const FEEDBACK_ENDPOINT = '/demo-feedback';

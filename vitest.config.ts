@@ -40,9 +40,9 @@ export default defineConfig({
       thresholds: {
         'src/cli/**': floor(92, 83, 92, 91),
         'src/core/**': floor(91, 80, 87, 87),
-        'src/feedback/**': floor(97, 94, 95, 96),
+        'src/feedback/**': floor(98, 93, 97, 97),
         'src/node/**': floor(95, 87, 96, 92),
-        'src/postgres/**': floor(99, 77, 83, 96),
+        'src/postgres/**': floor(97, 89, 92, 96),
         'src/react/**': floor(89, 82, 88, 87),
         'src/serve/**': floor(94, 86, 86, 92),
         'src/vite/**': floor(91, 80, 87, 89),

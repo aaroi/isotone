@@ -83,16 +83,30 @@ describe('a Postgres store', () => {
     expect(await rows('retried')).toMatchObject([{ id: 'note-1', updated_at: null }]);
   });
 
-  it('replaces a note for the key that wrote it, keeping when it was written and the payload it came with', async () => {
+  it('replaces what the writer changed, and keeps where and when the note was first written', async () => {
     const store = postgresStore(db, { table: 'edited' });
-    await store.save(entry({ payload: { plan: 'pro' }, viewport: { w: 1280, h: 720 } }), request);
+    await store.save(
+      entry({
+        payload: { plan: 'pro' },
+        viewport: { w: 1280, h: 720 },
+        url: 'https://app.example/projects',
+        selections: { layout: 'grid' },
+      }),
+      request,
+    );
+    // Edited later from a phone, on another page, with other selections.
     const saved = await store.save(
       entry({
         feedback: 'Shorter now',
         author: 'Ada L.',
-        createdAt: '2026-11-14T08:00:00.000Z',
         elements: [],
+        variant: { axisId: 'layout', label: 'Layout' },
+        createdAt: '2026-11-14T08:00:00.000Z',
+        route: '/settings',
+        url: 'https://app.example/settings',
         viewport: { w: 390, h: 844 },
+        selections: { layout: 'list' },
+        browser: { userAgent: 'Phone' },
       }),
       request,
     );
@@ -102,7 +116,12 @@ describe('a Postgres store', () => {
       feedback: 'Shorter now',
       author: 'Ada L.',
       elements: [],
-      viewport: { w: 390, h: 844 },
+      variant: { axisId: 'layout', label: 'Layout' },
+      route: '/projects',
+      url: 'https://app.example/projects',
+      viewport: { w: 1280, h: 720 },
+      selections: { layout: 'grid' },
+      user_agent: 'Mozilla/5.0 Test',
       payload: { plan: 'pro' },
     });
     expect(new Date(String(row?.created_at)).toISOString()).toBe('2026-11-13T10:00:00.000Z');

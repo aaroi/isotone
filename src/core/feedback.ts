@@ -2,8 +2,8 @@
  * Collected feedback: the record a deployed app's panel sends to the host's
  * own endpoint, and that `isotone/feedback` hands to the host's `save`.
  *
- * Unlike a development note it is written once and never read back through
- * Isotone: no agent closes it, and the host decides what happens to it.
+ * Unlike a development note it is never read back through Isotone: no agent
+ * closes it, only its writer changes it, and the host decides what happens to it.
  */
 import type { IsotoneElement, VariantReference } from './types';
 
@@ -79,7 +79,8 @@ export interface FeedbackEntry {
 
 /** How the panel reaches the host's feedback endpoint. */
 export interface FeedbackClientConfig {
-  /** Same-origin URL of the route that runs `feedback()` from `isotone/feedback`. */
+  /** URL of the route that runs `feedback()` from `isotone/feedback`: on the page's own origin,
+   *  unless that route names this page's origin in its `origins`. */
   endpoint: string;
   /** The reviewer's name when the app knows it. The name field starts with
    *  it; the reviewer can still change it. */

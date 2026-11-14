@@ -258,6 +258,10 @@ note; only `id`, `key`, `author`, `feedback` and `route` are required:
 An edit is the same body again with the same `id` and `key`. A delete is
 `{ "id": "…", "key": "…", "remove": true }`.
 
+An edit changes what its writer changes: the text, the name, the pinned
+elements and the variant reference. The page, window, selections and browser a
+note was first written in stay as they were, wherever it is edited from.
+
 | Answer | Means |
 | --- | --- |
 | 201 `{ "id" }` | Saved, or replaced by its writer |
@@ -297,12 +301,17 @@ export const POST = feedback({
   store: {
     async save(entry) {
       const stored = await db.feedback.find(entry.id);
-      if (stored && stored.keyHash !== entry.keyHash) return false;
-      const edited = stored && stored.feedback !== entry.feedback;
+      if (!stored) return void (await db.feedback.put(entry.id, entry));
+      if (stored.keyHash !== entry.keyHash) return false;
+      const { author, feedback, elements, variant } = entry;
+      const edited = stored.feedback !== feedback;
       await db.feedback.put(entry.id, {
-        ...entry,
-        createdAt: stored?.createdAt ?? entry.createdAt,
-        updatedAt: edited ? new Date().toISOString() : stored?.updatedAt,
+        ...stored,
+        author,
+        feedback,
+        elements,
+        variant,
+        updatedAt: edited ? new Date().toISOString() : stored.updatedAt,
       });
     },
     async remove(id, keyHash) {
@@ -318,7 +327,8 @@ rules a store keeps:
 - `save` with an `id` it already holds replaces that record when the stored
   `keyHash` equals the new one. That is an edit, or the panel sending a note
   again because no answer came in time; the body has the same shape either
-  way, so compare the content to tell them apart.
+  way, so compare the content to tell them apart. Keep the stored record's
+  page context and time, as above.
 - With any other `keyHash` it changes nothing and returns `false`, and the route
   answers 409. Make the check and the write one atomic step.
 - `remove` deletes only where both `id` and `keyHash` match, and is quiet when
@@ -374,7 +384,8 @@ remove a selector are not offered.
 The notes list shows what this browser sent, kept in the browser. As in
 development, a click on a note brings it back into the composer to edit, and its
 corner button deletes it. Both reach your database: an edit replaces the row and
-sets `updated_at`, and a delete removes the row.
+sets `updated_at`, and a delete removes the row. A note's requests go out one
+at a time, in the order they were made, across the browser's tabs too.
 
 ## Who can change a note
 
@@ -397,6 +408,8 @@ A write the endpoint could not take (no network, or an answer other than a
 refusal of the request itself, a 401 from your gate included) waits in the
 browser and is sent again when the endpoint answers; a waiting note appears in
 the list like the others. Only the latest write for a note waits, so deleting a
-note that never arrived sends just the removal. A write still turned away after
-a week is given up, at most 50 wait at once, and where the browser cannot store
-anything the note stays in the composer instead.
+note that never arrived sends just the removal. A write still turned away a
+week after it was made is given up: a note that never arrived then leaves the
+list, while one the endpoint already has stays as it was last saved. At most 50
+writes wait at once, and where the browser cannot store anything the note stays
+in the composer instead.

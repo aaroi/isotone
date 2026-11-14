@@ -1,4 +1,4 @@
-import { memo, type RefObject, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
+import { memo, type RefObject, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { HINTS } from './hints';
 import { Icon } from '../icons';
 import { fadeIn, settleIn } from '../motion';
@@ -59,7 +59,9 @@ export const Composer = memo(function Composer({
   const text = useSyncExternalStore(draft.subscribe, draft.get, draft.get);
   const signed = author ?? UNSIGNED;
   const name = useSyncExternalStore(signed.subscribe, signed.get, signed.get);
-  const unsigned = Boolean(author) && !name.trim();
+  // A name still missing, or being typed: beside a pin the field then takes the select hint's place.
+  const [naming, setNaming] = useState(false);
+  const unsigned = Boolean(author) && (naming || !name.trim());
   const hasContext = Boolean(editing || variantTarget || targets.length || notice);
   // Context changes the scroll-through inset; measure again when that changes
   // or a route restores the composer after its DOM was removed.
@@ -217,6 +219,8 @@ export const Composer = memo(function Composer({
               maxLength={MAX_AUTHOR}
               value={name}
               onChange={(e) => author.set(e.target.value)}
+              onFocus={() => setNaming(true)}
+              onBlur={() => setNaming(false)}
               onKeyDown={(e) => {
                 if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
                 e.preventDefault();

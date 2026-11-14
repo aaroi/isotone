@@ -132,6 +132,14 @@ describe('the feedback route', () => {
     expect(saved[1]?.feedback).toBe('Ship it \ud83d\ude80');
   });
 
+  it('does not take a name or a note that is nothing once made storable', async () => {
+    const { saved, handle } = collector();
+    const nul = String.fromCharCode(0);
+    expect((await handle(post({ ...note, author: nul }))).status).toBe(400);
+    expect((await handle(post({ ...note, feedback: ` ${nul} ` }))).status).toBe(400);
+    expect(saved).toEqual([]);
+  });
+
   it('answers 400, not an exception, for a field built to break the reader', async () => {
     const { saved, handle } = collector();
     const hostile = await handle(

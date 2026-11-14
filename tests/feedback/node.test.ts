@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
+import { connect } from 'node:net';
 import type { AddressInfo } from 'node:net';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MAX_FEEDBACK_BODY } from '../../src/core/feedback';
 import { type FeedbackEntry, feedback, toNode } from '../../src/feedback/index';
 
@@ -50,6 +51,40 @@ describe('the route on a Node server', () => {
     expect((await post(note)).status).toBe(201);
     expect((await post({ ...note, remove: true })).status).toBe(200);
     expect(saved).toHaveLength(1);
+  });
+
+  it('answers a request the Fetch API will not carry, instead of leaving it open', async () => {
+    const { saved, origin } = await serve();
+    const { port } = new URL(origin);
+    /** The status line a raw request gets back. */
+    const raw = (head: string) =>
+      new Promise<string>((resolve, reject) => {
+        const socket = connect(Number(port), '127.0.0.1', () => socket.write(`${head}\r\nConnection: close\r\n\r\n`));
+        let answer = '';
+        socket.on('data', (chunk) => {
+          answer += chunk;
+        });
+        socket.on('end', () => resolve(answer.split('\r\n')[0] ?? ''));
+        socket.on('error', reject);
+        socket.setTimeout(3000, () => reject(new Error('no answer')));
+      });
+    expect(await raw('TRACE /api/feedback HTTP/1.1\r\nHost: app.example')).toContain('400');
+    expect(await raw('POST /api/feedback HTTP/1.1\r\nHost: a b\r\nContent-Length: 0')).toMatch(/400|415/);
+    expect(saved).toEqual([]);
+  });
+
+  it('answers 500 when the handler itself fails', async () => {
+    const failing = toNode(async () => {
+      throw new Error('boom');
+    });
+    const server = createServer((req, res) => void failing(req, res));
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    close = () => new Promise((resolve) => server.close(() => resolve()));
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const response = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/`);
+    expect(response.status).toBe(500);
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
   });
 
   it('keeps the origin check and the size cap', async () => {

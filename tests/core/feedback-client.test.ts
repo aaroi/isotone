@@ -41,6 +41,22 @@ function endpoint(...answers: (Response | Error)[]) {
 const store = (over: Partial<Parameters<typeof createFeedbackStore>[0]> = {}) =>
   createFeedbackStore({ endpoint: '/api/feedback', key: 'app', ...over });
 
+/** An endpoint that answers each request only when the test lets it, in order. */
+function heldEndpoint() {
+  const sent: { id: string; feedback?: string; remove?: boolean }[] = [];
+  const answers: ((response: Response) => void)[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url: string, init?: RequestInit) => {
+      const { id, feedback, remove } = JSON.parse(String(init?.body));
+      sent.push({ id, ...(feedback ? { feedback } : {}), ...(remove ? { remove } : {}) });
+      return new Promise<Response>((resolve) => answers.push(resolve));
+    }),
+  );
+  const answer = (status = 201) => answers.shift()?.(Response.json({ id: 'x' }, { status }));
+  return { sent, answer };
+}
+
 describe('a store that collects feedback', () => {
   it('posts a note once, signed, with the page and the browser around it', async () => {
     browser();
@@ -196,7 +212,7 @@ describe('a store that collects feedback', () => {
     const notes = store({ name: 'Ada' });
     const id = await notes.saveNote('/', 'Never mind', null, null);
     await notes.deleteNote(id);
-    expect(bodies[1]).toEqual({ id, key: bodies[0]?.key, remove: true, createdAt: expect.any(String) });
+    expect(bodies[1]).toEqual({ id, key: bodies[0]?.key, remove: true });
     expect(await notes.pendingNotes()).toEqual([]);
     expect(notes.hasUnsyncedNotes).toBe(false);
     // Deleting what is not on this browser asks nothing of the endpoint.
@@ -252,7 +268,7 @@ describe('a store that collects feedback', () => {
     const notes = store({ name: 'Ada' });
     const id = await notes.saveNote('/', 'Never arrives', null, null);
     const waiting = JSON.parse(values.get('app::outbox') ?? '[]');
-    waiting[0].createdAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+    waiting[0].queuedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
     values.set('app::outbox', JSON.stringify(waiting));
     expect((await notes.pollNotes(null)).notes).toEqual([]);
     expect(notes.hasUnsyncedNotes).toBe(false);
@@ -269,54 +285,84 @@ describe('a store that collects feedback', () => {
     expect(notes.hasUnsyncedNotes).toBe(false);
   });
 
-  it('does not send a waiting note that was deleted while a retry was running', async () => {
-    browser();
-    let release: (response: Response) => void = () => {};
-    const sent: { id: string; remove?: boolean }[] = [];
-    let offline = true;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (_url: string, init?: RequestInit) => {
-        const { id, remove } = JSON.parse(String(init?.body));
-        if (offline) return Response.json({}, { status: 503 });
-        sent.push({ id, ...(remove ? { remove } : {}) });
-        return sent.length === 1 ? new Promise<Response>((resolve) => (release = resolve)) : Response.json({ id }, { status: 201 });
-      }),
-    );
-    const notes = store({ name: 'Ada' });
-    const first = await notes.saveNote('/', 'First', null, null);
-    const second = await notes.saveNote('/', 'Changed my mind', null, null);
-    offline = false;
-    const retry = notes.pollNotes(null);
-    await vi.waitFor(() => expect(sent).toEqual([{ id: first }]));
-    await notes.deleteNote(second);
-    release(Response.json({ id: first }, { status: 201 }));
-    await retry;
-    // The second note's text never goes out: only its removal does.
-    expect(sent).toEqual([{ id: first }, { id: second, remove: true }]);
-  });
-
   it('sends one request for a note even when a retry run starts while it is out', async () => {
     browser();
-    let release: (response: Response) => void = () => {};
-    const bodies: string[] = [];
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (_url: string, init?: RequestInit) => {
-        bodies.push(JSON.parse(String(init?.body)).id);
-        return new Promise<Response>((resolve) => {
-          release = resolve;
-        });
-      }),
-    );
+    const { sent, answer } = heldEndpoint();
     const notes = store({ name: 'Ada' });
     const saving = notes.saveNote('/', 'In flight', null, null);
-    await vi.waitFor(() => expect(bodies).toHaveLength(1));
-    // The panel's poll finds the note in the outbox, where it waits until its own request answers.
-    await expect(notes.pollNotes(null)).rejects.toThrow('waiting to be sent');
-    release(Response.json({ id: 'x' }, { status: 201 }));
+    await vi.waitFor(() => expect(sent).toHaveLength(1));
+    // The panel's poll finds the note in the outbox and waits its turn; by then there is nothing left to send.
+    const polling = notes.pollNotes(null);
+    answer();
     await saving;
-    expect(bodies).toHaveLength(1);
+    await polling;
+    expect(sent).toHaveLength(1);
+    expect(notes.hasUnsyncedNotes).toBe(false);
+  });
+
+  it('never lets a retry of the old text land after an edit', async () => {
+    browser();
+    const offline = endpoint(new TypeError('offline'));
+    const notes = store({ name: 'Ada' });
+    const id = await notes.saveNote('/', 'v1', null, null);
+    expect(offline).toHaveLength(1);
+    const { sent, answer } = heldEndpoint();
+    // A retry of v1 is out when the reviewer edits the note.
+    const polling = notes.pollNotes(null);
+    await vi.waitFor(() => expect(sent).toHaveLength(1));
+    const editing = notes.saveNote('/', 'v2', null, id);
+    answer();
+    await vi.waitFor(() => expect(sent).toHaveLength(2));
+    answer();
+    await Promise.all([polling, editing]);
+    // In the order they were written, so the row ends as the edit.
+    expect(sent.map((request) => request.feedback)).toEqual(['v1', 'v2']);
+    expect(await notes.pendingNotes()).toMatchObject([{ id, feedback: 'v2' }]);
+    expect(notes.hasUnsyncedNotes).toBe(false);
+  });
+
+  it('never lets a retry bring back a note that was deleted meanwhile', async () => {
+    browser();
+    endpoint(new TypeError('offline'));
+    const notes = store({ name: 'Ada' });
+    const id = await notes.saveNote('/', 'Withdrawn', null, null);
+    const { sent, answer } = heldEndpoint();
+    const polling = notes.pollNotes(null);
+    await vi.waitFor(() => expect(sent).toHaveLength(1));
+    const deleting = notes.deleteNote(id);
+    answer();
+    await vi.waitFor(() => expect(sent).toHaveLength(2));
+    answer(200);
+    await Promise.all([polling, deleting]);
+    // The save that was already out lands first; the removal is the last word.
+    expect(sent).toEqual([
+      { id, feedback: 'Withdrawn' },
+      { id, remove: true },
+    ]);
+    expect(await notes.pendingNotes()).toEqual([]);
+    expect(notes.hasUnsyncedNotes).toBe(false);
+  });
+
+  it('keeps a note the endpoint has, when a later edit of it is given up', async () => {
+    const values = browser();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    endpoint(undefined as never, Response.json({}, { status: 503 }), Response.json({}, { status: 503 }));
+    const notes = store({ name: 'Ada' });
+    const id = await notes.saveNote('/', 'Arrived long ago', null, null);
+    // Written nine days ago, as the list remembers it; edited now, while the database sleeps.
+    const kept = JSON.parse(values.get('app::sent') ?? '[]');
+    kept[0].createdAt = new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString();
+    values.set('app::sent', JSON.stringify(kept));
+    await notes.saveNote('/', 'Edited today', null, id);
+    // The edit is a new write: its week starts now, whatever the note's age.
+    await expect(notes.pollNotes(null)).rejects.toThrow('waiting to be sent');
+    expect(notes.hasUnsyncedNotes).toBe(true);
+    // And when an edit is given up in the end, the note itself stays: its row and key are still good.
+    const waiting = JSON.parse(values.get('app::outbox') ?? '[]');
+    waiting[0].queuedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+    values.set('app::outbox', JSON.stringify(waiting));
+    endpoint(Response.json({}, { status: 503 }));
+    expect((await notes.pollNotes(null)).notes).toMatchObject([{ id }]);
     expect(notes.hasUnsyncedNotes).toBe(false);
   });
 

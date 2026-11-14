@@ -74,7 +74,7 @@ export function IsotonePanel({
   const fabRef = useRef<HTMLButtonElement>(null);
   const id = useId();
 
-  // Collecting in a deployed app: notes are sent once and signed, and no agent reads or changes them.
+  // Collecting in a deployed app: notes are signed and go to the host's own store, and no agent reads or changes them.
   const collecting = Boolean(storeCfg.feedback);
   const notesAvailable = Boolean(storeCfg.endpoint) || collecting;
   const variantsAvailable = useVariantsSnapshot(variants).shown.length > 0;

@@ -76,7 +76,8 @@ function elementContext(value: object): Partial<IsotoneElement> {
 /** A CSS property name: nothing else is a key of `styles`. */
 const STYLE_NAME = /^[a-z][a-z-]{0,39}$/;
 
-const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+/** Keys that must never be copied from a request into an object. */
+export const UNSAFE_KEYS: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype']);
 
 export function variantOf(value: unknown): VariantReference | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
