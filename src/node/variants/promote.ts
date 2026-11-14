@@ -5,7 +5,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, sta
 import { dirname, join, resolve } from 'node:path';
 import { overlayGroups, type OverlayVariant } from '../../core/variants/overlay';
 import { readActive, writeActive } from './active';
-import { currentBlob, recordBase } from './git';
+import { matchesBase, recordBase } from './git';
 import { filesWithoutBase, readVariant, writeVariant, readVariants, listVariants } from './manifest';
 import { type VariantsStoreOptions, mutateVariants } from './options';
 import { baseStore, variantDir, isValidVariantId } from './paths';
@@ -64,7 +64,7 @@ export function promoteVariant(
         .find((g) => g.members.some((m) => m.id === id))
         ?.members.filter((m) => m.id !== id) ?? [];
     const files = Object.keys(manifest.files);
-    const before = new Map(files.map((key) => [key, existsSync(join(root, key)) ? currentBlob(join(root, key)) : null]));
+    const before = new Map(files.map((key) => [key, existsSync(join(root, key)) ? readFileSync(join(root, key)) : null]));
     landFiles(files.map((key) => ({ from: join(vDir, key), to: join(root, key) })));
     rmSync(vDir, { recursive: true, force: true });
     if (active.includes(id))
@@ -113,15 +113,17 @@ function landFiles(copies: { from: string; to: string }[]): void {
  * only send someone to merge two alternatives into each other. Only a copy made
  * from the version the promote replaced moves. One that was already behind
  * stays stale, because the real file changed in ways nobody has looked at.
- * `before` holds the blob each landed file replaced (null for a new file).
+ * `before` holds what each landed file replaced (null for a new file).
  */
-function rebaseSiblings(opts: VariantsStoreOptions, siblings: OverlayVariant[], before: Map<string, string | null>): string[] {
+function rebaseSiblings(opts: VariantsStoreOptions, siblings: OverlayVariant[], before: Map<string, Buffer | null>): string[] {
   const root = resolve(opts.root);
   const rebased: string[] = [];
   for (const sibling of siblings) {
     let moved = false;
     for (const [key, entry] of Object.entries(sibling.files)) {
-      if (!before.has(key) || !(entry.added || (entry.base !== null && entry.base === before.get(key)))) continue;
+      const replaced = before.get(key);
+      if (replaced === undefined || !(entry.added || (entry.base !== null && replaced !== null && matchesBase(replaced, entry.base))))
+        continue;
       const base = recordBase(join(root, key), baseStore(opts, sibling.id));
       if (base === null) continue;
       sibling.files[key] = { base };

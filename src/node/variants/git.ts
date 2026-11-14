@@ -1,8 +1,8 @@
 /** Git blob hashing and three-way merges against the base an override was made from. */
 
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 /** A failed lookup is an answer here (`null`), not something to print. */
@@ -37,24 +37,6 @@ export function isGitIgnored(absPath: string): boolean {
   }
 }
 
-/** The file's blob hash in its repository's format; without git, the
- *  SHA-1 one that {@link recordBase} records outside a repository. */
-export function currentBlob(absPath: string): string | null {
-  try {
-    return execFileSync('git', ['hash-object', '--no-filters', absPath], {
-      cwd: dirname(absPath),
-      encoding: 'utf8',
-      stdio: GIT_QUIET,
-    }).trim();
-  } catch {
-    try {
-      return blobHash(readFileSync(absPath), false);
-    } catch {
-      return null;
-    }
-  }
-}
-
 /** What `git hash-object` prints: a header and the bytes, hashed. */
 function blobHash(contents: Buffer, sha256: boolean): string {
   return createHash(sha256 ? 'sha256' : 'sha1')
@@ -63,8 +45,15 @@ function blobHash(contents: Buffer, sha256: boolean): string {
     .digest('hex');
 }
 
+/** Whether `contents` are the blob `base` names. A base is compared in its
+ *  own format (SHA-1 or, 64 characters long, SHA-256), never the current
+ *  repository's: one kept outside a repository stays SHA-1 after any `git init`. */
+export function matchesBase(contents: Buffer, base: string): boolean {
+  return blobHash(contents, base.length === 64) === base;
+}
+
 /** Git blob hashing is just a header and the file bytes. Existing bases tell
- * us the repository's hash format, avoiding a process per file on every poll. */
+ * us the hash format, avoiding a process per file on every poll. */
 export function hashFile(file: string, base: string | null): string | null {
   if (base === null) return null;
   try {
@@ -73,6 +62,10 @@ export function hashFile(file: string, base: string | null): string | null {
     return null;
   }
 }
+
+/** What to say about a stale copy when {@link hasGit} is false. */
+export const NO_GIT_SYNC =
+  'Git is not installed, so `variant sync` cannot merge the change in; install Git, or compare each copy with its real file by hand';
 
 /** Whether a `git` executable runs at all. Only asked when a merge needs it. */
 export function hasGit(): boolean {
@@ -139,7 +132,10 @@ export function recordBase(absPath: string, store: string): string | null {
     const contents = readFileSync(absPath);
     const hash = blobHash(contents, false);
     mkdirSync(store, { recursive: true });
-    writeFileSync(join(store, hash), contents);
+    // Written beside and renamed, so a crash never leaves a partial base.
+    const temp = join(store, `${hash}.${randomUUID()}.tmp`);
+    writeFileSync(temp, contents);
+    renameSync(temp, join(store, hash));
     return hash;
   } catch {
     return null;
@@ -147,11 +143,14 @@ export function recordBase(absPath: string, store: string): string | null {
 }
 
 /** A recorded base's contents: from the variant's bases directory, where a
- *  base made outside a repository lives, or else from git's object store. */
+ *  base made outside a repository lives, or else from git's object store.
+ *  A kept file that no longer hashes to its name is never a merge base. */
 export function readBase(cwd: string, hash: string, store: string): string | null {
   try {
-    return readFileSync(join(store, hash), 'utf8');
+    const contents = readFileSync(join(store, hash));
+    if (matchesBase(contents, hash)) return contents.toString('utf8');
   } catch {
-    return catFile(cwd, hash);
+    // Not kept here: git's object store has it, if anything does.
   }
+  return catFile(cwd, hash);
 }

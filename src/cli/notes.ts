@@ -17,7 +17,8 @@ import { noteFingerprint, readNotes, replyView, type StoredNote, updateNotes } f
 import { defaultNotesFile, NOTES_FILE } from '../node/notes/location';
 import { foreignServers } from '../node/serve-owner';
 import { notesProjectRoot, updateRequestOf } from '../node/update/request';
-import { listVariants, readActive, variantDir } from '../node/variants';
+import { filesWithoutBase, listVariants, readActive, variantDir } from '../node/variants';
+import { hasGit, NO_GIT_SYNC } from '../node/variants/git';
 import { latestChange, mtime, snapshot } from './changes';
 import { docPath } from './docs';
 import { excludeLocalFiles } from './local-files';
@@ -357,16 +358,21 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
     return [];
   }
   const relevant = variants.filter((v) => notes.some(({ note }) => variantAppliesTo(v.route, note.route)));
+  // A copy with no recorded base has nothing to sync from; `variant list` names it.
   const changedFor = (v: (typeof variants)[number]) =>
-    v.stale.filter((file) =>
-      notes.some(({ note, since }) => variantAppliesTo(v.route, note.route) && (mtime(join(dir, file)) ?? 0) > since),
+    v.stale.filter(
+      (file) =>
+        !filesWithoutBase(v).includes(file) &&
+        notes.some(({ note, since }) => variantAppliesTo(v.route, note.route) && (mtime(join(dir, file)) ?? 0) > since),
     );
   const lines: string[] = [];
   const stale = relevant.map((v) => ({ id: v.id, files: changedFor(v) })).filter((v) => v.files.length);
   if (stale.length) {
     lines.push('These variants copy files changed since the note (or --working), so their copies may lack the fix:');
-    for (const v of stale) lines.push(`  ${v.id} (${v.files.join(', ')}): ${shellCommand('npx', 'isotone', 'variant', 'sync', v.id)}`);
-    lines.push('Sync each one the fix belongs in too; leave a copy alone when it is the alternative itself.');
+    const git = hasGit();
+    for (const v of stale)
+      lines.push(`  ${v.id} (${v.files.join(', ')})${git ? `: ${shellCommand('npx', 'isotone', 'variant', 'sync', v.id)}` : ''}`);
+    lines.push(git ? 'Sync each one the fix belongs in too; leave a copy alone when it is the alternative itself.' : `${NO_GIT_SYNC}.`);
   }
   const conflicted = relevant.filter((v) => v.conflicts?.length);
   if (conflicted.length) {

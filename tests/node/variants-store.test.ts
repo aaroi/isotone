@@ -304,7 +304,7 @@ describe('sync', () => {
     writeFileSync(join(root, 'src', 'Button.tsx'), 'line one\nline two\nline three CHANGED\n');
 
     const result = syncVariant(opts, 'v1');
-    expect(result.conflicts).toEqual(['src/Button.tsx']);
+    expect(result.conflicts).toEqual([]);
     expect(result.blocked).toEqual({ 'src/Button.tsx': 'no-base' });
     expect(readFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'utf8')).toBe(before);
   });
@@ -419,6 +419,39 @@ describe('outside a Git repository', () => {
     const result = syncVariant(opts, 'v1');
     expect(result.blocked).toEqual({ 'src/Button.tsx': 'no-git' });
     expect(readFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'utf8')).toBe('line one\nline two\nline three\n');
+  });
+
+  it('never merges from a kept base that no longer matches its hash', () => {
+    const { root, opts } = tempProject();
+    createVariant(opts, { id: 'v1' });
+    addVariantFile(opts, 'v1', 'src/Button.tsx');
+    const base = readVariant(opts, 'v1')?.files['src/Button.tsx']?.base as string;
+    // A crash or a bad checkout left part of it.
+    writeFileSync(join(variantDir(opts, 'v1'), '.isotone-base', base), 'line one\n');
+    writeFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'line one\nline two\nOVERRIDE THREE\n');
+    writeFileSync(join(root, 'src', 'Button.tsx'), 'REAL ONE\nline two\nline three\n');
+
+    expect(syncVariant(opts, 'v1').blocked).toEqual({ 'src/Button.tsx': 'base-missing' });
+    expect(readFileSync(join(variantDir(opts, 'v1'), 'src/Button.tsx'), 'utf8')).toBe('line one\nline two\nOVERRIDE THREE\n');
+  });
+
+  it('rebases alternatives made before a SHA-256 `git init` when one is promoted', () => {
+    // Their kept bases are SHA-1, the new repository hashes in SHA-256: the
+    // promoted file's old version has to be compared in the base's format.
+    const { root, opts } = tempProject();
+    createVariant(opts, { id: 'a', group: 'g' });
+    createVariant(opts, { id: 'b', group: 'g' });
+    addVariantFile(opts, 'a', 'src/Button.tsx');
+    addVariantFile(opts, 'b', 'src/Button.tsx');
+    execFileSync('git', ['init', '-q', '--object-format=sha256', root]);
+    writeFileSync(join(variantDir(opts, 'a'), 'src/Button.tsx'), 'line one\nline two\nA THREE\n');
+    writeFileSync(join(variantDir(opts, 'b'), 'src/Button.tsx'), 'B ONE\nline two\nline three\n');
+
+    expect(promoteVariant(opts, 'a').rebased).toEqual(['b']);
+    expect(readVariant(opts, 'b')?.files['src/Button.tsx']?.base).toMatch(/^[0-9a-f]{64}$/);
+    // b is an alternative to what was promoted, not a copy behind it.
+    expect(syncVariant(opts, 'b').unchanged).toEqual(['src/Button.tsx']);
+    expect(readFileSync(join(variantDir(opts, 'b'), 'src/Button.tsx'), 'utf8')).toBe('B ONE\nline two\nline three\n');
   });
 
   it('rebases a promoted variant’s alternatives onto the landed file', () => {
@@ -828,7 +861,7 @@ describe('files a variant adds', () => {
     // Someone created the real file meanwhile: a person has to decide.
     writeFileSync(join(root, 'src', 'New.tsx'), 'export {};\n');
     expect(listVariants(opts)[0]?.stale).toEqual(['src/New.tsx']);
-    expect(syncVariant(opts, 'n').conflicts).toEqual(['src/New.tsx']);
+    expect(syncVariant(opts, 'n').blocked).toEqual({ 'src/New.tsx': 'appeared' });
   });
 
   it('promotes by creating the file', () => {

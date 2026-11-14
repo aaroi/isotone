@@ -1186,6 +1186,10 @@ describe('variants outside a Git repository', () => {
 
     io = makeIo(root);
     expect(await runCli(['variant', 'sync', 'old'], io)).toBe(1);
+    // Not a merge conflict: `variant list` counts none.
+    expect(io.text.out).toContain('conflicts: none');
+    expect(io.text.out).toContain('not merged: src/Hero.tsx');
+    expect(io.text.err).toContain('has a file sync could not merge');
     expect(io.text.out).toContain('src/Hero.tsx: no base recorded (not a git repo when the copy was made)');
     expect(io.text.out).toContain('Compare it with the real file by hand');
   });

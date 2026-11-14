@@ -55,14 +55,16 @@ Variant files are the change under review, so they are committed by default and
 `.aws/` or `.ssh/`) unless given `--force`. `variants: { ignored: true }` keeps
 the variants directory local. The active pointer, `.isotone/active.json`, is
 local and never committed: like the notes file, it goes into the repository's
-`.git/info/exclude` when the dev server starts and whenever the CLI runs. `ISOTONE_VARIANT=<id>` (a comma-separated list) bakes
+`.git/info/exclude` when the dev server starts and when the CLI's notes,
+`variant` and `init` commands run. `ISOTONE_VARIANT=<id>` (a comma-separated list) bakes
 variants into a `vite build` for a preview.
 
 **Keeping copies current.** A copy records the version of the real file it was
 made from and reads as stale once that file moves on. In a Git repository that
 version is kept in Git's object store; outside one, in the variant's own
 `.isotone-base/` directory, so a project without `git init` works the same,
-before and after one. `variant sync <id>` merges the real file's changes in,
+before and after one. After a later `git init` those kept versions are
+committed with the variant, so teammates can sync it too. `variant sync <id>` merges the real file's changes in,
 untracked files included; it needs Git installed and says so when it is not.
 Where both sides changed the same lines the copy gets conflict markers: `sync`
 exits 1, `variant list` counts them under CONFLICTS, and the copy cannot be

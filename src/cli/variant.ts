@@ -15,7 +15,6 @@ import {
   createVariant,
   crossGroupOverlaps,
   dropVariant,
-  hasConflictMarkers,
   filesWithoutBase,
   KNOBS_FILE,
   listVariants,
@@ -33,7 +32,7 @@ import {
   type SyncBlocker,
   type VariantsStoreOptions,
 } from '../node/variants';
-import { hasGit } from '../node/variants/git';
+import { hasGit, NO_GIT_SYNC } from '../node/variants/git';
 import { mutateVariants } from '../node/variants/options';
 import { repoRelativeKey } from '../node/variants/paths';
 import { docPath } from './docs';
@@ -98,8 +97,9 @@ export function runVariant(args: string[], io: CliIO): number {
     // `drop x --dry-run` must fail, not delete.
     const positionals = parseArgs(rest, spec[0], spec[1], 'npx isotone variant --help');
     if (positionals.length > spec[2]) throw new Error(`Unexpected "${positionals[spec[2]]}". Run \`isotone variant --help\`.`);
+    const code = command(positionals, rest, io, opts);
     excludeLocalFiles(opts.root);
-    return command(positionals, rest, io, opts);
+    return code;
   } catch (err) {
     // Every store function throws a plain Error with a one-line, already
     // user-facing message (invalid id, unknown variant, escaping path); this
@@ -231,7 +231,7 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
       io,
       hasGit()
         ? `STALE: the real file changed since the copy was made. \`variant sync <id>\` merges the change in: ${stale.map((v) => v.id).join(', ')}`
-        : `STALE: the real file changed since the copy was made. Git is not installed, so \`variant sync\` cannot merge the change in; install Git, or compare each copy with its real file by hand: ${stale.map((v) => v.id).join(', ')}`,
+        : `STALE: the real file changed since the copy was made. ${NO_GIT_SYNC}: ${stale.map((v) => v.id).join(', ')}`,
     );
   }
   const unbased = rows.filter((v) => filesWithoutBase(v).length);
@@ -555,36 +555,37 @@ function cmdSync(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreO
     return 1;
   }
   const { merged, conflicts, unchanged, blocked } = syncVariant(opts, id);
+  const notMerged = Object.keys(blocked);
   out(io, `merged: ${merged.length ? merged.join(', ') : 'none'}`);
   out(io, `conflicts: ${conflicts.length ? conflicts.join(', ') : 'none'}`);
   out(io, `unchanged: ${unchanged.length ? unchanged.join(', ') : 'none'}`);
-  for (const file of conflicts) out(io, syncAdvice(opts, id, file, blocked[file]));
-  if (!conflicts.length) return 0;
-  errOut(
-    io,
-    `Not synced: "${id}" has ${conflicts.length === 1 ? 'a conflict' : 'conflicts'}. Fix each file above, then check with \`npx isotone variant list\`.`,
-  );
+  if (notMerged.length) out(io, `not merged: ${notMerged.join(', ')}`);
+  for (const file of conflicts)
+    out(io, `${file}: resolve the conflict markers in ${join(variantDir(opts, id), file)}. Until then the reviewer cannot see "${id}".`);
+  for (const file of notMerged) out(io, notMergedAdvice(id, file, blocked[file] as SyncBlocker));
+  if (!conflicts.length && !notMerged.length) return 0;
+  const problems = [
+    ...(conflicts.length ? [conflicts.length === 1 ? 'a conflict' : 'conflicts'] : []),
+    ...(notMerged.length ? [`${notMerged.length === 1 ? 'a file' : 'files'} sync could not merge`] : []),
+  ];
+  errOut(io, `Not synced: "${id}" has ${problems.join(' and ')}. Fix each file above, then check with \`npx isotone variant list\`.`);
   return 1;
 }
 
-function syncAdvice(opts: VariantsStoreOptions, id: string, file: string, why: SyncBlocker | undefined): string {
-  const copy = join(variantDir(opts, id), file);
-  if (hasConflictMarkers(copy)) {
-    return `${file}: resolve the conflict markers in ${copy}. Until then the reviewer cannot see "${id}".`;
-  }
+function notMergedAdvice(id: string, file: string, why: SyncBlocker): string {
   const byHand = `Compare it with the real file by hand, then \`variant promote ${id} --force\` when it should win.`;
   switch (why) {
     case 'no-base':
       return `${file}: no base recorded (not a git repo when the copy was made), so there is nothing to merge from and the copy was left as it is. ${byHand}`;
     case 'no-git':
-      return `${file}: Git is not installed, so \`variant sync\` cannot merge and the copy was left as it is. Install Git and sync again, or compare the copy with the real file by hand.`;
+      return `${file}: ${NO_GIT_SYNC}.`;
     case 'no-file':
       return `${file}: the real file no longer exists, so there is nothing to merge into. \`variant rm ${id} ${file}\` drops the copy; \`variant promote ${id} --force\` lands it as a new file.`;
     case 'appeared':
       return `${file}: the variant adds this file, and the project now has its own, so the copy was left as it is. ${byHand}`;
     case 'git-failed':
       return `${file}: \`git merge-file\` failed, so the copy was left as it is. ${byHand}`;
-    default:
+    case 'base-missing':
       return `${file}: the base version it was made from can no longer be read, so the copy was left as it is. ${byHand}`;
   }
 }

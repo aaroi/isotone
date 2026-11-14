@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync,
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { version } from '../../package.json';
 import { docPath } from '../../src/cli/docs';
@@ -269,6 +269,39 @@ describe('--done and variants', () => {
     const other = captureIo(root);
     expect(await runCli(['--done', 'cccc'], other)).toBe(0);
     expect(other.text.out).not.toContain('variant sync');
+  });
+
+  it('leaves out a copy with no recorded base, and offers no sync without Git', async () => {
+    const root = repo();
+    notes(root, [
+      { id: 'aaaa1111', createdAt: ago(60_000) },
+      { id: 'bbbb2222', createdAt: ago(60_000) },
+    ]);
+    for (const id of ['old', 'new']) {
+      expect(await runCli(['variant', 'new', id, '--route', '/'], captureIo(root))).toBe(0);
+      expect(await runCli(['variant', 'add', id, 'src/App.jsx'], captureIo(root))).toBe(0);
+    }
+    // What Isotone 1.5.0 recorded for a copy made outside a repository.
+    const manifest = join(root, '.isotone/variants/old/variant.json');
+    const old = JSON.parse(readFileSync(manifest, 'utf8'));
+    old.files['src/App.jsx'].base = null;
+    writeFileSync(manifest, JSON.stringify(old));
+    write(root, 'src/App.jsx', 'export default function App() { return <button>Get started</button>; }\n', Date.now() + 2000);
+
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    expect(io.text.out).toContain('new (src/App.jsx): npx isotone variant sync new');
+    expect(io.text.out).not.toContain('variant sync old');
+
+    vi.stubEnv('PATH', '');
+    try {
+      const noGit = captureIo(root);
+      expect(await runCli(['--done', 'bbbb'], noGit)).toBe(0);
+      expect(noGit.text.out).toContain('  new (src/App.jsx)\n');
+      expect(noGit.text.out).toContain('Git is not installed, so `variant sync` cannot merge the change in');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('names copies on the route that still hold conflict markers', async () => {

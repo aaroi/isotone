@@ -23,10 +23,10 @@ export type SyncBlocker = 'no-base' | 'base-missing' | 'no-file' | 'appeared' | 
 
 export interface SyncResult {
   merged: string[];
-  /** Files with conflict markers, and files left as they were (see `blocked`). */
+  /** Merged with conflict markers for a person to resolve. */
   conflicts: string[];
   unchanged: string[];
-  /** Why each conflict without markers was not merged. */
+  /** Left as they were, and why. */
   blocked: Record<string, SyncBlocker>;
 }
 
@@ -42,10 +42,6 @@ export function syncVariant(opts: VariantsStoreOptions, id: string): SyncResult 
     const conflicts: string[] = [];
     const unchanged: string[] = [];
     const blocked: Record<string, SyncBlocker> = {};
-    const block = (file: string, why: SyncBlocker) => {
-      conflicts.push(file);
-      blocked[file] = why;
-    };
     let dirty = false;
     let git: boolean | undefined;
 
@@ -55,7 +51,7 @@ export function syncVariant(opts: VariantsStoreOptions, id: string): SyncResult 
       if (entry.added) {
         // Nothing to merge into; a real file that appeared meanwhile is a
         // conflict for a person to settle.
-        if (existsSync(currentAbs)) block(file, 'appeared');
+        if (existsSync(currentAbs)) blocked[file] = 'appeared';
         else unchanged.push(file);
         continue;
       }
@@ -65,7 +61,7 @@ export function syncVariant(opts: VariantsStoreOptions, id: string): SyncResult 
         // has nothing to lose, though, so that file becomes its base.
         const base = sameBytes(overrideAbs, currentAbs) ? recordBase(currentAbs, store) : null;
         if (base === null) {
-          block(file, 'no-base');
+          blocked[file] = 'no-base';
           continue;
         }
         entry.base = base;
@@ -82,17 +78,17 @@ export function syncVariant(opts: VariantsStoreOptions, id: string): SyncResult 
       // No current file to merge into, or nothing to merge with: the override
       // is left as-is and flagged for a person to sort out.
       if (currentHash === null) {
-        block(file, 'no-file');
+        blocked[file] = 'no-file';
         continue;
       }
       git ??= hasGit();
       if (!git) {
-        block(file, 'no-git');
+        blocked[file] = 'no-git';
         continue;
       }
       const baseContent = readBase(dirname(currentAbs), entry.base, store);
       if (baseContent === null) {
-        block(file, 'base-missing');
+        blocked[file] = 'base-missing';
         continue;
       }
 
@@ -120,7 +116,7 @@ export function syncVariant(opts: VariantsStoreOptions, id: string): SyncResult 
         } else {
           // Git failed outright; its empty stdout must not replace the
           // override, and the base stays where it was.
-          block(file, 'git-failed');
+          blocked[file] = 'git-failed';
         }
       } finally {
         rmSync(baseTmp, { force: true });
