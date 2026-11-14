@@ -346,16 +346,20 @@ Nothing in the dock moves suddenly, and nothing under a resting pointer moves
 at all. The dock hangs from its bottom-right corner, so a panel moves when its
 bottom or right edge does, and slides there. While the pointer rests on the
 dock, a panel keeps its height when its contents change (a note arriving or
-leaving, a section folding or unfolding, Feedback closing over Variants): its
-list scrolls instead, a fold keeps its toggle where it was and the rows after
-it glide into place, and the panel takes its new height once the pointer
-leaves or a resize handle is taken up. A height that does change (Feedback
+leaving, a note opened for editing or put back, a section folding or unfolding,
+Feedback closing over Variants): its list scrolls instead, keeping its scroll as
+Feedback closes, a fold keeps its toggle where it was and the rows after it
+glide into place, and the panel takes its new height in one ease once the
+pointer leaves or a resize handle is taken up. A finger never holds a size: the
+hover a tap leaves behind is no resting pointer, so a tap's change eases at
+once. A height that does change (Feedback
 opening over a long list, room given back, the pointer gone) eases the card's
 height from what showed to what it needs, every changed panel on the same clock;
 Variants' list scrolls by as much as its top edge moves, so its controls stay
 still, and the dock lets its stack run past its room at the top meanwhile, never
 over the pill. A panel opening beside another lays out at once and is revealed
-from its foot upward, fading in, while the one above slides; one opening alone
+from its foot upward, fading in, by as much as the one above slides, so the gap
+between them stays the same the whole way; one opening alone
 rises 6px and fades in. Heights ease after a key too, since they follow from
 what the key did. Immediate: reduced motion, a resize the pointer drives (it
 tracks the pointer) or a key steps (each step lands exactly), a window resizing,

@@ -549,7 +549,7 @@ describe('a ?v= the overlay source does not apply', () => {
     expect(overlay.getNotice()).toEqual({
       text: 'Link picks aren’t applied here',
       detail:
-        'This link asks for Header › Hero: Split. Here every tab shows the same picks, so a link can’t choose them: pick it below instead. Per-tab links need live switching (React on Vite 6+).',
+        'This link asks for Header › Hero: Split. Here every tab shows the same picks, so a link can’t choose them. Pick it below instead.',
     });
   });
 
@@ -557,7 +557,7 @@ describe('a ?v= the overlay source does not apply', () => {
     const { overlay } = source('?v=hero:hero-split,card-highlight:card-highlight');
     await overlay.refresh();
     expect(detailOf(overlay.getNotice())).toContain('asks for Header › Hero: Split; Card.tsx: Highlight.');
-    expect(detailOf(overlay.getNotice())).toContain('pick them below instead.');
+    expect(detailOf(overlay.getNotice())).toContain('Pick them below instead.');
     // The view keeps what it showed while the panel is open; the source says how things are now.
     overlay.setSelection('hero', 'hero-split');
     overlay.setSelection('card-highlight', 'card-highlight');

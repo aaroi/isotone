@@ -218,6 +218,7 @@ export function IsotonePanel({
       data-expanded={railOpen}
       data-tools={tools}
       data-instant={instant}
+      data-touch={touch}
       data-notes-open={notesOpen}
       data-selecting={picking || floating}
       data-working={working > 0}

@@ -53,7 +53,10 @@ import { npm } from './npm.mjs';
 // Bundle raised to 414.5 kB and tarball to 472 kB (413.7 and 471.3 kB; still under the pointer): panels that hold their height while the
 // pointer rests on the dock, a fold that keeps its toggle in place, a panel revealed from its foot, and the
 // scroll-aware reflow.
-const BUDGET = { bundle: 414_500, tarball: 472_000 };
+// Bundle raised to 416.5 kB and tarball to 474.5 kB (416.2 and 473.8 kB; one ease): a hold that lets go in
+// one ease and covers any change of Feedback's contents, no hold for a finger, and a reveal that keeps the
+// gap to the panel above.
+const BUDGET = { bundle: 416_500, tarball: 474_500 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

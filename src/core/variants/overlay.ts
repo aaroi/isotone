@@ -374,7 +374,7 @@ export function unappliedLinkNotice(list: OverlayVariantsList, active: string[],
   // Stays true while the panel keeps it, even once the reviewer has picked what the link asked for.
   return {
     text: 'Link picks aren’t applied here',
-    detail: `This link asks for ${asked.join('; ')}. Here every tab shows the same picks, so a link can’t choose them: pick ${asked.length > 1 ? 'them' : 'it'} below instead. Per-tab links need live switching (React on Vite 6+).`,
+    detail: `This link asks for ${asked.join('; ')}. Here every tab shows the same picks, so a link can’t choose them. Pick ${asked.length > 1 ? 'them' : 'it'} below instead.`,
   };
 }
 

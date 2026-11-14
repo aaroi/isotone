@@ -126,7 +126,7 @@ describe('a link whose ?v= was not applied', () => {
     expect(line?.getAttribute('aria-describedby')).toBe(detail?.id);
     expect(detail?.getAttribute('role')).toBe('tooltip');
     expect(detail?.textContent).toBe(
-      'This link asks for Headline: Bold. Here every tab shows the same picks, so a link can’t choose them: pick it below instead. Per-tab links need live switching (React on Vite 6+).',
+      'This link asks for Headline: Bold. Here every tab shows the same picks, so a link can’t choose them. Pick it below instead.',
     );
   });
 

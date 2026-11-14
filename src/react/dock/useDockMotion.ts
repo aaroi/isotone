@@ -1,10 +1,11 @@
 import { useLayoutEffect, type RefObject } from 'react';
 import { MAX_ANIMATED_ITEMS, MOTION } from '../motion';
 
-type Position = { x: number; y: number; width: number; height: number; animation?: Animation };
+type Position = { x: number; y: number; width: number; height: number; animation?: Animation; scrolls?: number[] };
 
-/** The card's top edge, unclipped: the close, handles and shadow beside and above it stay whole. */
-const OPEN_CLIP = 'inset(-24px -24px -24px -24px)';
+const SCROLLERS = '.isotone-list, .isotone-vars-body';
+/** Where a panel's lists are scrolled, so its exit snapshot shows them as they were, not from the top. */
+const scrollsOf = (element: HTMLElement) => Array.from(element.querySelectorAll<HTMLElement>(SCROLLERS), (node) => node.scrollTop);
 
 /**
  * Move and resize panels without scaling their text, hit targets or corner shapes. The dock hangs from its
@@ -54,7 +55,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       const animation = element.animate(
         [
           { clipPath: `inset(${from}px -24px -24px -24px)`, opacity: 0 },
-          { clipPath: OPEN_CLIP, opacity: 1 },
+          { clipPath: 'inset(0px -24px -24px -24px)', opacity: 1 },
         ],
         { duration: MOTION.enter, easing: MOTION.easeOut },
       );
@@ -62,7 +63,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       animation.onfinish = () => reveals.delete(element);
     };
     const measure = (now = false) => {
-      const instant = settling || root.dataset.instant === 'true' || root.dataset.resizing === 'true' || reduced?.matches;
+      const instant = now || settling || root.dataset.instant === 'true' || root.dataset.resizing === 'true' || reduced?.matches;
       // An interrupted ease starts the next from the height that shows now.
       const showing = new Map<HTMLElement, number>();
       for (const [element, animation] of sizing) {
@@ -133,6 +134,9 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
               pointerEvents: 'none',
             });
             root.appendChild(ghost);
+            ghost.querySelectorAll<HTMLElement>(SCROLLERS).forEach((node, i) => {
+              node.scrollTop = old.scrolls?.[i] ?? 0;
+            });
             const animation = ghost.animate(
               [
                 { opacity: 1, transform: 'translateY(0)' },
@@ -154,9 +158,11 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         // panels' places follow it in the layout, so nothing slides on top of that.
         const shiftX = old ? old.x + old.width - (x + rect.width) : 0;
         const shiftY = old ? old.y + old.height - (y + rect.height) : 6;
-        if (!old && beside) reveal(element, rect.height);
+        // Revealed by as much as the panels above it slide up (its height and the gap), so its edge and the
+        // panel above it keep the gap between them the whole way.
+        if (!old && beside) reveal(element, rect.height + (Number.parseFloat(getComputedStyle(root).rowGap) || 0));
         if (old && (resizing.length > 0 || (Math.abs(shiftX) < 0.5 && Math.abs(shiftY) < 0.5))) {
-          Object.assign(old, { x, y, width: rect.width, height: rect.height });
+          Object.assign(old, { x, y, width: rect.width, height: rect.height, scrolls: scrollsOf(element) });
           // A rise still running (a panel just opened, now growing as its list arrives) carries on.
           if (instant) old.animation?.cancel();
           continue;
@@ -172,7 +178,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
                 { duration: MOTION.enter, easing: MOTION.easeOut },
               )
             : undefined;
-        previous.set(element, { x, y, width: rect.width, height: rect.height, animation });
+        previous.set(element, { x, y, width: rect.width, height: rect.height, animation, scrolls: scrollsOf(element) });
       }
       // A changed height eases from what showed to what the panel needs, every changed panel on the same
       // clock, so the stack's total moves evenly between two layouts; the panel's content keeps to its foot
@@ -208,7 +214,9 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
     const observer =
       typeof ResizeObserver !== 'undefined'
         ? new ResizeObserver(() => {
-            if (!sizing.size) measure();
+            // While a list lets go of room it held, the panel follows it in the layout; the dock stands
+            // aside and records where things land.
+            if (!sizing.size && !root.dataset.settling) measure();
             settling = false;
           })
         : undefined;
@@ -226,13 +234,13 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
           return panel;
         });
       });
-      if (changed) measure();
+      if (changed) measure(records.some((record) => record.attributeName === 'data-settling'));
     });
     mutations.observe(root, {
       subtree: true,
       childList: true,
       attributes: true,
-      attributeFilter: ['data-open', 'data-resizing'],
+      attributeFilter: ['data-open', 'data-resizing', 'data-settling'],
     });
     // An on-screen keyboard lifts the dock, and a resize sets its sizes, through the root's own style
     // (viewport.ts, useDockSize.ts): both land at once, so a key's step is exact.

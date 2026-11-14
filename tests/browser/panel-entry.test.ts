@@ -37,7 +37,7 @@ window.start = async (count, { notice = false, theme = 'light' } = {}) => {
     reset() { selections = {}; listeners.forEach((l) => l()); },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     saveDefaults() {},
-    ...(notice ? { getNotice: () => ({ text: 'Link picks aren’t applied here', detail: 'This link asks for Part 0 › Selector 0: Bold. Here every tab shows the same picks, so a link can’t choose them: pick it below instead. Per-tab links need live switching (React on Vite 6+).' }) } : {}),
+    ...(notice ? { getNotice: () => ({ text: 'Link picks aren’t applied here', detail: 'This link asks for Part 0 › Selector 0: Bold. Here every tab shows the same picks, so a link can’t choose them. Pick it below instead.' }) } : {}),
   };
   window.__isotone.mount({ variants: source, endpoint: '/notes', theme, compareShortcut: false });
   for (let tries = 0; !root()?.querySelector('.isotone-rail-track') && tries < 100; tries++) await frame();
