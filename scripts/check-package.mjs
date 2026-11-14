@@ -30,7 +30,9 @@ import { npm } from './npm.mjs';
 // Bundle raised to 397.5 kB and tarball to 429 kB (396.1 and 427.2 kB; a host source beside knobs):
 // combining sources and the one set-defaults note across them, in every entry that mounts the panel,
 // and the shipped docs that describe it.
-const BUDGET = { bundle: 397_500, tarball: 429_000 }; // re-measured after the integration merges
+// Tarball raised to 426 kB (425.1 kB; components compiled in parts): the part and reload handling
+// in the Vite plugin, and the Vue, Svelte and Astro notes in the shipped variants guide and changelog.
+const BUDGET = { bundle: 395_000, tarball: 426_000 }; // re-measured after the integration merges
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

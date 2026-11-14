@@ -13,7 +13,7 @@ import { ensureDirIgnored, ensureFileIgnored } from '../node/fs/git-exclude';
 import { isWithin } from '../node/fs/paths';
 import { overrideSourcePath, readVariant } from '../node/variants';
 import { ACTIVE_EVENT, BASE_VERSION, RESOLVED_LIVE_MODULE, VERSION_QUERY } from './live';
-import type { Overrides } from './overrides';
+import { type Overrides, reloadsOnSwitch } from './overrides';
 
 const MANIFEST = 'variant.json';
 
@@ -43,6 +43,13 @@ export function createSwitching(overrides: Overrides) {
   const swapping = new Map<string, Set<string>>();
   const swapWaiters = new Set<() => void>();
 
+  /** A switch of a Vue component, or an edit of its active copy, reloads the
+   *  page (see reloadsOnSwitch). */
+  const reloadForComponent = (): [] => {
+    reloadPage();
+    return [];
+  };
+
   const planChanged = (path: string): boolean => {
     const plan = overrides.dispatchPlan(path);
     return !plan || planKey(plan) !== dispatched.get(path);
@@ -56,8 +63,22 @@ export function createSwitching(overrides: Overrides) {
     changed: string,
     modulesOf: (file: string) => Iterable<M> | undefined,
     env: string | null,
+    invalidate: (mod: M) => void,
   ): M[] | undefined => {
     const client = env === null || env === 'client';
+    /**
+     * The modules of `file` a page imports. A check request
+     * (`<file>?isotone=<id>`, outside a dispatcher) leaves a module nothing
+     * imports; in an update it would end the walk with a full reload, so it
+     * is dropped from the graph instead and compiles afresh on its next
+     * request. `checked` says whether there was one.
+     */
+    const pageModules = (file: string): { page: M[]; checked: boolean } => {
+      const all = [...(modulesOf(file) ?? [])];
+      const page = all.filter((m) => versionOfId(m.id) === null);
+      for (const mod of all) if (versionOfId(mod.id) !== null) invalidate(mod);
+      return { page, checked: page.length !== all.length };
+    };
     // The module graph keys files by their forward-slash form, which is
     // what `join` produces on POSIX and not on Windows.
     if (isWithin(overrides.dir, changed)) {
@@ -75,10 +96,19 @@ export function createSwitching(overrides: Overrides) {
         }
         return [...(modulesOf(source) ?? [])].filter((m) => versionOfId(m.id) === hit.id);
       }
+      // A check of any copy of this file compiles afresh on its next request.
+      const { page } = pageModules(source);
       if (!overrides.active().includes(hit.id)) return [];
-      // The browser holds the real file's URL, so the override's edit has
-      // to be delivered as if the real file changed.
-      return [...(modulesOf(source) ?? [])];
+      // Live: the browser's dispatcher took the edit above, and a server
+      // render, which swaps the whole file, takes it as the real file's.
+      if (live && dispatched.has(source)) return page;
+      // The page holds the real file's URL, so the edit is reported as the
+      // real file's, as a switch is: a framework plugin that compiles the
+      // changed file again (Svelte's) would otherwise compile the copy's own
+      // path, which Vite refuses. Once, from the browser's environment, for a
+      // file any environment has loaded (a server render may be the only one).
+      if (client && dev && loadedAnywhere(dev, source)) reportSwap(dev, source);
+      return [];
     }
     // A change activate() reported. Vite hands this hook a forward-slash
     // path, and the swap is keyed the same way, so Windows paths match too.
@@ -104,12 +134,14 @@ export function createSwitching(overrides: Overrides) {
       }
       return [...(modulesOf(path) ?? [])].filter((m) => versionOfId(m.id) === BASE_VERSION);
     }
+    if (swap && client && reloadsOnSwitch(path)) return reloadForComponent();
+    const { page, checked } = pageModules(path);
     // Let Vite compute the swap's update as usual.
-    if (swap) return undefined;
+    if (swap) return checked ? page : undefined;
     // The real source of an overridden file: the browser is showing the
     // override, so there is nothing to update from this edit.
     if (overrides.overridable(changed) && overrides.overrideFor(overrides.active(), changed)) return [];
-    return undefined;
+    return checked ? page : undefined;
   };
 
   // The dev server, once attached: the swap reports to its watcher and
@@ -150,6 +182,18 @@ export function createSwitching(overrides: Overrides) {
       dispatched.clear();
       server.ws.send({ type: 'full-reload', path: '*' });
     }, 50);
+  };
+
+  /** Whether any environment has loaded `source` itself, not only a check of a copy. */
+  const loadedAnywhere = (server: ViteDevServer, source: string): boolean =>
+    [...(server.moduleGraph.getModulesByFile(source) ?? [])].some((mod) => versionOfId(mod.id) === null);
+
+  /** Tell Vite the real file `source` changed, and let its hot update through
+   *  (see hotModules), as an editor save would: load() answers it now with
+   *  whatever the active set says. */
+  const reportSwap = (server: ViteDevServer, source: string): void => {
+    swapping.set(source, new Set());
+    server.watcher.emit('change', source);
   };
 
   /**
@@ -214,9 +258,8 @@ export function createSwitching(overrides: Overrides) {
     for (const source of sources) {
       const loaded = server.moduleGraph.getModulesByFile(source);
       if (!loaded || loaded.size === 0) continue;
-      swapping.set(source, new Set());
       emitted.push(source);
-      server.watcher.emit('change', source);
+      reportSwap(server, source);
     }
     // Live tabs switch themselves; this tells the ones still on the
     // server's default to follow it, once a reload would render it.

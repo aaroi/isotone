@@ -8,7 +8,7 @@
  * (the endpoints), and ./html-inject (the panel in each page).
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { basename, dirname, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 
 // `normalizePath` is a plain function, so importing it as a value does not
 // pull vite's nominal `Plugin` type into the structural return type below.
@@ -22,14 +22,16 @@ import {
   type ResolvedConfig,
   type ViteDevServer,
 } from 'vite';
-// A namespace, not a named import: Vite 5 has no `isFileLoadingAllowed`, and
-// a missing named export would fail the whole module there.
+// A namespace, not a named import: Vite 5.4.18 and earlier have no
+// `isFileLoadingAllowed`, and a missing named export would fail the whole
+// module there. (Later Vite 5 releases take a server, not a config.)
 import * as vite from 'vite';
 
 import { VARIANTS_ENDPOINT } from '../core/variants';
 import { blastFile } from '../node/blast';
 import { defaultNotesFile, LEGACY_NOTES_FILE, NOTES_FILE } from '../node/notes/location';
 import { ensureFileIgnored } from '../node/fs/git-exclude';
+import { realPath } from '../node/fs/paths';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
 import { autoUpdateNote } from '../node/update/note';
@@ -47,7 +49,7 @@ import {
 } from './live';
 import { type Gate, notesEndpoint, updateEndpoint, variantsEndpoint } from './middleware';
 import type { IsotonePlugin, IsotoneViteOptions } from './options';
-import { createOverrides } from './overrides';
+import { createOverrides, isCompiledInParts } from './overrides';
 import { createSwitching } from './switching';
 
 export type { IsotonePlugin, IsotoneViteOptions } from './options';
@@ -64,6 +66,111 @@ const VITE_DENY = ['.env', '.env.*', '*.{crt,pem}', '**/.git/**'];
  * them and show the real file.
  */
 const SPECIAL_QUERY = /[?&](raw|url|inline|no-inline|worker|sharedworker|html-proxy)(?:[&=]|$)/;
+
+/**
+ * A part of a component that its framework plugin compiled from the whole
+ * file, named by the framework in the query: `Card.vue?vue&type=style&index=0…`,
+ * `Card.svelte?svelte&type=style&lang.css`, `Card.astro?astro&type=style…`.
+ * The plugin answers it from its own compile of the whole file, which load()
+ * has already swapped; the whole file in its place would compile as CSS. A
+ * Vue block kept in a file of its own (`<style src="./card.css">`, which adds
+ * `src=`) is that whole file, and is swapped as usual.
+ */
+const COMPONENT_PART = /(?:^|&)(?:vue|svelte|astro)(?:[&=]|$)/;
+const OWN_FILE = /(?:^|&)src=/;
+
+/** What load() reads of a Vite 6+ dev environment; a build has neither. */
+interface LoadEnvironment {
+  name: string;
+  moduleGraph?: { getModuleById(id: string): { url: string; transformResult: unknown } | undefined };
+  transformRequest?(url: string): Promise<unknown>;
+}
+
+/**
+ * Leave a component part to its framework plugin once the plugin has compiled
+ * the file as load() serves it now. plugin-vue keeps one parse per file and
+ * drops it when the real file changes on disk; a part asked before the whole
+ * file compiles again is then read from the real file. Under an active
+ * variant, an edit of the real file followed by a part rebuilt on its own (a
+ * stylesheet it imports changed) would show the real file's part. Compiling
+ * the whole file first restores the copy's. Vite 5 has no environment here
+ * and keeps that gap.
+ */
+function componentPart(env: LoadEnvironment | undefined, path: string): Promise<null> | null {
+  const main = env?.moduleGraph?.getModuleById(path);
+  if (!main || main.transformResult || !env?.transformRequest) return null;
+  // A copy that does not compile reports that on its own request.
+  return env.transformRequest(main.url).then(
+    () => null,
+    () => null,
+  );
+}
+
+/**
+ * A check request (`<file>?isotone=<id>`) that would not compile the copy gets
+ * a plain 404, rather than the page's file, which would pass an agent's check
+ * of a copy it never compiled. For a component compiled in parts: its parts
+ * come from the plugin's compile of the page's file (plugin-vue keeps one
+ * parse per component, so a copy compiled on its own would even replace the
+ * page's). On Vite 5: see load(). Only files a variant tracks:
+ * `tracked` maps a request path to that answer, and any other `?isotone=` is
+ * the app's own.
+ */
+function refuseVersion(vite6: () => boolean, tracked: (path: string) => boolean) {
+  return (
+    req: { url?: string },
+    res: { statusCode: number; setHeader(name: string, value: string): void; end(body: string): void },
+    next: () => void,
+  ): void => {
+    const url = req.url ?? '';
+    const at = url.indexOf('?');
+    if (at < 0 || !new URLSearchParams(url.slice(at + 1)).has(VERSION_QUERY)) {
+      next();
+      return;
+    }
+    let path = url.slice(0, at);
+    try {
+      path = decodeURIComponent(path);
+    } catch {
+      /* Left as written; Vite answers a malformed path itself. */
+    }
+    if (!tracked(path)) {
+      next();
+      return;
+    }
+    const reason = isCompiledInParts(path)
+      ? 'isotone serves no copy of a .vue, .svelte or .astro file on its own'
+      : vite6()
+        ? null
+        : 'isotone serves a copy on its own from Vite 6';
+    if (reason === null) {
+      next();
+      return;
+    }
+    res.statusCode = 404;
+    res.setHeader('content-type', 'text/plain; charset=utf-8');
+    res.end(`${reason}: switch to its variant with \`npx isotone variant use <id>\` instead.\n`);
+  };
+}
+
+/** The file a dev server request path names, as module ids write it: under
+ *  the configured base and the Vite root, or `/@fs/<absolute path>`. */
+function requestedFile(server: ViteDevServer, path: string): string {
+  const base = server.config.base ?? '/';
+  const local = base !== '/' && path.startsWith(base) ? path.slice(base.length - 1) : path;
+  if (local.startsWith('/@fs/')) {
+    const absolute = local.slice('/@fs'.length);
+    // `/@fs/C:/…` on Windows.
+    return normalizePath(/^\/[A-Za-z]:/.test(absolute) ? absolute.slice(1) : absolute);
+  }
+  let root = server.config.root;
+  try {
+    root = realPath(root);
+  } catch {
+    /* A root that does not exist yet names nothing a variant tracks. */
+  }
+  return normalizePath(join(root, local));
+}
 
 /** Say where the notes go after Vite's own banner, so it is not buried under
  *  it. Portable setups fail quietly otherwise: a reviewer writes notes and the
@@ -88,6 +195,8 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
   let isDev = false;
   let hasReact = false;
   let ssrHost = false;
+  // Vite 6 or later, whose environments mark it: decided in configureServer.
+  let vite6 = false;
   let resolved: ResolvedConfig | null = null;
   const variantsOptions = options.variants === false ? null : (options.variants ?? {});
   const overrides = createOverrides(variantsOptions ?? {});
@@ -131,7 +240,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       // cannot find it on disk, so answer with the path the variant gives it.
       return overrides.addedFile(source, importer, () => this.resolve(source, importer, { ...opts, skipSelf: true }));
     },
-    load(id: string, opts?: { ssr?: boolean }) {
+    load(this: { environment?: LoadEnvironment }, id: string, opts?: { ssr?: boolean }) {
       if (!variantsOptions || SPECIAL_QUERY.test(id)) return null;
       if (id === RESOLVED_LIVE_MODULE) return { code: liveRuntimeModule(overrides.liveConfig(ssrHost)), map: null };
       // `?v=<hash>`, `?t=<timestamp>`, `?import`: vite's own request
@@ -139,15 +248,24 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       const path = id.replace(/[?#].*$/, '');
       if (!overrides.overridable(path)) return null;
       const query = id.slice(path.length).replace(/^\?/, '').replace(/#.*$/, '');
-      const version = switching.live ? new URLSearchParams(query).get(VERSION_QUERY) : null;
+      if (COMPONENT_PART.test(query) && !OWN_FILE.test(query)) {
+        return overrides.versionsByFile().has(path) ? componentPart(this.environment, path) : null;
+      }
+      // `?isotone=<id>`: one version of a tracked file. Live dispatchers import
+      // each version this way, and on any dev server it shows that a copy
+      // compiles. Only Vite 6 and later can check it against
+      // `server.fs.deny` (below); Vite 5's check takes a server, not a
+      // config. On Vite 5, as for a component (plugin-vue would take that
+      // copy for the real file's parse), refuseVersion answers 404 first.
+      const versioned = vite6 && !isCompiledInParts(path);
+      const version = versioned ? new URLSearchParams(query).get(VERSION_QUERY) : null;
       // Only a file some variant tracks has versions. Any other path is left
       // to Vite, whose `server.fs.deny` keeps `.env` and `.git/` out of reach;
       // answering it here would read the file around that check.
       if (version !== null && overrides.versionsByFile().has(path)) {
         // A file tracked past the secret guard (`variant add … --force`)
         // still obeys `server.fs.deny`: left to Vite, the request gets 403.
-        // Live mode needs Vite 6, which has the check.
-        if (resolved && vite.isFileLoadingAllowed && !vite.isFileLoadingAllowed(resolved, path)) return null;
+        if (!resolved || !vite.isFileLoadingAllowed(resolved, path)) return null;
         const from = version === BASE_VERSION ? (existsSync(path) ? path : null) : overrides.copyOf(version, path);
         return { code: from ? readFileSync(from, 'utf8') : 'export {};\n', map: null };
       }
@@ -169,12 +287,22 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
     hotUpdate(this: { environment: DevEnvironment }, ctx: HotUpdateOptions): EnvironmentModuleNode[] | undefined {
       if (!variantsOptions) return undefined;
       const env = this.environment;
-      return switching.hotModules(ctx.file, (f) => env.moduleGraph.getModulesByFile(f), env.name);
+      return switching.hotModules(
+        ctx.file,
+        (f) => env.moduleGraph.getModulesByFile(f),
+        env.name,
+        (mod) => env.moduleGraph.invalidateModule(mod),
+      );
     },
     handleHotUpdate(ctx: HmrContext) {
       if (!variantsOptions) return undefined;
       const { server } = ctx;
-      return switching.hotModules(ctx.file, (f) => server.moduleGraph.getModulesByFile(f), null) as HmrContext['modules'] | undefined;
+      return switching.hotModules(
+        ctx.file,
+        (f) => server.moduleGraph.getModulesByFile(f),
+        null,
+        (mod) => server.moduleGraph.invalidateModule(mod),
+      ) as HmrContext['modules'] | undefined;
     },
     configureServer(server) {
       if (!isDev) return;
@@ -207,11 +335,18 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
         // Live switching needs the host's React for the wrappers and Vite 6's
         // per-environment hot updates, so the server render keeps its swap
         // while the browser's dispatchers are left alone.
-        const live = (variantsOptions.live ?? hasReact) && server.environments !== undefined;
+        vite6 = server.environments !== undefined;
+        const live = (variantsOptions.live ?? hasReact) && vite6;
         const activate = switching.attach(server, { live, ignored: variantsOptions.ignored });
         server.middlewares.use(
           VARIANTS_ENDPOINT,
           variantsEndpoint(() => overrides.opts, activate, allowedHosts),
+        );
+        server.middlewares.use(
+          refuseVersion(
+            () => vite6,
+            (path) => overrides.versionsByFile().has(requestedFile(server, path)),
+          ),
         );
       }
 
