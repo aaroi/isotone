@@ -170,9 +170,10 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       const path = normalizePath(resolve(raw));
       // Every copy, version and dispatcher of a file obeys the dev server's
       // `server.fs.deny` as the real file does: left to Vite, the request gets
-      // 403. A server render loads files without that check, so it keeps its
-      // swap.
-      if (!opts?.ssr && overrides.versionsByFile().has(path) && !servable(path)) return null;
+      // 403. Asked of every path, before anything below reads a manifest: the
+      // list of tracked files is cached, while the copy is looked up afresh.
+      // A server render loads files without that check, so it keeps its swap.
+      if (!opts?.ssr && !servable(path)) return null;
       const version = switching.live ? new URLSearchParams(query).get(VERSION_QUERY) : null;
       // Only a file some variant tracks has versions. Any other path is left
       // to Vite, whose `server.fs.deny` keeps `.env` and `.git/` out of reach;

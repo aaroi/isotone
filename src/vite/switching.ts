@@ -200,6 +200,9 @@ export function createSwitching(overrides: Overrides) {
     const prev = overrides.active();
     const changed = [...prev.filter((id) => !next.includes(id)), ...next.filter((id) => !prev.includes(id))];
     if (!server || (changed.length === 0 && removedFiles.length === 0)) return Promise.resolve();
+    // The variants may have changed with no watcher to say so (`watch: null`,
+    // or `.isotone` ignored): what each file resolves to is read again.
+    overrides.forget();
     overrides.setActive(next);
     const root = overrides.opts.root;
     // Forward-slash paths throughout: the module graph and the hot
