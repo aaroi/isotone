@@ -103,7 +103,8 @@ function variantsDirGlobs(viteRoot: string, setup: { root?: string; dir?: string
   // Glob characters in the path itself match literally; picomatch reads a
   // backslash as a separator on Windows, where such names are rare.
   const literal = (path: string) => (process.platform === 'win32' ? path : path.replace(/[*?{}()[\]!+@]/g, '\\$&'));
-  return [...dirs].map((dir) => `${literal(dir)}/**`);
+  // A directory holding the app itself would deny the whole app.
+  return [...dirs].filter((dir) => !isWithin(dir, viteRoot)).map((dir) => `${literal(dir)}/**`);
 }
 
 /** The filesystem's own spelling of `path`, or `path` when it does not exist yet. */

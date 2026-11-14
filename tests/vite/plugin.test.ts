@@ -1520,6 +1520,8 @@ describe('variants kept outside .isotone', () => {
     const literal = process.platform === 'win32' ? dir : dir.replace(/[()]/g, '\\$&');
     expect(deny({ variants: { dir: 'variants' } }, '/work/My App (copy)')).toContain(`${literal}/**`);
     expect(deny({ variants: { dir: resolve('/elsewhere/alts') } }, '/work/app')).toContain(`${id(resolve('/elsewhere/alts'))}/**`);
+    // A directory holding the app itself is never denied: it would deny the app.
+    expect(deny({ variants: { dir: resolve('/work') } }, '/work/app').filter((glob) => glob.includes('work'))).toEqual([]);
     // The default directory is under `.isotone/`, which is denied already.
     expect(deny({}, '/work/app').filter((glob) => glob.includes('work'))).toEqual([]);
   });
