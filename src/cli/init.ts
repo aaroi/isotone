@@ -26,8 +26,8 @@ const SOURCE_MAX_DEPTH = 4;
 const SOURCE_EXT = /\.(ts|tsx|js|jsx|mts|cts|html)$/;
 /** An import of an Isotone adapter, or the loader tag `isotone serve` prints. */
 const INTEGRATION = /['"]isotone\/(?:vite|react|server|serve)['"]|\/isotone\.js\b/;
-/** A host-owned variants source: built with the helpers, or typed as one. */
-const HOST_SOURCE = /\b(?:createVariantsSource|combineVariantsSources)\s*\(|\bVariantsSource\b/;
+/** A host-owned variants source, built with the helpers. A mention of the type alone (tests, typings) is not one. */
+const HOST_SOURCE = /\b(?:createVariantsSource|combineVariantsSources)\s*\(/;
 /** The Vite plugin's name before 1.3, still accepted as a deprecated alias. */
 const OLD_PLUGIN = /\biteration\s*\(/;
 /** The section `init` owns in AGENTS.md lies between these; nothing else is touched. */
@@ -269,7 +269,8 @@ function walkSources(cwd: string, dir: string, depthLeft: number, found: Sources
     const text = safeRead(join(cwd, path));
     if ((entry.name === 'meta.ts' && text.includes('defaultOption')) || text.includes('useVariant(')) found.hostOwnedAxes = true;
     if (INTEGRATION.test(text)) found.integration.push(path);
-    if (HOST_SOURCE.test(text)) found.hostSources.push(path);
+    // Built output under public/ would name the helper too.
+    if (!path.startsWith('public/') && !/\.d\.[cm]?ts$/.test(entry.name) && HOST_SOURCE.test(text)) found.hostSources.push(path);
   }
 }
 
@@ -389,6 +390,8 @@ function printHost(print: Print, host: Host): void {
   if (host === 'next') {
     print("In Next, mount from a 'use client' component rendered once in the root layout, and");
     print("import('isotone/react') inside its effect behind process.env.NODE_ENV === 'development'.");
+  } else if (host === 'vite') {
+    print("In Vite, import('isotone/react') behind import.meta.env.DEV so builds leave it out.");
   }
   print();
   for (const line of HOST_EXAMPLE) print(line ? `  ${line}` : '');
@@ -620,7 +623,7 @@ function agentsSection(approach: Approach, guide: string): string {
 const APPROACH_LINE: Record<Approach, string> = {
   overlay:
     'Alternatives are variants, not edits to the real file: `npx isotone variant --help`.\n  Promote one only when the reviewer picks it.',
-  host: 'The panel’s Variants tab shows this app’s own VariantsSource; a chosen default\n  is a change to this app’s code.',
+  host: 'The panel’s Variants tab shows this app’s own VariantsSource, with knobs from\n  .isotone/knobs.json beside it; a chosen default is a change to this app’s code.',
   serve:
     'The panel loads from `npx isotone serve` (or the package.json `isotone` script),\n  which must be running in this directory. Alternatives are knobs in .isotone/knobs.json.',
 };

@@ -387,7 +387,7 @@ describe('a host source beside the knobs of the server that answers notes', () =
     });
   });
 
-  it('lets a host that saves its own defaults save them, and files only the knobs', async () => {
+  it('calls a host’s own saveDefaults and still names its picks, since the note replaces any it filed', async () => {
     const saveDefaults = vi.fn(async (_selections: Record<string, string>) => {});
     const source = createVariantsSource({ axes, selections: { cta: 'start' }, saveDefaults });
     const panel = await mountWithKnobs({ endpoint: notesEndpoint, variants: source });
@@ -395,27 +395,31 @@ describe('a host source beside the knobs of the server that answers notes', () =
     expect(saveDefaults).toHaveBeenCalledWith({ cta: 'start' });
     expect(panel.posted()).toEqual([
       expect.objectContaining({
-        feedback: '[set-defaults] Knobs: Card radius 16px (card-radius).',
-        payload: { variants: 'default', knobs: 'card-radius:16' },
+        feedback: '[set-defaults] App selectors: Hero › Call to action → Get started (cta). Knobs: Card radius 16px (card-radius).',
+        payload: { variants: 'default', selectors: 'cta:start', knobs: 'card-radius:16' },
       }),
     ]);
-
-    // With no knob moved, the host's own request is the only one.
     await panel.off();
-    saveDefaults.mockClear();
-    const quiet = await mountWithKnobs({ endpoint: notesEndpoint, variants: source }, {});
-    expect(quiet.shadow.querySelector('.isotone-save-count')?.textContent).toBe('1 pick changed');
-    // Only what this click posts: the store may still resend the earlier panel's note.
-    const before = quiet.posted().length;
-    await quiet.click(quiet.button('Make default'));
-    expect(saveDefaults).toHaveBeenCalledWith({ cta: 'start' });
-    expect(
-      quiet
-        .posted()
-        .slice(before)
-        .filter((note) => note.id === null),
-    ).toEqual([]);
-    await quiet.off();
+  });
+
+  it('files no knob that a host selector of the same id hides, and leaves the host’s source with no listeners', async () => {
+    const shadowed = createVariantsSource({ axes: [...axes, { ...knob, label: 'App radius', defaultValue: 8 }] as never });
+    const subscribe = vi.spyOn(shadowed, 'subscribe');
+    const panel = await mountWithKnobs({ endpoint: notesEndpoint, variants: shadowed });
+    expect(Array.from(panel.shadow.querySelectorAll('.isotone-axis-label')).map((el) => el.textContent)).toEqual([
+      'App radius',
+      'Call to action',
+    ]);
+    await panel.click(panel.button('Make default'));
+    expect(panel.posted().at(-1)?.feedback).toBe('[set-defaults] The current defaults stay on this route.');
+    const offs = subscribe.mock.results.map((r) => r.value as () => void);
+    expect(offs.length).toBeGreaterThan(0);
+    await panel.off();
+    // Every subscription the panel made through the wrapper is gone: a new one is the only listener.
+    const listener = vi.fn();
+    shadowed.subscribe(listener);
+    shadowed.setSelection('cta', 'start');
+    expect(listener).toHaveBeenCalledOnce();
   });
 
   it('reads no knobs beside a notes endpoint that is not an Isotone server, and still files the host’s picks', async () => {

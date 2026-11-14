@@ -152,6 +152,29 @@ describe('combineVariantsSources', () => {
     expect(saved).toEqual(['a {"layout":"list"}', 'c {"gap":"6"}']);
   });
 
+  it('lets go of every source when one of them cannot show a hold', () => {
+    const onChange = vi.fn();
+    const first = createVariantsSource({ axes: [LAYOUT], selections: { layout: 'list' }, onChange, compare: true });
+    const broken: VariantsSource = {
+      ...createVariantsSource({ axes: [RADIUS], selections: { radius: '20' } }),
+      preview: () => {
+        throw new Error('no preview here');
+      },
+    };
+    const combined = combineVariantsSources(first, broken);
+    expect(compareFor(combined).start('key')).toBe(false);
+    expect(onChange.mock.calls.map((call) => call[1])).toEqual([{ preview: true }, { preview: false }]);
+    expect(compareFor(combined).held).toBeNull();
+  });
+
+  it('asks a source with nothing on this page to save nothing', async () => {
+    const save = vi.fn();
+    const empty = createVariantsSource({ axes: [], saveDefaults: save });
+    const combined = combineVariantsSources(createVariantsSource({ axes: [LAYOUT], saveDefaults: vi.fn() }), empty);
+    await combined.saveDefaults?.({ layout: 'list' });
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it('refreshes every source that can, and reports the first error', async () => {
     const refreshed: string[] = [];
     const quiet = createVariantsSource({ axes: [LAYOUT] });

@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client';
 import { createIsotoneStore } from '../core/notes-client';
 import {
   axisSection,
-  combineVariantsSources,
   createOverlayVariantsSource,
   knobDelta,
   OVERLAY_DEFAULT_OPTION,
@@ -12,6 +11,7 @@ import {
   VARIANTS_ENDPOINT,
   visibleAxes,
 } from '../core/variants';
+import { combineSources } from '../core/variants/combine';
 import { IsotonePanel } from './IsotonePanel';
 import { ensurePanelStyles } from './styles/panel';
 import type { MountIsotoneOptions } from '../core/types';
@@ -75,7 +75,7 @@ const KNOBS_EMPTY_TEXT =
   'No knobs on this page yet. Ask your agent to add knobs for this page to .isotone/knobs.json and they will appear here.';
 
 /** The notes path of an Isotone server (the Vite plugin, `isotone serve`), which serves knobs beside it. */
-const ISOTONE_NOTES = /\/api\/isotone\/notes$/;
+const ISOTONE_NOTES = /\/api\/isotone\/notes\/?$/;
 
 export function mountIsotone(opts: MountIsotoneOptions): () => void {
   const getRoute = opts.getRoute ?? (() => window.location.pathname);
@@ -89,10 +89,10 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
       ? (opts.variantsEndpoint ?? VARIANTS_ENDPOINT)
       : undefined;
   const overlay = overlayEndpoint ? createOverlayVariantsSource({ endpoint: overlayEndpoint, getRoute }) : null;
-  let variants: VariantsSource | undefined = app ?? overlay ?? undefined;
-  if (app && overlay) variants = combineVariantsSources(app, overlay);
-  // A host source that leaves promotion to Isotone gets Make default, wrapped rather than changed.
-  else if (app && opts.endpoint && !app.saveDefaults) variants = combineVariantsSources(app);
+  // A wrapper this mount owns, so Make default can be added without changing the host's source.
+  const combined =
+    app && overlay ? combineSources([app, overlay]) : app && opts.endpoint && !app.saveDefaults ? combineSources([app]) : null;
+  const variants: VariantsSource | undefined = combined ?? app ?? overlay ?? undefined;
   if (opts.endpoint && variants && variants !== app)
     variants.saveDefaults = defaultsNote(variants, app, overlay, getRoute, opts.endpoint, opts.key);
   // Nothing to show: no notes to write and no variants to pick. A production
@@ -200,6 +200,8 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
   return () => {
     disposed = true;
     for (const off of listeners) off();
+    // The host's source outlives this mount: leave it with none of this panel's listeners.
+    combined?.dispose();
     guard.disconnect();
     // Deferred, not synchronous: a React host calls this from an effect
     // cleanup, and unmounting our root while the host's render is in flight
@@ -218,11 +220,11 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
  * across every selector on the route, for the agent to land. Landing an
  * overlay variant means copying files over the real ones (`variant promote`),
  * a knob's value is written into the source, and a pick in the host's own
- * selectors is a change to the host's code. A host source with its own
- * `saveDefaults` saves its picks itself, and the note then covers only
- * variants and knobs, filed when one of them moved. The other variants are
- * untouched; only an explicit ask removes a variant. One note, because a
- * route keeps one open `[set-defaults]` request.
+ * selectors is a change to the host's code. A host source's own
+ * `saveDefaults` runs first with its picks; the note names them anyway, since
+ * a route keeps one open `[set-defaults]` request and this one replaces any
+ * the host filed. The other variants are untouched; only an explicit ask
+ * removes a variant.
  */
 function defaultsNote(
   source: VariantsSource,
@@ -256,17 +258,18 @@ function defaultsNote(
         const named = selector === label || axis.label === label ? label : `${selector}: ${label}`;
         return [{ id, named, element: variant?.element ?? null }];
       });
-    // The host's selectors the reviewer moved, named as the panel showed them, unless the host saved them.
-    const app = host?.saveDefaults
-      ? []
-      : knobDelta(
-          shown.filter((axis) => hostIds.has(axis.id)),
-          selections,
-        );
+    // The host's selectors the reviewer moved, named as the panel showed them.
+    const app = knobDelta(
+      shown.filter((axis) => hostIds.has(axis.id)),
+      selections,
+    );
     // Knobs the reviewer moved off their defaults ride in the same note, as
-    // the value the panel showed, so the agent can write the number in.
-    const moved = knobDelta(knobs.axes, knobs.values);
-    if (host?.saveDefaults && !picked.length && !moved.length) return;
+    // the value the panel showed, so the agent can write the number in. Only
+    // shown ones: a knob behind a host selector of its id was never in the panel.
+    const moved = knobDelta(
+      knobs.axes.filter((knob) => shown.includes(knob)),
+      knobs.values,
+    );
     // Only the decision, nothing about the other variants: they stay until
     // the reviewer says otherwise, in their own words.
     const parts: string[] = [];

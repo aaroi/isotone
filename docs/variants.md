@@ -263,9 +263,9 @@ Any other notes endpoint gets no knobs unless `variantsEndpoint` names where the
 are. Compare holds every selector that can switch at once, whichever source owns
 it. **Make default** files one `[set-defaults]` note naming every pick, the
 source's own in `payload.selectors` for the agent to make the defaults in code.
-A source with its own `saveDefaults` saves its picks itself instead, and the
-note then covers only knobs and file variants; since a route keeps one open
-`[set-defaults]` note, such a `saveDefaults` should not file one of its own.
+A source's own `saveDefaults` still runs first with its picks; the note names
+them too, since a route keeps one open `[set-defaults]` note and this one
+replaces any that `saveDefaults` filed.
 
 To show several sources in one panel yourself, for an `IsotonePanel` or two
 variant systems of your own, combine them; earlier sources keep a shared axis

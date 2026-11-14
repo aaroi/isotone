@@ -16,6 +16,11 @@ import type { VariantsSource } from './source';
  * with that source's picks, in order. `reset` resets every source.
  */
 export function combineVariantsSources(...sources: VariantsSource[]): VariantsSource {
+  return combineSources(sources);
+}
+
+/** {@link combineVariantsSources}, with `dispose` for a mount that ends: it leaves every source's subscribers. */
+export function combineSources(sources: VariantsSource[]): VariantsSource & { dispose(): void } {
   /** Each shown axis with the source that owns it, earliest first. */
   const owned = (): [VariantAxis, VariantsSource][] => {
     const seen = new Set<string>();
@@ -45,7 +50,9 @@ export function combineVariantsSources(...sources: VariantsSource[]): VariantsSo
   // The sources a hold is showing, so letting go reaches only them.
   const previewed = new Set<VariantsSource>();
 
-  const combined: VariantsSource & { refresh?: () => Promise<void> } = {
+  // Every live subscription, so a mount that ends can leave the sources it does not own.
+  const subscriptions = new Set<() => void>();
+  const combined: VariantsSource & { refresh?: () => Promise<void>; dispose(): void } = {
     getAxes: () => owned().map(([axis]) => axis),
     getSelections() {
       const picks: VariantSelections = {};
@@ -66,9 +73,15 @@ export function combineVariantsSources(...sources: VariantsSource[]): VariantsSo
     },
     subscribe(listener) {
       const offs = sources.map((source) => source.subscribe(listener));
-      return () => {
-        for (const off of offs) off();
+      const off = () => {
+        for (const one of offs) one();
+        subscriptions.delete(off);
       };
+      subscriptions.add(off);
+      return off;
+    },
+    dispose() {
+      for (const off of [...subscriptions]) off();
     },
   };
   if (some('getError')) combined.getError = () => sources.reduce<string | null>((error, s) => error ?? s.getError?.() ?? null, null);
@@ -86,11 +99,24 @@ export function combineVariantsSources(...sources: VariantsSource[]): VariantsSo
         return undefined;
       }
       const shown: string[] = [];
-      for (const [source, part] of split(partial)) {
-        if (!source.preview) continue;
-        previewed.add(source);
-        const ids = source.preview(part);
-        shown.push(...(Array.isArray(ids) ? ids : Object.keys(part)));
+      try {
+        for (const [source, part] of split(partial)) {
+          if (!source.preview) continue;
+          previewed.add(source);
+          const ids = source.preview(part);
+          shown.push(...(Array.isArray(ids) ? ids : Object.keys(part)));
+        }
+      } catch (error) {
+        // The hold never starts, so nothing may stay held: let go of what was shown.
+        for (const source of previewed) {
+          try {
+            source.preview?.(null);
+          } catch {
+            // Its own state is what it stored.
+          }
+        }
+        previewed.clear();
+        throw error;
       }
       return shown;
     };
@@ -102,7 +128,8 @@ export function combineVariantsSources(...sources: VariantsSource[]): VariantsSo
   if (some('saveDefaults'))
     combined.saveDefaults = async (selections) => {
       const parts = split(selections);
-      for (const source of sources) await source.saveDefaults?.(parts.get(source) ?? {});
+      // A source with nothing on this page has nothing to save.
+      for (const [source, part] of parts) await source.saveDefaults?.(part);
     };
   if (sources.some((source) => typeof (source as { refresh?: unknown }).refresh === 'function'))
     combined.refresh = async () => {

@@ -102,8 +102,8 @@ The printed setup URL offers a copyable tag and a bookmarklet. This path has
 notes and [knobs](variants.md#knobs) from `.isotone/knobs.json` where `serve`
 runs (the Variants tool appears once it holds a valid knob; reload after the
 first). Swapping source files needs the Vite plugin or a host `VariantsSource`;
-a host source mounted with this server's notes endpoint shows its knobs beside
-its own selectors ([details](variants.md#beside-knobs-and-file-variants)). A
+mounting a host source with this server's notes endpoint lists the knobs
+beside the source's selectors ([details](variants.md#beside-knobs-and-file-variants)). A
 source built with `createVariantsSource` offers [hold to
 compare](variants.md#hold-to-compare) only with `compare: true`, once its
 `onChange` skips persisting calls marked `{ preview: true }`.

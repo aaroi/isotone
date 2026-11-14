@@ -133,7 +133,8 @@ npx isotone variant list [<route>] [--json]        # check what the panel will s
 - A copy is stale once its real file changes: `variant list` shows it as STALE
   and `--done` names it. Sync each copy the fix belongs in too.
 - `variant list --json` prints one object: `variants` (with `stale`, `missing`,
-  `conflicts` and `active`), `knobs`, and `skippedKnobs` with reasons. `--all-routes` lists
+  `conflicts` and `active`), `knobs`, `skippedKnobs` with reasons, and
+  `hostSources`, the files with the app's own selectors, which no command lists. `--all-routes` lists
   every route's variants even with a route given.
 - `variant off <id>` turns one off, `variant rm <id> <file>` stops overriding a
   file, and `variant group <id> <groupId> [--label <text>]` moves a variant into

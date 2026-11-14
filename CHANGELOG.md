@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- **An app's own selectors and `.isotone/knobs.json` knobs show together.** `mountIsotone({ variants: source, endpoint })` with the notes endpoint of the Vite plugin or `isotone serve` now lists the knobs (and, on Vite, file variants) beside the source's selectors, where before the knobs silently disappeared and stopped applying. Compare holds both, and Make default files one `[set-defaults]` note naming every pick, the app's own selectors in `payload.selectors`. A source with its own `saveDefaults` still saves its picks itself.
+- **An app's own selectors and `.isotone/knobs.json` knobs show together.** `mountIsotone({ variants: source, endpoint })` with the notes endpoint of the Vite plugin or `isotone serve` now lists the knobs (and, on Vite, file variants) beside the source's selectors, where before the knobs silently disappeared and stopped applying. Compare holds both, and Make default files one `[set-defaults]` note naming every pick, the app's own selectors in `payload.selectors`. A source's own `saveDefaults` still runs first.
 - **Make default and Compare appear for a host source without `saveDefaults`** once it is mounted with a notes endpoint; the bar that holds them needed one.
 - **`init --approach host` fits its setup and check to the framework.** It names the endpoint for Vite or `isotone serve`, and no longer asks for the Vite-only `data-isotone-inject` and `?isotone=` checks. It says the CLI cannot see the app's own selectors, and `variant list` names the files that hold them (`hostSources` in `--json`).
 
