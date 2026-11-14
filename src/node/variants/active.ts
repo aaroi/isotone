@@ -6,7 +6,7 @@ import { overlayGroups } from '../../core/variants/overlay';
 import { writeJson } from '../fs/atomic';
 import { ensureFileIgnored } from '../fs/git-exclude';
 import { isEscaping, toPosixPath } from '../fs/paths';
-import { readVariant, readVariants } from './manifest';
+import { hasConflictMarkers, readVariant, readVariants } from './manifest';
 import { ACTIVE_FILE, type VariantsStoreOptions, type ActiveFileShape, variantsDir } from './options';
 import { variantDir } from './paths';
 
@@ -78,10 +78,24 @@ export function crossGroupOverlaps(opts: VariantsStoreOptions, id: string): { fi
 }
 
 /**
+ * The files of variant `id` whose copies still hold conflict markers from
+ * `variant sync`. Such a copy does not parse, so the variant cannot be shown:
+ * activating it is refused, and {@link readActive} leaves it out until the
+ * markers are resolved.
+ */
+export function conflictedCopies(opts: VariantsStoreOptions, id: string): string[] {
+  const manifest = readVariant(opts, id);
+  return Object.keys(manifest?.files ?? {}).filter((file) => hasConflictMarkers(join(variantDir(opts, id), file)));
+}
+
+/**
  * The active set, cleaned: ids whose variant is gone (dropped or promoted
  * since the file was written) are dropped, and of two variants over one
- * file the later one is dropped, so `load` never has to choose. The file's
- * older shape, one id or `null`, still reads.
+ * file the later one is dropped, so `load` never has to choose. A variant
+ * whose copies hold conflict markers is left out while they do, so the real
+ * files show and every reader (`load`, the endpoint, the CLI) agrees on what
+ * is shown; the file keeps the id, which returns once they are resolved. The
+ * file's older shape, one id or `null`, still reads.
  */
 export function readActive(opts: VariantsStoreOptions): string[] {
   const file = join(resolve(opts.root), ACTIVE_FILE);
@@ -100,7 +114,7 @@ export function readActive(opts: VariantsStoreOptions): string[] {
     if (typeof id !== 'string' || seen.has(id)) continue;
     seen.add(id);
     const manifest = readVariant(opts, id);
-    if (!manifest) continue;
+    if (!manifest || conflictedCopies(opts, id).length > 0) continue;
     const files = Object.keys(manifest.files);
     if (files.some((f) => owner.has(f))) continue;
     for (const f of files) owner.add(f);

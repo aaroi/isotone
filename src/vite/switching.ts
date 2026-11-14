@@ -12,7 +12,8 @@ import { normalizePath, type ViteDevServer } from 'vite';
 import { ensureDirIgnored, ensureFileIgnored } from '../node/fs/git-exclude';
 import { isWithin } from '../node/fs/paths';
 import { overrideSourcePath, readVariant } from '../node/variants';
-import { ACTIVE_EVENT, BASE_VERSION, RESOLVED_LIVE_MODULE, VERSION_QUERY } from './live';
+import { ACTIVE_EVENT } from '../core/variants/overlay';
+import { BASE_VERSION, RESOLVED_LIVE_MODULE, VERSION_QUERY } from './live';
 import { type Overrides, reloadsOnSwitch } from './overrides';
 
 const MANIFEST = 'variant.json';
@@ -274,9 +275,10 @@ export function createSwitching(overrides: Overrides) {
       reportSwap(server, source);
     }
     // Live tabs switch themselves; this tells the ones still on the
-    // server's default to follow it, once a reload would render it.
+    // server's default to follow it, once a reload would render it, and every
+    // panel what the page now shows.
     const settled = serverSawSwap(server, emitted);
-    if (live) void settled.then(() => server.ws.send({ type: 'custom', event: ACTIVE_EVENT, data: { active: next } }));
+    void settled.then(() => server.ws.send({ type: 'custom', event: ACTIVE_EVENT, data: { active: next } }));
     return settled;
   };
 

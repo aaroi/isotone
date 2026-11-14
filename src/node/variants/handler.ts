@@ -1,9 +1,9 @@
 /** The variants endpoint the panel calls. */
 
-import { overlayGroups } from '../../core/variants/overlay';
+import { conflictedReason, overlayGroups } from '../../core/variants/overlay';
 import { LockBusyError, SERVER_LOCK_WAIT_MS } from '../fs/lock';
 import { type HandlerRequest, type HandlerResponse, jsonResponse } from '../http';
-import { activeConflict, readActive, writeActive } from './active';
+import { activeConflict, conflictedCopies, readActive, writeActive } from './active';
 import { readKnobs } from './knobs';
 import { readVariant, readVariants, listVariants } from './manifest';
 import { mutateVariants, type VariantsStoreOptions } from './options';
@@ -53,6 +53,8 @@ function setActive(opts: VariantsStoreOptions, body: unknown): HandlerResponse {
   }
   for (const id of active) {
     if (!readVariant(opts, id)) return json(404, { error: `unknown variant "${id}"` });
+    const conflicted = conflictedCopies(opts, id);
+    if (conflicted.length > 0) return json(409, { error: conflictedReason(id, conflicted) });
   }
   const conflict = activeConflict(opts, active);
   if (conflict) {

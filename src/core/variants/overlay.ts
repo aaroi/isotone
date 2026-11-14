@@ -161,6 +161,20 @@ export function knobDelta(knobs: KnobAxis[], values: VariantSelections): { axis:
 /** The endpoint path the client calls. */
 export const VARIANTS_ENDPOINT = '/api/isotone/variants';
 
+/**
+ * The server's active set changed (another tab's pick, `variant use`, a copy
+ * that gained or lost conflict markers): `{ active }`. Sent over Vite's HMR
+ * channel, and passed on to the page as a `window` event of the same name,
+ * which the overlay source follows.
+ */
+export const ACTIVE_EVENT = 'isotone:active';
+
+/** Why `id` cannot be shown: copies holding conflict markers from `variant sync`.
+ *  The CLI, the endpoint and the panel all refuse it with this. */
+export function conflictedReason(id: string, files: string[]): string {
+  return `"${id}" holds conflict markers from \`variant sync\` in ${files.join(', ')}, so it cannot be shown until they are resolved.`;
+}
+
 /** Where the browser keeps knob values between reloads. */
 export const KNOBS_STORAGE_KEY = 'isotone:knobs';
 
@@ -409,7 +423,8 @@ export function createOverlayVariantsSource(cfg: {
   takenIds?: () => Iterable<string>;
 }): VariantsSource & {
   refresh(): Promise<void>;
-  /** For the reviewer: the page's `?v=` names picks the page does not show; else null. */
+  /** For the reviewer: the page's `?v=` names picks the page does not show, or a variant here
+   *  cannot be shown for its conflict markers; else null. */
   getNotice(): string | null;
   readonly list: OverlayVariantsList | null;
   /** The knobs on the current route and their values, for the save note. */
@@ -447,7 +462,22 @@ export function createOverlayVariantsSource(cfg: {
       previewingLive = false;
     }
   };
+  // Without a live store every tab shows the server's set, which moves when
+  // another tab picks or the CLI runs `variant use`: follow it, so the panel
+  // and a note's selections name what the page shows.
+  const page = typeof window === 'undefined' ? null : window;
+  page?.addEventListener?.(ACTIVE_EVENT, (event) => {
+    const next = (event as CustomEvent<{ active?: unknown } | null>).detail?.active;
+    if (!list || !Array.isArray(next)) return;
+    list = { ...list, active: next.filter((id): id is string => typeof id === 'string') };
+    emit();
+  });
   const current = (): string[] => live?.active ?? intended ?? list?.active ?? [];
+  /** The variants on this route that cannot be shown. */
+  const conflicted = (): OverlayVariantStatus[] => {
+    const here = new Set(selects().flatMap((axis) => axis.options.map((o) => o.id)));
+    return (list?.variants ?? []).filter((v) => here.has(v.id) && v.conflicts?.length);
+  };
   const selects = (): SelectVariantAxis[] => (list ? overlayAxes(list, cfg.getRoute()) : []);
   /** The knobs on `route` (every route without one) that no other source's selector has taken. */
   const ownKnobs = (route?: string): KnobAxis[] => {
@@ -580,7 +610,8 @@ export function createOverlayVariantsSource(cfg: {
         ? `Left out of .isotone/knobs.json: ${clashes.map((knob) => knob.id).join(', ')}, since one of the app’s own selectors has ${clashes.length > 1 ? 'each' : 'this'} id, so the panel shows only that selector. Give ${clashes.length > 1 ? 'each knob its' : 'the knob its'} own id.`
         : null;
       const link = live ? null : unappliedLinkNotice(list, current(), search());
-      return [link, clash].filter(Boolean).join(' ') || null;
+      const unshown = conflicted().map((v) => conflictedReason(v.label || v.id, v.conflicts ?? []));
+      return [link, clash, ...unshown].filter(Boolean).join(' ') || null;
     },
     get list() {
       return list;
@@ -663,6 +694,13 @@ export function createOverlayVariantsSource(cfg: {
       }
       const axis = selects().find((a) => a.id === axisId);
       if (!axis || !isValidSelection(axis, value)) return;
+      // Refused here, before the tab switches: the server would refuse it too.
+      const unshowable = conflicted().find((v) => v.id === value);
+      if (unshowable) {
+        error = conflictedReason(unshowable.label || unshowable.id, unshowable.conflicts ?? []);
+        emit();
+        return;
+      }
       // The group's members leave the set and the pick joins it; the other
       // groups' picks ride along untouched.
       const members = new Set(axis.options.map((o) => o.id));

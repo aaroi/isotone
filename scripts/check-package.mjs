@@ -41,7 +41,9 @@ import { npm } from './npm.mjs';
 // and its notes in the shipped variants guide and changelog.
 // The figures above are each change on its own over 1.5.0. Merged together (#60 to #69), the bundle is
 // 402.6 kB and the tarball 457.6 kB: bundle raised to 403.5 kB and tarball to 459 kB.
-const BUDGET = { bundle: 403_500, tarball: 459_000 };
+// Tarball raised to 460 kB (panel truth): the page passing the server's picks on to the
+// panel, the refusal of a conflicted copy in the CLI, endpoint and panel, and their changelog lines.
+const BUDGET = { bundle: 403_500, tarball: 460_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

@@ -25,9 +25,12 @@
  * wrappers use, and keeps the functions testable as ordinary code.
  */
 
+import { ACTIVE_EVENT } from '../core/variants/overlay';
+
 /** What the store needs from the server, per page load. */
 export interface LiveConfig {
-  /** Variant groups in panel order, each a decision with its members. */
+  /** Variant groups in panel order, each a decision with the members it can
+   *  show: a copy with conflict markers is left out until they are resolved. */
   groups: { id: string; members: string[] }[];
   /** The server's active set: `.isotone/active.json` when the page was served. */
   active: string[];
@@ -82,8 +85,6 @@ export const VERSION_QUERY = 'isotone';
 export const BASE_VERSION = '_base';
 export const LIVE_MODULE = 'virtual:isotone/live';
 export const RESOLVED_LIVE_MODULE = '\0isotone-live';
-/** Sent over Vite's HMR channel when the server's active set changes. */
-export const ACTIVE_EVENT = 'isotone:active';
 
 /**
  * Create the tab's store on `win`, or return the one already there. Runs as

@@ -12,6 +12,7 @@ import { type OverlayVariant, overlayGroups, VARIANTS_ENDPOINT } from '../core/v
 import { isWithin, realPath } from '../node/fs/paths';
 import {
   ACTIVE_FILE,
+  conflictedCopies,
   hasConflictMarkers,
   readActive,
   readVariants,
@@ -263,9 +264,13 @@ export function createOverrides(setup: VariantsSetup) {
       return { key: normalizePath(relative(opts.root, path)), versions, names: [...names].sort() };
     },
 
-    /** The live store's config: groups in panel order and the active set. */
+    /** The live store's config: groups in panel order, with the members they
+     *  can show, and the active set. */
     liveConfig(ssr: boolean): LiveConfig {
-      const groups = overlayGroups(readManifests()).map((group) => ({ id: group.id, members: group.members.map((m) => m.id) }));
+      const groups = overlayGroups(readManifests()).map((group) => ({
+        id: group.id,
+        members: group.members.filter((m) => conflictedCopies(opts, m.id).length === 0).map((m) => m.id),
+      }));
       return { groups, active: active(), ssr, endpoint: VARIANTS_ENDPOINT };
     },
 

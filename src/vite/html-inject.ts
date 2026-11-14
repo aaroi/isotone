@@ -5,6 +5,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { RouteGateOptions } from '../core/routes';
+import { ACTIVE_EVENT } from '../core/variants/overlay';
 import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
 import { readBundle } from '../node/bundle';
 import { isFromThisMachine, nodeRequestFacts } from '../node/http';
@@ -47,6 +48,18 @@ export function mountModuleSource(
   `;
 }
 
+/**
+ * Pass the server's active-set changes ({@link ACTIVE_EVENT}) from Vite's HMR
+ * channel to the page as a `window` event, which the panel's overlay source
+ * follows: a self-contained bundle (or the host's own mount) has no
+ * `import.meta.hot`. `base` is the dev server's, where its client lives.
+ */
+export function activeEventSource(base: string): string {
+  const client = JSON.stringify(`${base.endsWith('/') ? base : `${base}/`}@vite/client`);
+  const event = JSON.stringify(ACTIVE_EVENT);
+  return `import(${client}).then(({ createHotContext }) => createHotContext('/@isotone/active').on(${event}, (detail) => window.dispatchEvent(new CustomEvent(${event}, { detail }))), () => {});`;
+}
+
 type Use = {
   (handler: (req: IncomingMessage, res: ServerResponse, next: () => void) => void): unknown;
   (path: string, handler: (req: IncomingMessage, res: ServerResponse, next: () => void) => void): unknown;
@@ -58,12 +71,17 @@ const local = (req: IncomingMessage): boolean => isFromThisMachine(nodeRequestFa
 /**
  * Serve the panel to the dev server's pages: the bundle, and the scripts
  * added to every HTML navigation. `mount` is the mount module, or null when
- * the host mounts the panel itself; `head` is the live variant store, when
- * there is one. A device on the network gets the store, which the app's
- * modules need, but never the panel.
+ * the host mounts the panel itself; `follow` passes active-set changes on to
+ * a panel, mounted either way, when there are file variants; `head` is the
+ * live variant store, when there is one. A device on the network gets the
+ * store, which the app's modules need, but never the panel.
  */
-export function servePanel(use: Use, mount: string | null, head: (() => string) | null): void {
-  if (mount === null && head === null) return;
+export function servePanel(use: Use, mount: string | null, head: (() => string) | null, follow: string | null = null): void {
+  if (mount === null && head === null && follow === null) return;
+  const panel = [
+    follow === null ? '' : `<script type="module" data-isotone-active>${follow}</script>`,
+    mount === null ? '' : `<script type="module" data-isotone-inject>${mount}</script>`,
+  ].join('');
   if (mount !== null) {
     // A self-contained bundle keeps the panel out of the host's dependency
     // graph and works in React, Vue, Svelte and plain Vite apps alike. Only
@@ -90,12 +108,12 @@ export function servePanel(use: Use, mount: string | null, head: (() => string) 
     // gets 304 and never sees the panel. Ask for the full document.
     delete req.headers['if-none-match'];
     delete req.headers['if-modified-since'];
-    injectHtmlResponse(res, local(req) ? mount : null, head ?? undefined);
+    injectHtmlResponse(res, local(req) ? panel : '', head ?? undefined);
     next();
   });
 }
 
-function injectHtmlResponse(res: ServerResponse, code: string | null, head: () => string | null = () => null): void {
+function injectHtmlResponse(res: ServerResponse, panel: string, head: () => string | null = () => null): void {
   if (INJECTED.has(res)) return;
   INJECTED.add(res);
 
@@ -165,12 +183,11 @@ function injectHtmlResponse(res: ServerResponse, code: string | null, head: () =
     buffering = false;
     const body = Buffer.concat(chunks).toString('utf8');
     if (body.includes('<html') && (HEAD_OPEN.test(body) || body.includes('</body>'))) {
-      const script = code === null ? '' : `<script type="module" data-isotone-inject>${code}</script>`;
       // Classic, not a module: it runs during parsing, before any module.
       const store = head();
       const early = store ? `<script data-isotone-live>${store.replace(/<\/script/gi, '<\\/script')}</script>` : '';
       if (!res.headersSent) originalSetHeader('Cache-Control', 'no-store');
-      return originalEnd(withNativeFetch(injectIntoHead(body, `${early}${script}`)), cb);
+      return originalEnd(withNativeFetch(injectIntoHead(body, `${early}${panel}`)), cb);
     }
     return originalEnd(Buffer.concat(chunks), cb);
   }) as unknown as ServerResponse['end'];

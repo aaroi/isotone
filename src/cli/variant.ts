@@ -17,10 +17,12 @@ import {
   variantAppliesTo,
   visibleAxes,
 } from '../core/variants';
+import { conflictedReason } from '../core/variants/overlay';
 import { isRouteModule, scanExports } from '../node/variants/exports';
 import { readNotes } from '../node/notes/store';
 import {
   activeConflict,
+  conflictedCopies,
   addVariantFile,
   createVariant,
   crossGroupOverlaps,
@@ -584,6 +586,8 @@ function cmdUse(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOp
       return `active: default for ${groupId}${describeActive(readActive(opts))}`;
     }
     if (!readVariant(opts, id)) throw new Error(`No variant "${id}"`);
+    const conflicted = conflictedCopies(opts, id);
+    if (conflicted.length > 0) throw new Error(conflictedReason(id, conflicted));
     // Only the siblings leave: the reviewer's other picks stay as they were,
     // the same as choosing an option in one selector of the panel.
     const siblings = new Set(groups.find((g) => g.members.some((m) => m.id === id))?.members.map((m) => m.id) ?? [id]);

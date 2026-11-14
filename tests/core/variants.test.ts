@@ -589,3 +589,61 @@ describe('a ?v= the overlay source does not apply', () => {
     expect(inLive.getNotice()).toBeNull();
   });
 });
+
+describe('what the overlay source says the page shows', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+  const listing: OverlayVariantsList = {
+    variants: [
+      variant('card-bold', { label: 'Bold', group: 'pricing-card', files: ['src/Card.tsx'] }),
+      variant('card-compact', { label: 'Compact', group: 'pricing-card', files: ['src/Card.tsx'] }),
+      variant('card-merged', { label: 'Merged', group: 'pricing-card', files: ['src/Card.tsx'], conflicts: ['src/Card.tsx'] }),
+    ],
+    active: ['card-bold'],
+  };
+  function source(live: Parameters<typeof createOverlayVariantsSource>[0]['live'] = null) {
+    const page = new EventTarget();
+    vi.stubGlobal('window', page);
+    const posted: string[][] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        if (init?.method === 'POST') posted.push((JSON.parse(String(init.body)) as { active: string[] }).active);
+        return Response.json(listing);
+      }),
+    );
+    const overlay = createOverlayVariantsSource({ endpoint: '/variants', getRoute: () => '/', storage: null, knobRoot: null, live });
+    const serverSwitched = (active: string[]) => page.dispatchEvent(new CustomEvent('isotone:active', { detail: { active } }));
+    return { overlay, posted, serverSwitched };
+  }
+
+  it('follows the server’s set when another tab or the CLI switches it, without a live store', async () => {
+    const { overlay, serverSwitched } = source();
+    await overlay.refresh();
+    expect(overlay.getSelections()['pricing-card']).toBe('card-bold');
+    const changed = vi.fn();
+    overlay.subscribe(changed);
+    serverSwitched(['card-compact']);
+    expect(changed).toHaveBeenCalled();
+    // The panel's highlight and a new note's selections both read this.
+    expect(overlay.getSelections()['pricing-card']).toBe('card-compact');
+    serverSwitched([]);
+    expect(overlay.getSelections()['pricing-card']).toBe(OVERLAY_DEFAULT_OPTION);
+  });
+
+  it('refuses a copy with conflict markers before the tab switches, and says why', async () => {
+    const live = { active: ['card-bold'], select: vi.fn(() => false), subscribe: () => () => {}, reload: () => {} };
+    const { overlay, posted } = source(live);
+    await overlay.refresh();
+    expect(overlay.getNotice()).toBe(
+      '"Merged" holds conflict markers from `variant sync` in src/Card.tsx, so it cannot be shown until they are resolved.',
+    );
+    overlay.setSelection('pricing-card', 'card-merged');
+    expect(live.select).not.toHaveBeenCalled();
+    expect(overlay.getError?.()).toContain('"Merged" holds conflict markers');
+    expect(overlay.getSelections()['pricing-card']).toBe('card-bold');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(posted).toEqual([]);
+  });
+});

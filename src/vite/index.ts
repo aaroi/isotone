@@ -37,7 +37,7 @@ import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
 import { autoUpdateNote } from '../node/update/note';
 import { listVariants, variantsDir } from '../node/variants';
 import { isLoopback } from '../node/http';
-import { mountModuleSource, servePanel } from './html-inject';
+import { activeEventSource, mountModuleSource, servePanel } from './html-inject';
 import {
   BASE_VERSION,
   dispatcherModule,
@@ -430,7 +430,8 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
               options.theme,
               options.compareShortcut,
             );
-      servePanel(server.middlewares.use.bind(server.middlewares) as never, mount, liveScript);
+      const follow = variantsOptions ? activeEventSource(server.config.base ?? '/') : null;
+      servePanel(server.middlewares.use.bind(server.middlewares) as never, mount, liveScript, follow);
     },
   } satisfies Plugin;
 
