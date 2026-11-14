@@ -10,22 +10,26 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { MAX_REPLY_LENGTH } from '../core/limits';
 import { matchRoute } from '../core/routes';
 import { updateNoteText } from '../core/update';
-import { variantAppliesTo } from '../core/variants';
+import { overlayGroups, variantAppliesTo } from '../core/variants';
 import { blastFile, touchSession } from '../node/blast';
 import { realPath } from '../node/fs/paths';
 import { noteFingerprint, readNotes, replyView, type StoredNote, updateNotes } from '../node/notes/store';
 import { defaultNotesFile, NOTES_FILE } from '../node/notes/location';
 import { foreignServers } from '../node/serve-owner';
 import { notesProjectRoot, updateRequestOf } from '../node/update/request';
-import { listVariants, readActive, variantDir } from '../node/variants';
-import { latestChange, mtime, snapshot } from './changes';
+import { filesWithoutBase, hasGit, listVariants, NO_GIT_SYNC, readActive, variantDir } from '../node/variants';
+import { changedSince, latestChange, mtime, snapshot } from './changes';
 import { docPath } from './docs';
+import { excludeLocalFiles } from './local-files';
+import { fileVariantSwitching } from './project';
 import { oneLine, quoted, shellCommand, shellQuote, toJson, utcStamp } from './text';
 import { type CliIO, errOut, findNoteByPrefix, has, out, parseArgs, valueFor } from './util';
 
 const VALUE_FLAGS = ['--days', '--file', '--done', '--undone', '--working', '--reply'] as const;
 const BOOLEAN_FLAGS = ['--all', '--json', '--force'] as const;
 const ACTIONS = ['--done', '--undone', '--working', '--reply'] as const;
+/** Files live switching can serve per tab; anything else (a stylesheet) follows `.isotone/active.json` everywhere. */
+const SCRIPT = /\.[cm]?[jt]sx?$/;
 type Action = (typeof ACTIONS)[number];
 
 /**
@@ -141,6 +145,7 @@ export async function runNotes(argv: string[], io: CliIO): Promise<number> {
   // An update request is checked against this notes file's project before its
   // command is printed: a hand edit cannot point an agent at another directory.
   const root = notesProjectRoot(args.file);
+  excludeLocalFiles(args.dir, args.file);
   // On stderr, so `--json` output stays one array.
   if (args.foundAbove) errOut(io, `Notes: ${relative(io.cwd, args.file)}`);
   if (args.action === '--reply') return reply(io, args, root);
@@ -195,8 +200,9 @@ function reply(io: CliIO, args: NotesArgs, root: string): number {
 function flip(io: CliIO, args: NotesArgs, action: Exclude<Action, '--reply'>, root: string): number {
   // `since` is read before `--done` clears `workingAt`, for the variant advice.
   const changed: { note: StoredNote; already: boolean; since: number }[] = [];
+  let counted: string[] = [];
   try {
-    if (action === '--done' && !args.force) refuseUnfixed(args, root);
+    if (action === '--done' && !args.force) counted = refuseUnfixed(io, args, root);
     const started = action === '--working' ? snapshot(root, isBookkeeping(args.file), managedFiles(args.file, root)) : null;
     updateNotes(args.file, (current) => {
       changed.length = 0;
@@ -230,10 +236,13 @@ function flip(io: CliIO, args: NotesArgs, action: Exclude<Action, '--reply'>, ro
   touchSession(args.file, Date.now(), action === '--working' ? [] : changed.map((c) => c.note.id));
   const advice =
     action === '--done'
-      ? variantAdvice(
-          args.dir,
-          changed.filter((c) => !c.already),
-        )
+      ? [
+          ...counted,
+          ...variantAdvice(
+            args.dir,
+            changed.filter((c) => !c.already),
+          ),
+        ]
       : [];
   if (args.json) {
     out(io, toJson(changed.map((c) => noteRecord(c.note, root))));
@@ -303,11 +312,13 @@ function managedFiles(file: string, root: string): string[] {
  * Refuses `--done` on a note when no project file changed since `--working`
  * on it, or since it was written: the fix has not landed. That is what a
  * chained `edit && … ; npx isotone --done <id>` does when the edit fails.
+ * Otherwise returns the line that names the files it counted, since any
+ * change counts (see `./changes`).
  */
-function refuseUnfixed(args: NotesArgs, root: string): void {
+function refuseUnfixed(io: CliIO, args: NotesArgs, root: string): string[] {
   const notes = readNotes(args.file);
   const targets = [...new Set(args.ids.map((id) => findNoteByPrefix(notes, id)))].filter((n) => !n.done);
-  if (!targets.length) return;
+  if (!targets.length) return [];
   const ignore = isBookkeeping(args.file);
   const own = managedFiles(args.file, root);
   let current: string | null | undefined;
@@ -320,7 +331,7 @@ function refuseUnfixed(args: NotesArgs, root: string): void {
     latest ??= latestChange(root, ignore, own);
     return latest <= since(n);
   });
-  if (!unfixed.length) return;
+  if (!unfixed.length) return countedLine(io, targets, changedSince(root, ignore, own, Math.min(...targets.map(since))));
   const lines = unfixed.map((n) => {
     const at =
       n.workingAt && Date.parse(n.workingAt) >= Date.parse(n.createdAt)
@@ -338,14 +349,49 @@ function refuseUnfixed(args: NotesArgs, root: string): void {
   );
 }
 
+/** What `--done` took for the fix, so a change that is not one (another agent's, the user's) shows. */
+function countedLine(io: CliIO, notes: StoredNote[], files: string[] | null): string[] {
+  const working = notes.filter((n) => n.workingAt).length;
+  const from = working === notes.length ? '--working' : working ? '--working or the note' : 'the note';
+  const whose = notes.length === 1 ? 'its fix' : 'their fixes';
+  // Too many files to name.
+  if (files === null) return [`Counted as ${whose}: a change since ${from}.`];
+  if (!files.length) return [`Counted as ${whose}: a staged or committed change since ${from}.`];
+  // Named from where the agent runs, the way Git names the files (macOS's /var is /private/var).
+  let cwd = io.cwd;
+  try {
+    cwd = realPath(cwd);
+  } catch {}
+  // A variant's manifest and copies are one change: named by its directory.
+  const named = [
+    ...new Set(
+      files.map((file) =>
+        relative(cwd, file)
+          .split(sep)
+          .join('/')
+          .replace(/^(.*\.isotone\/variants\/[^/]+\/).+$/, '$1'),
+      ),
+    ),
+  ];
+  const shown = named.slice(0, 5);
+  const more = named.length > 5 ? ` and ${named.length - 5} more` : '';
+  return [`Counted as ${whose}, changed since ${from}: ${shown.join(', ')}${more}.`];
+}
+
 /**
  * After a fix: the variants on the fixed notes' routes that copy a file this
  * fix changed (it changed after `--working`, or after the note was written),
- * and those showing instead of the real files. Either way the reviewer will
- * not see the fix on the page.
+ * so their copies may lack the fix, and which of those a page may show in
+ * place of the fix. A note about a selector names the option its reviewer was
+ * on; otherwise `.isotone/active.json` is the guess, though it is only what a
+ * tab without a pick of its own shows. The pick stays the reviewer's.
  */
 function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]): string[] {
-  if (!notes.length) return [];
+  // Nothing serves a copy in a Next app, which runs no Vite plugin: the page shows the real files, and no
+  // copy needs a sync. A project without a Vite config of its own may be served by a sibling's
+  // (`variants: { root }`), so it is not judged.
+  const switching = fileVariantSwitching(dir);
+  if (!notes.length || switching === 'none') return [];
   let variants: ReturnType<typeof listVariants>;
   let active: string[];
   try {
@@ -355,16 +401,37 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
     return [];
   }
   const relevant = variants.filter((v) => notes.some(({ note }) => variantAppliesTo(v.route, note.route)));
-  const changedFor = (v: (typeof variants)[number]) =>
-    v.stale.filter((file) =>
-      notes.some(({ note, since }) => variantAppliesTo(v.route, note.route) && (mtime(join(dir, file)) ?? 0) > since),
-    );
+  const changed = (file: string, since: number) => (mtime(join(dir, file)) ?? 0) > since;
   const lines: string[] = [];
-  const stale = relevant.map((v) => ({ id: v.id, files: changedFor(v) })).filter((v) => v.files.length);
-  if (stale.length) {
+  const stale = relevant
+    .map((variant) => {
+      const fixed = notes.filter(
+        ({ note, since }) => variantAppliesTo(variant.route, note.route) && variant.stale.some((f) => changed(f, since)),
+      );
+      const files = variant.stale.filter((file) => fixed.some(({ since }) => changed(file, since)));
+      return { variant, files, notes: fixed.map(({ note }) => note) };
+    })
+    .filter((v) => v.files.length);
+  // A copy Isotone 1.5.0 or earlier made outside a Git repository records no base: it reads as stale, but
+  // `variant sync` has nothing to merge from, so it is compared by hand.
+  const split = stale.map(({ variant, files }) => ({ id: variant.id, files, unbased: filesWithoutBase(variant) }));
+  const syncable = split
+    .map((v) => ({ id: v.id, files: v.files.filter((file) => !v.unbased.includes(file)) }))
+    .filter((v) => v.files.length);
+  const byHand = split.map((v) => ({ id: v.id, files: v.files.filter((file) => v.unbased.includes(file)) })).filter((v) => v.files.length);
+  if (syncable.length) {
+    // Merging needs a `git` executable, though no longer a repository.
+    const git = hasGit();
     lines.push('These variants copy files changed since the note (or --working), so their copies may lack the fix:');
-    for (const v of stale) lines.push(`  ${v.id} (${v.files.join(', ')}): ${shellCommand('npx', 'isotone', 'variant', 'sync', v.id)}`);
-    lines.push('Sync each one the fix belongs in too; leave a copy alone when it is the alternative itself.');
+    for (const v of syncable)
+      lines.push(`  ${v.id} (${v.files.join(', ')})${git ? `: ${shellCommand('npx', 'isotone', 'variant', 'sync', v.id)}` : ''}`);
+    lines.push(git ? 'Sync each one the fix belongs in too; leave a copy alone when it is the alternative itself.' : `${NO_GIT_SYNC}.`);
+  }
+  if (byHand.length) {
+    lines.push(
+      'These copies of files you changed have no base recorded (made outside a Git repository by Isotone 1.5.0 or earlier), so `variant sync` cannot merge the fix. Compare each with its real file by hand:',
+    );
+    for (const v of byHand) lines.push(`  ${v.id} (${v.files.join(', ')})`);
   }
   const conflicted = relevant.filter((v) => v.conflicts?.length);
   if (conflicted.length) {
@@ -372,10 +439,42 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
     for (const v of conflicted)
       lines.push(`  ${v.id}: ${(v.conflicts ?? []).map((file) => relative(dir, join(variantDir({ root: dir }, v.id), file))).join(', ')}`);
   }
-  const showing = relevant.filter((v) => active.includes(v.id));
+  // Each tab keeps its own pick of a script in live switching, so `.isotone/active.json` may be another
+  // tab's: a note about this variant's selector says what its reviewer was on (the option it is about, else
+  // the pick it was written with), as do the selections a note records, and they outrank it. A stylesheet follows active.json in every tab, and so
+  // does every file where picks are shared (no React, Vite 5, `live: false`): there it is what every tab shows.
+  const shared = switching === 'whole' || switching === 'whole-react';
+  const groupOf = new Map(overlayGroups(variants).flatMap((group) => group.members.map((member) => [member.id, group.id] as const)));
+  const article = (fixed: unknown[]) => (fixed.length > 1 ? 'a' : 'the');
+  const showing = stale.flatMap(({ variant, files, notes: fixed }) => {
+    if (shared)
+      return active.includes(variant.id)
+        ? [{ id: variant.id, files, why: 'active in .isotone/active.json, which every tab shows here' }]
+        : [];
+    const about = fixed.map(({ variant: ref }) => (ref?.axisId === groupOf.get(variant.id) ? ref : undefined));
+    if (about.some((ref) => ref?.optionId === variant.id))
+      return [{ id: variant.id, files, why: `${article(fixed)} note is about this option` }];
+    // A note records the picks its tab showed (`selections`), whatever it is about.
+    const group = groupOf.get(variant.id);
+    const pickedThen = fixed.some((note) => group !== undefined && note.selections?.[group] === variant.id);
+    if (pickedThen || about.some((ref) => !ref?.optionId && ref?.value === variant.id))
+      return [{ id: variant.id, files, why: `picked when ${article(fixed)} note was written` }];
+    if (!active.includes(variant.id)) return [];
+    const followed = about.some((ref) => !(ref?.optionId ?? ref?.value)) ? files : files.filter((file) => !SCRIPT.test(file));
+    if (!followed.length) return [];
+    const why = followed.some((file) => SCRIPT.test(file))
+      ? 'active in .isotone/active.json, which tabs without a pick of their own show'
+      : 'active in .isotone/active.json, which every tab follows for a stylesheet';
+    return [{ id: variant.id, files: followed, why }];
+  });
   if (showing.length) {
+    lines.push('The reviewer may be looking at one of these copies, without your fix, in place of the file you changed:');
+    for (const v of showing) lines.push(`  ${v.id} (${v.files.join(', ')}): ${v.why}`);
+    const stylesheet = showing.some((v) => v.files.some((file) => !SCRIPT.test(file)));
     lines.push(
-      `Active now, so the page shows ${showing.length === 1 ? 'its copy' : 'their copies'} instead of the real file: ${showing.map((v) => v.id).join(', ')}. \`npx isotone variant use default\` shows the real files.`,
+      shared
+        ? 'Sync the fix into a copy it belongs in. Otherwise the reviewer sees your fix once Default is picked on that selector; leave the pick to them, since `variant use` moves every tab here.'
+        : `Sync the fix into a copy it belongs in. Otherwise the reviewer sees your fix with Default picked on that selector${stylesheet ? ' (a stylesheet: once Default is the latest pick in any tab)' : ''}; leave the pick to them, since \`variant use\` moves every tab without a pick of its own.`,
     );
   }
   return lines;
@@ -450,6 +549,7 @@ export function noteRecord(record: StoredNote, root: string) {
     createdAt: n.createdAt,
     viewport: n.viewport,
     payload: n.payload,
+    selections: n.selections,
     variant: n.variant,
     variantAction: n.variantAction,
     update: n.update,
@@ -470,6 +570,16 @@ function doneCommand(id: string): string {
 /** The human listing of `npx isotone`, grouped by route; `root` as for `agentNote`. */
 export function printNotes(io: CliIO, rows: StoredNote[], root: string): void {
   let cur: string | null = null;
+  // Read once, and only for a note that has selections: a pick that is a file variant's id.
+  let ids: Set<string> | undefined;
+  const variantIds = () => {
+    try {
+      ids ??= new Set(listVariants({ root }).map((v) => v.id));
+    } catch {
+      ids = new Set();
+    }
+    return ids;
+  };
   for (const n of rows) {
     if (n.route !== cur) {
       cur = n.route;
@@ -515,6 +625,14 @@ export function printNotes(io: CliIO, rows: StoredNote[], root: string): void {
         oneLine(
           `  ◇ ${v.label}${v.optionLabel ? ` → ${v.optionLabel}` : ''} — selector=${v.axisId}${v.optionId ? ` option=${v.optionId}` : ''}${v.value ? ` value=${v.value}` : ''}`,
         ),
+      );
+    }
+    if (n.selections && Object.keys(n.selections).length) {
+      const picks = Object.entries(n.selections);
+      const copies = picks.some(([, value]) => variantIds().has(value)) ? '; source lines may be lines of the active variant copy' : '';
+      out(
+        io,
+        `  ⊙ selections: ${oneLine(picks.map(([id, value]) => `${id}=${value}`).join(', '), 200)} (the page showed these, not the defaults${copies})`,
       );
     }
     const context = n.payload === undefined ? '' : describePayload(n.payload);

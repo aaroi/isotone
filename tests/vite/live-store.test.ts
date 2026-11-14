@@ -23,6 +23,7 @@ const CONFIG: LiveConfig = {
   ],
   active: [],
   ssr: false,
+  conflicted: [],
   endpoint: '/api/isotone/variants',
 };
 const PUSH = history.pushState;
@@ -81,6 +82,31 @@ describe('the address bar', () => {
     const replace = vi.spyOn(history, 'replaceState');
     tab.select(['picker-a']);
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  it('holds a pick whose copy has conflict markers at Default, keeps the tab its own, and keeps one pair per group', () => {
+    const tab = store('/?v=nav:picker-b', { active: ['picker-a'], conflicted: ['picker-b'] });
+    // Not shown, and not the other tab's pick either: this tab stays on Default.
+    expect(tab.explicit).toBe(true);
+    expect(tab.shown).toEqual([]);
+    tab.follow(['picker-a']);
+    expect(tab.shown).toEqual([]);
+    // A pick elsewhere keeps the held pair, to return once the markers go…
+    tab.select(['hook-x'], ['hooks']);
+    expect(here()).toBe('/?v=nav:picker-b,hooks:hook-x');
+    // …a pick of it changes nothing it shows…
+    tab.select(['hook-x', 'picker-b'], ['nav']);
+    expect(tab.shown).toEqual(['hook-x']);
+    expect(here()).toBe('/?v=nav:default,hooks:hook-x');
+    // …and a pick in its group replaces it.
+    tab.select(['hook-x', 'picker-a'], ['nav']);
+    expect(here()).toBe('/?v=nav:picker-a,hooks:hook-x');
+  });
+
+  it('never writes a second pair for a group whose value it does not know', () => {
+    const tab = store('/?v=nav:gone,solo');
+    tab.select(['picker-a'], ['nav']);
+    expect(here()).toBe('/?v=solo,nav:picker-a');
   });
 });
 

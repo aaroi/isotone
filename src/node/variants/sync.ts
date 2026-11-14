@@ -1,25 +1,48 @@
 /** Bringing a variant up to date with the real files it overrides. */
 
 import { randomUUID } from 'node:crypto';
-import { existsSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { currentBlob, catFile, mergeFile, isConflictStatus, recordBase } from './git';
+import { hashFile, hasGit, mergeFile, isConflictStatus, readBase, recordBase } from './git';
 import { readVariant, writeVariant, isStale } from './manifest';
 import { type VariantsStoreOptions, mutateVariants } from './options';
-import { variantDir } from './paths';
+import { baseStore, variantDir } from './paths';
 
-export function syncVariant(opts: VariantsStoreOptions, id: string): { merged: string[]; conflicts: string[]; unchanged: string[] } {
+/**
+ * Why a file was left as it was instead of merged:
+ * - `no-base`: the manifest records no base, as Isotone 1.5.0 and earlier did
+ *   for a copy made outside a Git repository;
+ * - `no-file`: the real file is gone;
+ * - `appeared`: the variant adds the file, and the project now has its own;
+ * - `no-git`: Git is not installed, so nothing can merge;
+ * - `failed`: the base can no longer be read, or `git merge-file` failed.
+ */
+export type SyncBlocker = 'no-base' | 'no-file' | 'appeared' | 'no-git' | 'failed';
+
+export interface SyncResult {
+  merged: string[];
+  /** Merged with conflict markers for a person to resolve. */
+  conflicts: string[];
+  unchanged: string[];
+  /** Left as they were, and why. */
+  blocked: Record<string, SyncBlocker>;
+}
+
+export function syncVariant(opts: VariantsStoreOptions, id: string): SyncResult {
   return mutateVariants(opts, () => {
     const manifest = readVariant(opts, id);
     if (!manifest) throw new Error(`No variant "${id}"`);
     const root = resolve(opts.root);
     const vDir = variantDir(opts, id);
+    const store = baseStore(opts, id);
 
     const merged: string[] = [];
     const conflicts: string[] = [];
     const unchanged: string[] = [];
+    const blocked: Record<string, SyncBlocker> = {};
     let dirty = false;
+    let git: boolean | undefined;
 
     for (const [file, entry] of Object.entries(manifest.files)) {
       const currentAbs = join(root, file);
@@ -27,22 +50,44 @@ export function syncVariant(opts: VariantsStoreOptions, id: string): { merged: s
       if (entry.added) {
         // Nothing to merge into; a real file that appeared meanwhile is a
         // conflict for a person to settle.
-        (existsSync(currentAbs) ? conflicts : unchanged).push(file);
+        if (existsSync(currentAbs)) blocked[file] = 'appeared';
+        else unchanged.push(file);
         continue;
       }
-      const currentHash = currentBlob(currentAbs);
 
-      if (!isStale(entry.base, currentHash)) {
+      if (entry.base === null) {
+        // Nothing to diff against. A copy still identical to the real file
+        // has nothing to lose, though, so that file becomes its base.
+        const base = sameBytes(overrideAbs, currentAbs) ? recordBase(currentAbs, store) : null;
+        if (base === null) {
+          blocked[file] = 'no-base';
+          continue;
+        }
+        entry.base = base;
+        dirty = true;
         unchanged.push(file);
         continue;
       }
 
-      // No base to diff against (never hashed, or the blob is unreachable), or
-      // no current file to merge into: nothing to three-way merge, so the
-      // override is left as-is and flagged for a person to sort out.
-      const baseContent = entry.base !== null ? catFile(dirname(currentAbs), entry.base) : null;
-      if (baseContent === null || currentHash === null) {
-        conflicts.push(file);
+      const currentHash = hashFile(currentAbs, entry.base);
+      if (!isStale(entry.base, currentHash)) {
+        unchanged.push(file);
+        continue;
+      }
+      // No current file to merge into, or nothing to merge with: the override
+      // is left as-is and flagged for a person to sort out.
+      if (currentHash === null) {
+        blocked[file] = 'no-file';
+        continue;
+      }
+      git ??= hasGit();
+      if (!git) {
+        blocked[file] = 'no-git';
+        continue;
+      }
+      const baseContent = readBase(dirname(currentAbs), entry.base, store);
+      if (baseContent === null) {
+        blocked[file] = 'failed';
         continue;
       }
 
@@ -52,7 +97,7 @@ export function syncVariant(opts: VariantsStoreOptions, id: string): { merged: s
         const result = mergeFile(overrideAbs, baseTmp, currentAbs);
         if (result.status === 0) {
           writeFileSync(overrideAbs, result.stdout);
-          entry.base = recordBase(currentAbs, currentHash);
+          entry.base = recordBase(currentAbs, store) ?? currentHash;
           dirty = true;
           merged.push(file);
         } else if (isConflictStatus(result.status)) {
@@ -64,13 +109,13 @@ export function syncVariant(opts: VariantsStoreOptions, id: string): { merged: s
           // as stale and a second sync would re-conflict the same hunks; the
           // marker check in promoteVariant is the guard that remains.
           writeFileSync(overrideAbs, result.stdout);
-          entry.base = recordBase(currentAbs, currentHash);
+          entry.base = recordBase(currentAbs, store) ?? currentHash;
           dirty = true;
           conflicts.push(file);
         } else {
           // Git failed outright; its empty stdout must not replace the
           // override, and the base stays where it was.
-          conflicts.push(file);
+          blocked[file] = 'failed';
         }
       } finally {
         rmSync(baseTmp, { force: true });
@@ -78,6 +123,14 @@ export function syncVariant(opts: VariantsStoreOptions, id: string): { merged: s
     }
 
     if (dirty) writeVariant(opts, manifest);
-    return { merged, conflicts, unchanged };
+    return { merged, conflicts, unchanged, blocked };
   });
+}
+
+function sameBytes(a: string, b: string): boolean {
+  try {
+    return readFileSync(a).equals(readFileSync(b));
+  } catch {
+    return false;
+  }
 }

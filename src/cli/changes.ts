@@ -10,6 +10,12 @@
  * Git) {@link latestChange} falls back to modification times. Both also read
  * the `own` paths Isotone manages (variant copies, knobs) whether or not Git
  * ignores them, so a fix made only there counts.
+ *
+ * Any change counts, not only one near the note: a fix often lands away from
+ * the element's own component (a stylesheet, a token, a parent), so a check
+ * by path would refuse real fixes and teach agents to pass `--force`. Instead
+ * `--done` names the files it counted ({@link changedSince}), so an unrelated
+ * edit (another agent's, the user's) is seen for what it is.
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -90,9 +96,15 @@ export function latestChange(root: string, ignore: (file: string) => boolean, ow
 
 function projectChange(root: string, ignore: (file: string) => boolean): number {
   const top = gitTop(root);
-  const listed = top ? git(top, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']) : null;
-  if (!top || listed === null) return walk(root, ignore);
-  const files = [...new Set(listed.split('\0').filter(Boolean))];
+  const files = top ? gitFiles(top) : null;
+  if (!top || files === null) {
+    let latest = 0;
+    return walk(root, ignore, (_, time) => {
+      latest = Math.max(latest, time);
+    })
+      ? latest
+      : Number.POSITIVE_INFINITY;
+  }
   if (files.length > MAX_FILES) return Number.POSITIVE_INFINITY;
   const head = Number(git(top, ['log', '-1', '--format=%ct'])?.trim()) * 1000;
   let latest = Number.isFinite(head) ? head : 0;
@@ -105,8 +117,47 @@ function projectChange(root: string, ignore: (file: string) => boolean): number 
   return latest;
 }
 
-function walk(root: string, ignore: (file: string) => boolean): number {
-  let latest = 0;
+/**
+ * The files a change since `since` came from, as {@link latestChange} and a
+ * {@link snapshot} see them: modified after it (under `root` or `own`),
+ * deleted, or in a commit made since. Absolute and sorted; null past
+ * {@link MAX_FILES}, as there. A staged-only change shows in neither
+ * modification times nor commits, so a snapshot can differ while this is empty.
+ */
+export function changedSince(root: string, ignore: (file: string) => boolean, own: string[], since: number): string[] | null {
+  const found = new Set<string>();
+  const managed = filesUnder(own);
+  if (managed === null) return null;
+  for (const abs of managed) if (!ignore(abs) && (mtime(abs) ?? 0) > since) found.add(abs);
+  const top = gitTop(root);
+  const files = top ? gitFiles(top) : null;
+  if (!top || files === null) {
+    const whole = walk(root, ignore, (abs, time) => {
+      if (time > since) found.add(abs);
+    });
+    return whole ? [...found].sort() : null;
+  }
+  if (files.length > MAX_FILES) return null;
+  // Commit times are whole seconds: one in the second `since` falls in is taken for older.
+  const after = new Date((Math.floor(since / 1000) + 1) * 1000).toISOString();
+  const log = git(top, ['log', `--since=${after}`, '--name-only', '--format=', '-z']) ?? '';
+  const committed = new Set(log.split(/[\0\n]/).filter(Boolean));
+  for (const file of new Set([...files, ...committed])) {
+    const abs = join(top, file);
+    const time = mtime(abs);
+    if (!ignore(abs) && (time === null || time > since || committed.has(file))) found.add(abs);
+  }
+  return [...found].sort();
+}
+
+/** The tracked and untracked files Git does not ignore, from the work tree's root; null when Git cannot say. */
+function gitFiles(top: string): string[] | null {
+  const listed = git(top, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']);
+  return listed === null ? null : [...new Set(listed.split('\0').filter(Boolean))];
+}
+
+/** Visits each file under `root` with its modification time; false past {@link MAX_FILES}. */
+function walk(root: string, ignore: (file: string) => boolean, visit: (file: string, time: number) => void): boolean {
   let seen = 0;
   // Walk the long path, as the ignore list holds it (Windows can name a folder both ways).
   const queue = [realPath(root)];
@@ -118,14 +169,14 @@ function walk(root: string, ignore: (file: string) => boolean): number {
       continue;
     }
     for (const entry of entries) {
-      if (++seen > MAX_FILES) return Number.POSITIVE_INFINITY;
+      if (++seen > MAX_FILES) return false;
       const abs = join(dir, entry.name);
       if (entry.isDirectory()) {
         if (!SKIP_DIRS.has(entry.name) && (!entry.name.startsWith('.') || entry.name === '.isotone')) queue.push(abs);
-      } else if (entry.isFile() && !ignore(abs)) latest = Math.max(latest, mtime(abs) ?? 0);
+      } else if (entry.isFile() && !ignore(abs)) visit(abs, mtime(abs) ?? 0);
     }
   }
-  return latest;
+  return true;
 }
 
 /** Every file at or under `paths`, sorted; null past {@link MAX_FILES}. */

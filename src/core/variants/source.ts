@@ -26,7 +26,8 @@ export interface VariantsSource {
    * current selections. A host that promotes by editing source (one that
    * files a `[set-defaults]` note for the agent) implements it; a host
    * whose variants are whole alternatives (the overlay adapter) leaves it
-   * out and promotes from the CLI instead.
+   * out and promotes from the CLI instead. Mounted beside an Isotone
+   * server's knobs, the panel files the note itself, naming these picks too.
    */
   saveDefaults?: (selections: VariantSelections) => Promise<void> | void;
   /** Optional durable host mutation. Reject to leave the UI unchanged. */
@@ -45,6 +46,13 @@ export interface VariantsSource {
    * page"). Absent, every axis can.
    */
   canPreview?: (axisId: string) => boolean | string;
+  /**
+   * Optional: a quiet note the Variants view shows above the selectors, or
+   * `null`, such as the overlay's on a link whose `?v=` it does not apply.
+   * Read when the view opens and kept until it closes, so it never moves the
+   * selectors under a pick.
+   */
+  getNotice?: () => string | null;
 }
 
 /**

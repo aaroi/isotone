@@ -12,6 +12,7 @@ import { type OverlayVariant, overlayGroups, VARIANTS_ENDPOINT } from '../core/v
 import { isWithin, realPath } from '../node/fs/paths';
 import {
   ACTIVE_FILE,
+  conflictedCopies,
   hasConflictMarkers,
   readActive,
   readVariants,
@@ -26,6 +27,22 @@ import type { LiveConfig } from './live';
 /** Element type comparisons, which a component wrapper would break. */
 const COMPARES_TYPES = /\.type\s*[!=]==?|[!=]==?\s*[\w$.]+\.type\b/;
 const SCRIPT = /\.[cm]?[jt]sx?$/;
+
+/**
+ * A component its framework plugin compiles into several modules (Vue,
+ * Svelte, Astro), each part answered from the plugin's compile of the whole
+ * file: so a part request is left to the plugin, and a copy is never served
+ * on its own (`?isotone=`), since the parts it imports would be the page's.
+ */
+export const isCompiledInParts = (path: string): boolean => /\.(?:vue|svelte|astro)$/.test(path);
+
+/**
+ * plugin-vue's hot update compares its last parse of a component with the
+ * real file on disk, neither of which a switch changes, so it would update
+ * nothing: a Vue component switches by reloading the page. Svelte's compiles
+ * the file again through load(), which answers with the copy.
+ */
+export const reloadsOnSwitch = (path: string): boolean => path.endsWith('.vue');
 
 /** How live mode serves one file: every version, and the names it exports. */
 export interface DispatchPlan {
@@ -83,6 +100,8 @@ export function createOverrides(setup: VariantsSetup) {
   let manifests: OverlayVariant[] | null = null;
   let byFile: Map<string, string[]> | null = null;
   let addedFiles: Map<string, string[]> | null = null;
+  // The live store's groups and the members it cannot show, for each page.
+  let liveGroups: Pick<LiveConfig, 'groups' | 'conflicted'> | null = null;
 
   const readManifests = (): OverlayVariant[] => {
     manifests ??= readVariants(opts);
@@ -135,6 +154,7 @@ export function createOverrides(setup: VariantsSetup) {
     manifests = null;
     byFile = null;
     addedFiles = null;
+    liveGroups = null;
     answers.clear();
   };
 
@@ -179,9 +199,11 @@ export function createOverrides(setup: VariantsSetup) {
 
     forget,
 
-    /** Drop which copy answers each path, keeping the manifests. */
+    /** Drop which copy answers each path, and which copies hold conflict
+     *  markers, keeping the manifests. */
     forgetAnswers(): void {
       answers.clear();
+      liveGroups = null;
     },
 
     /** The override that answers `path` under the active set `ids`. */
@@ -247,10 +269,16 @@ export function createOverrides(setup: VariantsSetup) {
       return { key: normalizePath(relative(opts.root, path)), versions, names: [...names].sort() };
     },
 
-    /** The live store's config: groups in panel order and the active set. */
+    /** The live store's config: groups in panel order, the members it cannot
+     *  show, and the active set. Read once per change under the variants dir. */
     liveConfig(ssr: boolean): LiveConfig {
-      const groups = overlayGroups(readManifests()).map((group) => ({ id: group.id, members: group.members.map((m) => m.id) }));
-      return { groups, active: active(), ssr, endpoint: VARIANTS_ENDPOINT };
+      liveGroups ??= {
+        groups: overlayGroups(readManifests()).map((group) => ({ id: group.id, members: group.members.map((m) => m.id) })),
+        conflicted: readManifests()
+          .filter((m) => conflictedCopies(opts, m.id).length > 0)
+          .map((m) => m.id),
+      };
+      return { ...liveGroups, active: active(), ssr, endpoint: VARIANTS_ENDPOINT };
     },
 
     /**

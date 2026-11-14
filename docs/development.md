@@ -102,6 +102,7 @@ The sample app's selectors sit in two sections, Cards and Theme. Other demo URLs
 | --- | --- |
 | `/?stress=1` | 500 selectors in sections of a dozen (one with a long name) and 500 notes, with long labels and large feedback |
 | `/?review=1` | Feedback stays open across variant reloads |
+| `/?shared=1` | What Variants says about a link's `?v=` where picks are shared by every tab: the Layout options stand in for file variants, and the link asks for Feature (or what `v` names) |
 | `/?review=1&update-preview=1` | A fictional update result; **Ask agent to update** files a demo update note (built by the same server code in the dev demo) that the pretend agent closes. Nothing contacts npm. |
 
 `/preview.html` frames the live demo for the README image: `?scene=both`

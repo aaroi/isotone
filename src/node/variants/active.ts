@@ -6,7 +6,7 @@ import { overlayGroups } from '../../core/variants/overlay';
 import { writeJson } from '../fs/atomic';
 import { ensureFileIgnored } from '../fs/git-exclude';
 import { isEscaping, toPosixPath } from '../fs/paths';
-import { readVariant, readVariants } from './manifest';
+import { hasConflictMarkers, readVariant, readVariants } from './manifest';
 import { ACTIVE_FILE, type VariantsStoreOptions, type ActiveFileShape, variantsDir } from './options';
 import { variantDir } from './paths';
 
@@ -78,12 +78,25 @@ export function crossGroupOverlaps(opts: VariantsStoreOptions, id: string): { fi
 }
 
 /**
- * The active set, cleaned: ids whose variant is gone (dropped or promoted
- * since the file was written) are dropped, and of two variants over one
- * file the later one is dropped, so `load` never has to choose. The file's
- * older shape, one id or `null`, still reads.
+ * The files of variant `id` whose copies still hold conflict markers from
+ * `variant sync`. Such a copy does not parse, so the variant cannot be shown:
+ * activating it is refused, and {@link readActive} leaves it out until the
+ * markers are resolved.
  */
-export function readActive(opts: VariantsStoreOptions): string[] {
+export function conflictedCopies(opts: VariantsStoreOptions, id: string): string[] {
+  const manifest = readVariant(opts, id);
+  return Object.keys(manifest?.files ?? {}).filter((file) => hasConflictMarkers(join(variantDir(opts, id), file)));
+}
+
+/**
+ * The active file as written, cleaned: ids whose variant is gone (dropped or
+ * promoted since the file was written) are dropped, and of two variants over
+ * one file the later one is dropped, so `load` never has to choose. A variant
+ * whose copies hold conflict markers stays, so a rewrite of the file keeps it
+ * and it returns once they are resolved. The file's older shape, one id or
+ * `null`, still reads.
+ */
+export function readPointer(opts: VariantsStoreOptions): string[] {
   const file = join(resolve(opts.root), ACTIVE_FILE);
   if (!existsSync(file)) return [];
   let raw: unknown;
@@ -104,6 +117,35 @@ export function readActive(opts: VariantsStoreOptions): string[] {
     const files = Object.keys(manifest.files);
     if (files.some((f) => owner.has(f))) continue;
     for (const f of files) owner.add(f);
+    kept.push(id);
+  }
+  return kept;
+}
+
+/**
+ * The active set: what is shown. {@link readPointer} less any variant whose
+ * copies hold conflict markers, so the real files show meanwhile and every
+ * reader (`load`, the endpoint, the panel, the CLI) agrees on it.
+ */
+export function readActive(opts: VariantsStoreOptions): string[] {
+  return readPointer(opts).filter((id) => conflictedCopies(opts, id).length === 0);
+}
+
+/**
+ * `next` with the pointer's conflicted variants added back, unless `next`
+ * picks another member of their group or another variant over their files, or
+ * the reviewer set their group (`touched`, by group id), Default included. A
+ * set posted from what a tab shows never names them, and dropping them would
+ * lose the pick that returns once their markers are resolved.
+ */
+export function withUnshown(opts: VariantsStoreOptions, next: string[], touched: string[] = []): string[] {
+  const groups = overlayGroups(readVariants(opts));
+  const kept = [...next];
+  for (const id of readPointer(opts)) {
+    if (kept.includes(id) || conflictedCopies(opts, id).length === 0) continue;
+    const group = groups.find((candidate) => candidate.members.some((member) => member.id === id));
+    if (group && touched.includes(group.id)) continue;
+    if (group?.members.some((member) => kept.includes(member.id)) || activeConflict(opts, [...kept, id])) continue;
     kept.push(id);
   }
   return kept;

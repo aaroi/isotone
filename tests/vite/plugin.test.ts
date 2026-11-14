@@ -19,6 +19,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+// @ts-expect-error jsdom ships no types; this file only parses a served page.
+import { JSDOM } from 'jsdom';
 import { createServer, normalizePath, type ViteDevServer } from 'vite';
 
 import { withNativeFetch } from '../../src/vite/html-inject';
@@ -118,9 +120,8 @@ describe('the Vite adapter, served', () => {
   it('injects into <head>, never into the body a react tree owns', async () => {
     const html = await (await fetch(`${origin}/`, { headers: { accept: 'text/html' } })).text();
     expect(html).toContain('data-isotone-inject');
-    // The loader script sits inside <head> (right after the opening tag,
-    // sharing it with the native-fetch capture it must run after, and ahead
-    // of the host's own head content)...
+    // The loader script sits inside <head> (at its end, after the
+    // native-fetch capture it must run after and the host's own head content)...
     const head = html.slice(html.indexOf('<head>') + '<head>'.length, html.indexOf('</head>'));
     expect(head).toMatch(/(^|>)[ \t]*<script type="module" data-isotone-inject>/);
     // ...and nothing between <body> and </body> carries a script tag. A
@@ -135,7 +136,7 @@ describe('the Vite adapter, served', () => {
   it('serves the variants endpoint, path-relative to its mount', async () => {
     const res = await fetch(`${origin}${VARIANTS_ENDPOINT}`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ variants: [], active: [], knobs: [] });
+    expect(await res.json()).toEqual({ variants: [], active: [], knobs: [], hmr: '/@vite/client' });
     const unknown = await fetch(`${origin}${VARIANTS_ENDPOINT}/active`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -229,9 +230,63 @@ describe('the Vite adapter, served', () => {
     const html = await (await fetch(`${origin}/`, { headers: { accept: 'text/html' } })).text();
     const capture = html.indexOf('data-isotone-native');
     expect(capture).toBeGreaterThan(-1);
-    // Before anything the app loads: directly inside <head>.
-    expect(html.slice(html.indexOf('<head>') + '<head>'.length).startsWith('<script data-isotone-native')).toBe(true);
+    // At the end of <head>, ahead of Isotone's other scripts; a classic script there runs before any module.
+    expect(capture).toBeLessThan(html.indexOf('data-isotone-inject'));
+    expect(html.slice(capture, html.indexOf('</head>'))).not.toContain('<title>');
     expect(html).toContain('window.__isotoneFetch=window.fetch.bind(window)');
+  });
+
+  it('puts the route’s stored knob values on the page before it paints, outside <html style>', async () => {
+    const knobs = join(root, '.isotone', 'knobs.json');
+    mkdirSync(dirname(knobs), { recursive: true });
+    writeFileSync(
+      knobs,
+      JSON.stringify([
+        { kind: 'range', id: 'pad', label: 'Padding', min: 0, max: 40, step: 1, defaultValue: 8, unit: 'px' },
+        { kind: 'color', id: 'ink', label: 'Ink', defaultColor: '#000000', swatches: [], route: '/pricing' },
+        {
+          kind: 'select',
+          id: 'ticks',
+          label: 'Ticks',
+          defaultOption: 'lines',
+          options: [
+            { id: 'lines', label: 'Lines' },
+            { id: 'dots', label: 'Dots' },
+          ],
+        },
+      ]),
+    );
+    try {
+      const load = async (path: string) => {
+        const html = await (await fetch(`${origin}${path}`, { headers: { accept: 'text/html' } })).text();
+        let atBody: string | null = null;
+        const dom = new JSDOM(html.replace('<body>', '<body><script>window.atBody = document.documentElement.outerHTML</script>'), {
+          url: `${origin}${path}`,
+          runScripts: 'dangerously',
+          beforeParse(window: Window) {
+            window.localStorage.setItem('isotone:knobs', JSON.stringify({ pad: '24', ink: '#ff0000', ticks: 'dots' }));
+            Object.defineProperty(window, 'atBody', {
+              set: (value: string) => {
+                atBody = value;
+              },
+            });
+          },
+        });
+        const rule = dom.window.document.querySelector('style[data-isotone-knobs]') as HTMLStyleElement | null;
+        return { atBody, html: dom.window.document.documentElement, rule: (rule?.sheet?.cssRules[0] as CSSStyleRule | undefined)?.style };
+      };
+      const home = await load('/');
+      // Set before the parser reached <body>: nothing has painted yet.
+      expect(home.atBody).toContain('data-knob-ticks="dots"');
+      expect(home.atBody).toContain('data-isotone-knobs');
+      expect(home.rule?.getPropertyValue('--knob-pad')).toBe('24px');
+      expect(home.rule?.getPropertyValue('--knob-ticks')).toBe('dots');
+      expect(home.rule?.getPropertyValue('--knob-ink')).toBe('');
+      expect(home.html.hasAttribute('style')).toBe(false);
+      expect((await load('/pricing')).rule?.getPropertyValue('--knob-ink')).toBe('#ff0000');
+    } finally {
+      rmSync(knobs);
+    }
   });
 
   it('resolves a relative notes file against the Vite root, not the cwd', async () => {
@@ -282,7 +337,13 @@ describe('the Vite adapter, served', () => {
       expect(html).not.toContain('data-isotone');
       expect(html).not.toContain('/@isotone/panel.js');
       expect(await (await fetch(`${url}${NOTES_ENDPOINT}`)).json()).toEqual([]);
-      expect(await (await fetch(`${url}${VARIANTS_ENDPOINT}`)).json()).toEqual({ variants: [], active: [], knobs: [] });
+      // The listing names the dev server's HMR client, which the panel listens on for the set changing.
+      expect(await (await fetch(`${url}${VARIANTS_ENDPOINT}`)).json()).toEqual({
+        variants: [],
+        active: [],
+        knobs: [],
+        hmr: '/@vite/client',
+      });
       const update = await fetch(`${url}${UPDATE_ENDPOINT}`);
       expect(update.headers.get('cache-control')).toBe('no-store');
       expect(await update.json()).toMatchObject({ status: 'disabled', upgrade: null });
@@ -387,9 +448,10 @@ describe('the notes file from before 1.3', () => {
 });
 
 describe('withNativeFetch', () => {
-  it('lands right after <head>, and after <body> when there is no head', () => {
+  it('lands at the end of <head>, and after <body> when there is no head', () => {
+    // At the start of <head>, React 19 claims it for a script the app renders there and React 18 fails hydration.
     expect(withNativeFetch('<html><head lang="en"><title>x</title></head><body></body></html>')).toMatch(
-      /<head lang="en"><script data-isotone-native>/,
+      /<title>x<\/title><script data-isotone-native>.*<\/script><\/head>/,
     );
     expect(withNativeFetch('<html><body class="a"><p>x</p></body></html>')).toMatch(/<body class="a"><script data-isotone-native>/);
     // A document without a head tag: the app's <header> is not one.
@@ -402,6 +464,16 @@ describe('withNativeFetch', () => {
     const once = withNativeFetch('<html><head></head><body></body></html>');
     expect(withNativeFetch(once)).toBe(once);
     expect(withNativeFetch('<p>fragment</p>')).toBe('<p>fragment</p>');
+  });
+
+  it('passes over a </head> written inside an earlier script or comment', () => {
+    const page = '<html><head><!-- </head> --><script>document.write("</head>")</script><title>x</title></head><body></body></html>';
+    expect(withNativeFetch(page)).toMatch(/<title>x<\/title><script data-isotone-native>.*<\/script><\/head><body>/);
+  });
+
+  it('still captures fetch beside the live store, whose source names the capture', () => {
+    const page = '<html><head><script data-isotone-head>win.__isotoneFetch ?? win.fetch</script></head><body></body></html>';
+    expect(withNativeFetch(page)).toContain('<script data-isotone-native>');
   });
 });
 
@@ -431,7 +503,11 @@ type Middleware = (
 ) => void;
 
 interface FakeServer {
-  config: { root: string; logger: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> } };
+  config: {
+    root: string;
+    logger: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> };
+    server: { fs: { strict: boolean; deny: string[]; allow?: string[] } };
+  };
   httpServer: null;
   middlewares: { use: ReturnType<typeof vi.fn> };
   watcher: {
@@ -461,6 +537,13 @@ afterEach(() => {
  *  `C:/…` form on Windows as in Vite's module graph and hot updates. */
 function id(...parts: string[]): string {
   return normalizePath(join(...parts));
+}
+
+/** A `/@fs` URL for an absolute path, as Vite writes one: `/@fs/C:/…` on Windows,
+ *  `/@fs/home/…` elsewhere. `/@fs${root}` would be `/@fsC:\…` on Windows, which
+ *  Vite never sends, so a test of what it refuses would pass without testing it. */
+function fsUrl(...parts: string[]): string {
+  return `/@fs/${id(...parts).replace(/^\//, '')}`;
 }
 
 function tempProject(): { root: string; source: string; override: string; table: string } {
@@ -494,7 +577,8 @@ function plugin(root: string, command: 'serve' | 'build', options: IsotoneViteOp
 
 function fakeServer(root: string): FakeServer {
   return {
-    config: { root, logger: { info: vi.fn(), warn: vi.fn() } },
+    // Vite's file access check, off as in `plugin()`: tests that need it set it.
+    config: { root, logger: { info: vi.fn(), warn: vi.fn() }, server: { fs: { strict: false, deny: [] } } },
     httpServer: null,
     middlewares: { use: vi.fn() },
     watcher: { add: vi.fn(), on: vi.fn(), emit: vi.fn() },
@@ -559,6 +643,18 @@ describe('overlay variants in load()', () => {
     // job (covered below), not something load() re-reads every time.
     writeActive({ root }, []);
     expect(fresh.load(source)?.code).toContain('variant b');
+  });
+
+  it("serves a copy with a map naming it, so a pinned element's source is the copy's file", () => {
+    const { root, source, override } = tempProject();
+    writeFileSync(override, 'export const label = "variant b";\n\nexport const more = 1;\n');
+    writeActive({ root }, ['b']);
+    const map = (loaded: unknown) => (loaded as { map: { sources: string[]; mappings: string } | null } | null)?.map;
+    // Whole-file mode and a live version (`?isotone=b`) alike; the real file keeps Vite's own map.
+    expect(map(plugin(root, 'serve').load(source))).toMatchObject({ sources: [override], mappings: 'AAAA;AACA;AACA;AACA' });
+    const { hooks } = livePlugin(root);
+    expect(map(hooks.load(`${source}?isotone=b`))?.sources).toEqual([override]);
+    expect(map(hooks.load(`${source}?isotone=_base`))).toBeNull();
   });
 
   it('strips the query and hash vite decorates module ids with', () => {
@@ -642,6 +738,53 @@ describe('overlay variants in load()', () => {
   });
 });
 
+describe('a copy where the real file is refused', () => {
+  it('serves no copy where the dev server would refuse the real file, and a server render keeps its swap', () => {
+    const { root, source } = tempProject();
+    writeFileSync(join(root, '.env'), 'SECRET_TOKEN=sk_live_FAKE_ENV\n');
+    createVariant({ root }, { id: 'forced' });
+    addVariantFile({ root }, 'forced', '.env', { force: true });
+    writeActive({ root }, ['forced', 'b']);
+    const env = id(root, '.env');
+    // Vite 5: no environments, so the deny list is matched as Vite matches it.
+    const hooks = plugin(root, 'serve') as unknown as { load: (id: string, opts?: { ssr?: boolean }) => { code: string } | null } & Hooks;
+    const server = Object.assign(fakeServer(root), {
+      // Vite 5's own deny matcher, which ignores case.
+      _fsDenyGlob: (path: string) => /(?:^|\/)\.env(?:\..*)?$|\.(?:crt|pem)$|\/\.git\/|\/\.isotone\//i.test(path),
+    });
+    server.config.server.fs = { strict: true, allow: [root], deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/.isotone/**'] };
+    hooks.configureServer(server);
+    expect(hooks.load(env)).toBeNull();
+    expect(hooks.load(`${env}?import`)).toBeNull();
+    // `/@fs/` keeps a trailing slash in the module id; it names the same file.
+    expect(hooks.load(`${env}/`)).toBeNull();
+    expect(hooks.load(`${env}/?import`)).toBeNull();
+    // Any other copy is served as before, and a server render, which Vite
+    // loads without the check, keeps the swap.
+    expect(hooks.load(source)?.code).toContain('variant b');
+    expect(hooks.load(env, { ssr: true })?.code).toContain('FAKE_ENV');
+    // Nor a copy outside `server.fs.allow`, where Vite refuses the real file.
+    const narrow = plugin(root, 'serve');
+    const narrowServer = Object.assign(fakeServer(root), { _fsDenyGlob: () => false });
+    narrowServer.config.server.fs = { strict: true, allow: [id(root, 'lib')], deny: [] };
+    narrow.configureServer(narrowServer);
+    expect(narrow.load(source)).toBeNull();
+    // A Vite 5 without that matcher serves no copy while the check is on.
+    const bare = plugin(root, 'serve');
+    const strictServer = fakeServer(root);
+    strictServer.config.server.fs = { strict: true, allow: [root], deny: [] };
+    bare.configureServer(strictServer);
+    expect(bare.load(source)).toBeNull();
+    // `server.fs.strict: false` turns Vite's check off, and Isotone's with it.
+    const loose = plugin(root, 'serve');
+    loose.configureServer(fakeServer(root));
+    expect(loose.load(env)?.code).toContain('FAKE_ENV');
+    // A build serves no files; `ISOTONE_VARIANT` bakes the copy in as before.
+    process.env.ISOTONE_VARIANT = 'forced';
+    expect(plugin(root, 'build').load(env)?.code).toContain('FAKE_ENV');
+  });
+});
+
 describe('overlay variants in the dev server', () => {
   it('flips the active file and hot-swaps the loaded module on POST /active', async () => {
     const { root, source } = tempProject();
@@ -666,7 +809,10 @@ describe('overlay variants in the dev server', () => {
     // The swap is reported to Vite as an edit of the real file, never as a
     // page reload: Fast Refresh keeps the reviewer's state and open panel.
     expect(server.watcher.emit).toHaveBeenCalledWith('change', source);
-    expect(server.ws.send).not.toHaveBeenCalled();
+    expect(server.ws.send).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'full-reload' }));
+    // Every tab's panel hears the new set, so its highlight and a note's
+    // selections name what the page now shows.
+    expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: ['b'] } });
     // The hot update for that reported change goes through, where an
     // ordinary edit of an overridden real file would be dropped.
     // Vite reports the change in its own normalized form (forward slashes
@@ -752,7 +898,7 @@ describe('overlay variants in the dev server', () => {
     const { root } = tempProject();
     const hooks = plugin(root, 'serve');
     const server = fakeServer(root);
-    (server.config as { server?: unknown }).server = { allowedHosts: ['.dev.example'] };
+    (server.config as { server?: unknown }).server = { ...server.config.server, allowedHosts: ['.dev.example'] };
     hooks.configureServer(server);
     const json = { 'content-type': 'application/json' };
     const note = { route: '/', feedback: 'From the network' };
@@ -841,6 +987,110 @@ describe('overlay variants in the dev server', () => {
     onAll('add', activeFile);
     expect(server.watcher.emit).toHaveBeenCalledWith('change', source);
     expect(hooks.load(source)?.code).toContain('variant b');
+    // Whole-file switching too: the panels follow the CLI's pick.
+    await vi.waitFor(() =>
+      expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: ['b'] } }),
+    );
+  });
+
+  it('never serves a copy with conflict markers, and shows it again once they are resolved', async () => {
+    const { root, source, override } = tempProject();
+    const markers = '<<<<<<< variant\nexport const label = "variant b";\n=======\nexport const label = "real";\n>>>>>>> real\n';
+    writeActive({ root }, ['b']);
+    writeFileSync(override, markers);
+    const hooks = plugin(root, 'serve');
+    const server = fakeServer(root);
+    server.moduleGraph.getModulesByFile.mockImplementation((f: string) =>
+      f === source ? new Set([{ id: '/src/Button.tsx' }]) : undefined,
+    );
+    hooks.configureServer(server);
+    const onAll = server.watcher.on.mock.calls.find((c) => c[0] === 'all')?.[1] as (event: string, file: string) => void;
+
+    // The pointer still names it, but nothing shows it: the real file loads,
+    // and the listing does not call it active.
+    expect(hooks.load(source)).toBeNull();
+    expect((await request(server, VARIANTS_ENDPOINT, 'GET', '/')).body).toMatchObject({ active: [] });
+    const pointer = () => JSON.parse(readFileSync(join(root, ACTIVE_FILE), 'utf8')).active;
+    // A tab posts what it shows: a pick in another group keeps it in the file,
+    // and so does a stale tab that still names it.
+    expect(await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['t'] })).toMatchObject({
+      status: 200,
+      body: { active: ['t'] },
+    });
+    expect(pointer()).toEqual(['t', 'b']);
+    expect((await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] })).status).toBe(200);
+    expect(pointer()).toEqual(['b']);
+    // Default picked in its own selector (or a reset) drops it.
+    expect((await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: [], groups: ['b'] })).status).toBe(200);
+    expect(pointer()).toEqual([]);
+    // Only a new pick of it is refused.
+    writeActive({ root }, []);
+    const refused = await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['b'] });
+    expect(refused.status).toBe(409);
+    expect((refused.body as { error: string }).error).toBe(
+      '"b" holds conflict markers from `variant sync` in src/Button.tsx, so it cannot be shown until they are resolved.',
+    );
+    writeActive({ root }, ['b']);
+
+    // Resolved: the pick it kept shows, and every panel hears so.
+    writeFileSync(override, 'export const label = "variant b";\n');
+    onAll('change', override);
+    expect(hooks.load(source)?.code).toContain('variant b');
+    await vi.waitFor(() =>
+      expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: ['b'] } }),
+    );
+
+    // A sync that leaves markers in the active copy takes it off the page.
+    writeFileSync(override, markers);
+    onAll('change', override);
+    expect(hooks.load(source)).toBeNull();
+    await vi.waitFor(() => expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: [] } }));
+    expect(JSON.parse(readFileSync(join(root, ACTIVE_FILE), 'utf8')).active).toEqual(['b']);
+
+    // A copy nothing shows gaining markers changes no set, but what the panels
+    // list: they hear of it on an event of its own, which a live tab does not
+    // follow (it could reload before a server render has a swap).
+    writeActive({ root }, []);
+    onAll('change', join(root, ACTIVE_FILE));
+    server.ws.send.mockClear();
+    writeFileSync(join(variantDir({ root }, 't'), 'src', 'Table.tsx'), markers);
+    onAll('change', join(variantDir({ root }, 't'), 'src', 'Table.tsx'));
+    await vi.waitFor(() => expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:variants' }));
+    expect(server.ws.send).not.toHaveBeenCalledWith(expect.objectContaining({ event: 'isotone:active' }));
+
+    // The lock every change takes is not a change, nor is the dir itself, which
+    // macOS reports as added whenever the lock comes and goes.
+    server.ws.send.mockClear();
+    onAll('add', join(root, '.isotone', 'variants', '.mutation.lock'));
+    onAll('addDir', join(root, '.isotone', 'variants'));
+    onAll('unlink', join(root, '.isotone', 'variants', '.mutation.lock'));
+    await new Promise((r) => setTimeout(r, 120));
+    expect(server.ws.send).not.toHaveBeenCalled();
+  });
+
+  it('keeps a live tab off the panels’ announcements: it follows only the server’s set', () => {
+    const { root } = tempProject();
+    const { hooks } = livePlugin(root);
+    const runtime = hooks.load('\0isotone-live')?.code ?? '';
+    expect(runtime).toContain('import.meta.hot.on("isotone:active"');
+    expect(runtime).not.toContain('isotone:variants');
+  });
+
+  it('names the HMR client under the dev server’s origin, and none without a WebSocket server', async () => {
+    const { root } = tempProject();
+    const withOrigin = fakeServer(root);
+    Object.assign(withOrigin.config.server, { origin: 'http://127.0.0.1:5173' });
+    plugin(root, 'serve').configureServer(withOrigin);
+    expect((await request(withOrigin, VARIANTS_ENDPOINT, 'GET', '/')).body).toMatchObject({ hmr: 'http://127.0.0.1:5173/@vite/client' });
+    const noSocket = fakeServer(root);
+    Object.assign(noSocket.config.server, { ws: false, hmr: false });
+    plugin(root, 'serve').configureServer(noSocket);
+    expect((await request(noSocket, VARIANTS_ENDPOINT, 'GET', '/')).body).not.toHaveProperty('hmr');
+    // HMR off alone still has the socket, which custom events use.
+    const hmrOff = fakeServer(root);
+    Object.assign(hmrOff.config.server, { hmr: false });
+    plugin(root, 'serve').configureServer(hmrOff);
+    expect((await request(hmrOff, VARIANTS_ENDPOINT, 'GET', '/')).body).toMatchObject({ hmr: '/@vite/client' });
   });
 
   it('logs the variants dir after the banner when it exists', () => {
@@ -866,7 +1116,7 @@ describe('other devices on the network', () => {
   function exposed(): { root: string; server: FakeServer; lines: string[] } {
     const { root } = tempProject();
     const server = fakeServer(root);
-    (server.config as { server?: unknown }).server = { host: true, port: 5173 };
+    (server.config as { server?: unknown }).server = { ...server.config.server, host: true, port: 5173 };
     const listeners: Array<() => void> = [];
     (server as unknown as { httpServer: unknown }).httpServer = {
       once: (event: string, cb: () => void) => event === 'listening' && listeners.push(cb),
@@ -938,6 +1188,33 @@ describe('other devices on the network', () => {
     expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, { 'content-type': 'application/json' })).status).toBe(201);
   });
 
+  it('marks a page for React hydration only on a React server render', () => {
+    const { root } = tempProject();
+    writeFileSync(
+      join(root, '.isotone', 'knobs.json'),
+      JSON.stringify([{ kind: 'select', id: 'ticks', label: 'Ticks', defaultOption: 'a', options: [{ id: 'a', label: 'A' }] }]),
+    );
+    const hydrates = (appType: string, plugins: string[]) => {
+      const hooks = isotone() as unknown as Hooks;
+      (hooks.configResolved as (config: object) => void)({
+        root,
+        command: 'serve',
+        assetsInclude: () => false,
+        server: { fs: { strict: false } },
+        appType,
+        plugins: plugins.map((name) => ({ name })),
+      });
+      const server = fakeServer(root);
+      hooks.configureServer(server);
+      return navigate(server, '/', { host: 'localhost:5173' }, '127.0.0.1').body.match(/\]\], (true|false), function knobStyle/)?.[1];
+    };
+    expect(hydrates('custom', ['react-router'])).toBe('true');
+    expect(hydrates('spa', ['vite:react-babel'])).toBe('false');
+    // Preact's name holds "react"; Astro renders the document itself, with React islands at most.
+    expect(hydrates('custom', ['preact:config', 'prefresh'])).toBe('false');
+    expect(hydrates('custom', ['astro:build', 'vite:react-babel'])).toBe('false');
+  });
+
   it('says nothing about other devices when the dev server stays on this machine', () => {
     const { root } = tempProject();
     const local = fakeServer(root);
@@ -963,16 +1240,32 @@ describe('other devices on the network', () => {
 });
 
 describe('overlay variants in handleHotUpdate()', () => {
-  it("maps an override edit to the real source's modules while active", () => {
+  it('reports an override edit as an edit of the real source while active', () => {
     const { root, source, override } = tempProject();
     writeActive({ root }, ['b']);
     const hooks = plugin(root, 'serve');
     const server = fakeServer(root);
     const mod = { id: '/src/Button.tsx' };
     server.moduleGraph.getModulesByFile.mockImplementation((f: string) => (f === source ? new Set([mod]) : undefined));
-    expect(hooks.handleHotUpdate({ file: override, server })).toEqual([mod]);
-    // The real file's edit is invisible: the browser is showing the override.
+    hooks.configureServer(server);
+    // The page holds the real file's URL, so the copy's edit is reported as
+    // the real file's, as a switch is, and its update goes through.
+    expect(hooks.handleHotUpdate({ file: override, server })).toEqual([]);
+    expect(server.watcher.emit).toHaveBeenCalledWith('change', source);
+    expect(hooks.handleHotUpdate({ file: source, server })).toBeUndefined();
+    // The real file's own edit is invisible: the browser is showing the override.
     expect(hooks.handleHotUpdate({ file: source, server })).toEqual([]);
+    // A file only a server render has loaded is reported all the same (Vite
+    // 6: the browser's environment has none of its modules).
+    server.watcher.emit.mockClear();
+    const empty = { name: 'client', moduleGraph: { getModulesByFile: () => undefined, invalidateModule: vi.fn() } };
+    expect((hooks as unknown as LiveHooks).hotUpdate.call({ environment: empty }, { file: override })).toEqual([]);
+    expect(server.watcher.emit).toHaveBeenCalledWith('change', source);
+    // Nothing loaded anywhere: nothing to report.
+    server.watcher.emit.mockClear();
+    server.moduleGraph.getModulesByFile.mockImplementation(() => undefined);
+    expect(hooks.handleHotUpdate({ file: override, server })).toEqual([]);
+    expect(server.watcher.emit).not.toHaveBeenCalled();
     // The manifest is not a module anywhere.
     expect(hooks.handleHotUpdate({ file: id(variantDir({ root }, 'b'), 'variant.json'), server })).toEqual([]);
     // Files the variant does not touch go through vite's default handling.
@@ -1125,6 +1418,10 @@ describe('live variants', () => {
     expect(hooks.hotUpdate.call({ environment: client }, { file: source })).toEqual([]);
     expect(hooks.hotUpdate.call({ environment: ssr }, { file: source })).toBeUndefined();
     expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: ['b'] } });
+    // An edit of the active copy: the browser's version module above, and the
+    // server render, which swaps the whole file, takes it as the real file's.
+    expect(hooks.hotUpdate.call({ environment: client }, { file: override })).toEqual([{ id: `${source}?isotone=b` }]);
+    expect(hooks.hotUpdate.call({ environment: ssr }, { file: override })).toEqual([{ id: source }]);
   });
 
   it('answers a switch once the server render has taken it', async () => {
@@ -1171,6 +1468,10 @@ describe('live variants', () => {
       const dispatcher = hooks.load(source)?.code ?? '';
       expect(dispatcher).toContain('"./Button.tsx?isotone=_base"');
       expect(dispatcher).not.toContain('?isotone=b');
+      // Nor can a tab pick it, from the panel or a `?v=` link: its group has no such member.
+      expect(hooks.load('\0isotone-live')?.code).toContain(
+        '"groups":[{"id":"b","members":["b"]},{"id":"t","members":["t"]}],"conflicted":["b"]',
+      );
       writeFileSync(override, 'export const label = "variant b";\n');
       const client = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([{ id: source }]) } };
       expect(hooks.hotUpdate.call({ environment: client }, { file: override })).toEqual([]);
@@ -1255,6 +1556,8 @@ describe('project files through the dev server', () => {
     // A notes file from before 1.3 that stayed beside the new one.
     writeFileSync(join(project, '.iteration-feedback.json'), '[{"FAKE_NOTE_TEXT":1}]');
     writeFileSync(join(project, '.isotone', 'knobs.json'), '[{"id":"FAKE_KNOB"}]');
+    // Active, so its copy of `.env` is what load() would answer for the file.
+    writeActive({ root: project }, ['forced']);
     live = await createServer({
       root: project,
       configFile: false,
@@ -1292,6 +1595,13 @@ describe('project files through the dev server', () => {
   it('never serves secrets or Isotone’s own files, however the path is written', async () => {
     const secrets = /FAKE_(ENV|GIT_TOKEN|NOTE_TEXT|BLAST_STATE|KNOB)/;
     const paths = [
+      '/.env',
+      '/.env?import',
+      '/.env?t=1',
+      `${fsUrl(project)}/.env`,
+      `${fsUrl(project)}/.env/`,
+      `${fsUrl(project)}/.env/?import`,
+      `${fsUrl(project)}/.env/?isotone=forced&import`,
       '/.env?isotone=_base',
       '/.env?isotone=b',
       '/.env?isotone=forced',
@@ -1301,7 +1611,7 @@ describe('project files through the dev server', () => {
       '/src/../.env?isotone=_base',
       '/%2eenv?isotone=_base',
       '/.%65nv?isotone=_base',
-      `/@fs${project}/.env?isotone=_base`,
+      `${fsUrl(project)}/.env?isotone=_base`,
       '/.isotone/notes.json',
       '/.isotone/notes.json?import',
       '/.isotone/notes.json?raw',
@@ -1311,7 +1621,7 @@ describe('project files through the dev server', () => {
       '/.isotone/knobs.json',
       '/.isotone/knobs.json?import',
       '/.isotone/variants/b/src/Button.tsx',
-      `/@fs${project}/.isotone/knobs.json`,
+      `${fsUrl(project)}/.isotone/knobs.json`,
     ];
     for (const path of paths) {
       const { body } = await raw(path);
@@ -1325,5 +1635,575 @@ describe('project files through the dev server', () => {
     const notes = await raw(NOTES_ENDPOINT);
     expect(notes.status).toBe(200);
     expect(notes.body).toContain('FAKE_NOTE_TEXT');
+  });
+});
+
+/* ── Vue single-file components ──────────────────────────────────────── */
+
+const REAL_SFC = '<template><p class="card">real</p></template>\n<style scoped>\n.card { color: blue; }\n</style>\n';
+const COPY_SFC = '<template><p class="card">copy</p></template>\n<style scoped>\n.card { color: red; }\n</style>\n';
+const REAL_SVELTE = '<script>let n = 0;</script>\n<button class="n">real {n}</button>\n<style>\n.n { color: purple; }\n</style>\n';
+const COPY_SVELTE = '<script>let n = 0;</script>\n<button class="n">copy {n}</button>\n<style>\n.n { color: green; }\n</style>\n';
+
+/** `tempProject()` plus a component, `src/Card.vue`, and a stylesheet one
+ *  of its blocks could name with `src`; variant `v` copies both. */
+function vueProject(): ReturnType<typeof tempProject> & { card: string; copy: string; sheet: string } {
+  const project = tempProject();
+  const { root } = project;
+  const card = id(root, 'src', 'Card.vue');
+  const sheet = id(root, 'src', 'card.css');
+  writeFileSync(card, REAL_SFC);
+  writeFileSync(sheet, '.card { margin: 0; }\n');
+  execFileSync('git', ['add', '.'], { cwd: root });
+  execFileSync('git', ['commit', '-q', '-m', 'card'], { cwd: root });
+  createVariant({ root }, { id: 'v', label: 'V' });
+  addVariantFile({ root }, 'v', 'src/Card.vue');
+  addVariantFile({ root }, 'v', 'src/card.css');
+  const copy = id(variantDir({ root }, 'v'), 'src', 'Card.vue');
+  writeFileSync(copy, COPY_SFC);
+  writeFileSync(join(variantDir({ root }, 'v'), 'src', 'card.css'), '.card { margin: 8px; }\n');
+  return { ...project, card, copy, sheet };
+}
+
+/** A Vite 6+ environment as load() sees it, holding the component's main module. */
+interface BlockEnvironment {
+  name: string;
+  moduleGraph: { getModuleById: (id: string) => { url: string; transformResult: unknown } | undefined };
+  transformRequest: ReturnType<typeof vi.fn>;
+}
+type BlockLoad = (this: { environment?: BlockEnvironment }, id: string) => Promise<null> | { code: string } | null;
+
+describe('Components compiled in parts: Vue, Svelte, Astro', () => {
+  it('swaps the whole file and leaves each block to plugin-vue, which parsed that copy', () => {
+    const { root, card, sheet } = vueProject();
+    writeActive({ root }, ['v']);
+    const hooks = plugin(root, 'serve');
+    expect(hooks.load(card)?.code).toBe(COPY_SFC);
+    for (const block of [
+      '?vue&type=style&index=0&scoped=7a7a7a7a&lang.css',
+      '?vue&type=template&lang.js',
+      '?vue&type=script&setup=true&lang.ts',
+      '?vue&type=i18n&index=0&lang.json',
+      '?vue&type=style&index=0&scoped=7a7a7a7a&lang.css&t=1700000000000',
+    ]) {
+      // The whole file in a block's place compiled the component as CSS.
+      expect(hooks.load(`${card}${block}`), block).toBeNull();
+    }
+    // `<style src="./card.css">`: that block is the whole stylesheet, so its copy answers.
+    expect(hooks.load(`${sheet}?vue&type=style&index=0&src=7a7a7a7a&scoped=7a7a7a7a&lang.css`)?.code).toContain('margin: 8px');
+    // A query that only mentions vue is not a block.
+    expect(hooks.load(`${card}?vuex=1`)?.code).toBe(COPY_SFC);
+  });
+
+  it('leaves Svelte and Astro parts to their plugins, and lets a Svelte switch hot-update', async () => {
+    const { root } = vueProject();
+    const counter = id(root, 'src', 'Counter.svelte');
+    const page = id(root, 'src', 'Page.astro');
+    writeFileSync(counter, REAL_SVELTE);
+    writeFileSync(page, '---\n---\n<h1 class="t">real</h1>\n<style>.t { color: purple; }</style>\n');
+    execFileSync('git', ['add', '.'], { cwd: root });
+    execFileSync('git', ['commit', '-q', '-m', 'parts'], { cwd: root });
+    createVariant({ root }, { id: 'p', label: 'P' });
+    addVariantFile({ root }, 'p', 'src/Counter.svelte');
+    addVariantFile({ root }, 'p', 'src/Page.astro');
+    writeFileSync(join(variantDir({ root }, 'p'), 'src', 'Counter.svelte'), COPY_SVELTE);
+    writeActive({ root }, ['p']);
+    const hooks = plugin(root, 'serve') as unknown as LiveHooks;
+    expect(hooks.load(counter)?.code).toBe(COPY_SVELTE);
+    // Each plugin answers the part from its own compile of that copy.
+    expect(hooks.load(`${counter}?svelte&type=style&lang.css`)).toBeNull();
+    expect(hooks.load(`${page}?astro&type=style&index=0&lang.css`)).toBeNull();
+    expect(hooks.load(`${page}?astro&type=script&index=0&lang.ts`)).toBeNull();
+
+    // vite-plugin-svelte compiles the file again through load() to see what
+    // changed, so a switch is the usual hot update, not a reload.
+    const server = fakeServer(root);
+    Object.assign(server.moduleGraph, { getModuleById: vi.fn() });
+    const mod = { id: counter };
+    server.moduleGraph.getModulesByFile.mockImplementation((f: string) => (f === counter ? new Set([mod]) : undefined));
+    hooks.configureServer(server);
+    await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: [] });
+    expect(server.watcher.emit).toHaveBeenCalledWith('change', counter);
+    vi.useFakeTimers();
+    try {
+      const client = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([mod]), invalidateModule: vi.fn() } };
+      expect(hooks.hotUpdate.call({ environment: client }, { file: counter })).toBeUndefined();
+      vi.advanceTimersByTime(100);
+      expect(server.ws.send).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'full-reload' }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('compiles the whole component again before a block, once Vite has dropped it', async () => {
+    const { root, card } = vueProject();
+    writeActive({ root }, ['v']);
+    const load = (plugin(root, 'serve') as unknown as { load: BlockLoad }).load;
+    // An edit of the real file drops plugin-vue's parse and Vite's compiled
+    // module together; a block rebuilt on its own would then read the real file.
+    const main = { url: '/src/Card.vue', transformResult: null as unknown };
+    const environment: BlockEnvironment = {
+      name: 'client',
+      moduleGraph: { getModuleById: (m) => (m === card ? main : undefined) },
+      transformRequest: vi.fn(async () => {
+        main.transformResult = { code: '' };
+      }),
+    };
+    const block = `${card}?vue&type=style&index=0&lang.css`;
+    expect(await load.call({ environment }, block)).toBeNull();
+    expect(environment.transformRequest).toHaveBeenCalledWith('/src/Card.vue');
+    // Compiled: nothing to wait for.
+    expect(load.call({ environment }, block)).toBeNull();
+    expect(environment.transformRequest).toHaveBeenCalledTimes(1);
+    // A copy that does not compile says so on its own request; the block is still plugin-vue's.
+    main.transformResult = null;
+    environment.transformRequest.mockRejectedValueOnce(new Error('[vue/compiler-sfc] bad template'));
+    expect(await load.call({ environment }, block)).toBeNull();
+    // A component no variant tracks, and Vite 5 or a build without an environment, are left alone.
+    expect(load.call({ environment }, `${id(root, 'src', 'Other.vue')}?vue&type=style&index=0&lang.css`)).toBeNull();
+    expect(load.call({}, block)).toBeNull();
+    expect(environment.transformRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it('serves ?isotone= copies of scripts on any Vite 6 dev server, never of a component or on Vite 5', () => {
+    const { root, source, card } = vueProject();
+    // Vite 6 and later, without React: no live switching, and the check still serves the copy.
+    const hooks = plugin(root, 'serve');
+    hooks.configureServer(Object.assign(fakeServer(root), { environments: { client: {} } }));
+    expect(hooks.load(`${source}?isotone=b`)?.code).toContain('variant b');
+    expect(hooks.load(`${source}?isotone=_base`)?.code).toContain('"real"');
+    // plugin-vue keeps one parse per file, so a component's copy would
+    // become what every tab shows (the request is refused before load()).
+    expect(hooks.load(`${card}?isotone=v`)).toBeNull();
+    // Vite 5 has no `server.fs.deny` check to ask, so it serves no versions.
+    const vite5 = plugin(root, 'serve');
+    vite5.configureServer(fakeServer(root));
+    expect(vite5.load(`${source}?isotone=b`)).toBeNull();
+    // Nor does a build.
+    expect(plugin(root, 'build').load(`${source}?isotone=b`)).toBeNull();
+  });
+
+  it('keeps the module a check request leaves out of hot updates, and drops it', () => {
+    const { root, source, override } = vueProject();
+    writeActive({ root }, ['b']);
+    const hooks = plugin(root, 'serve') as unknown as LiveHooks;
+    const server = Object.assign(fakeServer(root), { environments: { client: {} } });
+    server.moduleGraph.getModulesByFile.mockImplementation((f: string) => (f === source ? new Set([{ id: source }]) : undefined));
+    hooks.configureServer(server);
+    const page = { id: source };
+    const check = { id: `${source}?isotone=b` };
+    const invalidateModule = vi.fn();
+    const client = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([page, check]), invalidateModule } };
+    // Nothing imports the check's module: in the update it would end the
+    // walk with a full reload, every switch from then on.
+    expect(hooks.hotUpdate.call({ environment: client }, { file: override })).toEqual([]);
+    expect(invalidateModule).toHaveBeenCalledWith(check);
+    expect(server.watcher.emit).toHaveBeenCalledWith('change', source);
+    expect(hooks.hotUpdate.call({ environment: client }, { file: source })).toEqual([page]);
+    // A hand edit of a file no variant overrides now, the same.
+    writeActive({ root }, []);
+    const fresh = plugin(root, 'serve') as unknown as LiveHooks;
+    fresh.configureServer(Object.assign(fakeServer(root), { environments: { client: {} } }));
+    expect(fresh.hotUpdate.call({ environment: client }, { file: source })).toEqual([page]);
+    // Without one, Vite keeps its own answer.
+    const plain = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([page]), invalidateModule } };
+    expect(fresh.hotUpdate.call({ environment: plain }, { file: source })).toBeUndefined();
+    // An edit of a copy whose variant is off updates no page, but its
+    // check would otherwise answer from before the edit.
+    invalidateModule.mockClear();
+    expect(fresh.hotUpdate.call({ environment: client }, { file: override })).toEqual([]);
+    expect(invalidateModule).toHaveBeenCalledWith(check);
+  });
+
+  it('answers 404 to a check that would not compile the copy: a component, or on Vite 5', async () => {
+    const { root } = vueProject();
+    /** The refusing middleware as configureServer mounts it, on a server with or without environments. */
+    const refusal = (environments: boolean) => {
+      const server = fakeServer(root);
+      plugin(root, 'serve').configureServer(environments ? Object.assign(server, { environments: { client: {} } }) : server);
+      const mounted = server.middlewares.use.mock.calls.find((c) => typeof c[0] === 'function' && c.length === 1)?.[0] as (
+        req: { url: string },
+        res: { statusCode: number; setHeader: () => void; end: (body: string) => void },
+        next: () => void,
+      ) => void;
+      return (url: string) =>
+        new Promise<number | 'next'>((done) => {
+          const res = { statusCode: 200, setHeader: () => {}, end: () => done(res.statusCode) };
+          mounted({ url }, res, () => done('next'));
+        });
+    };
+    const vite6 = refusal(true);
+    expect(await vite6('/src/Card.vue?isotone=v')).toBe(404);
+    expect(await vite6('/src/Card%2Evue?t=1&isotone=v')).toBe(404);
+    expect(await vite6('/src/Button.tsx?isotone=b')).toBe('next');
+    expect(await vite6('/src/Card.vue?vue&type=style&index=0&lang.css')).toBe('next');
+    const vite5 = refusal(false);
+    expect(await vite5('/src/Button.tsx?isotone=b')).toBe(404);
+    expect(await vite5(`${fsUrl(root)}/src/Button.tsx?isotone=b`)).toBe(404);
+    expect(await vite5('/src/Button.tsx')).toBe('next');
+    // Any other `?isotone=` is the app's own.
+    expect(await vite5('/?isotone=x')).toBe('next');
+    expect(await vite5('/api/items?isotone=1')).toBe('next');
+    expect(await vite6('/src/Other.vue?isotone=v')).toBe('next');
+  });
+
+  it('reloads the page when a component switches or its active copy changes', async () => {
+    const { root, card, copy } = vueProject();
+    const hooks = plugin(root, 'serve') as unknown as LiveHooks;
+    const server = fakeServer(root);
+    Object.assign(server.moduleGraph, { getModuleById: vi.fn() });
+    const mod = { id: card };
+    server.moduleGraph.getModulesByFile.mockImplementation((f: string) => (f === card ? new Set([mod]) : undefined));
+    hooks.configureServer(server);
+    const client = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([mod]), invalidateModule: vi.fn() } };
+    const ssr = { name: 'ssr', moduleGraph: { getModulesByFile: () => new Set([mod]), invalidateModule: vi.fn() } };
+    /** Vite 6 and later: each environment's hook, after a hand edit or a swap. */
+    const update = (file: string) => {
+      const browser = hooks.hotUpdate.call({ environment: client }, { file });
+      const render = hooks.hotUpdate.call({ environment: ssr }, { file });
+      return { browser, render };
+    };
+    const reloads = () => {
+      vi.advanceTimersByTime(100);
+      const sent = server.ws.send.mock.calls.filter(([m]) => m.type === 'full-reload').length;
+      server.ws.send.mockClear();
+      return sent;
+    };
+
+    await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: ['v'] });
+    expect(server.watcher.emit).toHaveBeenCalledWith('change', card);
+    vi.useFakeTimers();
+    try {
+      // plugin-vue would compare the real file on disk with its last parse
+      // of it and update nothing, so the page reloads instead. A server
+      // render takes the swap as it would any file's.
+      expect(update(card)).toEqual({ browser: [], render: undefined });
+      expect(reloads()).toBe(1);
+      expect(server.moduleGraph.invalidateModule).toHaveBeenCalledWith(mod);
+      // An edit of the active copy is reported as the real file's, and reloads too.
+      server.watcher.emit.mockClear();
+      expect(update(copy)).toEqual({ browser: [], render: [] });
+      expect(server.watcher.emit).toHaveBeenCalledWith('change', card);
+      expect(update(card)).toEqual({ browser: [], render: undefined });
+      expect(reloads()).toBe(1);
+      // An edit of the real file changes nothing the page shows.
+      expect(update(card).browser).toEqual([]);
+      expect(reloads()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // Vite 5 asks once for every environment.
+    await request(server, VARIANTS_ENDPOINT, 'POST', '/active', { active: [] });
+    vi.useFakeTimers();
+    try {
+      expect(hooks.handleHotUpdate({ file: card, server })).toEqual([]);
+      expect(reloads()).toBe(1);
+      // Back on the real file, its edits are plugin-vue's again and the copy's are nothing on screen.
+      expect(hooks.handleHotUpdate({ file: card, server })).toBeUndefined();
+      expect(hooks.handleHotUpdate({ file: copy, server })).toEqual([]);
+      expect(reloads()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('Components compiled in parts, through the dev server', () => {
+  let vue: ViteDevServer;
+  let base: string;
+  let project: ReturnType<typeof vueProject>;
+  // A stand-in for plugin-vue: it compiles a component's main request, keeps
+  // that parse, answers each block request from it, and reads the file from
+  // disk when it has none.
+  const parses = new Map<string, string>();
+  const styleOf = (sfc: string) => /<style[^>]*>([\s\S]*?)<\/style>/.exec(sfc)?.[1] ?? '';
+
+  beforeAll(async () => {
+    project = vueProject();
+    repos.splice(repos.indexOf(project.root), 1);
+    writeFileSync(join(project.root, '.env'), 'SECRET_TOKEN=sk_live_FAKE_ENV\n');
+    createVariant({ root: project.root }, { id: 'forced' });
+    addVariantFile({ root: project.root }, 'forced', '.env', { force: true });
+    // A Svelte component the same variant copies.
+    writeFileSync(join(project.root, 'src', 'Counter.svelte'), REAL_SVELTE);
+    execFileSync('git', ['add', '.'], { cwd: project.root });
+    execFileSync('git', ['commit', '-q', '-m', 'counter'], { cwd: project.root });
+    addVariantFile({ root: project.root }, 'v', 'src/Counter.svelte');
+    writeFileSync(join(variantDir({ root: project.root }, 'v'), 'src', 'Counter.svelte'), COPY_SVELTE);
+    writeActive({ root: project.root }, ['v']);
+    vue = await createServer({
+      root: project.root,
+      configFile: false,
+      logLevel: 'silent',
+      server: { port: 0, host: '127.0.0.1', watch: null },
+      optimizeDeps: { noDiscovery: true, include: [] },
+      plugins: [
+        {
+          name: 'fixture:vue',
+          load(moduleId: string) {
+            const [file = '', query = ''] = moduleId.split('?');
+            if (!/(?:^|&)vue(?:&|$)/.test(query)) return null;
+            return styleOf(parses.get(file) ?? readFileSync(file, 'utf8'));
+          },
+          // Keyed by the file, whatever the query, as plugin-vue's parses are.
+          transform(code: string, moduleId: string) {
+            const [file = '', query = ''] = moduleId.split('?');
+            if (!file.endsWith('.vue') || /(?:^|&)vue(?:&|$)/.test(query)) return null;
+            parses.set(file, code);
+            return `import ${JSON.stringify(`${file}?vue&type=style&index=0&scoped=7a7a7a7a&lang.css`)};\nexport default ${JSON.stringify(code.includes('copy') ? 'copy' : 'real')};\n`;
+          },
+        },
+        {
+          // A stand-in for vite-plugin-svelte: it keeps a component's CSS with
+          // its compiled module and answers the CSS part from there.
+          name: 'fixture:svelte',
+          load(moduleId: string) {
+            const [file = '', query = ''] = moduleId.split('?');
+            if (!/(?:^|&)svelte(?:&|$)/.test(query)) return null;
+            const meta = this.getModuleInfo(file)?.meta as { svelte?: { css?: string } } | undefined;
+            return meta?.svelte?.css ?? null;
+          },
+          transform(code: string, moduleId: string) {
+            const [file = '', query = ''] = moduleId.split('?');
+            if (!file.endsWith('.svelte') || query !== '') return null;
+            return {
+              code: `import ${JSON.stringify(`${file}?svelte&type=style&lang.css`)};\nexport default ${JSON.stringify(code.includes('copy') ? 'copy' : 'real')};\n`,
+              meta: { svelte: { css: styleOf(code) } },
+            };
+          },
+        },
+        isotone({ checkForUpdates: false }),
+      ],
+    });
+    await vue.listen();
+    const address = vue.httpServer?.address();
+    base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
+  });
+
+  afterAll(async () => {
+    (vue?.httpServer as import('node:http').Server | null)?.closeAllConnections?.();
+    await vue?.close();
+    rmSync(project.root, { recursive: true, force: true });
+  });
+
+  const get = async (path: string) => {
+    const res = await fetch(`${base}${path}`);
+    return { status: res.status, body: await res.text() };
+  };
+  const BLOCK = '/src/Card.vue?vue&type=style&index=0&scoped=7a7a7a7a&lang.css';
+
+  it("renders the copy's style block", async () => {
+    expect((await get('/src/Card.vue')).body).toContain('"copy"');
+    const block = await get(BLOCK);
+    expect(block.status).toBe(200);
+    expect(block.body).toContain('color: red');
+    expect(block.body).not.toContain('<template>');
+  });
+
+  it('parses the copy again for a block asked after the real file changed', async () => {
+    await get('/src/Card.vue');
+    // What an edit of the real file leaves behind: plugin-vue's parse and
+    // Vite's compiled module both gone, the browser still on the copy.
+    parses.clear();
+    const graph = vue.environments.client.moduleGraph;
+    const main = graph.getModuleById(project.card);
+    expect(main).toBeDefined();
+    if (main) graph.invalidateModule(main);
+    const block = graph.getModuleById(`${project.card}?vue&type=style&index=0&scoped=7a7a7a7a&lang.css`);
+    if (block) graph.invalidateModule(block);
+    const rebuilt = (await get(BLOCK)).body;
+    expect(rebuilt).toContain('color: red');
+    expect(rebuilt).not.toContain('color: blue');
+    expect(rebuilt).not.toContain('<template>');
+  });
+
+  it("renders the copy's CSS in a Svelte component", async () => {
+    expect((await get('/src/Counter.svelte')).body).toContain('"copy"');
+    const part = await get('/src/Counter.svelte?svelte&type=style&lang.css');
+    expect(part.status).toBe(200);
+    expect(part.body).toContain('color: green');
+    expect(part.body).not.toContain('<script');
+    expect((await get('/src/Counter.svelte?isotone=v')).status).toBe(404);
+  });
+
+  it("refuses ?isotone= for a component, and serves scripts' versions to the check", async () => {
+    for (const path of ['/src/Card.vue?isotone=v', '/src/Card.vue?isotone=_base', '/src/Card.vue?t=1&isotone=v']) {
+      const refused = await get(path);
+      expect(refused.status, path).toBe(404);
+      expect(refused.body, path).toContain('variant use');
+    }
+    expect(parses.get(project.card)).toBe(COPY_SFC);
+    expect((await get('/src/Card.vue')).status).toBe(200);
+    expect((await get('/src/Button.tsx?isotone=b')).body).toContain('variant b');
+    for (const path of ['/.env?isotone=_base', '/.env?isotone=forced', '/src/../.env?isotone=_base']) {
+      expect((await get(path)).body, path).not.toContain('FAKE_ENV');
+    }
+  });
+});
+
+/* ── copies of secrets added while the dev server runs ────────────────── */
+
+describe.each([
+  ['with no watcher', null],
+  ['with .isotone ignored by the watcher', { ignored: ['**/.isotone/**'] }],
+])('a secret forced into a variant while the dev server runs, %s', (_name, watch) => {
+  let dev: ViteDevServer;
+  let base: string;
+  let project: string;
+
+  beforeAll(async () => {
+    project = tempProject().root;
+    repos.splice(repos.indexOf(project), 1);
+    writeFileSync(join(project, '.env'), 'SECRET_TOKEN=sk_live_FAKE_REAL\n');
+    writeActive({ root: project }, ['b']);
+    dev = await createServer({
+      root: project,
+      configFile: false,
+      logLevel: 'silent',
+      server: { port: 0, host: '127.0.0.1', watch },
+      optimizeDeps: { noDiscovery: true, include: [] },
+      plugins: [isotone({ checkForUpdates: false })],
+    });
+    await dev.listen();
+    const address = dev.httpServer?.address();
+    base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
+  });
+
+  afterAll(async () => {
+    (dev?.httpServer as import('node:http').Server | null)?.closeAllConnections?.();
+    await dev?.close();
+    rmSync(project, { recursive: true, force: true });
+  });
+
+  /** One request on a connection of its own: the two servers here can be
+   *  given the same port in turn, and a pooled connection would outlive the first. */
+  const send = (path: string, method = 'GET', payload?: string): Promise<{ status: number; body: string }> =>
+    new Promise((done, fail) => {
+      const headers = payload === undefined ? {} : { 'content-type': 'application/json' };
+      const req = httpRequest(`${base}${path}`, { method, headers, agent: false }, (res) => {
+        let text = '';
+        res.on('data', (chunk) => (text += chunk));
+        res.on('end', () => done({ status: res.statusCode ?? 0, body: text }));
+      });
+      req.on('error', fail);
+      req.path = path;
+      req.end(payload);
+    });
+  const body = async (path: string) => (await send(path)).body;
+  const SECRET_PATHS = ['/.env', '/.env?import', '/.env?t=1', '/.env/?import'];
+
+  it('is never served, with no switch or after one, though nothing told Isotone it changed', async () => {
+    // The tracked files are read and cached: an ordinary copy is served.
+    expect(await body('/src/Button.tsx')).toContain('variant b');
+    // Forced into the active variant, with no watcher event.
+    addVariantFile({ root: project }, 'b', '.env', { force: true });
+    writeFileSync(join(variantDir({ root: project }, 'b'), '.env'), 'SECRET_TOKEN=sk_live_FAKE_COPY_B\n');
+    for (const path of SECRET_PATHS) expect(await body(path), path).not.toMatch(/FAKE_COPY/);
+    // A new variant over it, switched on from the panel.
+    createVariant({ root: project }, { id: 'late' });
+    addVariantFile({ root: project }, 'late', '.env', { force: true });
+    writeFileSync(join(variantDir({ root: project }, 'late'), '.env'), 'SECRET_TOKEN=sk_live_FAKE_COPY_LATE\n');
+    const switched = await send(`${VARIANTS_ENDPOINT}/active`, 'POST', JSON.stringify({ active: ['late'] }));
+    expect(switched.status).toBe(200);
+    expect(readActive({ root: project })).toEqual(['late']);
+    for (const path of SECRET_PATHS) expect(await body(path), path).not.toMatch(/FAKE_COPY/);
+  });
+});
+
+/* ── a variants directory outside .isotone ────────────────────────────── */
+
+describe('variants kept outside .isotone', () => {
+  let dev: ViteDevServer;
+  let base: string;
+  let project: string;
+  const store = (root: string) => ({ root, dir: 'variants' });
+
+  beforeAll(async () => {
+    project = tempGitRepo('isotone-vite-dir-', repos);
+    repos.splice(repos.indexOf(project), 1);
+    mkdirSync(join(project, 'src'), { recursive: true });
+    writeFileSync(join(project, 'src', 'Button.tsx'), 'export const label = "real";\n');
+    writeFileSync(join(project, '.env'), 'SECRET_TOKEN=sk_live_FAKE_REAL\n');
+    execFileSync('git', ['add', 'src'], { cwd: project });
+    execFileSync('git', ['commit', '-q', '-m', 'init'], { cwd: project });
+    createVariant(store(project), { id: 'f' });
+    addVariantFile(store(project), 'f', 'src/Button.tsx');
+    addVariantFile(store(project), 'f', '.env', { force: true });
+    writeFileSync(join(project, 'variants', 'f', 'src', 'Button.tsx'), 'export const label = "FAKE_COPY_BUTTON";\n');
+    writeFileSync(join(project, 'variants', 'f', '.env'), 'SECRET_TOKEN=sk_live_FAKE_COPY_ENV\n');
+    writeActive(store(project), ['f']);
+    dev = await createServer({
+      root: project,
+      configFile: false,
+      logLevel: 'silent',
+      server: { port: 0, host: '127.0.0.1', watch: null },
+      optimizeDeps: { noDiscovery: true, include: [] },
+      plugins: [isotone({ checkForUpdates: false, variants: { dir: 'variants' } })],
+    });
+    await dev.listen();
+    const address = dev.httpServer?.address();
+    base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
+  });
+
+  afterAll(async () => {
+    (dev?.httpServer as import('node:http').Server | null)?.closeAllConnections?.();
+    await dev?.close();
+    rmSync(project, { recursive: true, force: true });
+  });
+
+  const get = (path: string): Promise<{ status: number; body: string }> =>
+    new Promise((done, fail) => {
+      const req = httpRequest(`${base}${path}`, { agent: false }, (res) => {
+        let text = '';
+        res.on('data', (chunk) => (text += chunk));
+        res.on('end', () => done({ status: res.statusCode ?? 0, body: text }));
+      });
+      req.on('error', fail);
+      req.path = path;
+      req.end();
+    });
+
+  it('denies the directory itself to Vite, spelled as a literal path', () => {
+    type Config = (c: { root?: string; server?: { fs?: { deny?: string[] } } }) => { server: { fs: { deny: string[] } } };
+    const deny = (options: IsotoneViteOptions, root: string) =>
+      (isotone(options) as unknown as { config: Config }).config({ root }).server.fs.deny;
+    // Glob characters in the path match literally.
+    const dir = id(resolve('/work/My App (copy) | v2'), 'variants');
+    expect(deny({ variants: { dir: 'variants' } }, '/work/My App (copy) | v2')).toContain(`${dir.replace(/[()|]/g, '\\$&')}/**`);
+    expect(deny({ variants: { dir: resolve('/elsewhere/alts') } }, '/work/app')).toContain(`${id(resolve('/elsewhere/alts'))}/**`);
+    // A directory that is a symlink is denied where it leads, too.
+    if (process.platform !== 'win32') {
+      const app = realpathSync.native(mkdtempSync(join(tmpdir(), 'isotone-link-dir-')));
+      repos.push(app);
+      mkdirSync(join(app, 'real-alts'));
+      symlinkSync(join(app, 'real-alts'), join(app, 'alts'));
+      expect(deny({ variants: { dir: 'alts' } }, app)).toEqual(
+        expect.arrayContaining([`${id(app, 'alts')}/**`, `${id(app, 'real-alts')}/**`]),
+      );
+    }
+    // A directory holding the app itself is never denied: it would deny the app.
+    expect(deny({ variants: { dir: resolve('/work') } }, '/work/app').filter((glob) => glob.includes('work'))).toEqual([]);
+    // The default directory is under `.isotone/`, which is denied already.
+    expect(deny({}, '/work/app').filter((glob) => glob.includes('work'))).toEqual([]);
+  });
+
+  it('never hands out a copy at its own path, only in place of the real file', async () => {
+    for (const path of [
+      '/variants/f/.env',
+      '/variants/f/.env?import',
+      '/variants/f/src/Button.tsx',
+      '/variants/f/src/Button.tsx?import',
+      '/variants/f/src/Button.tsx?raw',
+      `${fsUrl(project)}/variants/f/src/Button.tsx`,
+      `${fsUrl(project)}/variants/f/.env`,
+      '/variants/f/variant.json',
+      '/variants/f/variant.json?import',
+      '/.env',
+    ]) {
+      expect((await get(path)).body, path).not.toMatch(/FAKE_/);
+    }
+    // In place of the real file, the copy is served as usual.
+    expect((await get('/src/Button.tsx')).body).toContain('FAKE_COPY_BUTTON');
   });
 });

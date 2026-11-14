@@ -275,16 +275,16 @@ ${APPEARANCE_CSS}
 .isotone-secondary { padding: 6px 12px; font-size: 11px; font-weight: 500; white-space: nowrap; }
 .isotone-save { min-height: 26px; padding: 2px 12px; font-size: 11px; white-space: nowrap; overflow: hidden; }
 .isotone-root .isotone-vars > .isotone-panel-head .isotone-head-actions { flex: 1; min-width: 0; }
-/* The defaults bar floats over the panel's foot, so in a list that scrolls a pick never moves the selectors,
-   and an untouched panel has no gap. While it shows, the list gains room at its end (--iso-bar-room, see
-   .isotone-vars-tail) to scroll its last row clear; a list too short to scroll grows by that room instead of
-   hiding its end under the bar. The room is a registered length (ensurePanelStyles), so it eases in and out
-   with the bar, and the bottom scroll edge (edges.ts) grows and shrinks with it. */
-.isotone-vars { --iso-save-bar-h: calc(var(--iso-space) * 3 + 26px); --iso-bar-room: 0px; transition: --iso-bar-room var(--iso-enter) var(--iso-ease-out); }
-.isotone-vars[data-saving='true'] { --iso-bar-room: calc(var(--iso-save-bar-h) - var(--iso-panel-inset)); }
-.isotone-root .isotone-vars > .isotone-panel-head { position: absolute; left: 0; right: 0; bottom: 0; height: var(--iso-save-bar-h); min-height: 0; margin: 0; padding-top: calc(var(--iso-space) * 2); transition: opacity var(--iso-enter) var(--iso-ease-out), transform var(--iso-enter) var(--iso-ease-out); }
+/* The defaults bar floats over the panel's foot, in room the list keeps for it whenever the view can show it
+   (--iso-bar-room, see .isotone-vars-tail): a short list ends clear of the bar, a long one scrolls its last row
+   clear, and the bar coming or going never resizes the bottom-anchored panel, so no selector moves under the
+   pointer. Only the bar's material over the list (--iso-bar-veil, edges.ts) eases in and out with it. The bar's
+   text sits one selector gap below the last selector, so the kept room reads as the list's own spacing. */
+.isotone-vars { --iso-save-bar-h: calc(var(--iso-panel-inset) + 26px + var(--iso-space)); --iso-bar-room: 0px; }
+.isotone-vars[data-bar='true'] { --iso-bar-room: calc(var(--iso-save-bar-h) - var(--iso-panel-inset)); }
+.isotone-root .isotone-vars > .isotone-panel-head { position: absolute; left: 0; right: 0; bottom: 0; height: var(--iso-save-bar-h); min-height: 0; margin: 0; padding-top: var(--iso-panel-inset); transition: opacity var(--iso-enter) var(--iso-ease-out), transform var(--iso-enter) var(--iso-ease-out); }
 .isotone-root .isotone-vars > .isotone-panel-head[data-shown='false'] { opacity: 0; transform: translateY(6px); pointer-events: none; }
-/* The bar's room at the end of the list. Cancels its own gap, so it costs nothing while the bar is hidden.
+/* The bar's room at the end of the list. It cancels its own gap, so the room is exactly the bar's overlap.
    Scroll padding, so keyboard focus lands clear of the bar and the scroll edges, is in edges.ts. */
 .isotone-vars-tail { flex: none; height: var(--iso-bar-room); margin-top: calc(0px - var(--iso-panel-inset)); pointer-events: none; }
 .isotone-save-row { position: relative; display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; }
@@ -342,6 +342,8 @@ ${APPEARANCE_CSS}
    The side gutters contain the corner action and keyboard focus outlines. */
 .isotone-list { display: flex; flex-direction: column; gap: 0; flex: 0 1 auto; max-height: calc(var(--iso-list-height) + 2 * var(--iso-space) - 8px); min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; margin: calc(0px - var(--iso-space)) calc(-8px - var(--iso-note-outset)) calc(-2px - var(--iso-space)); padding: var(--iso-space) 8px; scroll-padding-block: var(--iso-space); }
 .isotone-empty { color: var(--iso-muted); font-size: 11px; line-height: 1.7; padding: 8px; }
+/* A note about what the page shows (a link's ?v= it does not apply): quiet, wrapping, above the selectors. */
+.isotone-vars-notice { flex: none; color: var(--iso-muted); font-size: 11px; line-height: 1.6; padding: 2px 8px; }
 .isotone-note { position: relative; flex: none; }
 .isotone-request-more { flex: none; color: var(--iso-faint); font-size: 9px; }
 
@@ -356,6 +358,10 @@ ${APPEARANCE_CSS}
 .isotone-meta .isotone-chip { flex: 0 1 auto; min-width: 0; height: 18px; padding: 0 7px; font-size: 10px; }
 /* A lone reference gets all available space; multiple references share the row. */
 .isotone-meta .isotone-chip:not(:only-child) { max-width: 140px; }
+/* A count ("3 pins", "2 picks") keeps its width; a single reference beside it keeps a few letters. */
+.isotone-meta .isotone-chip-count { flex-shrink: 0; }
+.isotone-chip > .isotone-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.isotone-meta .isotone-chip:not(.isotone-chip-count) { min-width: 52px; }
 /* The corner action floats outside the text column; its 24px hit target
    surrounds a 16px face without reserving trailing space in every row. */
 .isotone-note > .isotone-x { position: absolute; right: -8px; top: -8px; width: 24px; height: 24px; isolation: isolate; opacity: .6; background: none; box-shadow: none; }
@@ -395,6 +401,8 @@ ${APPEARANCE_CSS}
 .isotone-note-hit > p { flex: 1; min-width: 0; }
 /* The note keeps most of the row; references take at most a third and shrink first. */
 .isotone-note-hit > .isotone-meta { flex: 0 1 auto; max-width: 34%; margin-top: 0; }
+/* A count beside a pin takes some of that third, so the row gives references half. */
+.isotone-note-hit > .isotone-meta:has(.isotone-chip-count) { max-width: 50%; }
 .isotone-compose { flex: none; display: flex; flex-direction: column; }
 .isotone-input { --iso-input-padding: var(--iso-space); flex: none; min-width: 0; min-height: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; padding: var(--iso-input-padding); background: var(--iso-well); border: 1px solid var(--iso-input-border); box-shadow: var(--iso-input-shadow); border-radius: var(--iso-inner-radius); cursor: text; }
 .isotone-context:empty { display: none; }
@@ -503,7 +511,6 @@ ${EDGES_CSS}
   .isotone-root .isotone-rail-track { transition: none; }
   .isotone-root .isotone-panel, .isotone-root .isotone-axis-menu, .isotone-root .isotone-rail-tools { transition-property: opacity, visibility; }
   .isotone-colour, .isotone-root .isotone-vars > .isotone-panel-head { transition-property: opacity; }
-  .isotone-vars { transition: none; }
   .isotone-root button { transition: opacity 125ms ease; }
   .isotone-note[data-working] .isotone-note-hit > p:not(.isotone-reply) { animation: none; background: none; color: var(--iso-muted); }
   .isotone-root button:not(:disabled):active > svg, .isotone-root button:not(:disabled):active { transform: none; }
@@ -571,7 +578,7 @@ ${EDGES_CSS}
  * component directly.
  */
 export function ensurePanelStyles(target: Document | ShadowRoot): void {
-  registerBarRoom();
+  registerBarVeil();
   const parent = target instanceof Document ? target.head : target;
   if (!parent || parent.querySelector(`[${MARKER}]`)) return;
   const style = (target instanceof Document ? target : target.ownerDocument).createElement('style');
@@ -584,13 +591,13 @@ export function ensurePanelStyles(target: Document | ShadowRoot): void {
 }
 
 /**
- * A registered length can transition, so the defaults bar's room eases in and out with the bar
- * (see .isotone-vars). Registration is page-wide and reaches into shadow roots, where an
- * `@property` rule would not. Without it the room changes at once.
+ * A registered length can transition, so the defaults bar's material eases in and out with the bar
+ * (see the bottom band in edges.ts). Registration is page-wide and reaches into shadow roots, where an
+ * `@property` rule would not. Without it the material changes at once.
  */
-function registerBarRoom(): void {
+function registerBarVeil(): void {
   try {
-    CSS.registerProperty({ name: '--iso-bar-room', syntax: '<length>', inherits: true, initialValue: '0px' });
+    CSS.registerProperty({ name: '--iso-bar-veil', syntax: '<length>', inherits: true, initialValue: '0px' });
   } catch {
     // Registered already, by an earlier mount or a second copy of Isotone, or not supported.
   }

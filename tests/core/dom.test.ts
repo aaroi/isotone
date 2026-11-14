@@ -77,6 +77,18 @@ it('records the computed styles a painted element differs by, with colours as he
   for (const name of ['margin', 'position', 'opacity', 'box-shadow', 'z-index']) expect(styles).not.toHaveProperty(name);
 });
 
+it('keeps colours the browser reports in another form, such as oklch or translucent rgba, as it reports them', () => {
+  document.body.innerHTML =
+    '<p style="color: oklch(0.7 0.1 200); background-color: rgba(0, 0, 0, 0.5); border: 1px solid rgb(0, 0, 255)">Price</p>';
+  const p = document.querySelector('p') as HTMLElement;
+  p.getBoundingClientRect = () => ({ left: 0, top: 0, width: 80, height: 20 }) as DOMRect;
+  expect(describeIsotoneElement(elementAsNode(p)).styles).toMatchObject({
+    color: 'oklch(0.7 0.1 200)',
+    'background-color': 'rgba(0, 0, 0, 0.5)',
+    border: '1px solid #0000ff',
+  });
+});
+
 it('records no styles for an element that is not painted', () => {
   document.body.innerHTML = '<p style="font-size: 20px">Hidden</p>';
   expect(describeIsotoneElement(elementAsNode(document.querySelector('p') as Element))).not.toHaveProperty('styles');

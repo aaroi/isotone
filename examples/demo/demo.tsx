@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Gem, Moon, Play, Plus, Search, Sun } from 'lucide-react';
+import { unappliedLinkNotice } from '../../src/core/variants/overlay';
 import { createVariantsSource, IsotonePanel, type IsotoneTheme, type VariantAxis } from '../../src/react/index';
+import { type LiveStore, liveStore } from '../../src/vite/live';
 import { Tour, tourSeen } from './tour';
 
 const params = new URLSearchParams(location.search);
@@ -167,9 +169,53 @@ if (worst) {
     'Nothing',
   ]);
 }
+/**
+ * Card layout and spacing belong to the tab, as file variants do with live switching in a Vite app, through
+ * the same store: a pick, Default included, goes into `?v=` and stays with the tab, so two tabs can compare.
+ * A tab without one follows the latest pick made in any tab, which this browser keeps in place of the dev
+ * server's `.isotone/active.json`.
+ */
+const LATEST_PICK = 'isotone-demo-active';
+/** `?shared=1` shows a setup where picks are shared by every tab (below), so no tab keeps its own. */
+const sharedLink = !screenshot && params.get('shared') === '1';
+const tabGroups =
+  screenshot || sharedLink
+    ? []
+    : axes.flatMap((axis) =>
+        (axis.id === 'layout' || axis.id === 'spacing') && 'options' in axis
+          ? [
+              {
+                id: axis.id,
+                fallback: axis.defaultOption,
+                members: axis.options.map((o) => o.id).filter((id) => id !== axis.defaultOption),
+              },
+            ]
+          : [],
+      );
+function latestPick(): string[] | null {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(LATEST_PICK) ?? 'null');
+    return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : null;
+  } catch {
+    return null;
+  }
+}
+const tab = (() => {
+  if (tabGroups.length === 0) return null;
+  // The dev server's plugin puts its own store on the page, for file variants this demo has none of; leave it there.
+  const page = window as Window & { __isotoneLive?: LiveStore };
+  const plugin = page.__isotoneLive;
+  delete page.__isotoneLive;
+  const store = liveStore(page, { groups: tabGroups, conflicted: [], active: latestPick() ?? ['comfy'], ssr: false, endpoint: '' });
+  if (plugin) page.__isotoneLive = plugin;
+  else delete page.__isotoneLive;
+  return store;
+})();
+/** The tab's picks as selector values. */
+const tabPicks = (set: string[]) => Object.fromEntries(tabGroups.map((g) => [g.id, g.members.find((m) => set.includes(m)) ?? g.fallback]));
 const source = createVariantsSource({
   axes,
-  selections: { spacing: 'comfy' },
+  selections: tab ? tabPicks(tab.active) : { spacing: 'comfy' },
   // Hold to compare. onChange applies every call; it stores nothing, so a preview (change.preview) needs no
   // special case here. An app that keeps picks in its URL or storage skips that step when change.preview is true.
   compare: true,
@@ -195,6 +241,63 @@ const source = createVariantsSource({
     if (!response.ok) throw new Error('Could not save defaults.');
   },
 });
+if (tab) {
+  // A pick in Layout or Spacing pins the tab, even one it already shows (a Default it was following).
+  const choose = source.setSelection;
+  source.setSelection = (axisId, value) => {
+    choose(axisId, value);
+    if (!tabGroups.some((g) => g.id === axisId)) return;
+    const picks = source.getSelections();
+    const next = tabGroups.flatMap((g) => g.members.filter((m) => m === picks[g.id]));
+    tab.select(next, [axisId]);
+    try {
+      localStorage.setItem(LATEST_PICK, JSON.stringify(next));
+    } catch {
+      /* Private mode: this tab still keeps its pick. */
+    }
+  };
+  // Another tab's pick reaches this one only while it has none of its own, as `variant use` would.
+  window.addEventListener('storage', (event) => {
+    if (event.key === LATEST_PICK) tab.follow(latestPick() ?? []);
+  });
+  tab.subscribe(() => {
+    const current = source.getSelections();
+    const picks = tabPicks(tab.active);
+    if (tabGroups.some((g) => current[g.id] !== picks[g.id])) source.setSelections({ ...current, ...picks });
+  });
+}
+
+/**
+ * `?shared=1`: what the Variants panel says about a link's `?v=` where picks are shared by
+ * every tab (file variants on Vite 5, or without React), which ignores the link. The Layout
+ * options stand in for the file variants such a setup lists, and the link asks for Feature
+ * unless it names another. Like the real panel, it stays while the reviewer picks.
+ */
+if (sharedLink) {
+  if (!params.has('v')) {
+    const next = new URLSearchParams(location.search);
+    next.set('v', 'layout:feature');
+    history.replaceState(history.state, '', `?${next.toString().replace(/%3A/gi, ':')}${location.hash}`);
+  }
+  const layout = axes.find((axis) => axis.id === 'layout');
+  const options = layout && (layout.kind === undefined || layout.kind === 'select') ? layout.options : [];
+  const variants = options
+    .filter((option) => option.id !== 'row')
+    .map((option) => ({
+      id: option.id,
+      label: option.label,
+      group: 'layout',
+      groupLabel: layout?.label,
+      createdAt: '',
+      files: {},
+      stale: [],
+      missing: [],
+    }));
+  const picked = source.getSelections().layout;
+  const active = picked && picked !== 'row' ? [picked] : [];
+  const notice = unappliedLinkNotice({ variants, active }, active, location.search);
+  source.getNotice = () => notice;
+}
 
 type DemoNote = Record<string, unknown> & {
   id: string;
@@ -230,6 +333,8 @@ function seedHostedNotes() {
       route,
       feedback,
       element: { tag: 'section', text, selector: '#overview-cards' },
+      // Filed with a selector moved: the note says so, for the agent and in the panel.
+      ...(index === 0 ? { selections: { 'card-padding': '24' } } : {}),
       done: false,
       doneAt: null,
       createdAt: new Date(Date.now() - (seed.length - index) * 60_000).toISOString(),
@@ -277,7 +382,7 @@ function serveNotesInPage(path: string) {
     const feedback = String(body.feedback ?? '').trim();
     if (!body.route || !feedback) return reply(400, { error: 'route and feedback are required' });
     const fields = Object.fromEntries(
-      ['element', 'elements', 'variant', 'variantAction', 'payload', 'viewport']
+      ['element', 'elements', 'variant', 'variantAction', 'payload', 'viewport', 'selections']
         .filter((key) => body[key] !== undefined)
         .map((key) => [key, body[key]]),
     );
@@ -435,9 +540,7 @@ function Panel({ theme }: { theme: IsotoneTheme }) {
     if (screenshot) {
       const style = document.createElement('style');
       // Select mode draws fixed outlines and a hint, which a scaled root would displace.
-      // The defaults bar floats over the last selector until the list is scrolled; the still image shows the
-      // list as it sits when scrolled clear of the bar.
-      style.textContent = `${scene === 'pin' ? '' : '.isotone-root { transform: scale(1.1); transform-origin: bottom right; right: 22px; bottom: 22px; }'} .isotone-textarea { caret-color: transparent; } .isotone-vars[data-saving='true'] > .isotone-vars-body { padding-bottom: calc(var(--iso-save-bar-h) - var(--iso-space)); }`;
+      style.textContent = `${scene === 'pin' ? '' : '.isotone-root { transform: scale(1.1); transform-origin: bottom right; right: 22px; bottom: 22px; }'} .isotone-textarea { caret-color: transparent; }`;
       shadow.append(style);
     }
     const target = document.createElement('div');
@@ -639,7 +742,9 @@ function Demo() {
     screenshot ? 'auto' : savedTheme('iso-demo-panel', ['auto', 'system', 'light', 'dark'], 'auto'),
   );
   // Every first visit starts with the tour. The Tour button brings it back.
-  const [touring, setTouring] = useState(() => !screenshot && !review && !stress && (params.get('tour') === '1' || !tourSeen()));
+  const [touring, setTouring] = useState(
+    () => !screenshot && !review && !stress && !sharedLink && (params.get('tour') === '1' || !tourSeen()),
+  );
   useEffect(() => {
     document.documentElement.dataset.theme = pageTheme;
     document.documentElement.dataset.capture = String(screenshot);

@@ -5,7 +5,7 @@
  */
 import type { RouteGateOptions } from './routes';
 import type { UpdateRequest } from './update';
-import type { VariantsSource } from './variants';
+import type { VariantSelections, VariantsSource } from './variants';
 
 /** A UI element picked with the panel's selector mode. */
 export interface IsotoneElement {
@@ -17,9 +17,9 @@ export interface IsotoneElement {
   selector: string;
   /** Identifying attributes: role, name, aria-label, data-*, class and so on. */
   attributes?: Record<string, string>;
-  /** React components around the element, outermost first. */
+  /** React or Vue components whose code wrote the element, outermost first. */
   component?: string[];
-  /** `file:line` of the JSX, where the host's React still records it. */
+  /** `file:line` that wrote the element, or the file alone where no line is known. */
   source?: string;
   /** Labelled or headed ancestors, outermost first. */
   within?: string[];
@@ -28,7 +28,8 @@ export interface IsotoneElement {
   /** Where it sat on the page when pinned, in CSS pixels from the document's corner. */
   rect?: { x: number; y: number; w: number; h: number };
   /** How it looked when pinned: the computed styles that differ from a plain
-   *  box (spacing, type, colours as hex, layout), so "bigger" has a "from". */
+   *  box (spacing, type, layout, and colours: hex when opaque `rgb()`, else as
+   *  the browser reports them, like `oklch(…)`), so "bigger" has a "from". */
   styles?: Record<string, string>;
 }
 
@@ -52,6 +53,9 @@ export interface NoteContext {
   variantAction?: VariantRemoval;
   elements?: IsotoneElement[];
   variant?: VariantReference | null;
+  /** The panel's selectors that sat off their defaults on the note's route
+   *  when it was sent: what the page showed then, not the defaults. */
+  selections?: VariantSelections;
   /** The user's request to upgrade Isotone, built by the local server from
    *  its own update check. At most one is open at a time. */
   update?: UpdateRequest;
@@ -135,7 +139,8 @@ export interface MountIsotoneOptions {
    *  variants passes a source and nothing else. */
   endpoint?: string;
   /**
-   * Variants for the panel. A `VariantsSource` is rendered as-is; `'overlay'`
+   * Variants for the panel. A `VariantsSource` is rendered with the knobs of
+   * its `variantsEndpoint`, if any; `'overlay'`
    * builds the overlay adapter against the Vite plugin's same-origin
    * endpoint. `'knobs'` is the same adapter for a server that has knobs but no
    * file variants (`isotone serve`), and its empty list says so. With neither
@@ -143,7 +148,9 @@ export interface MountIsotoneOptions {
    */
   variants?: VariantsSource | 'overlay' | 'knobs';
   /** Where `'overlay'` reads variants and knobs. Defaults to the Vite plugin's
-   *  same-origin endpoint; `isotone serve` passes its own absolute URL. */
+   *  same-origin endpoint; `isotone serve` passes its own absolute URL. Beside a
+   *  host source it defaults to the server of an `endpoint` ending
+   *  `/api/isotone/notes`, whose knobs then show after the source's selectors. */
   variantsEndpoint?: string;
   /** Which tab a tabbed panel opens on until the reviewer picks one. */
   defaultTab?: 'variants' | 'notes';

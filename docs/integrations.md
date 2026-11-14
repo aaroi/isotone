@@ -30,8 +30,8 @@ import { isotone } from 'isotone/vite';
 plugins: [/* existing plugins */, isotone()]
 ```
 
-`iteration`, the plugin's name before 1.3, still works until it is removed in
-1.5.0. Restart the dev server; notes and source-file variants work at once.
+`iteration`, the plugin's name before 1.3, still works as a deprecated alias.
+Restart the dev server; notes and source-file variants work at once.
 The panel carries its own React runtime, so React, Vue, Svelte and vanilla Vite
 projects share this setup, and it stays out of the host's dependency optimizer
 and Fast Refresh graph. The plugin acts only on the dev server: `vite build`
@@ -49,8 +49,9 @@ If the app mounts `IsotonePanel` or `mountIsotone` itself, use
 injecting a second panel; that mount can pass
 `updateEndpoint: '/api/isotone/update'` for the [update notice](updates.md).
 
-The notes file resolves against Vite's `root`. In a monorepo, run the CLI in that
-directory or pass `--file path/to/.isotone/notes.json`. Until 1.5.0, an old
+The notes file resolves against Vite's `root`, and goes into the repository's
+`.git/info/exclude` when the dev server starts and when the CLI's notes and
+`variant` commands run. In a monorepo, run the CLI in that directory or pass `--file path/to/.isotone/notes.json`. An old
 `.iteration-feedback.json` in its place is moved there on first run. Options:
 
 ```ts
@@ -102,7 +103,9 @@ The printed setup URL offers a copyable tag and a bookmarklet. This path has
 notes and [knobs](variants.md#knobs) from `.isotone/knobs.json` where `serve`
 runs (the Variants tool appears once it holds a valid knob; reload after the
 first). Swapping source files needs the Vite plugin or a host `VariantsSource`;
-a host source built with `createVariantsSource` offers [hold to
+mounting a host source with this server's notes endpoint lists the knobs
+beside the source's selectors ([details](variants.md#beside-knobs-and-file-variants)). A
+source built with `createVariantsSource` offers [hold to
 compare](variants.md#hold-to-compare) only with `compare: true`, once its
 `onChange` skips persisting calls marked `{ preview: true }`.
 
@@ -177,6 +180,10 @@ export function ReviewTools() {
   return null;
 }
 ```
+
+To review the app's own selectors too, pass `variants: source` beside the
+endpoint; the panel lists them first, then the knobs in `.isotone/knobs.json`
+([details](variants.md#beside-knobs-and-file-variants)).
 
 Render `<ReviewTools />` once in the app layout. The effect survives Strict Mode
 and route unmounts, and the guarded dynamic import keeps the panel out of
