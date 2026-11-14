@@ -17,9 +17,10 @@ import { noteFingerprint, readNotes, replyView, type StoredNote, updateNotes } f
 import { defaultNotesFile, NOTES_FILE } from '../node/notes/location';
 import { foreignServers } from '../node/serve-owner';
 import { notesProjectRoot, updateRequestOf } from '../node/update/request';
-import { listVariants, readActive, variantDir } from '../node/variants';
+import { filesWithoutBase, hasGit, listVariants, NO_GIT_SYNC, readActive, variantDir } from '../node/variants';
 import { latestChange, mtime, snapshot } from './changes';
 import { docPath } from './docs';
+import { excludeLocalFiles } from './local-files';
 import { oneLine, quoted, shellCommand, shellQuote, toJson, utcStamp } from './text';
 import { type CliIO, errOut, findNoteByPrefix, has, out, parseArgs, valueFor } from './util';
 
@@ -143,6 +144,7 @@ export async function runNotes(argv: string[], io: CliIO): Promise<number> {
   // An update request is checked against this notes file's project before its
   // command is printed: a hand edit cannot point an agent at another directory.
   const root = notesProjectRoot(args.file);
+  excludeLocalFiles(args.dir, args.file);
   // On stderr, so `--json` output stays one array.
   if (args.foundAbove) errOut(io, `Notes: ${relative(io.cwd, args.file)}`);
   if (args.action === '--reply') return reply(io, args, root);
@@ -370,23 +372,22 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
       return { variant, files, notes: fixed.map(({ note }) => note) };
     })
     .filter((v) => v.files.length);
-  // A copy made outside a Git repository may record no base: it reads as stale, but `variant sync` has
-  // nothing to merge from, so it is compared by hand.
-  const unbased = (variant: (typeof variants)[number], file: string) => variant.files[file]?.base === null && !variant.files[file]?.added;
-  const syncable = stale
-    .map(({ variant, files }) => ({ id: variant.id, files: files.filter((file) => !unbased(variant, file)) }))
-    .filter((v) => v.files.length);
-  const byHand = stale
-    .map(({ variant, files }) => ({ id: variant.id, files: files.filter((file) => unbased(variant, file)) }))
-    .filter((v) => v.files.length);
+  // A copy Isotone 1.5.0 or earlier made outside a Git repository records no base: it reads as stale, but
+  // `variant sync` has nothing to merge from, so it is compared by hand.
+  const split = stale.map(({ variant, files }) => ({ id: variant.id, files, unbased: filesWithoutBase(variant) }));
+  const syncable = split.map((v) => ({ id: v.id, files: v.files.filter((file) => !v.unbased.includes(file)) })).filter((v) => v.files.length);
+  const byHand = split.map((v) => ({ id: v.id, files: v.files.filter((file) => v.unbased.includes(file)) })).filter((v) => v.files.length);
   if (syncable.length) {
+    // Merging needs a `git` executable, though no longer a repository.
+    const git = hasGit();
     lines.push('These variants copy files changed since the note (or --working), so their copies may lack the fix:');
-    for (const v of syncable) lines.push(`  ${v.id} (${v.files.join(', ')}): ${shellCommand('npx', 'isotone', 'variant', 'sync', v.id)}`);
-    lines.push('Sync each one the fix belongs in too; leave a copy alone when it is the alternative itself.');
+    for (const v of syncable)
+      lines.push(`  ${v.id} (${v.files.join(', ')})${git ? `: ${shellCommand('npx', 'isotone', 'variant', 'sync', v.id)}` : ''}`);
+    lines.push(git ? 'Sync each one the fix belongs in too; leave a copy alone when it is the alternative itself.' : `${NO_GIT_SYNC}.`);
   }
   if (byHand.length) {
     lines.push(
-      'These copies of files you changed have no base recorded (not a git repo when they were made), so `variant sync` cannot merge the fix. Compare each with its real file by hand:',
+      'These copies of files you changed have no base recorded (made outside a Git repository by Isotone 1.5.0 or earlier), so `variant sync` cannot merge the fix. Compare each with its real file by hand:',
     );
     for (const v of byHand) lines.push(`  ${v.id} (${v.files.join(', ')})`);
   }

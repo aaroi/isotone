@@ -231,7 +231,8 @@ describe('`variant sync` output', () => {
     writeFileSync(manifest, JSON.stringify(parsed));
     const sync = sink(root);
     await runCli(['variant', 'sync', 'v'], sync);
-    expect(sync.text.out).toContain('conflicts: src/a.ts');
+    expect(sync.text.out).toContain('not merged: src/a.ts');
+    expect(sync.text.out).toContain('the base it was made from could not be read or merged');
     expect(sync.text.out).toMatch(/promote v --force/);
   });
 });

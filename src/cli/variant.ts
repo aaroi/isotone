@@ -25,7 +25,7 @@ import {
   createVariant,
   crossGroupOverlaps,
   dropVariant,
-  hasConflictMarkers,
+  filesWithoutBase,
   KNOBS_FILE,
   listVariants,
   promoteVariant,
@@ -39,12 +39,16 @@ import {
   syncVariant,
   variantDir,
   writeActive,
+  hasGit,
+  NO_GIT_SYNC,
+  type SyncBlocker,
   type VariantsStoreOptions,
 } from '../node/variants';
 import { mutateVariants } from '../node/variants/options';
 import { repoRelativeKey } from '../node/variants/paths';
 import { docPath } from './docs';
 import { hostSourceFiles } from './init';
+import { excludeLocalFiles } from './local-files';
 import { findNotesFile } from './notes';
 import { detectHost, vitePlugin, viteSwitching } from './project';
 import { toJson } from './text';
@@ -106,7 +110,9 @@ export function runVariant(args: string[], io: CliIO): number {
     // `drop x --dry-run` must fail, not delete.
     const positionals = parseArgs(rest, spec[0], spec[1], 'npx isotone variant --help');
     if (positionals.length > spec[2]) throw new Error(`Unexpected "${positionals[spec[2]]}". Run \`isotone variant --help\`.`);
-    return command(positionals, rest, io, opts);
+    const code = command(positionals, rest, io, opts);
+    excludeLocalFiles(opts.root);
+    return code;
   } catch (err) {
     // Every store function throws a plain Error with a one-line, already
     // user-facing message (invalid id, unknown variant, escaping path); this
@@ -204,6 +210,7 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
           section: sectionOf.get(v.id) ?? null,
           files: Object.keys(v.files),
           stale: v.stale,
+          noBase: filesWithoutBase(v),
           missing: v.missing,
           conflicts: v.conflicts ?? [],
           active: active.includes(v.id),
@@ -246,12 +253,27 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
       active.includes(v.id) ? '*' : '',
     ]),
   );
-  const stale = rows.filter((v) => v.stale.length);
+  // A copy with no recorded base reads as stale, but nobody knows whether its
+  // real file changed; it gets its own line rather than the merge advice.
+  const stale = rows.filter((v) => {
+    const unbased = filesWithoutBase(v);
+    return v.stale.some((file) => !unbased.includes(file));
+  });
   if (stale.length) {
     out(io);
     out(
       io,
-      `STALE: the real file changed since the copy was made. \`variant sync <id>\` merges the change in: ${stale.map((v) => v.id).join(', ')}`,
+      hasGit()
+        ? `STALE: the real file changed since the copy was made. \`variant sync <id>\` merges the change in: ${stale.map((v) => v.id).join(', ')}`
+        : `STALE: the real file changed since the copy was made. ${NO_GIT_SYNC}: ${stale.map((v) => v.id).join(', ')}`,
+    );
+  }
+  const unbased = rows.filter((v) => filesWithoutBase(v).length);
+  if (unbased.length) {
+    out(io);
+    out(
+      io,
+      `NO BASE: these copies have no base recorded (not a git repo when they were made), so whether their real files changed is unknown and \`variant sync\` cannot merge. Compare each with its real file by hand, then \`variant promote <id> --force\` when it should win: ${unbased.map((v) => `${v.id} (${filesWithoutBase(v).join(', ')})`).join(', ')}`,
     );
   }
   const conflicted = rows.filter((v) => v.conflicts?.length);
@@ -655,25 +677,34 @@ function cmdSync(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreO
     errOut(io, 'Usage: isotone variant sync <id>');
     return 1;
   }
-  const { merged, conflicts, unchanged } = syncVariant(opts, id);
+  const { merged, conflicts, unchanged, blocked } = syncVariant(opts, id);
+  const notMerged = Object.keys(blocked);
   out(io, `merged: ${merged.length ? merged.join(', ') : 'none'}`);
   out(io, `conflicts: ${conflicts.length ? conflicts.join(', ') : 'none'}`);
   out(io, `unchanged: ${unchanged.length ? unchanged.join(', ') : 'none'}`);
-  for (const file of conflicts) out(io, syncAdvice(opts, id, file));
-  if (!conflicts.length) return 0;
-  errOut(
-    io,
-    `Not synced: "${id}" has ${conflicts.length === 1 ? 'a conflict' : 'conflicts'}. Fix each file above, then check with \`npx isotone variant list\`.`,
-  );
+  if (notMerged.length) out(io, `not merged: ${notMerged.join(', ')}`);
+  for (const file of conflicts)
+    out(io, `${file}: resolve the conflict markers in ${join(variantDir(opts, id), file)}. Until then the reviewer cannot see "${id}".`);
+  for (const file of notMerged) out(io, notMergedAdvice(id, file, blocked[file] as SyncBlocker));
+  if (!conflicts.length && !notMerged.length) return 0;
+  const problems = [
+    ...(conflicts.length ? [conflicts.length === 1 ? 'a conflict' : 'conflicts'] : []),
+    ...(notMerged.length ? [`${notMerged.length === 1 ? 'a file' : 'files'} sync could not merge`] : []),
+  ];
+  errOut(io, `Not synced: "${id}" has ${problems.join(' and ')}. Fix each file above, then check with \`npx isotone variant list\`.`);
   return 1;
 }
 
-function syncAdvice(opts: VariantsStoreOptions, id: string, file: string): string {
-  const copy = join(variantDir(opts, id), file);
-  if (hasConflictMarkers(copy)) {
-    return `${file}: resolve the conflict markers in ${copy}. Until then the reviewer cannot see "${id}".`;
-  }
-  return `${file}: there is no base version to merge from, so the copy was left as it is. Compare it with the real file by hand, then \`variant promote ${id} --force\` when it should win.`;
+function notMergedAdvice(id: string, file: string, why: SyncBlocker): string {
+  if (why === 'no-git') return `${file}: ${NO_GIT_SYNC}.`;
+  if (why === 'no-file')
+    return `${file}: the real file no longer exists. \`variant rm ${id} ${file}\` drops the copy; \`variant promote ${id} --force\` lands it as a new file.`;
+  const reason = {
+    'no-base': 'no base recorded (not a git repo when the copy was made)',
+    appeared: 'the variant adds this file, and the project now has its own',
+    failed: 'the base it was made from could not be read or merged',
+  }[why];
+  return `${file}: ${reason}, so the copy was left as it is. Compare it with the real file by hand, then \`variant promote ${id} --force\` when it should win.`;
 }
 
 function cmdPromote(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions): number {

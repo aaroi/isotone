@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { UPDATE_HINT } from '../../src/cli/notes';
 import { runCli } from '../../src/cli/run';
@@ -1508,6 +1508,106 @@ describe('output an agent can trust', () => {
       expect(record).not.toHaveProperty('element');
       expect(record).not.toHaveProperty('doneAt');
       expect(record.elements).toEqual(record.id === 'none' ? undefined : [element]);
+    }
+  });
+});
+
+/** A project with no Git repository above it, as a newcomer scaffolds one. */
+function tempProject(): string {
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'isotone-cli-nogit-')));
+  dirs.push(root);
+  vi.stubEnv('GIT_CEILING_DIRECTORIES', dirname(root));
+  mkdirSync(join(root, 'src'), { recursive: true });
+  writeFileSync(join(root, 'src', 'Hero.tsx'), 'one\ntwo\nthree\n');
+  return root;
+}
+
+describe('variants outside a Git repository', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('lists a new copy as current, then as stale once the real file changes, and syncs it', async () => {
+    const root = tempProject();
+    expect(await runCli(['variant', 'new', 'v'], makeIo(root))).toBe(0);
+    expect(await runCli(['variant', 'add', 'v', 'src/Hero.tsx'], makeIo(root))).toBe(0);
+    let io = makeIo(root);
+    expect(await runCli(['variant', 'list'], io)).toBe(0);
+    expect(io.text.out).not.toContain('STALE:');
+    expect(io.text.out).not.toContain('NO BASE:');
+
+    writeFileSync(join(root, '.isotone/variants/v/src/Hero.tsx'), 'one\ntwo\nTHREE (variant)\n');
+    writeFileSync(join(root, 'src', 'Hero.tsx'), 'ONE (real)\ntwo\nthree\n');
+    io = makeIo(root);
+    expect(await runCli(['variant', 'list', '--json'], io)).toBe(0);
+    expect(JSON.parse(io.text.out).variants[0]).toMatchObject({ stale: ['src/Hero.tsx'], noBase: [] });
+
+    io = makeIo(root);
+    expect(await runCli(['variant', 'sync', 'v'], io)).toBe(0);
+    expect(io.text.out).toContain('merged: src/Hero.tsx');
+    expect(readFileSync(join(root, '.isotone/variants/v/src/Hero.tsx'), 'utf8')).toBe('ONE (real)\ntwo\nTHREE (variant)\n');
+  });
+
+  it('says a copy with no recorded base needs comparing by hand, not that its file changed', async () => {
+    const root = tempProject();
+    await runCli(['variant', 'new', 'old'], makeIo(root));
+    await runCli(['variant', 'add', 'old', 'src/Hero.tsx'], makeIo(root));
+    // What Isotone 1.5.0 wrote for a copy made outside a repository.
+    const manifest = readVariant(root, 'old') as { files: Record<string, { base: string | null }> };
+    manifest.files['src/Hero.tsx'] = { base: null };
+    writeFileSync(join(root, '.isotone/variants/old/variant.json'), JSON.stringify(manifest));
+    writeFileSync(join(root, '.isotone/variants/old/src/Hero.tsx'), 'edited copy\n');
+
+    let io = makeIo(root);
+    expect(await runCli(['variant', 'list'], io)).toBe(0);
+    expect(io.text.out).toContain(
+      'NO BASE: these copies have no base recorded (not a git repo when they were made), so whether their real files changed is unknown',
+    );
+    expect(io.text.out).toContain('old (src/Hero.tsx)');
+    expect(io.text.out).not.toContain('changed since');
+
+    io = makeIo(root);
+    expect(await runCli(['variant', 'sync', 'old'], io)).toBe(1);
+    // Not a merge conflict: `variant list` counts none.
+    expect(io.text.out).toContain('conflicts: none');
+    expect(io.text.out).toContain('not merged: src/Hero.tsx');
+    expect(io.text.err).toContain('has a file sync could not merge');
+    expect(io.text.out).toContain('src/Hero.tsx: no base recorded (not a git repo when the copy was made)');
+    expect(io.text.out).toContain('Compare it with the real file by hand');
+  });
+
+  it('says Git is not installed rather than offering a sync that cannot run', async () => {
+    const root = tempProject();
+    vi.stubEnv('PATH', '');
+    await runCli(['variant', 'new', 'v'], makeIo(root));
+    await runCli(['variant', 'add', 'v', 'src/Hero.tsx'], makeIo(root));
+    writeFileSync(join(root, 'src', 'Hero.tsx'), 'changed\n');
+    let io = makeIo(root);
+    expect(await runCli(['variant', 'list'], io)).toBe(0);
+    expect(io.text.out).toContain('Git is not installed, so `variant sync` cannot merge the change in');
+    io = makeIo(root);
+    expect(await runCli(['variant', 'sync', 'v'], io)).toBe(1);
+    expect(io.text.out).toContain('src/Hero.tsx: Git is not installed');
+  });
+
+  it('keeps the notes and active files out of a repository made after they were written', async () => {
+    const root = tempProject();
+    await runCli(['variant', 'new', 'v'], makeIo(root));
+    await runCli(['variant', 'add', 'v', 'src/Hero.tsx'], makeIo(root));
+    await runCli(['variant', 'use', 'v'], makeIo(root));
+    writeFileSync(notesAt(root), '[]\n');
+    execFileSync('git', ['init', '-q', root]);
+    const untracked = () => execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: root, encoding: 'utf8' });
+    expect(untracked()).toContain('.isotone/notes.json');
+
+    for (const argv of [[], ['variant', 'list']]) {
+      rmSync(join(root, '.git/info/exclude'), { force: true });
+      expect(await runCli(argv, makeIo(root))).toBe(0);
+      const exclude = readFileSync(join(root, '.git/info/exclude'), 'utf8');
+      expect(exclude).toContain('/.isotone/notes.json\n');
+      expect(exclude).toContain('/.isotone/active.json\n');
+      expect(untracked()).not.toMatch(/\.isotone\/(notes|active)\.json/);
+      // A second run adds nothing.
+      await runCli(argv, makeIo(root));
+      expect(readFileSync(join(root, '.git/info/exclude'), 'utf8')).toBe(exclude);
     }
   });
 });

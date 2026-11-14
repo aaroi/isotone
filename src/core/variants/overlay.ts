@@ -45,9 +45,11 @@ export interface OverlayVariant {
   createdAt: string;
   /**
    * Repo-relative source path → what the override was derived from. `base`
-   * is the git blob id of the real file when the override was made (`null`
-   * when the file was not hashable), so a later change to the real file can
-   * be detected and three-way merged into the override.
+   * is the git blob id of the real file when the override was made (outside
+   * a repository its bytes sit in the variant's `.isotone-base/`; `null` for
+   * an added file, or a copy made outside one by Isotone 1.5.0 and earlier),
+   * so a later change to the real file can be detected and three-way merged
+   * into the override.
    */
   /** `added`: a file the project does not have; the variant introduces it. */
   files: Record<string, { base: string | null; added?: true }>;

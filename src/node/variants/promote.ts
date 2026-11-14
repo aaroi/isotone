@@ -5,10 +5,10 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmdirSync, 
 import { dirname, join, resolve } from 'node:path';
 import { overlayGroups, type OverlayVariant } from '../../core/variants/overlay';
 import { readActive, writeActive } from './active';
-import { blobOf, currentBlob } from './git';
-import { readVariant, writeVariant, readVariants, listVariants } from './manifest';
+import { blobHashes, hasGit, NO_GIT_SYNC, recordBase } from './git';
+import { filesWithoutBase, readVariant, writeVariant, readVariants, listVariants } from './manifest';
 import { type VariantsStoreOptions, mutateVariants, variantsDir } from './options';
-import { variantDir, isValidVariantId } from './paths';
+import { baseStore, variantDir, isValidVariantId } from './paths';
 
 /**
  * Land a variant: copy every override over its real file, then delete the
@@ -43,30 +43,41 @@ export function promoteVariant(
       }
       if (status?.stale.length) {
         // A null base is stale by definition, but the file did not necessarily
-        // change: there was simply no git to record what it looked like.
+        // change: Isotone 1.5.0 and earlier recorded none outside a git repo.
+        // With no base there is nothing for sync to merge from either.
+        const unbased = new Set(filesWithoutBase(manifest));
         const reasons = status.stale.map((file) =>
-          manifest.files[file]?.base === null
+          unbased.has(file)
             ? `no base recorded for ${file} (not a git repo when the override was made)`
-            : `${file} changed since the override was made`,
+            : manifest.files[file]?.added
+              ? `the project now has its own ${file}`
+              : `${file} changed since the override was made`,
         );
-        throw new Error(`"${id}" is stale (${reasons.join('; ')}). Run \`variant sync ${id}\` first, or promote with --force.`);
+        const next = status.stale.every((file) => unbased.has(file))
+          ? 'Compare it with the real file by hand, then promote with --force.'
+          : hasGit()
+            ? `Run \`variant sync ${id}\` first, or promote with --force.`
+            : `${NO_GIT_SYNC}, then promote with --force.`;
+        throw new Error(`"${id}" is stale (${reasons.join('; ')}). ${next}`);
       }
     }
     const siblings =
       overlayGroups(readVariants(opts))
         .find((g) => g.members.some((m) => m.id === id))
         ?.members.filter((m) => m.id !== id) ?? [];
+    // Before anything lands: a sibling store refused afterwards would leave a half-done promote.
+    const stores = new Map(siblings.map((s) => [s.id, baseStore(opts, s.id)]));
     const files = Object.keys(manifest.files);
-    const before = new Map(files.map((key) => [key, existsSync(join(root, key)) ? currentBlob(join(root, key)) : null]));
+    // Hashed once per file, in both formats a sibling's base can have.
+    const before = new Map(files.map((key) => [key, existsSync(join(root, key)) ? blobHashes(readFileSync(join(root, key))) : null]));
     landFiles(files.map((key) => ({ from: join(vDir, key), to: join(root, key) })));
-    const landed = new Map(files.map((key) => [key, { before: before.get(key) ?? null, after: blobOf(join(root, key)) }]));
     rmSync(vDir, { recursive: true, force: true });
     if (active.includes(id))
       writeActive(
         opts,
         active.filter((a) => a !== id),
       );
-    return { files, rebased: rebaseSiblings(opts, siblings, landed) };
+    return { files, rebased: rebaseSiblings(opts, siblings, before, stores) };
   });
   removeIfEmpty(opts);
   return result;
@@ -109,19 +120,24 @@ function landFiles(copies: { from: string; to: string }[]): void {
  * only send someone to merge two alternatives into each other. Only a copy made
  * from the version the promote replaced moves. One that was already behind
  * stays stale, because the real file changed in ways nobody has looked at.
+ * `before` holds the hashes of what each landed file replaced (null for a new file).
  */
 function rebaseSiblings(
   opts: VariantsStoreOptions,
   siblings: OverlayVariant[],
-  landed: Map<string, { before: string | null; after: string | null }>,
+  before: Map<string, string[] | null>,
+  stores: Map<string, string>,
 ): string[] {
+  const root = resolve(opts.root);
   const rebased: string[] = [];
   for (const sibling of siblings) {
     let moved = false;
     for (const [key, entry] of Object.entries(sibling.files)) {
-      const change = landed.get(key);
-      if (!change?.after || !(entry.added || (entry.base !== null && entry.base === change.before))) continue;
-      sibling.files[key] = { base: change.after };
+      const replaced = before.get(key);
+      if (replaced === undefined || !(entry.added || (entry.base !== null && replaced?.includes(entry.base)))) continue;
+      const base = recordBase(join(root, key), stores.get(sibling.id) as string);
+      if (base === null) continue;
+      sibling.files[key] = { base };
       moved = true;
     }
     if (!moved) continue;

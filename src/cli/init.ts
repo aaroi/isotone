@@ -760,8 +760,10 @@ function createVariantsReadme(cwd: string): void {
     [
       '# Overlay variants',
       '',
-      'Each subdirectory here is one variant: `<id>/variant.json` is its manifest, and',
-      'everything else under `<id>/` mirrors a real source file at its repo-relative path.',
+      'Each subdirectory here is one variant: `<id>/variant.json` is its manifest,',
+      '`<id>/.isotone-base/` keeps the versions its copies were made from when Git could',
+      'not, and everything else under `<id>/` mirrors a real source file at its',
+      'repo-relative path.',
       'The Vite plugin swaps a file in for the real one while that variant is active.',
       '',
       'Manage these with the CLI rather than by hand:',
