@@ -78,7 +78,7 @@ export function IsotonePanel({
   const notesAvailable = Boolean(storeCfg.endpoint);
   const memoryKey = `${nsKey}::panels`;
   // A reload, such as a variant switch on a host that reloads, comes back to the panels that were open.
-  const [mode, update] = useDockMode(() => restoredMode(memoryKey, { notes: notesAvailable, variants: Boolean(variants) }));
+  const [mode, update] = useDockMode(() => restoredMode(memoryKey, route, { notes: notesAvailable, variants: Boolean(variants) }));
   const { notesOpen, variantsOpen, expanded, picking, pickingWithPanel, anchor } = mode;
   const floating = anchor !== null;
   const open = notesOpen || variantsOpen;
@@ -87,7 +87,7 @@ export function IsotonePanel({
   const floatRef = useRef<HTMLDivElement>(null);
   const fabRef = useRef<HTMLButtonElement>(null);
   const id = useId();
-  const lastTool = useDockMemory(memoryKey, mode);
+  const memory = useDockMemory(memoryKey, route, mode);
   const variantsAvailable = useVariantsSnapshot(variants).shown.length > 0;
   const visible = isRouteVisible(route, rule) && (notesAvailable || variantsAvailable || variantsOpen);
   const { store, notes, setNotes, clock, load: loadNotes, write } = useNotes(storeCfg, visible);
@@ -187,12 +187,12 @@ export function IsotonePanel({
   }, [variants, notesOpen]);
 
   // A link whose `?v=` the source could not apply gets a quiet line by the pill, until Variants, which
-  // says what the link asked for, has been opened on this page.
-  const [linkSeen, setLinkSeen] = useState(variantsOpen);
+  // says what the link asked for, has been opened with it in this tab.
+  const [linkSeen, setLinkSeen] = useState(() => variantsOpen || memory.current.link === location.search);
   useEffect(() => {
     if (variantsOpen) setLinkSeen(true);
   }, [variantsOpen]);
-  const linkIgnored = !linkSeen && !variantsOpen && Boolean(variants?.getNotice?.()?.includes('?v='));
+  const linkIgnored = !linkSeen && !variantsOpen && Boolean(variants?.linkIgnored?.());
 
   if (!visible) return null;
   const composer = (
@@ -237,7 +237,16 @@ export function IsotonePanel({
       )}
       <div className="isotone-notices">
         {linkIgnored && (
-          <button type="button" ref={fadeIn} className="isotone-link-hint" onClick={() => update({ variantsOpen: true, expanded: false })}>
+          <button
+            type="button"
+            ref={fadeIn}
+            className="isotone-link-hint"
+            onClick={() => {
+              // The line goes as Variants opens; focus moves on to Variants' face rather than the page.
+              update({ variantsOpen: true, expanded: false });
+              focus.launcher('variants');
+            }}
+          >
             This link’s variants aren’t shown
           </button>
         )}
@@ -269,7 +278,7 @@ export function IsotonePanel({
                 focus.remember();
                 update({ expanded: true });
                 // The tool used last in this tab, else the host's choice.
-                if (((lastTool.current ?? defaultTab) === 'variants' || !notesAvailable) && variantsAvailable)
+                if (((memory.current.last ?? defaultTab) === 'variants' || !notesAvailable) && variantsAvailable)
                   update({ variantsOpen: true });
                 else startFeedback(false);
               }
@@ -308,6 +317,7 @@ export function IsotonePanel({
             emptyText={variantsEmptyText}
             compareKey={isUnderEscape(compareShortcut)}
             scrollKey={`${memoryKey}::scroll`}
+            besideFeedback={notesOpen}
           />
         )}
         {variants && (

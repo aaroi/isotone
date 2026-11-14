@@ -4,7 +4,7 @@
  */
 import { act, createElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { unappliedLinkNotice } from '../../src/core/variants/overlay';
+import { combineVariantsSources, createOverlayVariantsSource } from '../../src/core/variants';
 import { createVariantsSource, IsotonePanel } from '../../src/react/index';
 import { AXES, byText, click, container, render, setUpPanelFixture, unmount } from '../helpers/panel';
 
@@ -78,43 +78,112 @@ describe('the pill', () => {
 });
 
 describe('a link whose ?v= was not applied', () => {
-  const linked = () => {
-    const source = createVariantsSource({ axes: AXES });
-    // As the overlay source words it for a link it cannot apply.
-    const notice = unappliedLinkNotice(
-      {
-        variants: [
-          { id: 'bold', label: 'Bold', group: 'headline', groupLabel: 'Headline', createdAt: '', files: {}, stale: [], missing: [] },
-        ],
-        active: [],
-      },
-      [],
-      '?v=headline:bold',
+  /** The app's own selectors beside the overlay's file variants, on a link asking for one it does not show. */
+  const linked = async (search = '?v=headline:bold') => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => ({
+        ok: true,
+        status: 200,
+        json: async () =>
+          String(url).includes('variants')
+            ? {
+                variants: [
+                  {
+                    id: 'bold',
+                    label: 'Bold',
+                    group: 'headline',
+                    groupLabel: 'Headline',
+                    createdAt: '',
+                    files: {},
+                    stale: [],
+                    missing: [],
+                  },
+                ],
+                active: [],
+              }
+            : [],
+      })),
     );
-    expect(notice).toContain('?v=');
-    source.getNotice = () => notice;
-    return source;
+    const overlay = createOverlayVariantsSource({
+      endpoint: '/variants',
+      getRoute: () => '/',
+      storage: null,
+      live: null,
+      getSearch: () => search,
+    });
+    await overlay.refresh();
+    return combineVariantsSources(createVariantsSource({ axes: AXES }), overlay);
   };
 
-  it('says so by the pill, and opens Variants, which explains it', async () => {
-    await reload({ variants: linked() });
+  it('says so by the pill, and opens Variants with focus on its face, which explains it', async () => {
+    await reload({ variants: await linked() });
     expect(hint()?.textContent).toBe('This link’s variants aren’t shown');
-    await click(hint());
+    await act(async () => {
+      hint()?.click();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
     expect(open('variants')).toBe(true);
+    expect(document.activeElement).toBe(byText('Variants'));
     expect(container.querySelector('.isotone-vars-notice')?.textContent).toContain('?v=');
     expect(hint()).toBeNull();
-    // Once read, it stays away for the rest of the page's life.
+    // Once read, it stays away: closing Variants, or reloading with the same link.
     await click(byText('Close variants'));
+    expect(hint()).toBeNull();
+    await reload({ variants: await linked() });
     expect(hint()).toBeNull();
   });
 
-  it('shows beside Feedback too, and not for a note without a link', async () => {
-    await reload({ variants: linked() });
+  it('shows beside Feedback too, and not for a link the source applies or a notice about something else', async () => {
+    await reload({ variants: await linked() });
     await click(byText('Feedback'));
     expect(hint()).not.toBeNull();
+    sessionStorage.clear();
+    await reload({ variants: await linked('?v=headline:default') });
+    expect(hint()).toBeNull();
     const other = createVariantsSource({ axes: AXES });
-    other.getNotice = () => 'Something else the source wants said.';
+    other.getNotice = () => 'This note mentions ?v= but no link was ignored.';
     await reload({ variants: other });
     expect(hint()).toBeNull();
+  });
+});
+
+describe('a remount in the same tab', () => {
+  it('keeps the panels on the same page, and starts folded on another', async () => {
+    const props = { variants: createVariantsSource({ axes: AXES }) };
+    await reload(props);
+    await click(byText('Variants'));
+    await reload(props);
+    expect(open('variants')).toBe(true);
+    await unmount();
+    await render(createElement(IsotonePanel, { route: '/pricing', store: { endpoint: '/notes' }, ...props }));
+    expect(open('variants')).toBe(false);
+  });
+});
+
+describe('the field under the select-mode cover', () => {
+  it('ends selecting on a key that would edit it unseen, and leaves arrows on the page alone', async () => {
+    await reload({});
+    const shortcut = () =>
+      act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Period', ctrlKey: true, shiftKey: true, bubbles: true }));
+      });
+    const selecting = () => byText('Select elements')?.getAttribute('aria-pressed');
+    const field = container.querySelector('textarea') as HTMLTextAreaElement;
+    for (const key of ['Backspace', 'ArrowLeft', 'Delete', 'End']) {
+      await shortcut();
+      expect(selecting()).toBe('true');
+      expect(document.activeElement).toBe(field);
+      await act(async () => {
+        field.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true }));
+      });
+      expect(selecting(), key).toBe('false');
+    }
+    // On the page, an arrow scrolls it; selecting stays on.
+    await shortcut();
+    await act(async () => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    });
+    expect(selecting()).toBe('true');
   });
 });

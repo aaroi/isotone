@@ -51,34 +51,45 @@ export function useDockMode(initial: () => Partial<Mode> = () => ({})): [Mode, U
   return [mode, update];
 }
 
-/** What a tab remembers across a reload: the panels it had open, and the tool opened last. */
+/**
+ * What a tab remembers: the panels it had open on which page, the tool opened last, and the link it
+ * opened Variants with, whose unapplied `?v=` the reviewer has then read about. `doc` names the document
+ * that wrote it.
+ */
 interface Remembered {
-  notes: boolean;
-  variants: boolean;
-  last: Surface | null;
+  notes?: boolean;
+  variants?: boolean;
+  last?: Surface;
+  route?: string;
+  doc?: number;
+  link?: string;
 }
 
-function recall(key: string): Remembered | null {
-  if (typeof sessionStorage === 'undefined') return null;
+function recall(key: string): Remembered {
   try {
     const value: unknown = JSON.parse(readBrowserStorage(sessionStorage, key) ?? 'null');
-    if (typeof value !== 'object' || value === null) return null;
-    const { notes, variants, last } = value as Record<string, unknown>;
-    return { notes: notes === true, variants: variants === true, last: last === 'notes' || last === 'variants' ? last : null };
+    return typeof value === 'object' && value !== null ? (value as Remembered) : {};
   } catch {
-    return null;
+    return {};
   }
 }
 
+/** This document, as opposed to an earlier one in the same tab. */
+const thisDocument = () => (typeof performance === 'undefined' ? 0 : performance.timeOrigin);
+const reloaded = () =>
+  typeof performance !== 'undefined' &&
+  (performance.getEntriesByType?.('navigation')[0] as PerformanceNavigationTiming | undefined)?.type === 'reload';
+
 /**
- * The panels this tab had open before a reload, among those it can show. A
- * small screen reopens only the one used last. Select mode and a floating
- * composer are never restored: selecting is something the reviewer starts.
+ * The panels open before this page was reloaded, or before the panel remounted in the same document,
+ * among those it can show. A new visit, even to the same page, starts folded. A small screen reopens only
+ * the one used last. Select mode and a floating composer are never restored: selecting is something the
+ * reviewer starts.
  */
-export function restoredMode(key: string, available: Record<Surface, boolean>): Partial<Mode> {
+export function restoredMode(key: string, route: string, available: Record<Surface, boolean>): Partial<Mode> {
   const saved = recall(key);
-  if (!saved) return {};
-  const open = { notesOpen: saved.notes && available.notes, variantsOpen: saved.variants && available.variants };
+  if (saved.route !== route || (saved.doc !== thisDocument() && !reloaded())) return {};
+  const open = { notesOpen: saved.notes === true && available.notes, variantsOpen: saved.variants === true && available.variants };
   if (open.notesOpen && open.variantsOpen && isCompactViewport()) {
     if (saved.last === 'notes') open.variantsOpen = false;
     else open.notesOpen = false;
@@ -87,29 +98,29 @@ export function restoredMode(key: string, available: Record<Surface, boolean>): 
 }
 
 /**
- * Keep which panels are open for this tab (`sessionStorage`), so a reload, such
- * as a variant switch that reloads the page, comes back to the same tools.
- * Returns the tool opened last, which the launcher reopens.
+ * Keep which panels are open in this tab (`sessionStorage`), so a reload, such as a variant switch that
+ * reloads the page, comes back to the same tools. Holds the tool opened last, which the launcher reopens,
+ * and the link Variants was last opened with.
  */
-export function useDockMemory(key: string, { notesOpen, variantsOpen }: Pick<Mode, 'notesOpen' | 'variantsOpen'>) {
-  const last = useRef<Surface | null>(null);
-  last.current ??= recall(key)?.last ?? null;
+export function useDockMemory(key: string, route: string, { notesOpen, variantsOpen }: Pick<Mode, 'notesOpen' | 'variantsOpen'>) {
+  const record = useRef<Remembered | null>(null);
+  record.current ??= recall(key);
   const was = useRef<Pick<Mode, 'notesOpen' | 'variantsOpen'> | null>(null);
   useEffect(() => {
+    const saved = record.current as Remembered;
     const before = was.current;
     was.current = { notesOpen, variantsOpen };
     // At mount the panels are the ones restored, which leaves the tool used last as it was.
-    if (!before) {
-      if (!notesOpen && !variantsOpen) return;
-    } else {
-      if (notesOpen && !before.notesOpen) last.current = 'notes';
-      if (variantsOpen && !before.variantsOpen) last.current = 'variants';
-    }
+    if (!before && !notesOpen && !variantsOpen) return;
+    if (before && notesOpen && !before.notesOpen) saved.last = 'notes';
+    if (before && variantsOpen && !before.variantsOpen) saved.last = 'variants';
+    if (variantsOpen) saved.link = location.search;
+    Object.assign(saved, { notes: notesOpen, variants: variantsOpen, route, doc: thisDocument() });
     try {
-      sessionStorage.setItem(key, JSON.stringify({ notes: notesOpen, variants: variantsOpen, last: last.current }));
+      sessionStorage.setItem(key, JSON.stringify(saved));
     } catch {
       /* Private mode or blocked storage: the dock just starts folded after a reload. */
     }
-  }, [key, notesOpen, variantsOpen]);
-  return last;
+  }, [key, route, notesOpen, variantsOpen]);
+  return record as { readonly current: Remembered };
 }

@@ -484,7 +484,7 @@ ${EDGES_CSS}
 /* The dock's size is the reviewer's choice on a window with room for it. */
 @media (min-width: 641px) and (min-height: 501px) {
   .isotone-root[data-open='true'] { width: var(--iso-width, var(--iso-dock-width)); }
-  .isotone-variants-panel { max-height: min(var(--iso-variants-height, 100vh), calc(var(--iso-view-height) - 76px)); }
+  .isotone-variants-panel { max-height: min(var(--iso-variants-height, 100vh), var(--iso-variants-hold, 100vh), calc(var(--iso-view-height) - 76px)); }
   .isotone-notes-panel { max-height: min(var(--iso-notes-height, 100vh), calc(var(--iso-view-height) - 76px)); }
   .isotone-root[data-sized-notes='true'] .isotone-list { max-height: none; }
 }
@@ -568,6 +568,7 @@ ${EDGES_CSS}
 .isotone-root .isotone-update-dialog input { width: 100%; padding: 6px 8px; border-radius: 5px; background: var(--iso-well); box-shadow: var(--iso-well-shadow); font-size: 11px; }
 @media (pointer: coarse) { .isotone-root .isotone-update-quiet { padding: 9px 6px; } .isotone-update-actions { margin: -9px 0 -9px -6px; } }
 @media (pointer: coarse) { .isotone-compare::after { content: ''; position: absolute; inset: -8px -2px; } }
+@media (pointer: coarse) { .isotone-link-hint { position: relative; } .isotone-link-hint::after { content: ''; position: absolute; inset: -10px 0; } }
 @media (hover: hover) and (pointer: fine) { :is(.isotone-update-trigger, .isotone-link-hint):hover, .isotone-root :is(.isotone-update-quiet, .isotone-compare):hover { color: var(--iso-fg); } }
 `;
 /**

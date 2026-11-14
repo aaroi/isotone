@@ -67,33 +67,43 @@ or rescales another's text.
 
 ### Getting in
 
-A tool opens from its face on the pill; a click or tap on the folded pill, or
-Enter on it, reopens the tool used last in the tab (else the host's
-`defaultTab`). Opening Feedback puts the caret in the note field in the commit
-that shows it, never a frame later, so nothing typed during the entrance is
-lost; a finger only opens it, so no on-screen keyboard rises over the page.
-Select mode is something the reviewer starts: the crosshair, or the shortcut,
-which also leaves the caret in the field under the cover so that the first
-character, keyed or inserted, ends selecting and lands there. Opening Variants,
-or a press or focus anywhere in the dock outside Feedback, ends selecting and
-keeps the pins, so the next click on the page acts on the page.
+A tool's face on the pill opens it and, pressed again, closes it; a click or
+tap on the folded pill, or Enter on it, reopens the tool used last in the tab
+(else the host's `defaultTab`). Opening Feedback puts the caret in the note
+field in the commit that shows it, never a frame later, so nothing typed during
+the entrance is lost; a finger only opens it, so no on-screen keyboard rises
+over the page. Select mode is something the reviewer starts: the crosshair, or
+the shortcut, which also leaves the caret in the field under the cover. The
+first character, keyed or inserted, or a key that would edit or move the caret
+unseen (Backspace, Delete, arrows, Home, End), ends selecting and acts in the
+field. Opening Variants, or a press anywhere in the dock outside Feedback, ends
+selecting and keeps the pins, so the next click on the page acts on the page.
+Focus passing through the dock does not: Tab and Shift+Tab are how the keyboard
+reaches the page, where Space pins.
 
-The open panels are kept per tab (`sessionStorage`, `<namespace>::panels`) and
-come back after a reload, such as a variant switch that reloads the page,
-already in place with no entrance, and Variants at the same scroll position;
-select mode and a floating composer never do. Where panels take turns, only the
-one used last comes back.
+The open panels are kept per tab (`sessionStorage`, `<namespace>::panels`, with
+the page and the document that wrote them) and come back when that page is
+reloaded, as a variant switch that reloads does, or when the panel remounts in
+the same document; a new visit starts folded. They come back already in place,
+with no entrance, and Variants at the same place in its list, kept from its
+foot and held until the reviewer scrolls or presses there. Select mode and a
+floating composer never come back. Where panels take turns, only the one used
+last does.
 
 Variants sits on the pill and Feedback above it. Opening Feedback, a note
-saved into it or closing it never moves a selector; when room runs out, Variants
-gives it from its top edge and its list scrolls by as much, so every control in
-view stays where it was. Opening Variants under an open Feedback slides Feedback
-up: the one movement left, caused by the reviewer's own click.
+saved into it or closing it never moves a selector: when room runs out,
+Variants gives it from its top edge and its list scrolls by as much; room given
+back is taken only as far as that scroll absorbs, and the rest waits until the
+pointer leaves the dock (or a resize handle is pressed). Opening Variants under
+an open Feedback slides Feedback up: the one movement left, caused by the
+reviewer's own click.
 
-A link whose `?v=` the source did not apply (its `getNotice()` names `?v=`)
+A link whose `?v=` the source did not apply (its optional `linkIgnored()`)
 gets one quiet line beside the pill in the update notice's glass: “This link’s
 variants aren’t shown”. It opens Variants, which says what the link asked for,
-and does not come back on that page once Variants has been open.
+and moves focus to Variants' face. Once Variants has been opened with that link
+in the tab, the line does not come back, after a reload included.
+
 
 The defaults bar sits at the bottom of the variants panel while a pick differs
 from its default: a count, Compare and Make default, which files a request and

@@ -53,6 +53,12 @@ export interface VariantsSource {
    * selectors under a pick.
    */
   getNotice?: () => string | null;
+  /**
+   * Optional: whether the page's link asked, with `?v=`, for picks this source
+   * shows something else for. The panel then puts a quiet line by the pill, so
+   * the reviewer learns it without opening Variants.
+   */
+  linkIgnored?: () => boolean;
 }
 
 /**

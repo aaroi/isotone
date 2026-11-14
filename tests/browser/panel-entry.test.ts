@@ -37,7 +37,7 @@ window.start = async (count, { notice = false, theme = 'light' } = {}) => {
     reset() { selections = {}; listeners.forEach((l) => l()); },
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     saveDefaults() {},
-    ...(notice ? { getNotice: () => 'This link’s ?v= asks for Selector 0: Bold, but links don’t choose variants here.' } : {}),
+    ...(notice ? { getNotice: () => 'This link’s ?v= asks for Selector 0: Bold, but links don’t choose variants here.', linkIgnored: () => true } : {}),
   };
   window.__isotone.mount({ variants: source, endpoint: '/notes', theme, compareShortcut: false });
   for (let tries = 0; !root()?.querySelector('.isotone-rail-track') && tries < 100; tries++) await frame();
@@ -207,6 +207,22 @@ describe.skipIf(!binary)('Getting into the panel (headless Chrome)', () => {
     expect(await chrome.eval('location.hash')).toBe('#elsewhere');
   });
 
+  it('keeps selecting while Shift+Tab takes focus from the field to the page, where Space pins', async () => {
+    await fresh(1024, 768);
+    await start(3);
+    await tool('Variants');
+    await shortcut();
+    expect(await chrome.eval('selecting()')).toBe(true);
+    for (let i = 0; i < 30 && !(await chrome.eval<boolean>(`document.activeElement?.id === 'link'`)); i++)
+      await chrome.key('Tab', 'Tab', 8);
+    expect(await chrome.eval(`document.activeElement?.id`)).toBe('link');
+    expect(await chrome.eval('selecting()')).toBe(true);
+    await chrome.key(' ', 'Space', 0, ' ');
+    await chrome.eval('settle()');
+    expect(await chrome.eval(`root().querySelectorAll('.isotone-chip').length`)).toBe(1);
+    expect(await chrome.eval('selecting()')).toBe(true);
+  });
+
   it('comes back after a reload with the panels that were open, in place and where the list was, not selecting', async () => {
     await fresh(1024, 768);
     await start(12);
@@ -216,20 +232,24 @@ describe.skipIf(!binary)('Getting into the panel (headless Chrome)', () => {
     await chrome.eval(`${body}.scrollTop = 150; settle()`);
     const at = `panel('variants').querySelectorAll('[role=radio]')[18].getBoundingClientRect().top`;
     const before = await chrome.eval<number>(at);
-    await chrome.goto(`${origin}/`);
+    await chrome.goto('');
     await start(12);
     expect(await chrome.eval('isOpen("variants")')).toBe(true);
     expect(await chrome.eval('isOpen("notes")')).toBe(true);
     expect(await chrome.eval('selecting()')).toBe(false);
     // The selector that was under the pointer is where it was.
     expect(await chrome.eval<number>(at)).toBeCloseTo(before, 0);
+    // A new visit to the page, rather than a reload, starts folded.
+    await chrome.goto(`${origin}/`);
+    await start(12);
+    expect(await chrome.eval('isOpen("variants")')).toBe(false);
   });
 
   it('shows panels restored by a reload at rest, with no entrance', async () => {
     await fresh(1024, 768);
     await start(3);
     await tool('Feedback');
-    await chrome.goto(`${origin}/`);
+    await chrome.goto('');
     const moving = await chrome.eval<number>(`(async () => {
       window.__isotone.mount({ variants: { getAxes: () => [], getSelections: () => ({}), setSelection() {}, reset() {}, subscribe: () => () => {} }, endpoint: '/notes' });
       for (let i = 0; i < 100 && !root()?.querySelector('.isotone-notes-panel[data-open="true"]'); i++) await new Promise((r) => requestAnimationFrame(r));
@@ -278,6 +298,27 @@ describe.skipIf(!binary)('Getting into the panel (headless Chrome)', () => {
     await chrome.eval('panel("variants").querySelector(".isotone-vars-body").scrollTop = 60; settle()');
     expect(await chrome.eval('panel("variants").querySelector(".isotone-vars-body").scrollHeight > 700')).toBe(true);
     await expectVariantsSteady();
+  });
+
+  it('moves no Variants control when Feedback, open before it, closes over a list at its top', async () => {
+    await fresh(1024, 768);
+    await start(12);
+    await tool('Feedback');
+    await tool('Variants');
+    expect(await chrome.eval('panel("variants").querySelector(".isotone-vars-body").scrollTop')).toBe(0);
+    const before = await chrome.eval<object>('controls()');
+    await chrome.eval('watch()');
+    await tool('Feedback');
+    expect(await chrome.eval('isOpen("notes")')).toBe(false);
+    const result = await chrome.eval<{ count: number; moved: unknown[] }>(`kept(${JSON.stringify(before)})`);
+    expect(result.count).toBeGreaterThan(2);
+    expect(result.moved).toEqual([]);
+    expect(await chrome.eval<number>('unwatch()')).toBeLessThanOrEqual(0.5);
+    // With the pointer gone from the dock, the list takes the room back.
+    const height = await chrome.eval<number>('panel("variants").offsetHeight');
+    await chrome.move(20, 300);
+    await chrome.eval('settle()');
+    expect(await chrome.eval<number>('panel("variants").offsetHeight')).toBeGreaterThan(height);
   });
 
   it.each([

@@ -297,6 +297,7 @@ if (sharedLink) {
   const active = picked && picked !== 'row' ? [picked] : [];
   const notice = unappliedLinkNotice({ variants, active }, active, location.search);
   source.getNotice = () => notice;
+  source.linkIgnored = () => notice !== null;
 }
 
 type DemoNote = Record<string, unknown> & {

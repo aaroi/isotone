@@ -411,6 +411,7 @@ export function createOverlayVariantsSource(cfg: {
   refresh(): Promise<void>;
   /** For the reviewer: the page's `?v=` names picks the page does not show; else null. */
   getNotice(): string | null;
+  linkIgnored(): boolean;
   readonly list: OverlayVariantsList | null;
   /** The knobs on the current route and their values, for the save note. */
   readonly knobs: { axes: KnobAxis[]; values: VariantSelections };
@@ -582,6 +583,7 @@ export function createOverlayVariantsSource(cfg: {
       const link = live ? null : unappliedLinkNotice(list, current(), search());
       return [link, clash].filter(Boolean).join(' ') || null;
     },
+    linkIgnored: () => Boolean(list && !live && unappliedLinkNotice(list, current(), search())),
     get list() {
       return list;
     },

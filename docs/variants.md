@@ -318,7 +318,9 @@ optional `canPreview(axisId)` returns `true`, or `false` or a reason
 (`'switches by reloading the page'`) for an axis that cannot switch at once.
 Without `preview` the panel offers no Compare. An optional `getNotice()` returns
 a short note the Variants view shows above the selectors, or `null`; it is read
-as the view opens and kept until it closes.
+as the view opens and kept until it closes. An optional `linkIgnored()` returns
+`true` while the page's `?v=` asks for picks the source shows something else
+for; the panel then puts a quiet line by the pill that opens Variants.
 
 ## How switching works
 

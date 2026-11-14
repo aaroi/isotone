@@ -47,6 +47,7 @@ interface PickerContext {
 }
 
 const MAX_PINS = 50;
+const EDIT_KEYS = /^(Backspace|Delete|Arrow\w+|Home|End)$/;
 
 const isPanelElement = (node: EventTarget | null) => node instanceof Element && Boolean(node.closest('[data-isotone]'));
 
@@ -148,7 +149,10 @@ function usePicker(context: PickerContext) {
       }
       // The composer is covered while selecting. Typing a character finishes
       // selecting and lands in the composer, unless the page has an input focused.
-      const typing = e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey && !e.isComposing;
+      // In the field itself, a key that edits or moves the caret finishes it too, so no edit is unseen.
+      const typing =
+        (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey && !e.isComposing) ||
+        (EDIT_KEYS.test(e.key) && fieldRef.current !== null && e.composedPath().includes(fieldRef.current));
       if (typing) {
         const el = e.composedPath().find((node): node is Element => node instanceof Element);
         if (el && !el.closest('[data-isotone]') && el.closest('input, textarea, select, [contenteditable]')) return;
@@ -231,9 +235,10 @@ export function useSelectMode({ mode, update, focus, rootRef, fieldRef, floatRef
     },
   });
   useFloatingComposer(floatRef, rootRef, mode.anchor, locate);
-  // Selecting is for the page. A press or focus anywhere in the dock but the feedback panel and its
-  // composer (Variants, the pill, a notice) ends it, keeping the pins, so the next click on the page
-  // after a pick in Variants follows a link rather than pinning it.
+  // Selecting is for the page. A press anywhere in the dock but the feedback panel and its composer
+  // (Variants, the pill, a notice) ends it, keeping the pins, so the next click on the page after a pick
+  // in Variants follows a link rather than pinning it. Focus passing through the dock does not: Tab and
+  // Shift+Tab are how the keyboard reaches the page to pin with Space.
   useEffect(() => {
     const root = rootRef.current;
     if (!mode.picking || !root) return;
@@ -243,11 +248,7 @@ export function useSelectMode({ mode, update, focus, rootRef, fieldRef, floatRef
         update({ picking: false });
     };
     root.addEventListener('pointerdown', away, true);
-    root.addEventListener('focusin', away, true);
-    return () => {
-      root.removeEventListener('pointerdown', away, true);
-      root.removeEventListener('focusin', away, true);
-    };
+    return () => root.removeEventListener('pointerdown', away, true);
   }, [mode.picking, rootRef, update]);
   /** Stop selecting and write: the composer keeps what was pinned. */
   const done = useCallback(() => {

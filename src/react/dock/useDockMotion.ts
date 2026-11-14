@@ -23,10 +23,11 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       exits.delete(element);
     };
     // Panels already open at mount were open before a reload: they are simply there, without an entrance.
-    let first = true;
+    // Until the observer's first report the dock may not be styled yet (a host mounting the panel itself
+    // themes it in a later effect), so what is measured before then only records where things are.
+    let settling = true;
     const measure = () => {
-      const instant = first || root.dataset.instant === 'true' || root.dataset.resizing === 'true' || reduced?.matches;
-      first = false;
+      const instant = settling || root.dataset.instant === 'true' || root.dataset.resizing === 'true' || reduced?.matches;
       // Finish all reads before cancelling animations or adding exit snapshots.
       const panels = Array.from(root.querySelectorAll<HTMLElement>('.isotone-panel:not(.isotone-exit)'), (element) => {
         const open = element.dataset.open === 'true';
@@ -108,7 +109,14 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       if (instant) for (const element of exits.keys()) removeExit(element);
     };
     measure();
-    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : undefined;
+    const observer =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => {
+            measure();
+            settling = false;
+          })
+        : undefined;
+    if (!observer) settling = false;
     observer?.observe(root);
     const mutations = new MutationObserver((records) => {
       const changed = records.some((record) => {

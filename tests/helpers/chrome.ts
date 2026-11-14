@@ -35,6 +35,7 @@ export function findChrome(): string | null {
 export interface Chrome {
   /** Evaluate an expression in the page, awaiting a promise, and return its JSON value. */
   eval<T>(expression: string): Promise<T>;
+  /** Navigate to `url`, or reload the page with an empty one; resolves once it has loaded. */
   goto(url: string): Promise<void>;
   viewport(width: number, height: number, mobile?: boolean): Promise<void>;
   move(x: number, y: number): Promise<void>;
@@ -151,7 +152,7 @@ export async function launchChrome(binary: string): Promise<Chrome> {
         };
         loads.add(done);
       });
-      await send('Page.navigate', { url });
+      await send(url ? 'Page.navigate' : 'Page.reload', url ? { url } : {});
       await loaded;
     },
     async viewport(width, height, mobile = false) {
