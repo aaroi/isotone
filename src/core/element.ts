@@ -88,6 +88,7 @@ const IDENTIFYING_ATTRIBUTES = ['role', 'type', 'name', 'href', 'aria-label', 't
 interface Made {
   type?: unknown;
   name?: string;
+  displayName?: string;
   _debugOwner?: Made | null;
   owner?: Made | null;
   _debugSource?: { fileName?: string; lineNumber?: number } | null;
@@ -125,31 +126,38 @@ function callsite(node: Made): (StackFrame & { legacy?: true }) | undefined {
  * The components that wrote the element, outermost first, and the first place
  * in the app's own code that did. The walk follows owners (who rendered what),
  * not parents, so providers and layout boundaries that only pass children
- * through never appear. A node made in a dependency, or by nothing on the
- * stack, is not the app's: below the app's first component the walk climbs
- * past such nodes (a library's insides), and above it the first one ends the
- * walk (the framework that rendered the page). Absent on other frameworks and
- * production builds, which leaves the fields out.
+ * through never appear. Where a node was made in the app's code (its callsite
+ * is outside `node_modules`), it and its owner are named: that callsite is a
+ * line of the owner's render, whoever made the owner (a router, a framework).
+ * Below the app's first such node the walk climbs past a library's insides;
+ * above it, the first node made elsewhere ends the walk. Absent on other
+ * frameworks and production builds, which leaves the fields out.
  */
 function reactOwners(el: Element): { names: string[]; at?: ReturnType<typeof callsite> } {
   const key = Object.keys(el).find((name) => name.startsWith('__reactFiber$'));
   let node: Made | null | undefined = key ? (el as unknown as Record<string, Made | null>)[key] : null;
   const names: string[] = [];
+  const name = (made: Made | null | undefined) => {
+    const type = made?.type as { displayName?: string; name?: string; render?: Made; type?: Made } | string | undefined;
+    const inner = type && typeof type !== 'string' ? (type.render ?? type.type ?? type) : made;
+    const found = (type && typeof type !== 'string' ? type.displayName : undefined) ?? inner?.displayName ?? inner?.name;
+    // Capitalized is a component; anything else is a minified or internal name.
+    if (found && /^[A-Z]/.test(found) && names[0] !== found && names.length < 5) names.unshift(found);
+  };
   let at: ReturnType<typeof callsite>;
   let seen = false;
-  for (let depth = 0; node && depth < 64 && names.length < 5; depth++) {
+  for (let depth = 0; node && depth < 64; depth++) {
     const made = callsite(node);
+    const owner = node._debugOwner ?? node.owner;
     if (made && !/node_modules/.test(made.url)) {
       // React's replay of a server component's stack names the server bundle, not a source file.
       if (!/^(?:about|rsc):/.test(made.url)) at ??= made;
-      const type = node.type as { displayName?: string; name?: string; render?: Made; type?: Made } | string | undefined;
-      const named = type && typeof type !== 'string' ? (type.render ?? type.type ?? type) : node;
-      const name = (named as { displayName?: string }).displayName ?? named.name;
-      // The element itself is a tag. Capitalized is a component; anything else is a minified or internal name.
-      if (depth > 0 && name && /^[A-Z]/.test(name) && names[0] !== name) names.unshift(name);
+      // The element itself is a tag, not a component.
+      if (depth > 0) name(node);
+      name(owner);
       seen = true;
     } else if (seen) break;
-    node = node._debugOwner ?? node.owner;
+    node = owner;
   }
   return { names, at };
 }
@@ -269,7 +277,7 @@ function elementContext(el: Element): Partial<IsotoneElement> {
     // A label the page names explicitly comes first: the elements it points at, then its own text.
     const labelledBy = (up.getAttribute('aria-labelledby') ?? '')
       .split(/\s+/)
-      .map((id) => (id ? up.ownerDocument.getElementById(id)?.textContent : ''))
+      .map((id) => (id ? (up.getRootNode() as Document | ShadowRoot).getElementById?.(id)?.textContent : ''))
       .join(' ');
     const label = oneLine(labelledBy) || up.getAttribute('aria-label');
     const test = up.getAttribute('data-testid');
@@ -304,25 +312,20 @@ function elementContext(el: Element): Partial<IsotoneElement> {
 const HEADING = 'h1,h2,h3,h4,h5,h6';
 
 /**
- * The heading that titles `up` itself, above `el`: its own last heading child
- * before the branch holding `el`, or the first heading child of a wrapper
- * there (a header, a title row, a card's header). Not a wrapper that is
- * sectioning content, which titles itself, nor one shaped like the branch
- * (same tag and classes): that is a sibling card, and its heading names that
- * card. With no clear title there is none: a missing label misleads nobody.
+ * The heading that titles `up` itself, above the branch holding `el`: its last
+ * heading child there, else the first heading in a `header` or `hgroup` child
+ * there. Nothing else counts, so a card or column beside the element never
+ * lends its heading; a missing label misleads nobody.
  */
 function ownHeading(up: Element, el: Element): Element | null {
-  const children = Array.from(up.children);
-  const branch = children.find((child) => child === el || child.contains(el));
-  const shape = (node: Element) => `${node.localName} ${Array.from(node.classList).sort().join(' ')}`;
-  let found: Element | null = null;
-  for (const child of children) {
-    if (child === branch) break;
-    if (child.matches(HEADING)) found = child;
-    else if (!child.matches('section,article,aside,nav') && (!branch || shape(child) !== shape(branch)))
-      found = Array.from(child.children).find((inner) => inner.matches(HEADING)) ?? found;
+  let heading: Element | null = null;
+  let header: Element | null = null;
+  for (const child of Array.from(up.children)) {
+    if (child === el || child.contains(el)) break;
+    if (child.matches(HEADING)) heading = child;
+    else if (child.matches('header,hgroup')) header ??= child.querySelector(HEADING);
   }
-  return found;
+  return heading ?? header;
 }
 
 /** `rgb(17, 17, 17)` as `#111111`, the form a stylesheet is searched for; anything else as it is. */

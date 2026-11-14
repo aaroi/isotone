@@ -14,6 +14,7 @@ import { describeIsotoneElement, elementAsNode } from '../../src/core/element';
 import { resolveElementSource } from '../../src/core/element';
 import { applyKnobValues, knobDelta } from '../../src/core/variants';
 import { notesResponse } from '../../src/node/notes/handler';
+import { createVariant } from '../../src/node/variants';
 import { readNotes } from '../../src/node/notes/store';
 
 const dirs: string[] = [];
@@ -79,64 +80,70 @@ describe('within: the titles around a pinned element', () => {
     return describeIsotoneElement(elementAsNode(pinned)).within;
   };
 
-  it('credits an ancestor with its own title, not the card inside it that holds the element', () => {
+  it('credits an ancestor with its own heading, not the card inside it that holds the element', () => {
     expect(
       within('<main><h1>Simple pricing</h1><section class="card"><h2>Pro</h2><button>Get started</button></section></main>', 'Get started'),
     ).toEqual(['<main> headed "Simple pricing"', '<section> headed "Pro"']);
     // A header holding the element titles itself; its parent gets nothing from it.
     expect(within('<div><header><h1>Acme</h1><button>Menu</button></header></div>', 'Menu')).toEqual(['<header> headed "Acme"']);
-  });
-
-  it('does not borrow the heading of a sibling card or section', () => {
-    const cards =
-      '<main><div class="card"><h3>Free</h3><span>$0</span><a href="/s">Start free</a></div><div class="card"><a href="/p">Get Pro</a></div></main>';
-    expect(within(cards, 'Get Pro')).toBeUndefined();
-    const feature = (title: string, text: string) => `<div class="feature"><svg></svg><h3>${title}</h3><span>${text}</span></div>`;
-    const grid = `<main>${feature('Fast', 'Quick builds')}${feature('Secure', 'Encrypted')}${feature('Private', 'Yours alone')}</main>`;
-    expect(within(grid, 'Yours alone')).toEqual(['<div> headed "Private"']);
-    expect(within('<main><section><h2>Free</h2></section><div><button>Get started</button></div></main>', 'Get started')).toBeUndefined();
-  });
-
-  it("takes a title from a header, a card's header, an intro or a title row before the element", () => {
-    expect(
-      within('<main><header><h1>Billing</h1><nav><a href="/">Back</a></nav></header><div><button>Upgrade</button></div></main>', 'Upgrade'),
-    ).toEqual(['<main> headed "Billing"']);
-    expect(
-      within(
-        '<div class="card"><div class="card-header"><h3>Team</h3><p>Manage who has access.</p></div><div class="card-content"><button>Invite</button></div></div>',
-        'Invite',
-      ),
-    ).toEqual(['<div> headed "Team"']);
-    expect(
-      within('<main><div><h1>Create account</h1><p>It takes a minute.</p></div><form><button>Sign up</button></form></main>', 'Sign up'),
-    ).toEqual(['<main> headed "Create account"']);
-    expect(
-      within(
-        '<section><div class="row"><h2>Members</h2><button>Invite</button></div><ul><li><button>Remove</button></li></ul></section>',
-        'Remove',
-      ),
-    ).toEqual(['<section> headed "Members"']);
     // A link inside the heading is still its text.
     expect(within('<main><h2><a href="/docs">Docs</a></h2><div><button>Read</button></div></main>', 'Read')).toEqual([
       '<main> headed "Docs"',
     ]);
-    expect(
-      within(
-        '<main><div class="intro"><h2><a href="/docs">Docs</a></h2></div><div class="body"><button>Read</button></div></main>',
-        'Read',
-      ),
-    ).toEqual(['<main> headed "Docs"']);
-    // Two plain divs could be a title and its content or two cards: no label beats a wrong one.
-    expect(within('<main><div><h2>Docs</h2></div><div><button>Read</button></div></main>', 'Read')).toBeUndefined();
   });
 
-  it('prefers the label a block names with aria-labelledby', () => {
+  it('takes a heading from a header or hgroup before the element, never over a heading of its own', () => {
+    expect(
+      within('<main><header><h1>Billing</h1><nav><a href="/">Back</a></nav></header><div><button>Upgrade</button></div></main>', 'Upgrade'),
+    ).toEqual(['<main> headed "Billing"']);
+    expect(
+      within('<section><header><div class="row"><h2>Team</h2></div></header><ul><li><button>Remove</button></li></ul></section>', 'Remove'),
+    ).toEqual(['<section> headed "Team"']);
+    expect(within('<section><hgroup><h2>Plans</h2><p>Monthly</p></hgroup><button>Compare</button></section>', 'Compare')).toEqual([
+      '<section> headed "Plans"',
+    ]);
+    expect(
+      within('<section><h2>Members</h2><header><h3>Admins</h3></header><div><button>Invite</button></div></section>', 'Invite'),
+    ).toEqual(['<section> headed "Members"']);
+  });
+
+  it('borrows nothing from a card, column or wrapper beside the element', () => {
+    const cards =
+      '<main><div class="grid"><div class="card"><h3>Free</h3><a>Start free</a></div><div class="card featured"><h3>Pro</h3><a>Get Pro</a></div><div class="card"><span>Team</span><a>Get Team</a></div></div></main>';
+    expect(within(cards, 'Get Team')).toBeUndefined();
+    const feature = (title: string, text: string) => `<div class="feature"><svg></svg><h3>${title}</h3><span>${text}</span></div>`;
+    const grid = `<main>${feature('Fast', 'Quick builds')}${feature('Secure', 'Encrypted')}${feature('Private', 'Yours alone')}</main>`;
+    expect(within(grid, 'Yours alone')).toEqual(['<div> headed "Private"']);
+    const sidebar =
+      '<div class="layout"><div class="sidebar"><h2>Filters</h2><label>Size</label></div><div class="content"><button>Load more</button></div></div>';
+    expect(within(sidebar, 'Load more')).toBeUndefined();
+    const stats =
+      '<div class="dash"><div class="stat"><h3>Revenue</h3><p>$1</p></div><div class="panel"><button>Export</button></div></div>';
+    expect(within(stats, 'Export')).toBeUndefined();
+    expect(within('<main><section><h2>Free</h2></section><div><button>Get started</button></div></main>', 'Get started')).toBeUndefined();
+    // A card header that is a plain div is a wrapper like any other: no label beats a wrong one.
+    const card =
+      '<div class="card"><div class="card-header"><h3>Team</h3></div><div class="card-content"><button>Invite</button></div></div>';
+    expect(within(card, 'Invite')).toBeUndefined();
+  });
+
+  it('prefers the label a block names with aria-labelledby, then aria-label', () => {
     expect(
       within(
-        '<p id="plan">Team plan</p><section aria-labelledby="plan" aria-label="Plan"><h3>Monthly</h3><button>Start</button></section>',
+        '<p id="a">Team</p><p id="b">plan</p><section aria-labelledby="a b" aria-label="Plan"><h3>Monthly</h3><button>Start</button></section>',
         'Start',
       ),
     ).toEqual(['<section> labelled "Team plan"']);
+    expect(
+      within('<section aria-labelledby="missing" aria-label="Plan"><h3>Monthly</h3><button>Start</button></section>', 'Start'),
+    ).toEqual(['<section> labelled "Plan"']);
+    // Inside a shadow root the ids resolve there.
+    document.body.innerHTML = '<div id="host"></div>';
+    const shadow = (document.getElementById('host') as Element).attachShadow({ mode: 'open' });
+    shadow.innerHTML = '<p id="t">Settings</p><section aria-labelledby="t"><button>Save</button></section>';
+    expect(describeIsotoneElement(elementAsNode(shadow.querySelector('button') as Element)).within).toEqual([
+      '<section> labelled "Settings"',
+    ]);
   });
 });
 
@@ -156,9 +163,69 @@ describe('the React components that wrote the element', () => {
   const made = (...frames: string[]) => ({ stack: ['Error: react-stack-top-frame', ...frames.map((f) => `    at ${f}`)].join('\n') });
   const reactBottom = 'Object.react_stack_bottom_frame (http://localhost:3000/_next/static/chunks/react-dom_cjs_1.js:2859:93)';
 
-  it('follows owners, not parents, and stops at the framework that rendered the page', () => {
-    // Next 16, a 'use client' page: Turbopack serves ClientPageRoot from a chunk with no
-    // telling name, but nothing in the app made it.
+  const next = (file: string) => `webpack-internal:///(app-pages-browser)/./${file}`;
+
+  it('names the page a framework created, and stops at the framework', () => {
+    // Next with webpack: ClientPageRoot is served from node_modules, so the walk ends there.
+    const root = {
+      type: component('ClientPageRoot'),
+      _debugStack: made(`fakeJSXCallSite (${next('node_modules/next/dist/compiled/react-server-dom-webpack/client.js')}:1:1)`),
+      _debugOwner: null,
+    };
+    const page = {
+      type: component('Pricing'),
+      _debugStack: made(
+        `jsx (${next('node_modules/next/dist/compiled/react/jsx-runtime.js')}:1:1)`,
+        `ClientPageRoot (${next('node_modules/next/dist/client/components/client-page.js')}:20:3)`,
+      ),
+      _debugOwner: root,
+    };
+    const button = pin({
+      type: 'button',
+      _debugStack: made(
+        `jsxDEV (${next('node_modules/next/dist/compiled/react/jsx-dev-runtime.js')}:1:1)`,
+        `Pricing (${next('src/app/pricing/page.tsx')}:24:5)`,
+      ),
+      _debugOwner: page,
+      // The parents above it are the framework's and the layout's providers.
+      return: { type: component('ThemeProvider'), return: { type: component('Providers'), return: { type: component('AppRouter') } } },
+    });
+    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['Pricing'], source: 'src/app/pricing/page.tsx:24' });
+  });
+
+  it('names the route a router created', () => {
+    const at = (file: string) =>
+      made('exports.jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js:250:33)', file);
+    const provider = {
+      type: component('RouterProvider'),
+      _debugStack: at('main (http://localhost:5173/src/main.tsx:8:3)'),
+      _debugOwner: null,
+    };
+    const rendered = {
+      type: component('RenderedRoute'),
+      _debugStack: at('RouterProvider (http://localhost:5173/node_modules/.vite/deps/react-router.js:100:3)'),
+      _debugOwner: provider,
+    };
+    const route = {
+      type: component('Pricing'),
+      _debugStack: at('RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router.js:200:3)'),
+      _debugOwner: rendered,
+    };
+    const button = pin({ type: 'button', _debugStack: at('Pricing (http://localhost:5173/src/Pricing.tsx:12:7)'), _debugOwner: route });
+    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['Pricing'], source: '/src/Pricing.tsx:12' });
+  });
+
+  it("names a framework component Turbopack serves from a hashed chunk, which looks like the app's", () => {
+    // Next 16 with Turbopack bundles ClientPageRoot into a chunk with the app's providers, so the
+    // URL cannot tell it from app code: it is named, and the walk ends where nothing made it.
+    const root = {
+      type: component('ClientPageRoot'),
+      _debugStack: made(
+        'fakeJSXCallSite (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_1.js:2093:21)',
+        'Function.all (<anonymous>:1:21)',
+      ),
+      _debugOwner: null,
+    };
     const page = {
       type: component('Pricing'),
       _debugStack: made(
@@ -166,14 +233,7 @@ describe('the React components that wrote the element', () => {
         'ClientPageRoot (http://localhost:3000/_next/static/chunks/_0kb1y._.js:173:46)',
         reactBottom,
       ),
-      _debugOwner: {
-        type: component('ClientPageRoot'),
-        _debugStack: made(
-          'fakeJSXCallSite (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_1.js:2093:21)',
-          'Function.all (<anonymous>:1:21)',
-        ),
-        _debugOwner: null,
-      },
+      _debugOwner: root,
     };
     const button = pin({
       type: 'button',
@@ -183,11 +243,9 @@ describe('the React components that wrote the element', () => {
         reactBottom,
       ),
       _debugOwner: page,
-      // The parents above it are the framework's and the layout's providers.
-      return: { type: component('ThemeProvider'), return: { type: component('Providers'), return: { type: component('AppRouter') } } },
     });
     expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({
-      component: ['Pricing'],
+      component: ['ClientPageRoot', 'Pricing'],
       source: '/_next/static/chunks/src_app_client_page_tsx_1.js:24',
     });
   });
@@ -200,8 +258,18 @@ describe('the React components that wrote the element', () => {
     const card = { name: 'PricingCard', env: 'Prerender', debugStack: made(flight, server('Home')), owner: home };
     const button = pin({ type: 'button', _debugStack: made(flight, server('PricingCard')), _debugOwner: card });
     const described = describeIsotoneElement(elementAsNode(button));
-    expect(described.component).toEqual(['PricingCard']);
+    expect(described.component).toEqual(['Home', 'PricingCard']);
     expect(described.source).toBeUndefined();
+  });
+
+  it('names a forwardRef component by its displayName', () => {
+    const at = (file: string) =>
+      made('exports.jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js:250:33)', file);
+    const page = { type: component('Pricing'), _debugStack: at('App (http://localhost:5173/src/App.tsx:3:3)'), _debugOwner: null };
+    const forwarded = { $$typeof: Symbol.for('react.forward_ref'), render: () => null, displayName: 'Button' };
+    const owner = { type: forwarded, _debugStack: at('Pricing (http://localhost:5173/src/Pricing.tsx:9:3)'), _debugOwner: page };
+    const button = pin({ type: 'button', _debugStack: at('render (http://localhost:5173/src/ui/button.tsx:20:3)'), _debugOwner: owner });
+    expect(describeIsotoneElement(elementAsNode(button)).component).toEqual(['Pricing', 'Button']);
   });
 
   it("climbs out of a library's insides to the app code that used it, and keeps app names a framework also uses", () => {
@@ -313,9 +381,16 @@ it('keeps the context through the store and prints it for the agent', async () =
   const [note] = readNotes(file);
   expect(note?.element?.selector).toBe(element.selector);
   expect(note?.elements?.[0]?.rect).toEqual(element.rect);
-  // Without a pin there are no styles to speak of; a long list is cut.
+  // A long list is cut.
   const many = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`spacing-${i}`, '24']));
   notesResponse(file, { method: 'POST', url: '/', body: { id: 'n2', route: '/', feedback: 'roomier', element: null, selections: many } });
+  // A pick that is a file variant: the page ran its copy.
+  createVariant({ root }, { id: 'pricing-featured' });
+  notesResponse(file, {
+    method: 'POST',
+    url: '/',
+    body: { id: 'n3', route: '/', feedback: 'bolder', element: null, selections: { pricing: 'pricing-featured' } },
+  });
 
   let text = '';
   const stream = {
@@ -330,14 +405,16 @@ it('keeps the context through the store and prints it for the agent', async () =
     'labelled "Usage"',
     'role="tab"',
     'at: 934,292 83×35',
-    "selections: card-radius=24 (styles show these values, not the source's)",
+    'selections: card-radius=24 (the page showed these, not the defaults)',
   ]) {
     expect(text).toContain(part);
   }
-  const unpinned = text.split('\n').find((line) => line.includes('spacing-0=24')) ?? '';
-  expect(unpinned).not.toContain('styles show');
-  expect(unpinned.length).toBeLessThan(230);
-  expect(unpinned.endsWith('…')).toBe(true);
+  const long = text.split('\n').find((line) => line.includes('spacing-0=24')) ?? '';
+  expect(long.length).toBeLessThan(270);
+  expect(long).toContain('… (the page showed these, not the defaults)');
+  expect(text).toContain(
+    'selections: pricing=pricing-featured (the page showed these, not the defaults; source lines may be lines of the active variant copy)',
+  );
 });
 
 describe('select knobs on the page', () => {

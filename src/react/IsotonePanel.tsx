@@ -2,11 +2,10 @@ import { FEEDBACK_STORAGE_KEY } from '../core/browser-storage';
 import type { IsotoneStoreConfig } from '../core/types';
 import { isRouteVisible, normalizeRoute, type RouteGateOptions } from '../core/routes';
 import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
-import { knobDelta, type VariantSelections, type VariantsSource } from '../core/variants';
+import { knobDelta, type VariantSelections, type VariantsSource, visibleAxes } from '../core/variants';
 import { type ReactElement, useEffect, useId, useRef } from 'react';
 import { Composer } from './notes/Composer';
 import { AwayButton, NotesPanel } from './notes/NotesPanel';
-import { NoteAxes } from './notes/NoteSummary';
 import { PickOverlay, useSelectMode } from './dock/picking';
 import { Launcher, Rail, RailButton } from './dock/Rail';
 import { useDockTheme } from './styles/theme';
@@ -44,12 +43,13 @@ export interface IsotonePanelProps {
 }
 
 /**
- * Every selector and knob on this page that sits off its default, by id, from
+ * Every selector shown on this page that sits off its default, by id, from
  * any source. A note written under them says so: what the page showed, the
  * pinned element's styles included, is not what the source holds.
  */
 function offDefault(source: VariantsSource | undefined): VariantSelections | undefined {
-  const moved = source ? knobDelta(source.getAxes(), source.getSelections()) : [];
+  const selections = source?.getSelections() ?? {};
+  const moved = source ? knobDelta(visibleAxes(source.getAxes(), selections), selections) : [];
   return moved.length ? Object.fromEntries(moved.map((m) => [m.axis.id, m.value])) : undefined;
 }
 
@@ -280,26 +280,20 @@ export function IsotonePanel({
           />
         )}
         {notesAvailable && (
-          <NoteAxes.Provider value={variants}>
-            <NotesPanel
-              id={`${id}-notes`}
-              open={notesOpen}
-              route={route}
-              view={view}
-              editingId={draft.editing?.id}
-              resizeHandle={dockSize.handle('notes')}
-              onClose={() => closePanel('notes')}
-              onEdit={actions.beginEdit}
-              onRemove={actions.removeNote}
-              compose={
-                floating ? (
-                  <AwayButton targets={draft.targets} anchor={anchor} slot={select.slotHeight} onReturn={dockComposer} />
-                ) : (
-                  composer
-                )
-              }
-            />
-          </NoteAxes.Provider>
+          <NotesPanel
+            id={`${id}-notes`}
+            open={notesOpen}
+            route={route}
+            view={view}
+            editingId={draft.editing?.id}
+            resizeHandle={dockSize.handle('notes')}
+            onClose={() => closePanel('notes')}
+            onEdit={actions.beginEdit}
+            onRemove={actions.removeNote}
+            compose={
+              floating ? <AwayButton targets={draft.targets} anchor={anchor} slot={select.slotHeight} onReturn={dockComposer} /> : composer
+            }
+          />
         )}
         {notesAvailable && (
           <RailButton

@@ -1,30 +1,12 @@
-import { createContext, useContext } from 'react';
 import { showOverflowTitle } from '../tooltips';
 import type { IsotoneNote } from '../../core/types';
 import { updateNoteText } from '../../core/update';
-import { axisSection, knobDelta, type VariantSelections, type VariantsSource } from '../../core/variants';
-
-/** The page's variants source, so a note's selections read as the panel names them. */
-export const NoteAxes = createContext<VariantsSource | undefined>(undefined);
-
-/** Selection tags shown on a note; the rest are counted. */
-const SELECTION_TAGS = 3;
-
-/** `Card radius 24px` for a selector on this page, `card-radius 24` for one elsewhere. */
-function selectionTags(selections: VariantSelections, source: VariantsSource | undefined) {
-  const axes = source?.getAxes() ?? [];
-  return Object.entries(selections).map(([id, value]) => {
-    const axis = axes.find((candidate) => candidate.id === id);
-    const shown = axis && knobDelta([axis], { [id]: value })[0]?.shown;
-    return { key: `pick:${id}`, label: axis ? `${axisSection(axis).label} ${shown ?? value}` : `${id} ${value}` };
-  });
-}
 
 /** Pinned references and saved defaults use the same compact tag. */
-function SummaryTag({ label }: { label: string }) {
+function SummaryTag({ label, title }: { label: string; title?: string }) {
   return (
-    <span className="isotone-chip">
-      <span onPointerOver={showOverflowTitle}>{label}</span>
+    <span className="isotone-chip" title={title}>
+      <span onPointerOver={title ? undefined : showOverflowTitle}>{label}</span>
     </span>
   );
 }
@@ -42,7 +24,6 @@ function Reply({ note }: { note: IsotoneNote }) {
 
 /** Keep machine-directed requests readable without changing the agent's original text. */
 export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }) {
-  const source = useContext(NoteAxes);
   // The update request names no element: one compact tag says what it is.
   if (note.update)
     return (
@@ -56,7 +37,7 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
     );
   if (!note.feedback.startsWith('[set-defaults]')) {
     const elements = note.elements ?? (note.element ? [note.element] : []);
-    const references = [
+    const references: { key: string; label: string; title?: string }[] = [
       ...(page ? [{ key: `page:${page}`, label: page }] : []),
       ...(note.variant
         ? [
@@ -68,18 +49,23 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
         : []),
       ...elements.map((element) => ({ key: element.selector, label: element.text || element.tag })),
     ];
-    // The selections it was filed under, tagged and capped as a saved default's are.
-    const picks = selectionTags(note.selections ?? {}, source);
+    // The selections it was filed under, as one tag; hovering it lists them.
+    const picks = Object.entries(note.selections ?? {});
+    if (picks.length)
+      references.push({
+        key: 'selections',
+        label: `${picks.length} pick${picks.length === 1 ? '' : 's'}`,
+        title: picks.map(([id, value]) => `${id}: ${value}`).join('\n'),
+      });
     return (
       <>
         <p>{note.feedback}</p>
         <Reply note={note} />
-        {references.length + picks.length > 0 && (
+        {references.length > 0 && (
           <span className="isotone-meta">
-            {[...references, ...picks.slice(0, SELECTION_TAGS)].map((reference) => (
-              <SummaryTag key={reference.key} label={reference.label} />
+            {references.map((reference) => (
+              <SummaryTag key={reference.key} label={reference.label} title={reference.title} />
             ))}
-            {picks.length > SELECTION_TAGS && <span className="isotone-request-more">+{picks.length - SELECTION_TAGS}</span>}
           </span>
         )}
       </>

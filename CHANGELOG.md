@@ -4,12 +4,12 @@
 
 ### Added
 
-- **A note says which selectors you had moved.** A new note records every selector on its page that sits off its default (knobs, selects and variant picks), so your agent knows the page it describes, and the pinned element's styles, showed those values rather than the source's. `--json` has them under `selections`, `npx isotone` prints a `selections:` line, and the note shows up to three as tags in the panel, named as the Variants panel names them.
+- **A note says which selectors you had moved.** A new note records every selector shown on its page that sits off its default (knobs, selects and variant picks), so your agent knows the page it describes, and the pinned element's styles, showed those values rather than the defaults. `--json` has them under `selections`, `npx isotone` prints a `selections:` line, and the note carries one tag such as "2 picks" that lists them on hover.
 
 ### Fixed
 
-- **A pinned element's `within` no longer borrows a card's heading.** A page or section is credited only with its own title, not with the heading of a card inside it or of a sibling card shaped like the one holding the element, so a button in a "Pro" card inside a "Simple pricing" page reads as in `<main> headed "Simple pricing"` > `<section> headed "Pro"`. A block's `aria-labelledby` comes first. When a block has no clear title, none is given.
-- **Notes from Next.js no longer name the framework.** `component` lists the components that wrote the element (its owners), stopping where the framework rendered the page, so a client page reads as `Pricing` rather than `RedirectBoundary > … > SegmentViewNode`, and an element from a server component names that component. `source` is never a file inside `node_modules` or the server bundle.
+- **A pinned element's `within` no longer borrows a card's heading.** A block is titled only by its `aria-labelledby`, its `aria-label`, a heading of its own before the element, or the heading in a `header` or `hgroup` before it; never by a card, column or wrapper beside the element. A button in a "Pro" card inside a "Simple pricing" page reads as in `<main> headed "Simple pricing"` > `<section> headed "Pro"`. A block with no such title gets no label.
+- **`component` names the components that wrote the element, not the framework around it.** It follows who rendered what, so a page created by a router or by Next.js is named, and Next's boundaries (`RedirectBoundary`, `SegmentViewNode` and the like) and layout providers are not; an element from a server component names that component. A `forwardRef` component is named by its `displayName`. `source` is never a file inside `node_modules` or the server bundle. With Turbopack, Next's `ClientPageRoot` can still appear above a client page, as Turbopack serves it beside the app's own code.
 
 ## 1.5.0
 
