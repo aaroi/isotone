@@ -223,5 +223,5 @@ function headEnd(html: string): number | undefined {
  */
 export function withNativeFetch(html: string): string {
   if (html.includes('data-isotone-native')) return html;
-  return intoHead(html, '<script data-isotone-native>window.__isotoneFetch=window.fetch.bind(window)</script>') ?? html;
+  return intoHead(html, '<script data-isotone-native>if(window.fetch)window.__isotoneFetch=window.fetch.bind(window)</script>') ?? html;
 }

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **On Windows, a variant copy's source map names the copy with forward slashes**, like every other path Isotone records, so a pinned element's `source` reads the same on every platform.
+
 ## 1.6.0
 
 ### Added
