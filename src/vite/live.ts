@@ -14,9 +14,10 @@
  *   selection already in the URL, because React cannot swap a hook under a
  *   mounted component.
  *
- * Which variants a tab shows lives in that tab: in `?v=` when the reviewer
- * picked something there, otherwise in `.isotone/active.json`, which the
- * server injects into every page as the default.
+ * Which variants a tab shows lives in that tab: in `?v=` once the reviewer
+ * picked something there, Default included (`<group>:default`), otherwise in
+ * `.isotone/active.json`, which the server injects into every page as the
+ * default and which a tab without a pick of its own follows.
  *
  * The browser code below is written as plain functions without outer
  * references, serialized with `Function.prototype.toString` into an inline
@@ -46,7 +47,8 @@ export interface LiveStore {
   /** The set the server rendered this page with, for hydration. Fixed for
    *  the life of the page. */
   readonly server: string[];
-  /** Whether this tab's selection comes from its URL. */
+  /** Whether this tab's selection comes from its URL: the reviewer picked
+   *  something in it, Default included, so it no longer follows the server. */
   readonly explicit: boolean;
   subscribe(listener: () => void): () => void;
   /** Register a loaded file: its versions (`null` for the real file) and
@@ -55,18 +57,21 @@ export interface LiveStore {
   /** Whether switching to `next` needs a page reload. */
   needsReload(next: string[]): boolean;
   /**
-   * Switch this tab to `next` and write it to the URL. Returns true when the
-   * page has to reload to show it; the caller reloads once the server knows
-   * the new set (an SSR page renders from it).
+   * Switch this tab to `next` and write it to the URL, which keeps the tab on
+   * it from then on. `groups` names the groups the reviewer set; one left at
+   * Default (by them, or because its member left the set) is written as
+   * `<group>:default`. Returns true when the page has to reload to show it;
+   * the caller reloads once the server knows the new set (an SSR page renders
+   * from it).
    */
-  select(next: string[]): boolean;
+  select(next: string[], groups?: string[]): boolean;
   /**
    * Show `next` for a moment without touching `active`, the URL or the
    * server; `null` shows `active` again. False, changing nothing, when it
    * would need a reload.
    */
   preview(next: string[] | null): boolean;
-  /** The server's default changed. Tabs without their own pick follow it. */
+  /** The server's default changed. A tab without a pick of its own follows it. */
   follow(next: string[]): void;
   reload(): void;
 }
@@ -91,6 +96,12 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
   const DEFAULT = 'default';
   const groups = cfg.groups;
   const byId = new Map(groups.map((group) => [group.id, group]));
+  // A group without an explicit id is named by its members (`a+b`), so the id
+  // changes when the agent adds an alternative. A pair under the old id still
+  // belongs to the group that now holds one of those members. (A `+` typed
+  // into a URL by hand arrives as a space.)
+  const groupFor = (id: string) =>
+    byId.get(id) ?? groups.find((group) => id.split(/[+ ]/).some((member) => group.members.includes(member)));
   const listeners = new Set<() => void>();
   const files = new Map<string, { ids: (string | null)[]; pinned: boolean }>();
   const history = win.history;
@@ -113,23 +124,29 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
     }
     return null;
   };
-  /** Our picks from `?v=` (null when it names none of our groups) and the
-   *  pairs that belong to someone else, kept when the param is rewritten. */
-  const parse = (search: string): { picks: string[] | null; foreign: string[] } => {
+  /** Our picks from `?v=` (null when it names none of our groups), the groups
+   *  it sets to Default, and the pairs that belong to someone else, kept when
+   *  the param is rewritten. */
+  const parse = (search: string): { picks: string[] | null; defaults: string[]; foreign: string[] } => {
     const raw = readParam(search);
-    if (raw === null) return { picks: null, foreign: [] };
+    if (raw === null) return { picks: null, defaults: [], foreign: [] };
     const foreign: string[] = [];
     const picks = new Map<string, string>();
     for (const pair of raw.split(',')) {
       if (!pair) continue;
       const at = pair.indexOf(':');
-      const group = at < 0 ? undefined : byId.get(pair.slice(0, at));
+      const group = at < 0 ? undefined : groupFor(pair.slice(0, at));
       const value = at < 0 ? '' : pair.slice(at + 1);
       if (group && (value === DEFAULT || group.members.includes(value))) picks.set(group.id, value);
       else foreign.push(pair);
     }
-    if (picks.size === 0) return { picks: null, foreign };
-    return { picks: [...picks.values()].filter((value) => value !== DEFAULT), foreign };
+    if (picks.size === 0) return { picks: null, defaults: [], foreign };
+    const named = [...picks.entries()];
+    return {
+      picks: named.filter(([, value]) => value !== DEFAULT).map(([, value]) => value),
+      defaults: named.filter(([, value]) => value === DEFAULT).map(([group]) => group),
+      foreign,
+    };
   };
   const search = (set: string[]): string => {
     const { foreign } = parse(win.location.search);
@@ -137,7 +154,12 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
     for (const group of groups) {
       const pick = group.members.find((member) => set.includes(member));
       if (pick) mine.push(`${group.id}:${pick}`);
+      else if (defaults.has(group.id)) mine.push(`${group.id}:${DEFAULT}`);
     }
+    // A tab with a pick of its own says so even when every group is at
+    // Default, or a reload or a copied link would follow the server again.
+    const first = groups[0];
+    if (explicit && mine.length === 0 && first) mine.push(`${first.id}:${DEFAULT}`);
     const value = [...foreign, ...mine].join(',');
     const kept = win.location.search
       .replace(/^\?/, '')
@@ -157,10 +179,13 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
     }
   };
 
-  const fromUrl = parse(win.location.search).picks;
+  const fromUrl = parse(win.location.search);
   const server = cfg.active.slice();
-  let active = fromUrl ?? server.slice();
-  let explicit = fromUrl !== null;
+  let active = fromUrl.picks ?? server.slice();
+  let explicit = fromUrl.picks !== null;
+  // Groups this tab was set to Default in, kept in `?v=` as `<group>:default`
+  // so the tab stays on Default while other tabs pick.
+  const defaults = new Set(fromUrl.defaults);
   let previewing: string[] | null = null;
   let reloading = false;
 
@@ -272,12 +297,17 @@ export function liveStore(win: Window & { __isotoneLive?: LiveStore }, cfg: Live
     needsReload(next) {
       return needsReload(active, next);
     },
-    select(next) {
+    select(next, touched = []) {
       if (reloading) return true;
       const reloadNeeded = needsReload(active, next);
+      for (const group of groups) {
+        if (group.members.some((member) => next.includes(member))) defaults.delete(group.id);
+        else if (touched.includes(group.id) || group.members.some((member) => active.includes(member))) defaults.add(group.id);
+      }
       previewing = null;
       active = next.slice();
-      explicit = next.length > 0;
+      // Any pick, Default included, keeps the tab where the reviewer put it.
+      explicit = true;
       writeUrl(active);
       if (reloadNeeded) return true;
       emit();

@@ -37,9 +37,12 @@ npx isotone --undone <id>          # reopen it
   note), usually because an earlier edit in a chained command failed; in Git,
   staged edits, reverts, commits and deletions count.
 - After closing, `--done` names variants on the note's route whose copies may
-  lack the fix, with the `variant sync <id>` for each, any copy with conflict
-  markers, and any variant showing in place of the real file. With `--json`
-  that goes to stderr; stdout stays one array.
+  lack the fix, with the `variant sync <id>` for each (a copy with no base
+  recorded is compared by hand instead), any copy with conflict
+  markers, and which of those copies a page may show in place of the fix: the
+  option a note about that selector names, else one active in
+  `.isotone/active.json`. Leave that pick to the reviewer. With `--json` that
+  goes to stderr; stdout stays one array.
 - A unique id prefix is enough. `--working`, `--done` and `--undone` take
   several ids (`a1 b2` or `a1,b2`); either all change or none do.
 - A route is a pattern: `/items` is that page, `/items/*` also every page under
@@ -123,6 +126,9 @@ npx isotone variant list [<route>] [--json]        # check what the panel will s
 
 - `--group <id>` joins alternatives of one decision over different files; give
   them the note's route (`--route`).
+- `variant use` moves only tabs without a pick of their own: with live
+  switching, a tab where the reviewer picked, Default included, keeps its pick
+  ([live switching](variants.md#live-switching)). Ask them to pick it there.
 - Copy only files that export components where you can: a copied hook, helper,
   context or constant object makes every switch reload the page.
 - Describe a variant with `variant new --description`, not a comment in the copy:
