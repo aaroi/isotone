@@ -38,6 +38,7 @@ const SUPPORTED: Record<string, string[]> = {
     'VariantRemoval',
     'VariantSelections',
     'VariantsSource',
+    'combineVariantsSources',
     'createVariantsSource',
   ],
   serve: ['ServeIsotoneOptions', 'ServedIsotone', 'serveIsotone'],

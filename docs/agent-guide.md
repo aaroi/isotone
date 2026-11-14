@@ -140,7 +140,8 @@ npx isotone variant list [<route>] [--json]        # check what the panel will s
 - A copy is stale once its real file changes: `variant list` shows it as STALE
   and `--done` names it. Sync each copy the fix belongs in too.
 - `variant list --json` prints one object: `variants` (with `stale`, `missing`,
-  `conflicts` and `active`), `knobs`, and `skippedKnobs` with reasons. `--all-routes` lists
+  `conflicts` and `active`), `knobs`, `skippedKnobs` with reasons, and
+  `hostSources`, the files with the app's own selectors, which no command lists. `--all-routes` lists
   every route's variants even with a route given.
 - `variant off <id>` turns one off, `variant rm <id> <file>` stops overriding a
   file, and `variant group <id> <groupId> [--label <text>]` moves a variant into
@@ -171,7 +172,7 @@ them. Deleting a pending request cancels it.
 
 | Note starts with | Do |
 | --- | --- |
-| `[set-defaults]` | Make the named picks the defaults: `variant promote` each variant listed in `payload.variants`, and write each knob value in `payload.knobs` into the source and the knob's `defaultValue`. Leave other variants alone. |
+| `[set-defaults]` | Make the named picks the defaults: `variant promote` each variant listed in `payload.variants`, write each knob value in `payload.knobs` into the source and the knob's `defaultValue`, and make each of the app's own selectors in `payload.selectors` (`id:value`) default to that value in the app's code. Leave other variants alone. |
 | `[keep-option]` | Make that option the default and remove the selector and its other options. |
 | `[keep-default]` | Keep the current default; remove the selector and its alternatives. |
 | `[remove-option]`, `[remove-axis]` | Remove that option, or the whole selector. |

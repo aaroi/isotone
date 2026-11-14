@@ -7,6 +7,7 @@
 - **Isotone tells you whether a pick stays in its tab.** `init` names how picks switch in your project and what would change it: per tab, with `?v=` links, in a React app on Vite 6 or later; shared by every tab on Vite 5 or without React; knobs only with `isotone serve`. `init --json` has it as `switching`, and the first run has the agent pass it on. The variants guide has a table of what each setup does, including that knob values stay in the browser and never travel in a link.
 - **The Variants panel says when a link's `?v=` isn't applied.** Where picks are shared by every tab, a link that asks for other variants used to show the current ones without a word; the panel now names what the link asked for.
 - **`variant new`, `add`, `use` and `list` warn when nothing will serve file variants**, as in a Next.js app or a Vite config without `isotone/vite`, and point to knobs or your app's own `VariantsSource`. `variant --help` says file variants need the Vite plugin.
+- **`combineVariantsSources(...sources)`** in `isotone/core`: one panel source over several, each pick, preview and request reaching the source that owns the selector.
 
 ### Fixed
 
@@ -19,6 +20,9 @@
 - **The agent guide no longer promises colours as hex.** A pinned element's `styles` give opaque `rgb()` colours as hex and any other colour, such as Tailwind v4's `oklch(…)`, as the browser reports it. Only the docs changed.
 - **`variant drop` removes `.isotone/variants/` once it's empty**, as does promoting the last variant. A directory holding anything else, such as `init`'s README, stays.
 - **`variant add` warns only about what happens in your setup.** On Vue and other hosts without React, where a switch swaps the whole file, it no longer says a copy reloads the page or is served whole. On React with Vite 5 or `variants: { live: false }`, it says a copy exporting helpers may reload the page, rather than that it will.
+- **An app's own selectors and `.isotone/knobs.json` knobs show together.** `mountIsotone({ variants: source, endpoint })` with the notes endpoint of the Vite plugin or `isotone serve` now lists the knobs (and, on Vite, file variants) beside the source's selectors, where before the knobs silently disappeared and stopped applying. Compare holds both, and Make default files one `[set-defaults]` note naming every pick, the app's own selectors in `payload.selectors`. A source's own `saveDefaults` still runs first.
+- **Make default and Compare appear for a host source without `saveDefaults`** once it is mounted with a notes endpoint; the bar that holds them needed one.
+- **`init --approach host` fits its setup and check to the framework.** It names the endpoint for Vite or `isotone serve`, and no longer asks for the Vite-only `data-isotone-inject` and `?isotone=` checks. It says the CLI cannot see the app's own selectors, and `variant list` names the files that hold them (`hostSources` in `--json`).
 
 ## 1.5.0
 

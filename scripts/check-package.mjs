@@ -27,7 +27,10 @@ import { npm } from './npm.mjs';
 // Bundle raised to 396.5 kB and tarball to 428.5 kB (395.1 and 427.4 kB; 1.5.0 shipped at 393.8 and
 // 421.9 kB; per tab or shared): the panel's note on a link's unapplied ?v=, settled as the panel opens,
 // init's switching paragraph, the variant commands' warning, and the guides and changelog that state it.
-const BUDGET = { bundle: 396_500, tarball: 428_500 }; // re-measured after the integration merges
+// Bundle raised to 397.5 kB and tarball to 429 kB (396.1 and 427.2 kB; a host source beside knobs):
+// combining sources and the one set-defaults note across them, in every entry that mounts the panel,
+// and the shipped docs that describe it.
+const BUDGET = { bundle: 397_500, tarball: 429_000 }; // re-measured after the integration merges
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

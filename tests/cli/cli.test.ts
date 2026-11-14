@@ -224,6 +224,26 @@ describe('variant', () => {
     expect(broken.text.out).toContain('is not valid JSON');
   });
 
+  it('says plainly that the app’s own selectors are not listed, and where they are', async () => {
+    const root = tempRepo();
+    mkdirSync(join(root, '.isotone'), { recursive: true });
+    const radius = { kind: 'range', id: 'card-radius', label: 'Card radius', min: 0, max: 24, step: 1, defaultValue: 12, unit: 'px' };
+    writeFileSync(join(root, '.isotone', 'knobs.json'), JSON.stringify([radius]));
+    const plain = makeIo(root);
+    expect(await runCli(['variant', 'list', '/'], plain)).toBe(0);
+    expect(plain.text.out).not.toContain('Not listed');
+
+    mkdirSync(join(root, 'app'), { recursive: true });
+    writeFileSync(join(root, 'app', 'review.tsx'), 'const source = createVariantsSource({ axes: [] });\n');
+    const io = makeIo(root);
+    expect(await runCli(['variant', 'list', '/'], io)).toBe(0);
+    expect(io.text.out).toContain('Not listed: the app’s own selectors (app/review.tsx)');
+    expect(io.text.out).toContain('card-radius');
+    const json = makeIo(root);
+    expect(await runCli(['variant', 'list', '/', '--json'], json)).toBe(0);
+    expect(JSON.parse(json.text.out)).toMatchObject({ hostSources: ['app/review.tsx'], knobs: [{ id: 'card-radius' }] });
+  });
+
   it('names a duplicate knob id as a duplicate, not as an invalid knob', async () => {
     const root = tempRepo();
     mkdirSync(join(root, '.isotone'), { recursive: true });
@@ -736,6 +756,28 @@ describe('init', () => {
     expect(await runCli(['init', '--approach', 'serve'], serve)).toBe(0);
     expect(serve.text.out).toContain('npx isotone serve');
     expect(serve.text.out).not.toContain('isotone/server');
+  });
+
+  it('fits the host setup and its check to the framework, and never sends a host to Vite-only checks', async () => {
+    const root = tempRepo();
+    writeFileSync(join(root, 'next.config.ts'), 'export default {};\n');
+    const next = makeIo(root);
+    expect(await runCli(['init', '--approach', 'host'], next)).toBe(0);
+    expect(next.text.out).toContain("'use client'");
+    expect(next.text.out).toContain("endpoint: 'http://127.0.0.1:4123/api/isotone/notes'");
+    expect(next.text.out).toContain('the CLI cannot read the app’s own selectors');
+    expect(next.text.out).toContain('curl http://127.0.0.1:4123/api/isotone/notes');
+    expect(next.text.out).not.toContain('data-isotone-inject');
+    expect(next.text.out).not.toContain('?isotone=');
+
+    const vite = tempRepo();
+    writeFileSync(join(vite, 'vite.config.ts'), 'export default {};\n');
+    const io = makeIo(vite);
+    expect(await runCli(['init', '--approach', 'host'], io)).toBe(0);
+    expect(io.text.out).toContain('isotone({ panel: false })');
+    expect(io.text.out).toContain("endpoint: '/api/isotone/notes'");
+    expect(io.text.out).toContain('and file variants show beside');
+    expect(io.text.out).not.toContain('data-isotone-inject');
   });
 
   it('says an existing integration is set up instead of adding it again, and asks to rename iteration()', async () => {

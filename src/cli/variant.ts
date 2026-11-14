@@ -44,6 +44,7 @@ import {
 import { mutateVariants } from '../node/variants/options';
 import { repoRelativeKey } from '../node/variants/paths';
 import { docPath } from './docs';
+import { hostSourceFiles } from './init';
 import { findNotesFile } from './notes';
 import { detectHost, vitePlugin, viteSwitching } from './project';
 import { toJson } from './text';
@@ -119,7 +120,8 @@ function printVariantHelp(io: CliIO): void {
   out(io, 'isotone variant — overlay variants under .isotone/variants/<id>/');
   out(io);
   out(io, '  variant list [<route>] [--all-routes]    every variant; * marks the active ones;');
-  out(io, '               [--json]                    --json: variants, knobs and skipped knobs as one object');
+  out(io, '               [--json]                    --json: variants, knobs and skipped knobs as one object,');
+  out(io, '                                           and hostSources: files with the app’s own selectors');
   out(io, '  variant new <id> [--note <prefix>] [--route <path>] [--label <text>]');
   out(io, '                   [--description <text>] [--group <id>] [--group-label <text>]');
   out(io, '                   [--section <text>]');
@@ -187,6 +189,7 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
     for (const { axis } of section.axes) for (const id of membersOf.get(axis.id) ?? []) sectionOf.set(id, section.name);
   }
   if (variants.length) warnUnserved(io, opts);
+  const hostSources = hostSourceFiles(resolve(opts.root));
 
   if (has(args, '--json')) {
     out(
@@ -208,10 +211,12 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
         knobs: knobs?.shown ?? [],
         skippedKnobs: knobs?.skipped ?? [],
         ...(knobs?.error ? { knobsError: knobs.error } : {}),
+        ...(hostSources.length ? { hostSources } : {}),
       }),
     );
     return 0;
   }
+  printHostSources(io, hostSources);
 
   if (rows.length === 0) {
     // A knobs-only project (any dev server without the Vite plugin) has no
@@ -307,6 +312,19 @@ function knobReport(io: CliIO, opts: VariantsStoreOptions, route: string | undef
     }
   });
   return { shown: overlayKnobs({ variants, knobs: readKnobs(opts) }, route), skipped };
+}
+
+/**
+ * The app's own selectors live in its code, out of the CLI's reach: say so
+ * first, so an empty or partial list is not read as what the panel shows.
+ */
+function printHostSources(io: CliIO, files: string[]): void {
+  if (!files.length) return;
+  const shown = files.slice(0, 3).join(', ') + (files.length > 3 ? ` and ${files.length - 3} more` : '');
+  out(io, `Not listed: the app’s own selectors (${shown}), which only the page can show.`);
+  out(io, 'The panel lists them first, then the variants and knobs below once mountIsotone');
+  out(io, 'has the notes endpoint of the Vite plugin or `isotone serve`.');
+  out(io);
 }
 
 function printKnobs(io: CliIO, report: KnobReport, route: string | undefined): void {
