@@ -6,7 +6,17 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { knobsFor, overlayGroups, splitSectionLabel, variantAppliesTo } from '../core/variants';
+import {
+  axisDefault,
+  OVERLAY_DEFAULT_OPTION,
+  type OverlayVariantStatus,
+  overlayAxes,
+  overlayGroups,
+  overlayKnobs,
+  sectionAxes,
+  variantAppliesTo,
+  visibleAxes,
+} from '../core/variants';
 import { isRouteModule, scanExports } from '../node/variants/exports';
 import { readNotes } from '../node/notes/store';
 import {
@@ -151,17 +161,27 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
   // Grouped over every variant, not the filtered rows: a sibling on another
   // route still decides which selector this one belongs to.
   const groupOf = new Map<string, string>();
-  const sectionOf = new Map<string, string>();
+  const membersOf = new Map<string, string[]>();
   for (const group of overlayGroups(variants)) {
-    // The same rule as the panel: a member's `section`, else the label prefix.
-    const explicit = group.members.find((m) => m.section !== undefined)?.section;
-    const section = splitSectionLabel(group.label, explicit).section;
-    for (const member of group.members) {
-      groupOf.set(member.id, group.id);
-      if (section) sectionOf.set(member.id, section);
-    }
+    for (const member of group.members) groupOf.set(member.id, group.id);
+    membersOf.set(
+      group.id,
+      group.members.map((m) => m.id),
+    );
   }
-  const knobs = knobReport(io, opts, scope);
+  const knobs = knobReport(io, opts, scope, variants);
+  // Sections as the panel draws the page (every page, without a route): the same selectors, less
+  // those a `showWhen` hides at the active variants and the knobs' defaults, grouped the same way.
+  const selects = overlayAxes({ variants, active }, scope);
+  const on = new Set(active);
+  const picks: Record<string, string> = {};
+  for (const axis of selects) picks[axis.id] = axis.options.find((o) => on.has(o.id))?.id ?? OVERLAY_DEFAULT_OPTION;
+  for (const knob of knobs?.shown ?? []) picks[knob.id] = axisDefault(knob);
+  const sectionOf = new Map<string, string>();
+  for (const section of sectionAxes(visibleAxes([...selects, ...(knobs?.shown ?? [])], picks))) {
+    if (section.name === null) continue;
+    for (const { axis } of section.axes) for (const id of membersOf.get(axis.id) ?? []) sectionOf.set(id, section.name);
+  }
 
   if (has(args, '--json')) {
     out(
@@ -248,7 +268,7 @@ interface KnobReport {
  * null when there is no such file. An invalid knob simply never shows up in
  * the panel, so this is the one place an agent can see why.
  */
-function knobReport(io: CliIO, opts: VariantsStoreOptions, route: string | undefined): KnobReport | null {
+function knobReport(io: CliIO, opts: VariantsStoreOptions, route: string | undefined, variants: OverlayVariantStatus[]): KnobReport | null {
   const file = join(resolve(opts.root), KNOBS_FILE);
   if (!existsSync(file)) return null;
   let raw: unknown;
@@ -262,6 +282,7 @@ function knobReport(io: CliIO, opts: VariantsStoreOptions, route: string | undef
   const guide = docPath(io.cwd, 'docs/variants.md');
   const skipped: KnobReport['skipped'] = [];
   const ids = new Set<string>();
+  const groups = new Set(overlayGroups(variants).map((group) => group.id));
   raw.forEach((entry, index) => {
     const id =
       entry && typeof entry === 'object' && typeof (entry as { id?: unknown }).id === 'string' ? (entry as { id: string }).id : null;
@@ -270,10 +291,17 @@ function knobReport(io: CliIO, opts: VariantsStoreOptions, route: string | undef
     // An earlier knob already took this id; the panel keeps that one.
     else if (ids.has(id as string))
       skipped.push({ index: index + 1, id, reason: 'another knob earlier in the file already has this id. Give each knob its own id.' });
-    else ids.add(id as string);
+    else {
+      ids.add(id as string);
+      if (groups.has(id as string))
+        skipped.push({
+          index: index + 1,
+          id,
+          reason: 'a file variant group has this id, so the panel shows only its selector. Give the knob its own id.',
+        });
+    }
   });
-  const valid = readKnobs(opts);
-  return { shown: route ? knobsFor(valid, route) : valid, skipped };
+  return { shown: overlayKnobs({ variants, knobs: readKnobs(opts) }, route), skipped };
 }
 
 function printKnobs(io: CliIO, report: KnobReport, route: string | undefined): void {

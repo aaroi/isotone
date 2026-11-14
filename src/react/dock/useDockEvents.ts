@@ -34,12 +34,47 @@ interface DockEventsOptions {
   onLeave: () => void;
 }
 
-/** Whether `code` is one of the shortcut's keys. */
-export const isShortcutKey = (code: string, shortcut: IsotoneShortcut) => ([] as string[]).concat(shortcut.code).includes(code);
+/** The key each character is typed with on a US layout, shifted or not, and § on a Mac ISO one. */
+const KEY_CODES: Record<string, string> = Object.fromEntries(
+  Object.entries({
+    Period: '.>',
+    Comma: ',<',
+    Slash: '/?',
+    Semicolon: ';:',
+    Quote: `'"`,
+    BracketLeft: '[{',
+    BracketRight: ']}',
+    Backslash: '\\|',
+    Backquote: '`~',
+    Minus: '-_',
+    Equal: '=+',
+    IntlBackslash: '§±',
+    Space: ' ',
+  }).flatMap(([code, keys]) => [...keys].map((key) => [key, code])),
+);
+
+/**
+ * The event's physical key. A real keyboard always sets `code`; an event an
+ * automation tool dispatches often carries only `key` (`'.'`, `code: ''`), so
+ * the key is read as a US layout would type it. Named keys (`Escape`, `F2`)
+ * share their code's name.
+ */
+function codeOf({ code, key = '' }: Pick<KeyboardEvent, 'code' | 'key'>): string {
+  if (code) return code;
+  if (/^[a-z]$/i.test(key)) return `Key${key.toUpperCase()}`;
+  if (/^\d$/.test(key)) return `Digit${key}`;
+  const shifted = '!@#$%^&*()'.indexOf(key);
+  if (shifted >= 0) return `Digit${(shifted + 1) % 10}`;
+  return KEY_CODES[key] ?? key;
+}
+
+/** Whether the event's key is one of the shortcut's keys. */
+export const isShortcutKey = (e: Pick<KeyboardEvent, 'code' | 'key'>, shortcut: IsotoneShortcut) =>
+  ([] as string[]).concat(shortcut.code).includes(codeOf(e));
 
 /** The shortcut's key with exactly its modifiers. */
 export const matches = (e: KeyboardEvent, shortcut: IsotoneShortcut) =>
-  isShortcutKey(e.code, shortcut) &&
+  isShortcutKey(e, shortcut) &&
   Boolean(e.metaKey || e.ctrlKey) === Boolean(shortcut.mod) &&
   e.shiftKey === Boolean(shortcut.shift) &&
   e.altKey === Boolean(shortcut.alt);

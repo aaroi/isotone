@@ -351,6 +351,27 @@ describe('promote / drop', () => {
 
     dropVariant(opts, 'v2');
     expect(readActive(opts)).toEqual([]);
+    // The last one takes the empty variants directory with it.
+    expect(existsSync(variantsDir(opts))).toBe(false);
+  });
+
+  it('keeps the variants directory while it holds anything else', () => {
+    const { opts, root } = tempRepo();
+    createVariant(opts, { id: 'v1' });
+    writeFileSync(join(variantsDir(opts), 'README.md'), '# Overlay variants\n');
+    dropVariant(opts, 'v1');
+    expect(readFileSync(join(variantsDir(opts), 'README.md'), 'utf8')).toBe('# Overlay variants\n');
+
+    rmSync(join(variantsDir(opts), 'README.md'));
+    createVariant(opts, { id: 'v2' });
+    addVariantFile(opts, 'v2', 'src/Button.tsx');
+    writeFileSync(join(variantDir(opts, 'v2'), 'src/Button.tsx'), 'override\n');
+    promoteVariant(opts, 'v2');
+    expect(readFileSync(join(root, 'src', 'Button.tsx'), 'utf8')).toBe('override\n');
+    expect(existsSync(variantsDir(opts))).toBe(false);
+    // Making a variant again recreates it.
+    createVariant(opts, { id: 'v3' });
+    expect(readVariant(opts, 'v3')).not.toBeNull();
   });
 
   it('refuses an id that is not a directory name, before anything is removed', () => {

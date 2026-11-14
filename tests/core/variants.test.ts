@@ -456,6 +456,26 @@ describe('sections', () => {
     expect(sections[1]?.axes[2]).toMatchObject({ label: 'Shadow', fullLabel: 'Header › Shadow' });
   });
 
+  it('puts a selector named after a section in it, not above a second heading of that name', () => {
+    // A file variant group labelled "Pricing card" beside a "Pricing card > Accent" knob.
+    const sections = sectionAxes([
+      select('pricing', 'Pricing card'),
+      select('more', 'More', { showWhen: { axis: 'pricing', equals: 'b' } }),
+      select('alone', 'Footer', { section: '' }),
+      { kind: 'color', id: 'accent', label: 'pricing card > Accent', defaultColor: '#000000', swatches: [] },
+      select('links', 'Links', { section: 'Footer' }),
+    ]);
+    expect(sections.map((s) => [s.name, s.axes.map((entry) => entry.axis.id)])).toEqual([
+      [null, ['alone']],
+      ['Pricing card', ['pricing', 'more', 'accent']],
+      ['Footer', ['links']],
+    ]);
+    expect(sections[1]?.axes.slice(0, 2).map((entry) => [entry.label, entry.fullLabel])).toEqual([
+      ['Pricing card', 'Pricing card'],
+      ['More', 'Pricing card › More'],
+    ]);
+  });
+
   it('groups a large selector set in linear passes without reordering it', () => {
     const axes = Array.from({ length: 5000 }, (_, i) => select(`axis-${i}`, `Area ${i % 7} > Decision ${i}`));
     const sections = sectionAxes(axes);

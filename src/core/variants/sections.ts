@@ -71,11 +71,16 @@ export interface VariantSection<T extends VariantAxis = VariantAxis> {
  * header; sections follow in the order their first selector appears, and every
  * selector keeps its relative order. A dependent axis (`showWhen`) without its
  * own section joins its parent's, so it never jumps away from the control that
- * reveals it. Linear in the number of axes.
+ * reveals it. A selector with no section that is named after one, like a file
+ * variant group labelled `Pricing card` beside a `Pricing card > Accent` knob,
+ * joins it rather than sitting apart above a heading of the same name. Linear
+ * in the number of axes.
  */
 export function sectionAxes<T extends VariantAxis>(axes: T[]): VariantSection<T>[] {
   const byId = new Map(axes.map((axis) => [axis.id, axis]));
   const labels = new Map(axes.map((axis) => [axis.id, axisSection(axis)]));
+  const named = new Set<string>();
+  for (const label of labels.values()) if (label.section !== null) named.add(label.section.toLowerCase());
   const resolved = new Map<string, string | null>();
   const sectionOf = (axis: T): string | null => {
     const trail = new Set<string>();
@@ -90,7 +95,9 @@ export function sectionAxes<T extends VariantAxis>(axes: T[]): VariantSection<T>
       const own = labels.get(current.id)?.section ?? null;
       trail.add(current.id);
       if (own !== null || current.section !== undefined || !current.showWhen) {
-        result = own;
+        // `section: ''` keeps a selector out even when its name matches one.
+        const title = labels.get(current.id)?.label ?? '';
+        result = own ?? (current.section === undefined && named.has(title.toLowerCase()) ? title : null);
         break;
       }
       const parent = byId.get(current.showWhen.axis);
@@ -110,9 +117,9 @@ export function sectionAxes<T extends VariantAxis>(axes: T[]): VariantSection<T>
       loose.axes.push(entry);
       continue;
     }
-    // An inherited section still prints the child's own label in full.
-    if (label.section === null) entry.fullLabel = `${name}${SECTION_SEPARATOR}${label.label}`;
     const key = name.toLowerCase();
+    // An inherited section still prints the child's own label in full; one named after its section only once.
+    if (label.section === null && label.label.toLowerCase() !== key) entry.fullLabel = `${name}${SECTION_SEPARATOR}${label.label}`;
     const section = sections.get(key) ?? { name, key, axes: [] };
     sections.set(key, section);
     section.axes.push(entry);

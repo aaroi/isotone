@@ -364,6 +364,60 @@ describe('variant', () => {
     expect(io.text.err).toContain('No variant "missing"');
   });
 
+  it("lists a group named after a knob's section in that section, as the panel shows it", async () => {
+    const root = tempRepo();
+    await runCli(['variant', 'new', 'pricing-a', '--group-label', 'Pricing card'], makeIo(root));
+    await runCli(['variant', 'new', 'apart', '--group-label', 'Pricing card'], makeIo(root));
+    expect(await runCli(['variant', 'section', 'apart', '--none'], makeIo(root))).toBe(0);
+    writeFileSync(
+      join(root, '.isotone/knobs.json'),
+      JSON.stringify([{ id: 'accent', label: 'Pricing card > Accent', kind: 'color', defaultColor: '#000000', swatches: [] }]),
+    );
+    const io = makeIo(root);
+    expect(await runCli(['variant', 'list', '--json'], io)).toBe(0);
+    const { variants } = JSON.parse(io.text.out) as { variants: { id: string; section: string | null }[] };
+    expect(Object.fromEntries(variants.map((v) => [v.id, v.section]))).toEqual({ 'pricing-a': 'Pricing card', apart: null });
+
+    // With a route, only that page's selectors make sections, and a knob's id is not a group's.
+    const scoped = tempRepo();
+    await runCli(['variant', 'new', 'card-a', '--group-label', 'Pricing card', '--route', '/a'], makeIo(scoped));
+    await runCli(['variant', 'new', 'layout-b', '--group-label', 'pricing CARD > Layout', '--route', '/b'], makeIo(scoped));
+    await runCli(['variant', 'new', 'head-b', '--group-label', 'header > Logo', '--route', '/b'], makeIo(scoped));
+    await runCli(['variant', 'new', 'nav-a', '--group-label', 'Header > Nav', '--route', '/a'], makeIo(scoped));
+    await runCli(['variant', 'new', 'accent-a', '--group', 'accent', '--group-label', 'Accent colour'], makeIo(scoped));
+    await runCli(['variant', 'new', 'promo-a', '--group', 'promo', '--group-label', 'Promo'], makeIo(scoped));
+    const swatchless = { kind: 'color', defaultColor: '#000000', swatches: [] };
+    writeFileSync(
+      join(scoped, '.isotone/knobs.json'),
+      JSON.stringify([
+        { ...swatchless, id: 'accent', label: 'Theme > Accent' },
+        // Shown only while promo-a is on: until then the panel has no Promo section.
+        { ...swatchless, id: 'promo-ink', label: 'Promo > Ink', showWhen: { axis: 'promo', equals: 'promo-a' } },
+      ]),
+    );
+    const listScoped = async () => {
+      const routed = makeIo(scoped);
+      expect(await runCli(['variant', 'list', '/a', '--json'], routed)).toBe(0);
+      return JSON.parse(routed.text.out) as {
+        variants: { id: string; section: string | null }[];
+        knobs: { id: string }[];
+        skippedKnobs: { id: string; reason: string }[];
+      };
+    };
+    let listed = await listScoped();
+    expect(Object.fromEntries(listed.variants.map((v) => [v.id, v.section]))).toEqual({
+      'card-a': null,
+      'nav-a': 'Header',
+      'accent-a': null,
+      'promo-a': null,
+    });
+    expect(listed.knobs.map((k) => k.id)).toEqual(['promo-ink']);
+    expect(listed.skippedKnobs).toEqual([{ index: 1, id: 'accent', reason: expect.stringContaining('a file variant group has this id') }]);
+    await runCli(['variant', 'use', 'promo-a'], makeIo(scoped));
+    listed = await listScoped();
+    expect(listed.variants.find((v) => v.id === 'promo-a')?.section).toBe('Promo');
+  });
+
   it('use activates alongside other groups and replaces only its own siblings', async () => {
     const root = tempRepo();
     commit(root, 'src/Table.tsx', 'export const Table = () => "rows";\n');

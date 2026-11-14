@@ -22,7 +22,9 @@ import { npm } from './npm.mjs';
 // that rolls changed characters, and its notes in the shipped design guide and changelog.
 // Tarball raised to 425.5 kB (423.9 kB; Default pinned per tab): the live store keeping `<group>:default`
 // in `?v=`, the `--done` hint's per-note variant context, and their notes in the shipped docs.
-const BUDGET = { bundle: 395_000, tarball: 425_500 };
+// Tarball raised to 424.5 kB (424.4 kB; newcomer fixes): reading the key when an event has no code, knobs
+// that clash with a group, and the notes on those, section names, colours and the variants directory.
+const BUDGET = { bundle: 395_000, tarball: 425_500 }; // re-measured after the integration merges
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

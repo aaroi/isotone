@@ -6,6 +6,8 @@ import { MAX_FEEDBACK_LENGTH } from '../../src/core/limits';
 import {
   createOverlayVariantsSource,
   createVariantsSource,
+  KNOBS_STORAGE_KEY,
+  OVERLAY_DEFAULT_OPTION,
   visibleAxes,
   type OverlayVariantsList,
   type SelectVariantAxis,
@@ -328,6 +330,35 @@ describe('overlay activation races', () => {
   };
   const source = () => createOverlayVariantsSource({ endpoint: '/variants', getRoute: () => '/', storage: null, knobRoot: null });
   const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+  it('leaves out a knob whose id a file variant group has, so the two never share a selection', async () => {
+    const accent = { kind: 'range' as const, label: 'Theme > Accent', min: 0, max: 10, step: 1, defaultValue: 0 };
+    const withKnobs = {
+      ...listing,
+      knobs: [
+        { ...accent, id: 'a' },
+        { ...accent, id: 'accent' },
+      ],
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json(withKnobs)),
+    );
+    // A value the reviewer left on knob `a` before a group took its id.
+    const stored = new Map([[KNOBS_STORAGE_KEY, JSON.stringify({ a: '5', accent: '7' })]]);
+    const props = new Map<string, string>();
+    const store = createOverlayVariantsSource({
+      endpoint: '/variants',
+      getRoute: () => '/',
+      storage: { getItem: (key) => stored.get(key) ?? null, setItem: (key, value) => void stored.set(key, value), removeItem: () => {} },
+      knobRoot: { style: { setProperty: (name, value) => void props.set(name, value), removeProperty: (name) => void props.delete(name) } },
+    });
+    await store.refresh();
+    expect(store.getAxes().map((axis) => axis.id)).toEqual(['a', 'b', 'accent']);
+    expect(store.getSelections()).toEqual({ a: OVERLAY_DEFAULT_OPTION, b: OVERLAY_DEFAULT_OPTION, accent: '7' });
+    // Nothing the panel cannot show or reset styles the page.
+    expect(Object.fromEntries(props)).toEqual({ '--knob-accent': '7' });
+  });
 
   it('serializes rapid picks and keeps both groups when an earlier activation fails', async () => {
     let release!: (response: Response) => void;

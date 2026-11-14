@@ -52,6 +52,7 @@ export {
   knobsFor,
   overlayAxes,
   overlayGroups,
+  overlayKnobs,
   variantAppliesTo,
 } from './overlay';
 export type { KnobAxis, OverlayVariant, OverlayVariantStatus, OverlayVariantsList } from './overlay';

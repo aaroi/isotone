@@ -119,7 +119,8 @@ A colour knob takes a `defaultColor` and named `swatches`, all as hex values:
 ```
 
 Ranges render as sliders and colours as swatches with a custom picker. An
-invalid entry is skipped, and `npx isotone variant list` names it. Knobs work
+invalid entry is skipped, and so is a knob whose id a file variant group already
+has (a lone variant's id is its group's); `npx isotone variant list` names each one. Knobs work
 with `isotone serve` too. A value reaches the page as `--knob-<id>` on `<html>`,
 unit appended, so the source reads it with the committed default as fallback:
 
@@ -179,6 +180,8 @@ count. Screen readers, notes and saved defaults keep the full name,
   Unsectioned selectors come first; sections follow in order of their first
   selector, and selectors keep their order inside them.
 - A `showWhen` selector without its own section joins its parent's.
+- A selector without a section that is named after one, such as a file variant
+  group labelled `Pricing card` beside a `Pricing card > Accent` knob, joins it.
 - Sections are display text only: IDs, `?v=` links and `selections` do not change.
 
 An explicit `section` field overrides the prefix, and the label shows as
@@ -195,7 +198,8 @@ Host axes and `.isotone/knobs.json` entries take a prefixed `label` or a
 `variant new <id> --section Header`.
 `variant section <id> <text>` moves an existing selector with its whole group,
 `variant section <id> --none` takes it out of every section, and `variant list`
-shows a SECTION column.
+shows a SECTION column: as the panel draws `variant list <route>`, or every
+route's selectors together without one.
 
 ## The Variants panel
 
