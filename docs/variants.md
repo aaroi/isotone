@@ -307,7 +307,7 @@ also exports data or a hook cannot be swapped alone: the update climbs to its
 importer, and an entry with no accept handler reloads. Accept the import in the
 entry and re-render from the new module, or move the extra exports out.
 On Vite 6 and later, `<file>?isotone=<id>` serves one copy whole without
-switching anything, to check that it compiles.
+switching anything, to check that it compiles; Vite 5 answers 404.
 
 ### Vue components
 

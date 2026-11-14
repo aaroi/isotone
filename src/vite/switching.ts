@@ -99,8 +99,9 @@ export function createSwitching(overrides: Overrides) {
         }
         return [...(modulesOf(source) ?? [])].filter((m) => versionOfId(m.id) === hit.id);
       }
-      if (!overrides.active().includes(hit.id)) return [];
+      // A check of any copy of this file compiles afresh on its next request.
       const { page } = pageModules(source);
+      if (!overrides.active().includes(hit.id)) return [];
       // A component no page has loaded has nothing to reload.
       if (client && isSingleFileComponent(source)) return page.length > 0 ? reloadForComponent() : [];
       // The browser holds the real file's URL, so the override's edit has

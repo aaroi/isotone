@@ -103,25 +103,43 @@ function componentBlock(env: LoadEnvironment | undefined, path: string): Promise
 }
 
 /**
- * `<file>.vue?isotone=<id>` gets a plain 404. plugin-vue keeps one parse of
- * each component, shared by every tab, so a copy compiled on its own would
- * replace the page's; answering with the page's file instead would pass an
- * agent's check of a copy it never compiled.
+ * A check request (`<file>?isotone=<id>`) that would not compile the copy gets
+ * a plain 404, rather than the page's file, which would pass an agent's check
+ * of a copy it never compiled. For a `.vue` file: plugin-vue keeps one parse
+ * of each component, shared by every tab, so a copy compiled on its own would
+ * replace the page's. On Vite 5: see load().
  */
-function refuseComponentVersion(
-  req: { url?: string },
-  res: { statusCode: number; setHeader(name: string, value: string): void; end(body: string): void },
-  next: () => void,
-): void {
-  const url = req.url ?? '';
-  const at = url.indexOf('?');
-  if (at < 0 || !isSingleFileComponent(url.slice(0, at)) || !new URLSearchParams(url.slice(at + 1)).has(VERSION_QUERY)) {
-    next();
-    return;
-  }
-  res.statusCode = 404;
-  res.setHeader('content-type', 'text/plain; charset=utf-8');
-  res.end('isotone serves no copy of a .vue file on its own: switch to its variant with `npx isotone variant use <id>`.\n');
+function refuseVersion(vite6: () => boolean) {
+  return (
+    req: { url?: string },
+    res: { statusCode: number; setHeader(name: string, value: string): void; end(body: string): void },
+    next: () => void,
+  ): void => {
+    const url = req.url ?? '';
+    const at = url.indexOf('?');
+    if (at < 0 || !new URLSearchParams(url.slice(at + 1)).has(VERSION_QUERY)) {
+      next();
+      return;
+    }
+    let path = url.slice(0, at);
+    try {
+      path = decodeURIComponent(path);
+    } catch {
+      /* Left as written; Vite answers a malformed path itself. */
+    }
+    const reason = isSingleFileComponent(path)
+      ? 'isotone serves no copy of a .vue file on its own'
+      : vite6()
+        ? null
+        : 'isotone serves a copy on its own from Vite 6';
+    if (reason === null) {
+      next();
+      return;
+    }
+    res.statusCode = 404;
+    res.setHeader('content-type', 'text/plain; charset=utf-8');
+    res.end(`${reason}: switch to its variant with \`npx isotone variant use <id>\` instead.\n`);
+  };
 }
 
 /** Say where the notes go after Vite's own banner, so it is not buried under
@@ -206,9 +224,9 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       // `?isotone=<id>`: one version of a tracked file. Live dispatchers import
       // each version this way, and on any dev server it shows that a copy
       // compiles. Only Vite 6 and later can check it against
-      // `server.fs.deny` (below), so on Vite 5 it means nothing. Nor for a
-      // component: plugin-vue would take that copy for the real file's
-      // parse, so the request is refused before it gets here.
+      // `server.fs.deny` (below); Vite 5's check takes a server, not a
+      // config. On Vite 5, as for a component (plugin-vue would take that
+      // copy for the real file's parse), refuseVersion answers 404 first.
       const versioned = vite6 && !isSingleFileComponent(path);
       const version = versioned ? new URLSearchParams(query).get(VERSION_QUERY) : null;
       // Only a file some variant tracks has versions. Any other path is left
@@ -294,7 +312,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
           VARIANTS_ENDPOINT,
           variantsEndpoint(() => overrides.opts, activate, allowedHosts),
         );
-        server.middlewares.use(refuseComponentVersion);
+        server.middlewares.use(refuseVersion(() => vite6));
       }
 
       // The tab's variant store has to exist before the app's modules run,

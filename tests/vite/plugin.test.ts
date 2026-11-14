@@ -1452,6 +1452,38 @@ describe('Vue single-file components', () => {
     // Without one, Vite keeps its own answer.
     const plain = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([page]), invalidateModule } };
     expect(fresh.hotUpdate.call({ environment: plain }, { file: source })).toBeUndefined();
+    // An edit of a copy whose variant is off updates no page, but its
+    // check would otherwise answer from before the edit.
+    invalidateModule.mockClear();
+    expect(fresh.hotUpdate.call({ environment: client }, { file: override })).toEqual([]);
+    expect(invalidateModule).toHaveBeenCalledWith(check);
+  });
+
+  it('answers 404 to a check that would not compile the copy: a component, or on Vite 5', async () => {
+    const { root } = vueProject();
+    /** The refusing middleware as configureServer mounts it, on a server with or without environments. */
+    const refusal = (environments: boolean) => {
+      const server = fakeServer(root);
+      plugin(root, 'serve').configureServer(environments ? Object.assign(server, { environments: { client: {} } }) : server);
+      const mounted = server.middlewares.use.mock.calls.find((c) => typeof c[0] === 'function' && c.length === 1)?.[0] as (
+        req: { url: string },
+        res: { statusCode: number; setHeader: () => void; end: (body: string) => void },
+        next: () => void,
+      ) => void;
+      return (url: string) =>
+        new Promise<number | 'next'>((done) => {
+          const res = { statusCode: 200, setHeader: () => {}, end: () => done(res.statusCode) };
+          mounted({ url }, res, () => done('next'));
+        });
+    };
+    const vite6 = refusal(true);
+    expect(await vite6('/src/Card.vue?isotone=v')).toBe(404);
+    expect(await vite6('/src/Card%2Evue?t=1&isotone=v')).toBe(404);
+    expect(await vite6('/src/Button.tsx?isotone=b')).toBe('next');
+    expect(await vite6('/src/Card.vue?vue&type=style&index=0&lang.css')).toBe('next');
+    const vite5 = refusal(false);
+    expect(await vite5('/src/Button.tsx?isotone=b')).toBe(404);
+    expect(await vite5('/src/Button.tsx')).toBe('next');
   });
 
   it('reloads the page when a component switches or its active copy changes', async () => {
