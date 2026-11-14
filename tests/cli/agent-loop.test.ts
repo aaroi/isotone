@@ -81,6 +81,33 @@ describe('--done waits for the fix to land', () => {
     expect(stored(root)[0]?.done).toBe(true);
   });
 
+  // Any change counts, since a fix often lands away from the element's component; naming what was
+  // counted shows when that was someone else's change.
+  it('names the files it counted as the fix', async () => {
+    const root = repo();
+    notes(root, [{ id: 'aaaa1111', createdAt: new Date(Date.now() + 1000).toISOString() }]);
+    write(root, 'README.md', 'unrelated\n', Date.now() + 2000);
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    expect(io.text.out).toContain('Counted as its fix, changed since the note: README.md.');
+
+    notes(root, [{ id: 'bbbb2222', createdAt: ago(60_000) }]);
+    expect(await runCli(['--working', 'bbbb'], captureIo(root))).toBe(0);
+    for (const file of ['a.css', 'b.css', 'c.css', 'd.css', 'e.css', 'f.css']) write(root, `src/${file}`, 'a {}\n', Date.now() + 3000);
+    expect(await runCli(['variant', 'new', 'hero-a', '--force'], captureIo(root))).toBe(0);
+    const json = captureIo(join(root, 'src'));
+    expect(await runCli(['--done', 'bbbb', '--json'], json)).toBe(0);
+    expect(JSON.parse(json.text.out)).toHaveLength(1);
+    // From where the agent runs; a variant is one change; past five, a count.
+    expect(json.text.err).toContain('Counted as its fix, changed since --working: ../.isotone/variants/hero-a/, ../README.md, a.css,');
+    expect(json.text.err).toContain('b.css, c.css and 3 more.');
+    // --force counts nothing.
+    notes(root, [{ id: 'cccc3333', createdAt: ago(60_000) }]);
+    const forced = captureIo(root);
+    expect(await runCli(['--done', 'cccc', '--force'], forced)).toBe(0);
+    expect(forced.text.out).not.toContain('Counted');
+  });
+
   it('counts a fix that was committed after the note', async () => {
     const root = repo();
     notes(root, [{ id: 'cccc3333', createdAt: ago(60_000) }]);
@@ -298,7 +325,7 @@ describe('--done and variants', () => {
     write(root, 'src/index.css', 'body { margin: 8px; }\n', Date.now() + 2000);
     const io = captureIo(root);
     expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
-    expect(io.text.out).not.toContain('pricing-featured');
+    expect(io.text.out).not.toContain('pricing-featured (');
     expect(io.text.out).not.toContain('variant use');
   });
 
@@ -431,20 +458,20 @@ describe('--done and variants', () => {
     expect(io.text.out).toContain('since `variant use` moves every tab here.');
   });
 
-  // Next runs no Vite plugin, so no copy is served (#63): the page shows the fix, whatever is active.
-  it('names no copy a page may show where nothing serves file variants', async () => {
+  // Next runs no Vite plugin, so no copy is served (#63): the page shows the fix, whatever is active,
+  // and a copy made there anyway (--force) needs no sync.
+  it('says nothing of variants where nothing serves them', async () => {
     const root = repo();
     write(root, 'package.json', JSON.stringify({ dependencies: { next: '16.0.0', react: '^19.0.0' } }));
     write(root, 'next.config.ts', 'export default {};\n');
     notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000), variant: { axisId: 'hero', label: 'Hero', optionId: 'hero-left' } }]);
-    expect(await runCli(['variant', 'new', 'hero-left', '--route', '/', '--group', 'hero'], captureIo(root))).toBe(0);
-    expect(await runCli(['variant', 'add', 'hero-left', 'src/App.jsx'], captureIo(root))).toBe(0);
-    expect(await runCli(['variant', 'use', 'hero-left'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'new', 'hero-left', '--route', '/', '--group', 'hero', '--force'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'add', 'hero-left', 'src/App.jsx', '--force'], captureIo(root))).toBe(0);
+    expect(await runCli(['variant', 'use', 'hero-left', '--force'], captureIo(root))).toBe(0);
     write(root, 'src/App.jsx', 'export default function App() { return <button>Start</button>; }\n', Date.now() + 2000);
     const io = captureIo(root);
     expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
-    // The copy may still lack the fix, so the sync advice stays.
-    expect(io.text.out).toContain('hero-left (src/App.jsx): npx isotone variant sync hero-left');
+    expect(io.text.out).not.toContain('variant sync');
     expect(io.text.out).not.toContain('The reviewer may be looking');
   });
 

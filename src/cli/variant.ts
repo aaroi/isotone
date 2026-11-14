@@ -57,10 +57,10 @@ import { type CliIO, errOut, extractFlag, findNoteByPrefix, has, out, parseArgs,
 /** Each subcommand's value flags, boolean flags and most positionals; anything else is refused. */
 const SPEC: Record<string, [values: string[], booleans: string[], positionals: number]> = {
   list: [[], ['--all-routes', '--json'], 1],
-  new: [['--label', '--route', '--note', '--description', '--file', '--group', '--group-label', '--section'], [], 1],
+  new: [['--label', '--route', '--note', '--description', '--file', '--group', '--group-label', '--section'], ['--force'], 1],
   add: [[], ['--new', '--force'], Number.POSITIVE_INFINITY],
   rm: [[], [], 2],
-  use: [[], [], 2],
+  use: [[], ['--force'], 2],
   off: [[], [], 1],
   group: [['--label'], [], 2],
   section: [[], ['--none'], Number.POSITIVE_INFINITY],
@@ -130,7 +130,7 @@ function printVariantHelp(io: CliIO): void {
   out(io, '                                           and hostSources: files with the app’s own selectors');
   out(io, '  variant new <id> [--note <prefix>] [--route <path>] [--label <text>]');
   out(io, '                   [--description <text>] [--group <id>] [--group-label <text>]');
-  out(io, '                   [--section <text>]');
+  out(io, '                   [--section <text>] [--force]');
   out(io, '                                           start one; --note copies route and element from a note,');
   out(io, '                                           --group makes it one alternative of a shared selector,');
   out(io, '                                           --section names the part of the page it sits under');
@@ -143,7 +143,7 @@ function printVariantHelp(io: CliIO): void {
   out(io, '                                           put an existing variant into a group');
   out(io, '  variant section <id> [<text> | --none]   put its selector (every variant in its group) in a');
   out(io, '                                           panel section; no text goes back to the label prefix');
-  out(io, '  variant use <id>                         activate it on every dev server on this root, in');
+  out(io, '  variant use <id> [--force]               activate it on every dev server on this root, in');
   out(io, '                                           place of its group siblings; other groups stay');
   out(io, '  variant use default [<groupId>]          back to the real files, for every group or one');
   out(io, '  variant off <id>                         deactivate one variant');
@@ -154,7 +154,8 @@ function printVariantHelp(io: CliIO): void {
   out(io, 'Options: --dir <path> (default .isotone/variants), --file <path> (notes file for --note)');
   out(io);
   out(io, 'File variants need the Vite plugin (isotone/vite). With `isotone serve` or another dev');
-  out(io, 'server, use knobs in .isotone/knobs.json, or the app’s own VariantsSource.');
+  out(io, 'server, use knobs in .isotone/knobs.json, or the app’s own VariantsSource. In a Next.js');
+  out(io, 'app, which runs no Vite plugin, new, add and use refuse unless given --force.');
   out(io);
   out(io, 'Variants that override the same file are alternatives of one selector without a');
   out(io, '--group; use one when the alternatives touch different files.');
@@ -388,6 +389,7 @@ function cmdNew(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
     errOut(io, 'Give a variant id: isotone variant new <id>');
     return 1;
   }
+  refuseUnserved(io, opts, args, `"${id}" was not created`);
 
   // --note seeds route/element from an existing piece of feedback so a
   // variant answering a note does not need its context typed out again.
@@ -420,7 +422,7 @@ function cmdNew(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
       variant.group ? ` in group ${variant.group}` : ''
     }${variant.section ? ` in section "${variant.section}"` : ''}`,
   );
-  warnUnserved(io, opts);
+  warnUnserved(io, opts, args);
   return 0;
 }
 
@@ -431,6 +433,7 @@ function cmdAdd(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
     errOut(io, 'Usage: isotone variant add <id> [--new] [--force] <file...>');
     return 1;
   }
+  refuseUnserved(io, opts, args, `Nothing was added to "${id}"`);
   for (const file of files) addVariantFile(opts, id, file, { create, force: has(args, '--force') });
   out(io, create ? `created ${files.length} new file(s) in "${id}"` : `added ${files.length} file(s) to "${id}"`);
   if (!create) {
@@ -438,27 +441,47 @@ function cmdAdd(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
     for (const file of files) warnNoHotSwap(io, file, switching);
   }
   warnOverlaps(io, opts, id);
-  warnUnserved(io, opts);
+  warnUnserved(io, opts, args);
   return 0;
+}
+
+/** Where Next.js leaves file variants to: knobs, or the app's own selectors. */
+function alternatives(root: string): string {
+  const own = hostSourceFiles(root)[0];
+  return own
+    ? `Use knobs in .isotone/knobs.json, or a selector in the app’s own VariantsSource (${own}).`
+    : 'Use knobs in .isotone/knobs.json, or the app’s own VariantsSource (npx isotone init --approach host).';
+}
+
+/**
+ * Nothing serves a file variant in a Next.js app, so making or activating one
+ * there would only look like it worked: refused, unless `--force`.
+ */
+function refuseUnserved(io: CliIO, opts: VariantsStoreOptions, args: string[], what: string): void {
+  if (has(args, '--force') || switchingOf(opts) !== 'none') return;
+  throw new Error(
+    `${what}: file variants need the Vite plugin (isotone/vite), and Next.js does not run it, so the panel would never show it. ${alternatives(variantsProject(opts) ?? io.cwd)} --force goes ahead anyway.`,
+  );
 }
 
 /**
  * The store takes a variant anywhere, but only the Vite plugin serves one: in
  * a Next app, or under `isotone serve`, the panel lists nothing while the CLI
  * reports success. Said on stderr, so `--json` output stays parseable. Only
- * Next is certain: a sibling dev server can serve this project's variants
- * (`variants: { root }`), so the rest say "may".
+ * Next is certain (and refused without `--force`, so said only by `list`): a
+ * sibling dev server can serve this project's variants (`variants: { root }`),
+ * so the rest say "may".
  */
-function warnUnserved(io: CliIO, opts: VariantsStoreOptions): void {
+function warnUnserved(io: CliIO, opts: VariantsStoreOptions, args: string[] = []): void {
   const root = variantsProject(opts);
   if (root === null) return;
   const { loaded, viteConfig } = vitePlugin(root);
   if (loaded) return;
-  const alternatives = 'Use knobs in .isotone/knobs.json, or the app’s own VariantsSource (npx isotone init --approach host).';
   if (detectHost(root) === 'next') {
+    if (has(args, '--force')) return;
     errOut(
       io,
-      `warning: file variants need the Vite plugin (isotone/vite), and Next.js does not run it, so the panel will not show them. ${alternatives}`,
+      `warning: file variants need the Vite plugin (isotone/vite), and Next.js does not run it, so the panel will not show them. ${alternatives(root)}`,
     );
   } else if (viteConfig) {
     errOut(
@@ -468,7 +491,7 @@ function warnUnserved(io: CliIO, opts: VariantsStoreOptions): void {
   } else {
     errOut(
       io,
-      `warning: file variants need the Vite plugin (isotone/vite), and no config in this directory imports it, so the panel may not show them. ${alternatives}`,
+      `warning: file variants need the Vite plugin (isotone/vite), and no config in this directory imports it, so the panel may not show them. ${alternatives(root)}`,
     );
   }
 }
@@ -554,7 +577,7 @@ function cmdRm(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOpt
   return 0;
 }
 
-function cmdUse(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOptions): number {
+function cmdUse(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOptions): number {
   const [id, groupId] = pos;
   if (!id) {
     errOut(io, 'Usage: isotone variant use <id> | variant use default [<groupId>]');
@@ -564,6 +587,8 @@ function cmdUse(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOp
     errOut(io, `Unexpected "${groupId}": only \`variant use default <groupId>\` takes a group.`);
     return 1;
   }
+  // Back to the real files is what the page shows anyway.
+  if (id !== 'default') refuseUnserved(io, opts, args, `"${id}" was not activated`);
   // Under the same lock as every other variants change, and refused like the
   // panel's request when another group already overrides one of its files.
   const message = mutateVariants(opts, () => {
@@ -600,7 +625,7 @@ function cmdUse(pos: string[], _args: string[], io: CliIO, opts: VariantsStoreOp
     return `active: "${id}"${describeActive(readActive(opts), id)}`;
   });
   out(io, message);
-  warnUnserved(io, opts);
+  if (id !== 'default') warnUnserved(io, opts, args);
   return 0;
 }
 

@@ -295,31 +295,51 @@ describe('variant', () => {
     expect(existsSync(join(root, '.isotone/variants/bold-cta'))).toBe(false);
   });
 
-  it('warns new, add, use and list when Next.js will not serve file variants, and names knobs and a host source', async () => {
+  it('refuses new, add and use in a Next.js app, where nothing serves file variants, unless --force', async () => {
     const root = tempRepo();
     writeFileSync(join(root, 'package.json'), JSON.stringify({ dependencies: { next: '16.0.0', react: '19.0.0' } }));
     writeFileSync(join(root, 'next.config.ts'), 'export default {};\n');
     commit(root, 'app/Hero.tsx', 'export const Hero = () => null;\n');
+    const refused = makeIo(root);
+    expect(await runCli(['variant', 'new', 'hero-a'], refused)).toBe(1);
+    expect(refused.text.err).toContain(
+      '"hero-a" was not created: file variants need the Vite plugin (isotone/vite), and Next.js does not run it',
+    );
+    expect(refused.text.err).toContain(
+      'Use knobs in .isotone/knobs.json, or the app’s own VariantsSource (npx isotone init --approach host). --force goes ahead anyway.',
+    );
+    expect(existsSync(join(root, '.isotone/variants/hero-a'))).toBe(false);
+
+    // --force stores it, and says nothing more: the agent was told.
     for (const argv of [
-      ['variant', 'new', 'hero-a'],
-      ['variant', 'add', 'hero-a', 'app/Hero.tsx'],
-      ['variant', 'use', 'hero-a'],
+      ['variant', 'new', 'hero-a', '--force'],
+      ['variant', 'add', 'hero-a', 'app/Hero.tsx', '--force'],
+      ['variant', 'use', 'hero-a', '--force'],
       ['variant', 'use', 'default'],
-      ['variant', 'list'],
     ]) {
       const io = makeIo(root);
-      // Still a success: the variant is stored, it is only not shown.
       expect(await runCli(argv, io), argv.join(' ')).toBe(0);
-      expect(io.text.err, argv.join(' ')).toContain('Next.js does not run it, so the panel will not show them');
-      expect(io.text.err).toContain(
-        'Use knobs in .isotone/knobs.json, or the app’s own VariantsSource (npx isotone init --approach host).',
-      );
+      expect(io.text.err, argv.join(' ')).toBe('');
     }
-    // On stderr, so the listing an agent parses stays JSON.
+    const add = makeIo(root);
+    expect(await runCli(['variant', 'add', 'hero-a', 'app/Hero.tsx'], add)).toBe(1);
+    expect(add.text.err).toContain('Nothing was added to "hero-a"');
+    const use = makeIo(root);
+    expect(await runCli(['variant', 'use', 'hero-a'], use)).toBe(1);
+    expect(use.text.err).toContain('"hero-a" was not activated');
+    expect(JSON.parse(readFileSync(join(root, '.isotone/active.json'), 'utf8')).active).toEqual([]);
+
+    // A variant made anyway is listed with the warning, on stderr, so the listing an agent parses stays JSON.
     const json = makeIo(root);
     expect(await runCli(['variant', 'list', '--json'], json)).toBe(0);
     expect(JSON.parse(json.text.out).variants[0]).toMatchObject({ id: 'hero-a', active: false });
-    expect(json.text.err).toContain('Next.js does not run it');
+    expect(json.text.err).toContain('Next.js does not run it, so the panel will not show them');
+
+    // The app's own VariantsSource is named instead of set up again.
+    commit(root, 'app/Review.tsx', "import { createVariantsSource } from 'isotone/react';\ncreateVariantsSource({ axes: [] });\n");
+    const own = makeIo(root);
+    expect(await runCli(['variant', 'new', 'hero-b'], own)).toBe(1);
+    expect(own.text.err).toContain('or a selector in the app’s own VariantsSource (app/Review.tsx).');
   });
 
   it('warns when the Vite config does not import the plugin, and says nothing once it does', async () => {
@@ -368,16 +388,16 @@ describe('variant', () => {
     const next = tempRepo();
     writeFileSync(join(next, 'next.config.ts'), 'export default {};\n');
     const unserved = makeIo(elsewhere);
-    expect(await runCli(['variant', '--dir', join(next, '.isotone/variants'), 'new', 'hero-c'], unserved)).toBe(0);
+    expect(await runCli(['variant', '--dir', join(next, '.isotone/variants'), 'new', 'hero-c'], unserved)).toBe(1);
     expect(unserved.text.err).toContain('Next.js does not run it');
   });
 
-  it('warns a Next app with a Vitest vite.config as Next, not to add the plugin there', async () => {
+  it('takes a Next app with a Vitest vite.config as Next, not to add the plugin there', async () => {
     const root = tempRepo();
     writeFileSync(join(root, 'package.json'), JSON.stringify({ dependencies: { next: '16.0.0' }, devDependencies: { vitest: '^3.0.0' } }));
     writeFileSync(join(root, 'vite.config.ts'), 'export default { test: {} };\n');
     const io = makeIo(root);
-    expect(await runCli(['variant', 'new', 'hero-a'], io)).toBe(0);
+    expect(await runCli(['variant', 'new', 'hero-a'], io)).toBe(1);
     expect(io.text.err).toContain('Next.js does not run it');
     expect(io.text.err).not.toContain('prints the plugin line');
   });
@@ -1256,6 +1276,138 @@ describe('init names how picks switch', () => {
   it('has the agent say switching is unclear when the Vite version is', async () => {
     const { text } = await init(project(viteConfig, { devDependencies: { ...react, vite: 'workspace:*' } }));
     expect(text).toContain('- whether a pick stays in its tab or changes every tab (Switching above);');
+  });
+});
+
+describe('init fits the setup to what the project already has', () => {
+  function project(files: Record<string, string>, pkg: Record<string, unknown>): string {
+    const root = tempRepo();
+    writeFileSync(join(root, 'package.json'), JSON.stringify(pkg));
+    for (const [name, text] of Object.entries(files)) {
+      mkdirSync(dirname(join(root, name)), { recursive: true });
+      writeFileSync(join(root, name), text);
+    }
+    return root;
+  }
+  async function init(root: string, ...args: string[]): Promise<string> {
+    const io = makeIo(root);
+    expect(await runCli(['init', ...args], io)).toBe(0);
+    return io.text.out;
+  }
+  const react = { react: '^19.0.0', 'react-dom': '^19.0.0' };
+
+  it('names React Router framework mode and says the server renders from active.json while the tab follows ?v=', async () => {
+    const files = {
+      'vite.config.ts': "import { reactRouter } from '@react-router/dev/vite';\nexport default { plugins: [reactRouter()] };\n",
+      'react-router.config.ts': 'export default { ssr: true };\n',
+    };
+    const pkg = {
+      scripts: { dev: 'react-router dev' },
+      dependencies: react,
+      devDependencies: { '@react-router/dev': '^7.0.0', vite: '^7.0.0' },
+    };
+    const text = await init(project(files, pkg));
+    expect(text).toContain('isotone init — React Router on Vite');
+    expect(text).toContain('Keep reactRouter() in the list so a variant switch swaps in place.');
+    expect(text).toContain('React Router renders each page on the server from .isotone/active.json; the browser then');
+    expect(text).toContain('follows the tab’s ?v=, switching right after it hydrates');
+
+    // SPA mode renders nothing on the server.
+    const spa = await init(project({ ...files, 'react-router.config.ts': 'export default { ssr: false };\n' }, pkg));
+    expect(spa).toContain('isotone init — Vite');
+    expect(spa).not.toContain('renders each page on the server');
+  });
+
+  it('names the framework plugin it finds instead of React’s', async () => {
+    const vue = await init(
+      project(
+        { 'vite.config.ts': 'export default {};\n' },
+        { dependencies: { vue: '^3.5.0' }, devDependencies: { '@vitejs/plugin-vue': '^6.0.0', vite: '^7.0.0' } },
+      ),
+    );
+    expect(vue).toContain('Keep @vitejs/plugin-vue in the list: it compiles each variant’s copy.');
+    expect(vue).not.toContain('plugin-react');
+    const bare = await init(project({ 'vite.config.ts': 'export default {};\n' }, { devDependencies: { vite: '^7.0.0' } }));
+    expect(bare).toContain('Keep the framework’s own Vite plugin in the list');
+  });
+
+  it('prints the Tailwind v4 @source line relative to the CSS file, and the lint ignore, until they are in place', async () => {
+    const root = project(
+      {
+        'vite.config.ts': 'export default {};\n',
+        'app/styles/app.css': '@import "tailwindcss";\n',
+        'eslint.config.js': "export default [{ ignores: ['dist'] }];\n",
+        'biome.json': '{ "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json" }\n',
+      },
+      {
+        dependencies: react,
+        devDependencies: { '@vitejs/plugin-react': '^5.0.0', '@tailwindcss/vite': '^4.0.0', typescript: '^5.0.0', vite: '^7.0.0' },
+      },
+    );
+    const text = await init(root);
+    expect(text).toContain('2. Tailwind v4 scans only what it is pointed at');
+    expect(text).toContain('In app/styles/app.css, after @import "tailwindcss", add:');
+    expect(text).toContain('     @source "../../.isotone/variants/**/*.{ts,tsx}";');
+    expect(text).toContain(
+      "3. Keep the linter off variant copies, whose imports resolve from the real file:\n   in eslint.config.js, add { ignores: ['.isotone/**'] } as an entry of its own.",
+    );
+    expect(text).toContain('4. Keep the linter off variant copies');
+    expect(text).toContain('in biome.json, add "!.isotone" to files.includes.');
+    expect(text).toContain('5. Start or restart the dev server');
+
+    // A re-run over an existing setup still says what is missing, and nothing once it is there.
+    writeFileSync(join(root, 'vite.config.ts'), "import { isotone } from 'isotone/vite';\nexport default { plugins: [isotone()] };\n");
+    const rerun = await init(root);
+    expect(rerun).toContain('Already set up: vite.config.ts loads Isotone.');
+    expect(rerun).toContain('@source "../../.isotone/variants/**/*.{ts,tsx}";');
+    writeFileSync(join(root, 'app/styles/app.css'), '@import "tailwindcss";\n@source "../../.isotone/variants/**/*.{ts,tsx}";\n');
+    writeFileSync(join(root, 'eslint.config.js'), "export default [{ ignores: ['dist', '.isotone/**'] }];\n");
+    writeFileSync(join(root, 'biome.json'), '{ "files": { "includes": ["**", "!.isotone"] } }\n');
+    const done = await init(root);
+    expect(done).not.toContain('@source');
+    expect(done).not.toContain('Keep the linter off');
+
+    // Tailwind 3 scans its content globs, and needs none of this.
+    const v3 = project(
+      { 'vite.config.ts': 'export default {};\n', 'src/index.css': '@tailwind base;\n' },
+      { devDependencies: { tailwindcss: '^3.4.0', vite: '^7.0.0' } },
+    );
+    expect(await init(v3)).not.toContain('@source');
+  });
+
+  it('serves on the port the package.json script gives isotone serve', async () => {
+    const root = project(
+      { 'next.config.ts': 'export default {};\n', 'app/layout.tsx': 'export default () => null;\n' },
+      { scripts: { isotone: 'isotone serve --port 4144' }, dependencies: { next: '16.0.0', ...react } },
+    );
+    const serve = await init(root);
+    expect(serve).toContain('     npx isotone serve --port 4144');
+    expect(serve).toContain('<Script src="http://127.0.0.1:4144/isotone.js" strategy="afterInteractive" />');
+    expect(serve).toContain('curl http://127.0.0.1:4144/api/isotone/variants');
+    expect(serve).not.toContain('4123');
+    const host = await init(root, '--approach', 'host');
+    expect(host).toContain('Run `npx isotone serve --port 4144` in this directory');
+    expect(host).toContain("endpoint: 'http://127.0.0.1:4144/api/isotone/notes'");
+    expect(host).not.toContain('4123');
+  });
+
+  it('recommends the app’s own VariantsSource once it has one, and never suggests setting one up', async () => {
+    const root = project(
+      {
+        'next.config.ts': 'export default {};\n',
+        'src/components/ReviewTools.tsx':
+          "import('isotone/react').then(({ createVariantsSource }) => createVariantsSource({ axes: [] }));\n",
+      },
+      { dependencies: { next: '16.0.0', ...react } },
+    );
+    const text = await init(root);
+    expect(text).toContain('Recommended: host — this app already has its own VariantsSource (src/components/ReviewTools.tsx)');
+    expect(text).toContain('Already set up: src/components/ReviewTools.tsx loads Isotone.');
+    expect(text).not.toContain('--approach host');
+    expect(text).toContain('no first run to do');
+    // The section it writes says what serves the endpoint here.
+    expect(text).toContain('while `npx isotone serve` (or the package.json');
+    for (const approach of ['serve', 'overlay']) expect(await init(root, '--approach', approach)).not.toContain('--approach host');
   });
 });
 

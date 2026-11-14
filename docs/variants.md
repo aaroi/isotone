@@ -66,8 +66,10 @@ variants into a `vite build` for a preview.
 made from and reads as stale once that file moves on. In a Git repository that
 version is kept in Git's object store; outside one, in the variant's own
 `.isotone-base/` directory, so a project without `git init` works the same,
-before and after one. After a later `git init` those kept versions are
-committed with the variant, so teammates can sync it too. `variant sync <id>` merges the real file's changes in,
+before and after one. Git's object store keeps only a version the current
+commit holds; any other (an uncommitted or untracked real file, a repository
+with no commits) is kept in `.isotone-base/` too, so it is committed with the
+variant, teammates can sync it, and `git gc` never drops it. `variant sync <id>` merges the real file's changes in,
 untracked files included; it needs Git installed and says so when it is not.
 Where both sides changed the same lines the copy gets conflict markers: `sync`
 exits 1, `variant list` counts them under CONFLICTS, and the copy cannot be
@@ -87,13 +89,15 @@ stop reading as stale: they are alternatives to what was promoted.
   switch reloads. A `.vue` or `.astro` file always reloads ([Vue components](#vue-components)).
 - **Tailwind v4** scans only the sources it is pointed at. Add
   `@source "../.isotone/variants/**/*.{ts,tsx}";` (relative to the CSS
-  file) or classes new to a variant render unstyled.
+  file, with your components' extensions; `init` prints the line) or classes
+  new to a variant render unstyled.
 - **A sibling dev server** that aliases into another package sets
   `variants: { root: '../that-package' }` so both serve the same variants.
 - **Routes** come from `window.location.pathname`; on a memory router (`/`
   everywhere) leave `--route` off.
-- **Linters** should ignore `.isotone` (Biome: `"!.isotone"` in
-  `files.includes`; ESLint: `{ ignores: ['.isotone/**'] }`).
+- **Linters** should ignore `.isotone`, since a copy's imports resolve from the
+  real file (Biome: `"!.isotone"` in `files.includes`; ESLint:
+  `{ ignores: ['.isotone/**'] }`). `init` says so when it finds a config.
 
 ## Knobs
 
@@ -331,7 +335,7 @@ names the one it finds:
 | --- | --- | --- |
 | React on Vite 6 or later | Per tab, in the tab's URL ([live](#live-switching)); CSS and files served whole follow every tab | Opens those variants |
 | Vite 5, Vue, Svelte or another host without React, or `variants: { live: false }` | Shared by every tab and browser, through `.isotone/active.json` ([whole files](#whole-file-switching)) | Not applied; the Variants panel says so |
-| `isotone serve` (Next.js, other dev servers) | None: only the Vite plugin serves them, and the `variant` commands warn | — |
+| `isotone serve` (Next.js, other dev servers) | None: only the Vite plugin serves them. In Next.js `variant new`, `add` and `use` refuse without `--force`; elsewhere the `variant` commands warn | — |
 | A host `VariantsSource` | The app's own: per tab when it keeps picks in the URL. File variants listed beside it ([on Vite](#beside-knobs-and-file-variants)) switch as in the rows above | The app's own selectors as the app decides; file variants as above |
 
 Knob values stay in the browser in every setup: the panel keeps them in
@@ -414,8 +418,8 @@ from the page's compile: check a copy by switching to it with
 
 ### Server rendering
 
-Server rendering follows `.isotone/active.json`, since the server cannot tell
-tabs apart; a tab whose components differ hydrates from it and switches right
+Server rendering (React Router's framework mode, Remix on Vite) follows
+`.isotone/active.json`, since the server cannot tell tabs apart; a tab whose components differ hydrates from it and switches right
 after. A link whose `?v=` differs in a fixed export saves its set as the default
 and reloads once; later reloads hydrate with a recoverable mismatch, so two tabs
 never fight over the default.
