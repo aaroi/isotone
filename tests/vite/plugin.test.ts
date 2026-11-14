@@ -467,6 +467,13 @@ function id(...parts: string[]): string {
   return normalizePath(join(...parts));
 }
 
+/** A `/@fs` URL for an absolute path, as Vite writes one: `/@fs/C:/…` on Windows,
+ *  `/@fs/home/…` elsewhere. `/@fs${root}` would be `/@fsC:\…` on Windows, which
+ *  Vite never sends, so a test of what it refuses would pass without testing it. */
+function fsUrl(...parts: string[]): string {
+  return `/@fs/${id(...parts).replace(/^\//, '')}`;
+}
+
 function tempProject(): { root: string; source: string; override: string; table: string } {
   const root = tempGitRepo('isotone-vite-variants-', repos);
   mkdirSync(join(root, 'src'), { recursive: true });
@@ -1369,10 +1376,10 @@ describe('project files through the dev server', () => {
       '/.env',
       '/.env?import',
       '/.env?t=1',
-      `/@fs${project}/.env`,
-      `/@fs${project}/.env/`,
-      `/@fs${project}/.env/?import`,
-      `/@fs${project}/.env/?isotone=forced&import`,
+      `${fsUrl(project)}/.env`,
+      `${fsUrl(project)}/.env/`,
+      `${fsUrl(project)}/.env/?import`,
+      `${fsUrl(project)}/.env/?isotone=forced&import`,
       '/.env?isotone=_base',
       '/.env?isotone=b',
       '/.env?isotone=forced',
@@ -1382,7 +1389,7 @@ describe('project files through the dev server', () => {
       '/src/../.env?isotone=_base',
       '/%2eenv?isotone=_base',
       '/.%65nv?isotone=_base',
-      `/@fs${project}/.env?isotone=_base`,
+      `${fsUrl(project)}/.env?isotone=_base`,
       '/.isotone/notes.json',
       '/.isotone/notes.json?import',
       '/.isotone/notes.json?raw',
@@ -1392,7 +1399,7 @@ describe('project files through the dev server', () => {
       '/.isotone/knobs.json',
       '/.isotone/knobs.json?import',
       '/.isotone/variants/b/src/Button.tsx',
-      `/@fs${project}/.isotone/knobs.json`,
+      `${fsUrl(project)}/.isotone/knobs.json`,
     ];
     for (const path of paths) {
       const { body } = await raw(path);
@@ -1610,8 +1617,7 @@ describe('Components compiled in parts: Vue, Svelte, Astro', () => {
     expect(await vite6('/src/Card.vue?vue&type=style&index=0&lang.css')).toBe('next');
     const vite5 = refusal(false);
     expect(await vite5('/src/Button.tsx?isotone=b')).toBe(404);
-    // Vite's spelling on every OS: `/@fs/C:/…` on Windows, where `root` is `C:\…`.
-    expect(await vite5(`/@fs/${normalizePath(root).replace(/^\//, '')}/src/Button.tsx?isotone=b`)).toBe(404);
+    expect(await vite5(`${fsUrl(root)}/src/Button.tsx?isotone=b`)).toBe(404);
     expect(await vite5('/src/Button.tsx')).toBe('next');
     // Any other `?isotone=` is the app's own.
     expect(await vite5('/?isotone=x')).toBe('next');
@@ -1967,8 +1973,8 @@ describe('variants kept outside .isotone', () => {
       '/variants/f/src/Button.tsx',
       '/variants/f/src/Button.tsx?import',
       '/variants/f/src/Button.tsx?raw',
-      `/@fs${project}/variants/f/src/Button.tsx`,
-      `/@fs${project}/variants/f/.env`,
+      `${fsUrl(project)}/variants/f/src/Button.tsx`,
+      `${fsUrl(project)}/variants/f/.env`,
       '/variants/f/variant.json',
       '/variants/f/variant.json?import',
       '/.env',
