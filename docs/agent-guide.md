@@ -35,7 +35,11 @@ npx isotone --undone <id>          # reopen it
 
 - `--done` refuses while no project file has changed since `--working` (or the
   note), usually because an earlier edit in a chained command failed; in Git,
-  staged edits, reverts, commits and deletions count.
+  staged edits, reverts, commits and deletions count. Any file counts, since a
+  fix often lands outside the pinned component, so it names the files it
+  counted: when none of them is your fix (another agent's or the user's edit),
+  reopen the note with `--undone`. Run `--working` when you start, so earlier
+  edits are not counted.
 - After closing, `--done` names variants on the note's route whose copies may
   lack the fix, with the `variant sync <id>` for each (a copy with no base
   recorded is compared by hand instead), any copy with conflict

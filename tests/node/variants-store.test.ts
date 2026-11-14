@@ -400,7 +400,7 @@ describe('outside a Git repository', () => {
     expect(listVariants(opts)[0]).toMatchObject({ stale: [], conflicts: ['src/Button.tsx'] });
   });
 
-  it('still syncs a copy made before `git init`, and hands its base to Git after', () => {
+  it('still syncs a copy made before `git init`, and hands its base to Git once a commit holds it', () => {
     const { root, opts } = tempProject();
     createVariant(opts, { id: 'v1' });
     addVariantFile(opts, 'v1', 'src/Button.tsx');
@@ -410,7 +410,19 @@ describe('outside a Git repository', () => {
 
     expect(syncVariant(opts, 'v1').merged).toEqual(['src/Button.tsx']);
     expect(listVariants(opts)[0]?.stale).toEqual([]);
-    // The new base is in git's object store, so the variant keeps no copy.
+    // No commit holds the new base yet: in Git's store it would be a dangling blob, out of a
+    // teammate's reach and pruned by `git gc`, so the variant keeps it.
+    expect(readdirSync(join(variantDir(opts, 'v1'), '.isotone-base'))).toEqual([
+      '.gitattributes',
+      sha1Blob('REAL ONE\nline two\nline three\n'),
+    ]);
+
+    const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd: root });
+    writeFileSync(join(root, 'src', 'Button.tsx'), 'REAL ONE, AGAIN\nline two\nline three\n');
+    git('add', 'src/Button.tsx');
+    git('commit', '-q', '-m', 'button');
+    expect(syncVariant(opts, 'v1').merged).toEqual(['src/Button.tsx']);
+    // The commit holds the new base, so the variant keeps no copy.
     expect(existsSync(join(variantDir(opts, 'v1'), '.isotone-base'))).toBe(false);
   });
 
@@ -522,7 +534,8 @@ describe('outside a Git repository', () => {
     writeFileSync(join(variantDir(opts, 'b'), 'src/Button.tsx'), 'B ONE\nline two\nline three\n');
 
     expect(promoteVariant(opts, 'a').rebased).toEqual(['b']);
-    expect(readVariant(opts, 'b')?.files['src/Button.tsx']?.base).toMatch(/^[0-9a-f]{64}$/);
+    // No commit holds the promoted file, so its base is kept with the variant, named as outside a repository.
+    expect(readVariant(opts, 'b')?.files['src/Button.tsx']?.base).toBe(sha1Blob('line one\nline two\nA THREE\n'));
     // b is an alternative to what was promoted, not a copy behind it.
     expect(syncVariant(opts, 'b').unchanged).toEqual(['src/Button.tsx']);
     expect(readFileSync(join(variantDir(opts, 'b'), 'src/Button.tsx'), 'utf8')).toBe('B ONE\nline two\nline three\n');

@@ -1,8 +1,9 @@
 /**
  * What the project the CLI runs in is built with, read from the files at its
- * top: which dev server, whether React, which Vite, and whether a config loads
- * the Vite plugin. `init` prints a setup from it, and the variant commands warn
- * when no dev server will serve file variants.
+ * top: which dev server, whether React, which Vite, whether a config loads
+ * the Vite plugin, and the framework, Tailwind and linters around it. `init`
+ * prints a setup from it, and the variant commands refuse or warn when no dev
+ * server will serve file variants.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import type { Dirent } from 'node:fs';
@@ -15,6 +16,8 @@ const CONFIG_FILE = /^[\w-]+\.config\.[cm]?[jt]s$/;
 const VITE_PLUGIN = /['"]isotone\/vite['"]/;
 /** The plugin's `variants: { live: false }`, which turns per-tab switching off. */
 const LIVE_OFF = /\blive\s*:\s*false\b/;
+/** React Router's `ssr: false` (in react-router.config) or Remix's (in its plugin's options): SPA mode. */
+const SSR_OFF = /\bssr\s*:\s*false\b/;
 
 /**
  * The dev server that serves the pages. A config loading the plugin settles it,
@@ -28,7 +31,7 @@ export function detectHost(cwd: string): Host {
   const pkg = readManifest(cwd);
   const deps = declaredDependencies(cwd);
   // `vinext` (Next on Vite) has no word boundary before its `next`.
-  const dev = typeof pkg.scripts?.dev === 'string' ? pkg.scripts.dev : '';
+  const dev = devScript(pkg);
   if (/\b(?:vite|vinext|react-router)\b/.test(dev)) return 'vite';
   if (/\bnext\b/.test(dev)) return 'next';
   if (has('next.config') || deps.next) return 'next';
@@ -48,7 +51,7 @@ export function viteSwitching(cwd: string): {
   vite: number | null;
 } {
   const deps = declaredDependencies(cwd);
-  const vite = viteMajor(cwd, deps.vite);
+  const vite = installedMajor(cwd, 'vite', deps.vite);
   if (typeof deps.react !== 'string') return { mode: 'shared', why: 'no-react', vite };
   if (vite !== null && vite < 6) return { mode: 'shared', why: 'old-vite', vite };
   const configs = safeReaddir(cwd).filter((name) => name.startsWith('vite.config.') && CONFIG_FILE.test(name));
@@ -72,7 +75,7 @@ export function vitePlugin(cwd: string): { loaded: boolean; viteConfig: string |
 }
 
 /** A config's text without its comments, so a commented-out plugin or option does not count. */
-function readCode(file: string): string {
+export function readCode(file: string): string {
   return safeRead(file)
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/(^|[^:])\/\/.*$/gm, '$1');
@@ -92,17 +95,81 @@ function readManifest(cwd: string): {
   }
 }
 
+function devScript(pkg: ReturnType<typeof readManifest>): string {
+  return typeof pkg.scripts?.dev === 'string' ? pkg.scripts.dev : '';
+}
+
 /** The dependencies and dev dependencies package.json declares. */
 function declaredDependencies(cwd: string): Record<string, unknown> {
   const pkg = readManifest(cwd);
   return { ...pkg.dependencies, ...pkg.devDependencies };
 }
 
-/** The installed Vite's major version, up to the Git root (a hoisted workspace), else the declared range's. */
-function viteMajor(cwd: string, declared: unknown): number | null {
+/**
+ * The framework that renders this Vite app's pages on the server too: React
+ * Router's framework mode or Remix on Vite. Null in SPA mode (`ssr: false`) or
+ * any other app.
+ */
+export function ssrFramework(cwd: string): 'React Router' | 'Remix' | null {
+  const deps = declaredDependencies(cwd);
+  const configs = safeReaddir(cwd).filter((name) => CONFIG_FILE.test(name));
+  const ssrOff = (prefix: string) => configs.some((name) => name.startsWith(prefix) && SSR_OFF.test(readCode(join(cwd, name))));
+  const reactRouter = configs.some((name) => name.startsWith('react-router.config.'));
+  if (reactRouter || deps['@react-router/dev'] || /\breact-router\s+dev\b/.test(devScript(readManifest(cwd))))
+    return ssrOff('react-router.config.') ? null : 'React Router';
+  if (deps['@remix-run/dev']) return ssrOff('vite.config.') ? null : 'Remix';
+  return null;
+}
+
+/**
+ * The Vite plugins of the frameworks the panel switches through, as a config
+ * names them, first match first: a framework plugin before the React one it
+ * may bring along.
+ */
+const FRAMEWORK_PLUGINS: [pkg: string, shown: string][] = [
+  ['@react-router/dev', 'reactRouter()'],
+  ['@remix-run/dev', 'the Remix plugin'],
+  ['@sveltejs/kit', 'sveltekit()'],
+  ['@vitejs/plugin-react', '@vitejs/plugin-react'],
+  ['@vitejs/plugin-react-swc', '@vitejs/plugin-react-swc'],
+  ['@vitejs/plugin-vue', '@vitejs/plugin-vue'],
+  ['@sveltejs/vite-plugin-svelte', '@sveltejs/vite-plugin-svelte'],
+  ['@preact/preset-vite', '@preact/preset-vite'],
+  ['vite-plugin-solid', 'vite-plugin-solid'],
+];
+
+/** The framework's Vite plugin package.json declares, by its package and as a config names it. */
+export function frameworkPlugin(cwd: string): { pkg: string; shown: string } | null {
+  const deps = declaredDependencies(cwd);
+  const found = FRAMEWORK_PLUGINS.find(([pkg]) => typeof deps[pkg] === 'string');
+  return found ? { pkg: found[0], shown: found[1] } : null;
+}
+
+/** Whether the project builds its CSS with Tailwind v4, which scans only the sources it is pointed at. */
+export function tailwindV4(cwd: string): boolean {
+  const deps = declaredDependencies(cwd);
+  if (deps['@tailwindcss/vite'] || deps['@tailwindcss/postcss']) return true;
+  const major = typeof deps.tailwindcss === 'string' ? installedMajor(cwd, 'tailwindcss', deps.tailwindcss) : null;
+  return major !== null && major >= 4;
+}
+
+/** The installed (else declared) Biome's major version, which decides how it ignores a directory. */
+export function biomeMajor(cwd: string): number | null {
+  return installedMajor(cwd, '@biomejs/biome', declaredDependencies(cwd)['@biomejs/biome']);
+}
+
+/** The extensions of the project's component files, for a glob over variant copies. */
+export function componentExtensions(cwd: string): string[] {
+  const deps = declaredDependencies(cwd);
+  const own = ['vue', 'svelte', 'astro'].filter((name) => typeof deps[name] === 'string');
+  return [...own, ...(typeof deps.typescript === 'string' ? ['ts', 'tsx'] : ['js', 'jsx'])];
+}
+
+/** The major version of the copy of `name` installed up to the Git root (a hoisted workspace), else the declared range's. */
+function installedMajor(cwd: string, name: string, declared: unknown): number | null {
   for (let dir = cwd; ; dir = dirname(dir)) {
     try {
-      const { version } = JSON.parse(safeRead(join(dir, 'node_modules', 'vite', 'package.json'))) as { version?: unknown };
+      const { version } = JSON.parse(safeRead(join(dir, 'node_modules', name, 'package.json'))) as { version?: unknown };
       const major = typeof version === 'string' ? /^(\d+)\./.exec(version) : null;
       if (major) return Number(major[1]);
     } catch {
