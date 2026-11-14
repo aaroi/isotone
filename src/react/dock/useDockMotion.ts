@@ -3,13 +3,21 @@ import { MAX_ANIMATED_ITEMS, MOTION } from '../motion';
 
 type Position = { x: number; y: number; width: number; height: number; animation?: Animation };
 
+/** The card's top edge, unclipped: the close, handles and shadow beside and above it stay whole. */
+const OPEN_CLIP = 'inset(-24px -24px -24px -24px)';
+
 /**
  * Move and resize panels without scaling their text, hit targets or corner shapes. The dock hangs from its
- * bottom-right corner, so a panel moves when its bottom or right edge does, and it eases there. A change
- * of height (a note saved, a section folded, Feedback taking room from Variants or giving it back, a
- * panel opening beside another) eases the panel's height itself from what showed to what it now needs,
- * every panel together, so the stack's edges glide and none jumps. Opening alone, a panel rises into
- * place; closing, it fades where it was.
+ * bottom-right corner, so a panel moves when its bottom or right edge does, and slides there.
+ *
+ * A panel whose height changes (a note saved, Feedback taking room from Variants or giving it back) keeps
+ * its bottom edge, and its card eases its height, so its top edge glides and a panel above follows it in
+ * the layout. A panel opening beside another lays out at once and is revealed from its foot upward,
+ * fading in, while the one above slides up; opening alone, it rises 6px and fades in; closing, it fades
+ * where it was.
+ *
+ * Reduced motion, a resize the pointer drives or a key steps, a window resizing, panels a reload restored
+ * and long lists (over `MAX_ANIMATED_ITEMS`) change at once.
  */
 export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boolean) {
   useLayoutEffect(() => {
@@ -19,6 +27,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
     const exits = new Map<HTMLElement, { ghost: HTMLElement; animation: Animation }>();
     // Heights easing now. While they run, the dock's own resizes come from them and are not measured.
     const sizing = new Map<HTMLElement, Animation>();
+    const reveals = new Map<HTMLElement, Animation>();
     const reduced = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
     const removeExit = (element: HTMLElement) => {
       const exit = exits.get(element);
@@ -27,11 +36,32 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       exit.ghost.remove();
       exits.delete(element);
     };
-    // Panels already open at mount were open before a reload: they are simply there, without an entrance.
     // Until the observer's first report the dock may not be styled yet (a host mounting the panel itself
     // themes it in a later effect), so what is measured before then only records where things are.
     let settling = true;
-    const measure = () => {
+    // Panels a reload restored stay at rest, contents and all, until the reviewer first presses a key or
+    // the pointer; a window resize or a resize step from the keyboard lands where it is going at once.
+    let restored: boolean | null = null;
+    let landAt = 0;
+    const land = () => {
+      landAt = performance.now() + MOTION.enter;
+    };
+    const woke = () => {
+      restored = false;
+    };
+    const reveal = (element: HTMLElement, from: number) => {
+      reveals.get(element)?.cancel();
+      const animation = element.animate(
+        [
+          { clipPath: `inset(${from}px -24px -24px -24px)`, opacity: 0 },
+          { clipPath: OPEN_CLIP, opacity: 1 },
+        ],
+        { duration: MOTION.enter, easing: MOTION.easeOut },
+      );
+      reveals.set(element, animation);
+      animation.onfinish = () => reveals.delete(element);
+    };
+    const measure = (now = false) => {
       const instant = settling || root.dataset.instant === 'true' || root.dataset.resizing === 'true' || reduced?.matches;
       // An interrupted ease starts the next from the height that shows now.
       const showing = new Map<HTMLElement, number>();
@@ -48,19 +78,25 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         return { element, open, rect: open ? element.getBoundingClientRect() : null, dx: matrix?.m41 ?? 0, dy: matrix?.m42 ?? 0 };
       });
       const shown = panels.filter((panel) => panel.rect);
-      const gap = shown.length > 1 ? Number.parseFloat(getComputedStyle(root).rowGap) || 0 : 0;
-      // The heights to ease: each open panel's change, and a panel opening beside another from nothing.
-      // Heights ease even after a key: they follow from what the key did, and a jump is never right. Only
-      // reduced motion, a resize the pointer drives, and a mount still settling skip them.
-      const still = settling || root.dataset.resizing === 'true' || reduced?.matches;
-      const eases = still
+      restored ??= shown.length > 0;
+      const long = shown.some(({ element }) => element.querySelectorAll('[data-motion-key]').length > MAX_ANIMATED_ITEMS);
+      // Heights glide after a key too: they follow from what the key did.
+      const still =
+        now ||
+        settling ||
+        restored ||
+        long ||
+        performance.now() < landAt ||
+        root.dataset.resizing === 'true' ||
+        reduced?.matches ||
+        typeof root.animate !== 'function';
+      const resizing = still
         ? []
         : shown.flatMap(({ element, rect }) => {
             const old = previous.get(element);
-            if (!old && shown.length < 2) return [];
-            const from = showing.get(element) ?? old?.height ?? 0;
+            const from = showing.get(element) ?? old?.height;
             const to = (rect as DOMRect).height;
-            return Math.abs(from - to) > 0.5 && typeof element.animate === 'function' ? [{ element, from, to, opening: !old }] : [];
+            return old && from !== undefined && Math.abs(from - to) > 0.5 ? [{ element, from, to }] : [];
           });
       const current = new Set(panels.map(({ element }) => element));
       for (const [element, item] of previous) {
@@ -74,6 +110,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         if (!open || !rect) {
           if (!old) continue;
           old.animation?.cancel();
+          reveals.get(element)?.cancel();
           removeExit(element);
           if (
             !instant &&
@@ -112,18 +149,21 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         removeExit(element);
         const x = rect.x - dx;
         const y = rect.y - dy;
-        // How far its anchored edges moved: the right and the bottom. While heights ease, the panels'
-        // places follow them in the layout, so nothing slides on top of that.
+        const beside = shown.length > 1 && !still;
+        // How far its anchored edges moved: the right and the bottom. While a height eases down, the
+        // panels' places follow it in the layout, so nothing slides on top of that.
         const shiftX = old ? old.x + old.width - (x + rect.width) : 0;
-        const shiftY = old ? old.y + old.height - (y + rect.height) : eases.length ? 0 : 6;
-        if (old && (eases.length > 0 || (Math.abs(shiftX) < 0.5 && Math.abs(shiftY) < 0.5))) {
+        const shiftY = old ? old.y + old.height - (y + rect.height) : 6;
+        if (!old && beside) reveal(element, rect.height);
+        if (old && (resizing.length > 0 || (Math.abs(shiftX) < 0.5 && Math.abs(shiftY) < 0.5))) {
           Object.assign(old, { x, y, width: rect.width, height: rect.height });
-          if (instant || eases.length) old.animation?.cancel();
+          // A rise still running (a panel just opened, now growing as its list arrives) carries on.
+          if (instant) old.animation?.cancel();
           continue;
         }
         old?.animation?.cancel();
         const animation =
-          !instant && typeof element.animate === 'function'
+          !instant && (old || !beside) && typeof element.animate === 'function'
             ? element.animate(
                 [
                   { transform: `translate(${shiftX + (old ? dx : 0)}px, ${shiftY + (old ? dy : 0)}px)`, opacity: old ? 1 : 0 },
@@ -134,18 +174,17 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
             : undefined;
         previous.set(element, { x, y, width: rect.width, height: rect.height, animation });
       }
-      // Every height eases on the same clock, so the stack's total moves evenly between two layouts that
-      // fit, and no panel is squeezed past its ease. One opening beside another unfolds from nothing,
-      // with the gap between them, its contents clipped while it does.
-      const last = shown.at(-1)?.element;
-      for (const { element, from, to, opening } of eases) {
-        const margin = element === last ? 'marginTop' : 'marginBottom';
-        const { paddingTop, paddingBottom } = getComputedStyle(element);
-        const box = { boxSizing: 'border-box', flexShrink: 0, overflow: 'hidden' };
+      // A changed height eases from what showed to what the panel needs, every changed panel on the same
+      // clock, so the stack's total moves evenly between two layouts; the panel's content keeps to its foot
+      // (a list above it gives way and scrolls), and the dock anchors its stack at the foot, so a panel
+      // opening above runs past the room, not over the pill.
+      if (resizing.length) root.dataset.easing = 'true';
+      for (const { element, from, to } of resizing) {
+        const box = { boxSizing: 'border-box', flexShrink: 0, justifyContent: 'flex-end' };
         const animation = element.animate(
           [
-            { ...box, height: `${from}px`, ...(opening ? { [margin]: `${-gap}px`, paddingTop: '0px', paddingBottom: '0px' } : {}) },
-            { ...box, height: `${to}px`, ...(opening ? { [margin]: '0px', paddingTop, paddingBottom } : {}) },
+            { ...box, height: `${from}px` },
+            { ...box, height: `${to}px` },
           ],
           { duration: MOTION.enter, easing: MOTION.easeOut },
         );
@@ -153,13 +192,19 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         animation.onfinish = () => {
           if (sizing.get(element) !== animation) return;
           sizing.delete(element);
+          if (sizing.size) return;
+          delete root.dataset.easing;
           // Whatever changed while it eased is measured now.
-          if (!sizing.size) measure();
+          measure();
         };
       }
+      if (!sizing.size) delete root.dataset.easing;
       if (instant) for (const element of exits.keys()) removeExit(element);
+      if (still) for (const animation of reveals.values()) animation.finish();
     };
     measure();
+    window.addEventListener('pointerdown', woke, true);
+    window.addEventListener('keydown', woke, true);
     const observer =
       typeof ResizeObserver !== 'undefined'
         ? new ResizeObserver(() => {
@@ -189,20 +234,33 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       attributes: true,
       attributeFilter: ['data-open', 'data-resizing'],
     });
-    // An on-screen keyboard lifts the dock through the root's own style (viewport.ts).
-    const lifted = new MutationObserver(measure);
+    // An on-screen keyboard lifts the dock, and a resize sets its sizes, through the root's own style
+    // (viewport.ts, useDockSize.ts): both land at once, so a key's step is exact.
+    const lifted = new MutationObserver(() => {
+      land();
+      measure(true);
+    });
     lifted.observe(root, { attributes: true, attributeFilter: ['style'] });
-    reduced?.addEventListener('change', measure);
-    window.addEventListener('resize', measure);
+    const resized = () => {
+      land();
+      measure(true);
+    };
+    const reducedChange = () => measure();
+    reduced?.addEventListener('change', reducedChange);
+    window.addEventListener('resize', resized);
     return () => {
       observer?.disconnect();
       mutations.disconnect();
       lifted.disconnect();
-      reduced?.removeEventListener('change', measure);
-      window.removeEventListener('resize', measure);
+      reduced?.removeEventListener('change', reducedChange);
+      window.removeEventListener('resize', resized);
+      window.removeEventListener('pointerdown', woke, true);
+      window.removeEventListener('keydown', woke, true);
+      delete root.dataset.easing;
       for (const element of exits.keys()) removeExit(element);
       for (const item of previous.values()) item.animation?.cancel();
       for (const animation of sizing.values()) animation.cancel();
+      for (const animation of reveals.values()) animation.cancel();
     };
   }, [ref, visible]);
 }

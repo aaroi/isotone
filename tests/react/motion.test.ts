@@ -120,6 +120,8 @@ describe('list motion', () => {
     expect(animate).toHaveBeenCalledTimes(3);
     await act(async () => root.render(h(List, { noise: 'Typing elsewhere' })));
     expect(offsets).toHaveBeenCalledTimes(3);
+    // The browser reports the list laid out; only then are its positions trusted for a reflow.
+    await act(async () => resize());
     const first = [...animations];
     await act(async () => root.render(h(List, { revision: 12 })));
     expect(first.every((animation) => animation.cancel.mock.calls.length === 1)).toBe(true);

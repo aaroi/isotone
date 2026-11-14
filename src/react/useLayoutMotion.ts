@@ -39,12 +39,21 @@ function clearPositions(positions: Map<string, Position>) {
 export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: unknown, active = true) {
   const previous = useRef(new Map<string, Position>());
   const sizes = useRef<ResizeObserver | null>(null);
+  // The list's scroll as last painted. A change of contents can clamp the scroll as it lays out, which
+  // moves every row on screen by as much as their offsets say: the reflow starts from where they showed.
+  const scrolled = useRef<{ container: HTMLElement; top: number } | null>(null);
+  // Positions are trusted once the browser has reported the list laid out: a change in the same frame as
+  // the list appearing (rows still taking their real heights) only records where things are.
+  const ready = useRef(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: revision signals a content/layout change without measuring on unrelated renders.
   useLayoutEffect(() => {
     const container = ref.current;
     sizes.current?.disconnect();
     sizes.current = null;
-    const clear = () => clearPositions(previous.current);
+    const clear = () => {
+      clearPositions(previous.current);
+      ready.current = false;
+    };
     if (!container || !active) {
       clear();
       return;
@@ -62,6 +71,8 @@ export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: un
       return;
     }
     const isStuck = stuckTest(container);
+    const shown = scrolled.current?.container === container ? scrolled.current.top : container.scrollTop;
+    const scrollShift = container.scrollTop - shown;
     const measurements = Array.from(elements, (element) => {
       const key = element.dataset.motionKey ?? '';
       const old = previous.current.get(key);
@@ -75,7 +86,7 @@ export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: un
     for (const { element, key, old, top, offset, stuck } of measurements) {
       old?.animation?.cancel();
       let animation: Animation | undefined;
-      const delta = old && !old.stuck && !stuck ? old.top + offset - top : 0;
+      const delta = old && !old.stuck && !stuck && ready.current ? old.top + offset - top + scrollShift : 0;
       if (typeof element.animate === 'function') {
         if (old && Math.abs(delta) > 0.5) {
           animation = element.animate([{ transform: `translateY(${delta}px)` }, { transform: 'translateY(0)' }], {
@@ -96,9 +107,11 @@ export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: un
     }
     for (const [key, item] of previous.current) if (!next.has(key)) item.animation?.cancel();
     previous.current = next;
+    scrolled.current = { container, top: container.scrollTop };
     if (typeof ResizeObserver === 'undefined') return;
     // Layout has already run when this is called, so the reads are cheap and nothing is written.
     const observer = new ResizeObserver(() => {
+      ready.current = true;
       const isStuck = stuckTest(container);
       for (const element of elements) {
         const item = previous.current.get(element.dataset.motionKey ?? '');
@@ -113,6 +126,28 @@ export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: un
     observer.observe(container);
     sizes.current = observer;
   }, [ref, revision, active]);
+  // Scroll events arrive after the layout that moved the scroll, so this holds what was last painted.
+  useLayoutEffect(() => {
+    const container = ref.current;
+    if (!container || !active) return;
+    // Scrolling also decides which rows are held at the edge, so a row that was stuck is not later
+    // animated as though it had moved.
+    const track = () => {
+      scrolled.current = { container, top: container.scrollTop };
+      if (!previous.current.size) return;
+      const isStuck = stuckTest(container);
+      for (const element of container.querySelectorAll<HTMLElement>('[data-motion-key]')) {
+        const item = previous.current.get(element.dataset.motionKey ?? '');
+        if (!item) continue;
+        // A held header's offset follows the scroll too.
+        item.top = element.offsetTop;
+        item.stuck = isStuck?.(element) ?? false;
+      }
+    };
+    scrolled.current = { container, top: container.scrollTop };
+    container.addEventListener('scroll', track, { passive: true });
+    return () => container.removeEventListener('scroll', track);
+  }, [ref, active]);
   useLayoutEffect(() => {
     const media = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
     const changed = () => {

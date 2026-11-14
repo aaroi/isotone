@@ -50,7 +50,10 @@ import { npm } from './npm.mjs';
 // and their changelog notes.
 // Bundle raised to 410.5 kB (410.1 kB; notices): a source's notice as one line with its explanation in a
 // popup, in place of the line by the pill.
-const BUDGET = { bundle: 410_500, tarball: 468_000 };
+// Bundle raised to 414.5 kB and tarball to 472 kB (413.7 and 471.3 kB; still under the pointer): panels that hold their height while the
+// pointer rests on the dock, a fold that keeps its toggle in place, a panel revealed from its foot, and the
+// scroll-aware reflow.
+const BUDGET = { bundle: 414_500, tarball: 472_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

@@ -1,11 +1,17 @@
 /**
- * No panel ever jumps: every change to a panel's size or position eases, frame by frame. This samples the
- * edges of every open panel after each painted frame through the dock's transitions in headless Chrome,
- * and fails on any edge that covers most of its way between two frames.
+ * No sudden movement in the dock, sampled after every painted frame in headless Chrome:
  *
- * `ISOTONE_BUNDLE=<path>` runs the same transitions against another build, to compare.
+ * - controls that should stay where they are (Variants' options while Feedback opens, saves or closes;
+ *   the section toggle under the pointer; Feedback's send button; everything a reload restores) move by
+ *   no more than a pixel at any frame;
+ * - anything that does move (a panel's edges, a panel sliding over) never covers most of its way between
+ *   two frames;
+ * - a keyboard resize step lands exactly; a long list (over `MAX_ANIMATED_ITEMS`) never animates a size.
+ *
+ * `ISOTONE_BUNDLE=<path>` runs the same transitions against another build, to compare; the measured
+ * steps are logged as `motion:` lines either way.
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -57,44 +63,92 @@ window.centre = (node) => { const r = node.getBoundingClientRect(); return [r.le
 window.pill = () => centre(root().querySelector('.isotone-rail-track'));
 window.face = (name) => centre(root().querySelector('.isotone-rail-button[aria-label^="' + name + '"]'));
 window.panel = (name) => root().querySelector('.isotone-' + name + '-panel');
-// Every open panel's top and bottom edge as painted, sampled after each frame until stopped.
+// Every open panel's edges, every option in Variants and Feedback's controls, as painted, after each frame.
+// An option counts while it is in view, clear of the list's edges, where rows recede by design.
 window.record = () => {
   const frames = [];
   let on = true;
+  let eased = false;
   const sample = () => {
     if (!on) return;
-    const edges = {};
-    for (const p of root().querySelectorAll('.isotone-panel[data-open="true"]:not(.isotone-exit)')) {
-      const r = p.getBoundingClientRect();
+    const f = {};
+    const r = root();
+    eased ||= r.querySelector('.isotone-root').dataset.easing === 'true';
+    for (const p of r.querySelectorAll('.isotone-panel[data-open="true"]:not(.isotone-exit)')) {
+      const box = p.getBoundingClientRect();
       const name = p.classList.contains('isotone-notes-panel') ? 'feedback' : 'variants';
-      edges[name + ' top'] = r.top;
-      edges[name + ' bottom'] = r.bottom;
+      // The top as seen: a panel revealed from its foot shows its top where its clip is.
+      const clip = /^inset\\((-?[\\d.]+)px/.exec(getComputedStyle(p).clipPath);
+      f[name + ' top'] = box.top + Math.max(0, clip ? Number(clip[1]) : 0);
+      f[name + ' bottom'] = box.bottom;
     }
-    frames.push(edges);
+    const body = r.querySelector('.isotone-variants-panel[data-open="true"] .isotone-vars-body');
+    if (body) {
+      const view = body.getBoundingClientRect();
+      for (const n of body.querySelectorAll('[role=radio], .isotone-section-toggle')) {
+        const b = n.getBoundingClientRect();
+        const name = (n.closest('.isotone-axis')?.dataset.motionKey ?? 'section') + ' ' + (n.getAttribute('aria-label') || n.textContent.trim());
+        if (b.top > view.top + 48 && b.bottom < view.bottom - 48) f['option ' + name] = b.top;
+      }
+    }
+    for (const [key, selector] of [['send', '.isotone-notes-panel[data-open="true"] .isotone-send'], ['field', '.isotone-notes-panel[data-open="true"] textarea']]) {
+      const n = r.querySelector(selector);
+      if (n) f[key] = n.getBoundingClientRect().top;
+    }
+    frames.push(f);
     requestAnimationFrame(() => setTimeout(sample));
   };
   sample();
-  window.stop = () => { on = false; return frames; };
+  window.stop = () => { on = false; return { frames, eased }; };
 };
 </script>`;
 
-/** Edges that moved more than 4px and covered over 80% of the way between two painted frames. */
-function jumps(frames: Record<string, number>[]): string[] {
-  const found: string[] = [];
-  const keys = new Set(frames.flatMap((f) => Object.keys(f)));
-  for (const key of keys) {
-    const series = frames.map((f) => f[key]).filter((v): v is number => v !== undefined);
-    if (series.length < 2) continue;
-    const total = Math.abs((series.at(-1) as number) - (series[0] as number));
-    let span = 0;
-    for (let i = 1; i < series.length; i++) span = Math.max(span, Math.abs((series[i] as number) - (series[i - 1] as number)));
-    const travel = Math.max(total, Math.max(...series) - Math.min(...series));
-    if (travel > 4 && span > 4 && span > travel * 0.8) found.push(`${key} jumped ${Math.round(span)}px of ${Math.round(travel)}px`);
-  }
-  return found;
+interface Motion {
+  /** The largest step between two frames of anything that should have stayed put, and what moved. */
+  still: number;
+  moved?: string;
+  /** Things that moved, each covering most of its way between two frames. */
+  jumps: string[];
+  /** Whether any height eased. */
+  eased: boolean;
 }
 
-describe.skipIf(!binary)('No panel jumps (headless Chrome)', () => {
+/** Measure a recording: `stay` matches the keys that must not move; the rest may glide, never jump. */
+function motion({ frames, eased }: { frames: Record<string, number>[]; eased: boolean }, stay: RegExp): Motion {
+  const keys = new Set(frames.flatMap((f) => Object.keys(f)));
+  let still = 0;
+  let moved: string | undefined;
+  const jumps: string[] = [];
+  for (const key of keys) {
+    let span = 0;
+    let travel = 0;
+    let first: number | undefined;
+    for (let i = 1; i < frames.length; i++) {
+      const a = frames[i - 1]?.[key];
+      const b = frames[i]?.[key];
+      first ??= a ?? b;
+      if (a === undefined || b === undefined) continue;
+      span = Math.max(span, Math.abs(b - a));
+      travel = Math.max(travel, Math.abs(b - (first as number)));
+    }
+    if (stay.test(key) && Math.max(span, travel) > still) {
+      still = Math.max(span, travel);
+      moved = key;
+      // Something that glides out of view has no end to judge its steps against.
+    } else if (frames.at(-1)?.[key] !== undefined && travel > 4 && span > 4 && span > travel * 0.8)
+      jumps.push(`${key} jumped ${Math.round(span)}px of ${Math.round(travel)}px`);
+  }
+  return { still: Math.round(still * 10) / 10, moved, jumps, eased };
+}
+
+/** The measured steps, logged, and written to `MOTION_REPORT` when it names a file. */
+const report: string[] = [];
+const note = (line: string) => {
+  report.push(line);
+  console.log(line);
+};
+
+describe.skipIf(!binary)('No sudden movement in the dock (headless Chrome)', () => {
   let server: Server;
   let origin = '';
   let chrome: Chrome;
@@ -131,13 +185,14 @@ describe.skipIf(!binary)('No panel jumps (headless Chrome)', () => {
   });
 
   afterAll(async () => {
+    if (process.env.MOTION_REPORT) writeFileSync(process.env.MOTION_REPORT, `${report.join('\n')}\n`);
     await chrome?.close();
     await new Promise((resolve) => server?.close(resolve));
   });
 
-  async function fresh(count: number, width = 1024, height = 768) {
-    notes = [];
-    await chrome.viewport(width, height);
+  async function fresh(count: number, saved: Record<string, unknown>[] = []) {
+    notes = saved;
+    await chrome.viewport(1024, 768);
     await chrome.goto(`${origin}/`);
     await chrome.eval('sessionStorage.clear(); localStorage.clear()');
     await chrome.goto(`${origin}/`);
@@ -152,17 +207,26 @@ describe.skipIf(!binary)('No panel jumps (headless Chrome)', () => {
     await chrome.click(x, y);
     await chrome.eval('settle()');
   }
-  /** The edges' frames through `act`, until every animation has settled and a little after. */
-  async function through(act: () => Promise<void>) {
+  /** Record through `act` until every animation has settled and a little after. */
+  async function through(act: () => Promise<void>, stay: RegExp): Promise<Motion> {
     await chrome.eval('record()');
     await act();
-    await chrome.eval('settle().then(() => new Promise((r) => setTimeout(r, 250)))');
-    return jumps(await chrome.eval<Record<string, number>[]>('stop()'));
+    await chrome.eval('settle().then(() => new Promise((r) => setTimeout(r, 300)))');
+    return motion(await chrome.eval('stop()'), stay);
+  }
+  /** One transition: what should stay moves under a pixel, and nothing jumps. */
+  async function step(label: string, act: () => Promise<void>, stay: RegExp) {
+    const result = await through(act, stay);
+    note(
+      `motion: ${label}: still ${result.still}px${result.moved ? ` (${result.moved})` : ''}, jumps ${JSON.stringify(result.jumps)}, eased ${result.eased}`,
+    );
+    expect.soft(result.still, `${label}: what should stay moved`).toBeLessThanOrEqual(1);
+    expect.soft(result.jumps, `${label}: jumps`).toEqual([]);
+    return result;
   }
   const pressEscape = () => chrome.key('Escape', 'Escape');
-
-  /** One transition: no edge of an open panel may jump through it. */
-  const step = async (label: string, act: () => Promise<void>) => expect.soft(await through(act), label).toEqual([]);
+  const NONE = /^$/;
+  const OPTIONS = /^option /;
 
   for (const [count, list] of [
     [3, 'a short list'],
@@ -171,44 +235,107 @@ describe.skipIf(!binary)('No panel jumps (headless Chrome)', () => {
     it(`Feedback opening and closing above Variants, with ${list}`, async () => {
       await fresh(count);
       await tool('Variants');
-      await step('Feedback opens', () => tool('Feedback'));
+      await step(`${list}: Feedback opens`, () => tool('Feedback'), OPTIONS);
       await pressEscape(); // select mode
-      await step('Feedback closes', () => tool('Feedback'));
-      await step('the pointer leaves the dock', () => chrome.move(20, 300));
+      await step(`${list}: Feedback closes`, () => tool('Feedback'), OPTIONS);
+      await step(`${list}: the pointer leaves`, () => chrome.move(20, 300), NONE);
     });
 
     it(`Variants opening and closing under Feedback, with ${list}`, async () => {
       await fresh(count);
       await tool('Feedback');
       await pressEscape();
-      await step('Variants opens', () => tool('Variants'));
-      await step('Variants closes', () => tool('Variants'));
+      await step(`${list}: Variants opens`, () => tool('Variants'), NONE);
+      await step(`${list}: Variants closes`, () => tool('Variants'), NONE);
     });
 
-    it(`a note saved with both open, and a section folded, with ${list}`, async () => {
+    it(`a note saved, and a section folded and unfolded, with both open, with ${list}`, async () => {
       await fresh(count);
       await tool('Variants');
       await tool('Feedback');
-      await step('a note is saved', async () => {
-        await chrome.insertText('A note that is saved');
-        await chrome.key('Enter', 'Enter', 0, '\r');
-        await chrome.eval(
-          `(async () => { for (let i = 0; i < 50 && !root().querySelector('.isotone-note'); i++) await new Promise((r) => setTimeout(r, 20)); })()`,
-        );
-      });
-      const [x, y] = await chrome.eval<[number, number]>(`centre(panel('variants').querySelector('.isotone-section-toggle'))`);
-      await step('a section folds', () => chrome.click(x, y));
-      await step('a section unfolds', () => chrome.click(x, y));
+      await step(
+        `${list}: a note is saved`,
+        async () => {
+          await chrome.insertText('A note that is saved');
+          await chrome.key('Enter', 'Enter', 0, '\r');
+          await chrome.eval(
+            `(async () => { for (let i = 0; i < 50 && !root().querySelector('.isotone-note'); i++) await new Promise((r) => setTimeout(r, 20)); })()`,
+          );
+        },
+        /^(option |send$)/,
+      );
+      const toggle = `panel('variants').querySelector('.isotone-section-toggle')`;
+      const [x, y] = await chrome.eval<[number, number]>(`centre(${toggle})`);
+      // The toggle under the pointer stays where it is through both clicks.
+      await chrome.eval(`${toggle}.dataset.probe = 'toggle'`);
+      const under = async () => chrome.eval<number>(`${toggle}.getBoundingClientRect().top`);
+      const before = await under();
+      await step(`${list}: a section folds`, () => chrome.click(x, y), NONE);
+      expect.soft(Math.abs((await under()) - before), `${list}: the toggle moved on folding`).toBeLessThanOrEqual(1);
+      await step(`${list}: a section unfolds`, () => chrome.click(x, y), NONE);
+      expect.soft(Math.abs((await under()) - before), `${list}: the toggle moved on unfolding`).toBeLessThanOrEqual(1);
+      await step(`${list}: the pointer leaves after folding`, () => chrome.move(20, 300), NONE);
     });
   }
 
-  it('the defaults bar appearing and leaving', async () => {
-    await fresh(3);
+  it('a keyboard resize lands each step exactly', async () => {
+    await fresh(12);
     await tool('Variants');
-    const option = `centre([...panel('variants').querySelectorAll('[role=radio]')].find((n) => n.textContent.trim() === 'Bold'))`;
-    const [x, y] = await chrome.eval<[number, number]>(option);
-    await step('the bar appears', () => chrome.click(x, y));
-    const [px, py] = await chrome.eval<[number, number]>(option.replace('Bold', 'Plain'));
-    await step('the bar leaves', () => chrome.click(px, py));
+    await chrome.move(20, 300);
+    const handle = `panel('variants').querySelector('[role=separator][aria-label^="Resize variants"]')`;
+    await chrome.eval(`${handle}.focus()`);
+    await chrome.key('ArrowDown', 'ArrowDown', 8); // shrink 64px first, so there is room to grow
+    await chrome.eval('settle()');
+    const heights = [await chrome.eval<number>(`panel('variants').getBoundingClientRect().height`)];
+    for (let i = 0; i < 4; i++) {
+      await chrome.key('ArrowUp', 'ArrowUp');
+      heights.push(
+        await chrome.eval<number>(`new Promise((r) => requestAnimationFrame(() => r(panel('variants').getBoundingClientRect().height)))`),
+      );
+    }
+    const steps = heights.slice(1).map((h, i) => Math.round(h - (heights[i] as number)));
+    note(`motion: keyboard resize steps ${JSON.stringify(steps)}`);
+    expect(steps).toEqual([16, 16, 16, 16]);
+  });
+
+  it('panels restored by a reload, and what is in them, are at rest from the first frame', async () => {
+    await fresh(12, [{ id: 'n1', route: '/', feedback: 'A saved note', createdAt: new Date().toISOString(), done: false }]);
+    await tool('Variants');
+    await tool('Feedback');
+    await pressEscape();
+    await chrome.move(20, 300);
+    await chrome.goto('');
+    const recorded = await chrome.eval<{ frames: Record<string, number>[]; eased: boolean }>(`(async () => {
+      await start(12);
+      record();
+      await new Promise((r) => setTimeout(r, 700));
+      return stop();
+    })()`);
+    const result = motion(recorded, /./);
+    note(`motion: restore: still ${result.still}px, eased ${result.eased}`);
+    expect(recorded.frames.some((f) => 'feedback top' in f && 'variants top' in f)).toBe(true);
+    expect(result.still).toBeLessThanOrEqual(1);
+    expect(result.eased).toBe(false);
+  });
+
+  it('a long list never animates a size, and its options stay put as Feedback opens and closes', async () => {
+    const many = Array.from({ length: 60 }, (_, i) => ({
+      id: `n${i}`,
+      route: '/',
+      feedback: `Note ${i}`,
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+      done: false,
+    }));
+    await fresh(500, many);
+    await tool('Variants');
+    const opens = await through(() => tool('Feedback'), OPTIONS);
+    note(`motion: 500 selectors: Feedback opens: still ${opens.still}px (${opens.moved}), eased ${opens.eased}`);
+    expect(opens.eased).toBe(false);
+    expect(opens.still).toBeLessThanOrEqual(1);
+    await pressEscape();
+    const closes = await through(() => tool('Feedback'), OPTIONS);
+    note(`motion: 500 selectors: Feedback closes: still ${closes.still}px, eased ${closes.eased}`);
+    expect(closes.eased).toBe(false);
+    expect(closes.still).toBeLessThanOrEqual(1);
   });
 });

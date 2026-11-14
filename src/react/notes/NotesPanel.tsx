@@ -17,6 +17,7 @@ import { Icon } from '../icons';
 import { dotPulse, fadeInContent, MAX_ANIMATED_ITEMS } from '../motion';
 import { NoteSummary } from './NoteSummary';
 import type { Anchor } from '../dock/picking';
+import { useHoverHold } from '../dock/useHoverHold';
 import { showOverflowTitle } from '../tooltips';
 import { useLayoutMotion } from '../useLayoutMotion';
 import { useRenderLimit } from '../useRenderLimit';
@@ -40,6 +41,9 @@ interface NotesPanelProps {
 /** The feedback panel: its close control, the page filter, saved notes and the compose slot. */
 export function NotesPanel({ id, open, route, view, editingId, resizeHandle, compose, onClose, onEdit, onRemove }: NotesPanelProps) {
   const { pages, selectedPages, notes, working, togglePage } = view;
+  const panelRef = useRef<HTMLElement | null>(null);
+  // A note arriving or leaving under a resting pointer scrolls the list rather than moving the composer.
+  useHoverHold(panelRef, notes.length, '--iso-notes-hold', open);
   return (
     <section
       id={id}
@@ -49,6 +53,7 @@ export function NotesPanel({ id, open, route, view, editingId, resizeHandle, com
       data-open={open}
       aria-hidden={!open}
       ref={(node) => {
+        panelRef.current = node;
         node?.toggleAttribute('inert', !open);
       }}
     >

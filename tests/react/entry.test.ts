@@ -221,6 +221,31 @@ describe('Escape', () => {
     expect(inDock()).toBe(false);
   });
 
+  it('returns focus after a pointer opening once the keyboard has moved about the dock, but not after typing', async () => {
+    await reload({ variants: createVariantsSource({ axes: AXES }) });
+    const openByPointer = () =>
+      act(async () => {
+        window.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'mouse' }));
+        container.querySelector('.isotone-fab')?.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+      });
+    await openByPointer();
+    // Typing a note is not moving about the dock.
+    await act(async () => {
+      container.querySelector('textarea')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    });
+    await pressEscape();
+    await pressEscape();
+    expect(inDock()).toBe(false);
+    await openByPointer();
+    await act(async () => {
+      container.querySelector('textarea')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    });
+    await pressEscape();
+    await pressEscape();
+    expect(open('notes')).toBe(false);
+    expect(inDock()).toBe(true);
+  });
+
   it('returns focus to the launcher when the dock was opened from the keyboard', async () => {
     await reload({ variants: createVariantsSource({ axes: AXES }) });
     await act(async () => {

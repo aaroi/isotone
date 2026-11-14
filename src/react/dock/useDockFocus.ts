@@ -38,6 +38,25 @@ export function useDockFocus(
   // for an update that changes nothing and so commits nothing.
   const pending = useRef<(() => void) | null>(null);
   useEffect(() => () => cancelAnimationFrame(frame.current), []);
+  // Moving about the dock by keyboard, or activating something without a pointer (a screen reader in
+  // browse mode), after a pointer opening counts as a keyboard opening: Escape then returns focus.
+  // Typing in a field does not.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const navigated = (event: Event) => {
+      const target = event.target as Element;
+      if (event.type === 'click') byKey.current ||= (event as MouseEvent).detail === 0;
+      else if ((event as KeyboardEvent).key === 'Tab' || !target.closest?.('textarea, input'))
+        byKey.current ||= (event as KeyboardEvent).key !== 'Escape';
+    };
+    root.addEventListener('keydown', navigated, true);
+    root.addEventListener('click', navigated, true);
+    return () => {
+      root.removeEventListener('keydown', navigated, true);
+      root.removeEventListener('click', navigated, true);
+    };
+  });
 
   const cancel = useCallback(() => {
     cancelAnimationFrame(frame.current);

@@ -99,14 +99,17 @@ saved into it or closing it never moves a selector: when room runs out,
 Variants gives it from its top edge and its list scrolls by as much; room given
 back is taken only as far as that scroll absorbs, and while the pointer rests on
 the dock the rest waits until it leaves (or a resize handle is taken up by
-pointer or key); closed from the keyboard, the list simply grows. Every such
-change of size eases (see Motion). Opening Variants under an open Feedback
-unfolds Variants and glides Feedback up: the one movement left, caused by the
-reviewer's own click.
+pointer or key); closed from the keyboard, the list simply grows, easing (see
+Motion). Opening Variants under an open Feedback reveals Variants from the pill
+and glides Feedback up: the one movement left, caused by the reviewer's own
+click. In a full dock, a note saved while the pointer rests there scrolls the
+list rather than growing Feedback into Variants.
 
 Escape returns focus to the control that opened the dock: the host's, or the
-launcher when the dock was opened from the keyboard. Opened with the pointer, it
-lets focus go, so the pill folds back with no ring on a face.
+launcher when the dock was opened from the keyboard, or the keyboard (or a screen
+reader activating a control) has been used in the dock since; typing in a field
+does not count. Otherwise, opened with the pointer, it lets focus go, so the pill
+folds back with no ring on a face.
 
 A source's notice (a link whose `?v=` it did not apply, a knob left out for a
 taken id) is one quiet line at the top of Variants in the secondary text, plain
@@ -339,20 +342,28 @@ while the keyboard is in use, each named one by one (a rule over every
 descendant restyles the dock on each change of input). Reduced motion removes
 spatial movement; hover stays brief.
 
-No panel ever jumps. The dock hangs from its bottom-right corner, so a panel
-moves when its bottom or right edge does, and slides there. A change of a
-panel's height (a note saved, a section folded, Feedback taking room from
-Variants or giving it back, the composer growing a line, a keyboard resize)
-eases the card's height from what showed to what it needs, every changed panel
-on the same clock, so the stack's total moves evenly between two layouts that
-fit and the panels above glide with it. A panel opening beside another unfolds
-from nothing, contents clipped, with the gap between them; one opening alone
+Nothing in the dock moves suddenly, and nothing under a resting pointer moves
+at all. The dock hangs from its bottom-right corner, so a panel moves when its
+bottom or right edge does, and slides there. While the pointer rests on the
+dock, a panel keeps its height when its contents change (a note arriving or
+leaving, a section folding or unfolding, Feedback closing over Variants): its
+list scrolls instead, a fold keeps its toggle where it was and the rows after
+it glide into place, and the panel takes its new height once the pointer
+leaves or a resize handle is taken up. A height that does change (Feedback
+opening over a long list, room given back, the pointer gone) eases the card's
+height from what showed to what it needs, every changed panel on the same clock;
+Variants' list scrolls by as much as its top edge moves, so its controls stay
+still, and the dock lets its stack run past its room at the top meanwhile, never
+over the pill. A panel opening beside another lays out at once and is revealed
+from its foot upward, fading in, while the one above slides; one opening alone
 rises 6px and fades in. Heights ease after a key too, since they follow from
-what the key did; only reduced motion, a resize the pointer drives (which
-tracks the pointer) and panels a reload restored are immediate. Inside a
-height that eases, Variants' list scrolls by as much as its top edge moves, so
-its controls stay still. `tests/browser/dock-motion.test.ts` samples every
-painted frame and fails on an edge that jumps. The launcher expands on mouse or
+what the key did. Immediate: reduced motion, a resize the pointer drives (it
+tracks the pointer) or a key steps (each step lands exactly), a window resizing,
+panels a reload restored (until the first key or press) and long lists (over
+`MAX_ANIMATED_ITEMS`), whose size never animates. An ease never re-renders the
+dock: the resize handles are measured once it lands.
+`tests/browser/dock-motion.test.ts` samples every painted frame and fails when
+something that should stay moves, or anything jumps. The launcher expands on mouse or
 hovering-pen entry, even where the primary pointer reports coarse; touch opens
 it by tap. The pill's hit surface spans its rim and the gap between icons.
 
@@ -399,7 +410,7 @@ keeps to the rows in view, on the dots' shared clock; text,
 corners and hit targets keep their size. Read positions before writing styles,
 retarget interrupted movement, cancel on cleanup. Only the pill's own width
 transitions, and a panel card's height eases as above (the card, never its
-rows); never animate the size of long lists or their rows. Lists above
+rows, and never over a long list). Lists above
 `MAX_ANIMATED_ITEMS` (40) update immediately and skip cloned exit snapshots.
 Hidden lists do not measure on render, and typing must not remeasure unchanged
 selectors or notes.

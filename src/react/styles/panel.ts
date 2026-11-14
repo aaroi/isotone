@@ -77,7 +77,7 @@ ${APPEARANCE_CSS}
 .isotone-rail, .isotone-rail-tools { display: contents; border: 0; margin: 0; padding: 0; min-width: 0; }
 .isotone-root[data-expanded='true'] { min-height: 44px; }
 .isotone-root[data-expanded='true'][data-open='false'][data-tools='2'] { width: var(--iso-rail-length); }
-.isotone-root[data-open='true'] { padding-bottom: calc(var(--iso-rail-size) + var(--iso-view-gap)); gap: var(--iso-view-gap); }
+.isotone-root[data-open='true'] { padding-bottom: calc(var(--iso-rail-size) + var(--iso-view-gap)); gap: var(--iso-view-gap); justify-content: flex-end; }
 /* The pill is glass: it blurs and lifts the colour of the page behind it, so it sits in the host page rather than on it. */
 .isotone-rail-track { position: absolute; right: 0; bottom: 0; width: var(--iso-rail-size); height: var(--iso-rail-size); border-radius: 999px; background: color-mix(in oklch, var(--iso-rail-base) 72%, transparent); -webkit-backdrop-filter: blur(20px) saturate(1.7); backdrop-filter: blur(20px) saturate(1.7); border: 0; box-shadow: var(--iso-rail-base-shadow); pointer-events: auto; transition: width var(--iso-enter) var(--iso-ease-out), height var(--iso-enter) var(--iso-ease-out); }
 .isotone-root[data-expanded='true'][data-tools='2'] .isotone-rail-track { width: var(--iso-rail-length); }
@@ -101,7 +101,7 @@ ${APPEARANCE_CSS}
 .isotone-panel { order: 0; position: relative; display: none; flex-direction: column; min-height: 0; flex: 0 1 auto; width: 100%; }
 .isotone-panel[data-open='true'] { display: flex; }
 .isotone-variants-panel { flex-shrink: 1; max-height: calc(var(--iso-view-height) - 76px); }
-.isotone-notes-panel { flex-shrink: 0; max-height: calc(var(--iso-view-height) - 76px); padding: var(--iso-panel-inset); gap: var(--iso-space); }
+.isotone-notes-panel { flex-shrink: 0; max-height: calc(var(--iso-view-height) - 76px); padding: var(--iso-panel-inset); gap: var(--iso-space); justify-content: flex-end; }
 .isotone-root .isotone-panel { background: var(--iso-bg); border: 0; border-radius: var(--iso-panel-radius); box-shadow: var(--iso-panel-shadow); }
 /* The close control sits on the panel's top-left corner, half outside it, with
    the same face as a note's delete button, a touch larger. It fades in while the
@@ -135,6 +135,9 @@ ${APPEARANCE_CSS}
 /* A selector out of view skips layout, so opening Feedback beside hundreds of them does not lay out every one.
    The clip margin keeps focus rings and corner badges, which reach past the selector, unclipped. */
 .isotone-axis { flex: none; content-visibility: auto; contain-intrinsic-size: auto 72px; overflow-clip-margin: 12px; }
+/* The first screenful lays out at its real height from the first frame, so the panel never settles
+   by a few pixels as it opens; the rest skip layout until they come near. */
+.isotone-axis[data-eager] { content-visibility: visible; }
 /* Sections name the part of the page their selectors change. The header sticks to
    the top of the scroll area while its own selectors pass beneath and fade into the
    surface; the next section's header pushes it out. At rest its padding occupies
@@ -491,7 +494,7 @@ ${EDGES_CSS}
 @media (min-width: 641px) and (min-height: 501px) {
   .isotone-root[data-open='true'] { width: var(--iso-width, var(--iso-dock-width)); }
   .isotone-variants-panel { max-height: min(var(--iso-variants-height, 100vh), var(--iso-variants-hold, 100vh), calc(var(--iso-view-height) - 76px)); }
-  .isotone-notes-panel { max-height: min(var(--iso-notes-height, 100vh), calc(var(--iso-view-height) - 76px)); }
+  .isotone-notes-panel { max-height: min(var(--iso-notes-height, 100vh), var(--iso-notes-hold, 100vh), calc(var(--iso-view-height) - 76px)); }
   .isotone-root[data-sized-notes='true'] .isotone-list { max-height: none; }
 }
 /* Phones. Panels take turns (see viewport.ts). Variants stop at about half the

@@ -175,7 +175,11 @@ export function useDockSize(rootRef: RefObject<HTMLElement | null>, key: string,
     // The observer's first report comes after the browser's own layout; measuring here would force that
     // layout synchronously, which is most of what opening a long Variants list costs.
     if (typeof ResizeObserver === 'undefined') return refresh();
-    const observer = new ResizeObserver(refresh);
+    // A height easing reports every frame: the handles are measured once it lands, not each frame, so the
+    // dock never re-renders through an ease.
+    const observer = new ResizeObserver(() => {
+      if (root.dataset.easing !== 'true') refresh();
+    });
     for (const panel of root.querySelectorAll('.isotone-panel')) observer.observe(panel);
     return () => observer.disconnect();
   }, [open.variants, open.notes, size, refresh, rootRef]);
