@@ -66,8 +66,22 @@ export function createSwitching(overrides: Overrides) {
     changed: string,
     modulesOf: (file: string) => Iterable<M> | undefined,
     env: string | null,
+    invalidate: (mod: M) => void,
   ): M[] | undefined => {
     const client = env === null || env === 'client';
+    /**
+     * The modules of `file` a page imports. A check request
+     * (`<file>?isotone=<id>`, outside a dispatcher) leaves a module nothing
+     * imports; in an update it would end the walk with a full reload, so it
+     * is dropped from the graph instead and compiles afresh on its next
+     * request. `checked` says whether there was one.
+     */
+    const pageModules = (file: string): { page: M[]; checked: boolean } => {
+      const all = [...(modulesOf(file) ?? [])];
+      const page = all.filter((m) => versionOfId(m.id) === null);
+      for (const mod of all) if (versionOfId(mod.id) !== null) invalidate(mod);
+      return { page, checked: page.length !== all.length };
+    };
     // The module graph keys files by their forward-slash form, which is
     // what `join` produces on POSIX and not on Windows.
     if (isWithin(overrides.dir, changed)) {
@@ -86,10 +100,12 @@ export function createSwitching(overrides: Overrides) {
         return [...(modulesOf(source) ?? [])].filter((m) => versionOfId(m.id) === hit.id);
       }
       if (!overrides.active().includes(hit.id)) return [];
-      if (client && isSingleFileComponent(source)) return reloadForComponent();
+      const { page } = pageModules(source);
+      // A component no page has loaded has nothing to reload.
+      if (client && isSingleFileComponent(source)) return page.length > 0 ? reloadForComponent() : [];
       // The browser holds the real file's URL, so the override's edit has
       // to be delivered as if the real file changed.
-      return [...(modulesOf(source) ?? [])];
+      return page;
     }
     // A change activate() reported. Vite hands this hook a forward-slash
     // path, and the swap is keyed the same way, so Windows paths match too.
@@ -116,12 +132,13 @@ export function createSwitching(overrides: Overrides) {
       return [...(modulesOf(path) ?? [])].filter((m) => versionOfId(m.id) === BASE_VERSION);
     }
     if (swap && client && isSingleFileComponent(path)) return reloadForComponent();
+    const { page, checked } = pageModules(path);
     // Let Vite compute the swap's update as usual.
-    if (swap) return undefined;
+    if (swap) return checked ? page : undefined;
     // The real source of an overridden file: the browser is showing the
     // override, so there is nothing to update from this edit.
     if (overrides.overridable(changed) && overrides.overrideFor(overrides.active(), changed)) return [];
-    return undefined;
+    return checked ? page : undefined;
   };
 
   // The dev server, once attached: the swap reports to its watcher and

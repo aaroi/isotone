@@ -1413,17 +1413,45 @@ describe('Vue single-file components', () => {
     expect(environment.transformRequest).toHaveBeenCalledTimes(2);
   });
 
-  it('serves ?isotone= copies of scripts on any dev server, never of a component', () => {
+  it('serves ?isotone= copies of scripts on any Vite 6 dev server, never of a component or on Vite 5', () => {
     const { root, source, card } = vueProject();
+    // Vite 6 and later, without React: no live switching, and the check still serves the copy.
     const hooks = plugin(root, 'serve');
-    // No React here, so no live switching: the check still serves the copy.
+    hooks.configureServer(Object.assign(fakeServer(root), { environments: { client: {} } }));
     expect(hooks.load(`${source}?isotone=b`)?.code).toContain('variant b');
     expect(hooks.load(`${source}?isotone=_base`)?.code).toContain('"real"');
     // plugin-vue keeps one parse per file, so a component's copy would
-    // become what every tab shows; the request gets the page's file.
+    // become what every tab shows (the request is refused before load()).
     expect(hooks.load(`${card}?isotone=v`)).toBeNull();
-    // A build serves no versions.
+    // Vite 5 has no `server.fs.deny` check to ask, so it serves no versions.
+    const vite5 = plugin(root, 'serve');
+    vite5.configureServer(fakeServer(root));
+    expect(vite5.load(`${source}?isotone=b`)).toBeNull();
+    // Nor does a build.
     expect(plugin(root, 'build').load(`${source}?isotone=b`)).toBeNull();
+  });
+
+  it('keeps the module a check request leaves out of hot updates, and drops it', () => {
+    const { root, source, override } = vueProject();
+    writeActive({ root }, ['b']);
+    const hooks = plugin(root, 'serve') as unknown as LiveHooks;
+    hooks.configureServer(Object.assign(fakeServer(root), { environments: { client: {} } }));
+    const page = { id: source };
+    const check = { id: `${source}?isotone=b` };
+    const invalidateModule = vi.fn();
+    const client = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([page, check]), invalidateModule } };
+    // Nothing imports the check's module: in the update it would end the
+    // walk with a full reload, every switch from then on.
+    expect(hooks.hotUpdate.call({ environment: client }, { file: override })).toEqual([page]);
+    expect(invalidateModule).toHaveBeenCalledWith(check);
+    // A hand edit of a file no variant overrides now, the same.
+    writeActive({ root }, []);
+    const fresh = plugin(root, 'serve') as unknown as LiveHooks;
+    fresh.configureServer(Object.assign(fakeServer(root), { environments: { client: {} } }));
+    expect(fresh.hotUpdate.call({ environment: client }, { file: source })).toEqual([page]);
+    // Without one, Vite keeps its own answer.
+    const plain = { name: 'client', moduleGraph: { getModulesByFile: () => new Set([page]), invalidateModule } };
+    expect(fresh.hotUpdate.call({ environment: plain }, { file: source })).toBeUndefined();
   });
 
   it('reloads the page when a component switches or its active copy changes', async () => {
@@ -1569,9 +1597,14 @@ describe('Vue single-file components through the dev server', () => {
     expect(rebuilt).not.toContain('<template>');
   });
 
-  it("leaves the component's parse alone for ?isotone=, and scripts' versions to the check", async () => {
-    expect((await get('/src/Card.vue?isotone=_base')).body).toContain('"copy"');
+  it("refuses ?isotone= for a component, and serves scripts' versions to the check", async () => {
+    for (const path of ['/src/Card.vue?isotone=v', '/src/Card.vue?isotone=_base', '/src/Card.vue?t=1&isotone=v']) {
+      const refused = await get(path);
+      expect(refused.status, path).toBe(404);
+      expect(refused.body, path).toContain('variant use');
+    }
     expect(parses.get(project.card)).toBe(COPY_SFC);
+    expect((await get('/src/Card.vue')).status).toBe(200);
     expect((await get('/src/Button.tsx?isotone=b')).body).toContain('variant b');
     for (const path of ['/.env?isotone=_base', '/.env?isotone=forced', '/src/../.env?isotone=_base']) {
       expect((await get(path)).body, path).not.toContain('FAKE_ENV');

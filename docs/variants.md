@@ -317,7 +317,7 @@ A Vue app switches whole files: a variant of a `.vue` file follows
 `<script setup>`, `<style scoped>`) as it would the real file's. A switch, or an
 edit of the active copy, reloads the page, since plugin-vue's own hot update
 reads the real file from disk; a variant of a `.ts` or `.css` file still
-switches as a hot update. `<file>?isotone=<id>` serves no `.vue` copy:
+switches as a hot update. `<file>?isotone=<id>` answers 404 for a `.vue` file:
 plugin-vue keeps one parse of each component, shared by every tab, so check a
 copy by switching to it with `variant use <id>`.
 

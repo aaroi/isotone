@@ -22,8 +22,9 @@ import {
   type ResolvedConfig,
   type ViteDevServer,
 } from 'vite';
-// A namespace, not a named import: Vite 5 has no `isFileLoadingAllowed`, and
-// a missing named export would fail the whole module there.
+// A namespace, not a named import: Vite 5.4.18 and earlier have no
+// `isFileLoadingAllowed`, and a missing named export would fail the whole
+// module there. (Later Vite 5 releases take a server, not a config.)
 import * as vite from 'vite';
 
 import { VARIANTS_ENDPOINT } from '../core/variants';
@@ -101,6 +102,28 @@ function componentBlock(env: LoadEnvironment | undefined, path: string): Promise
   );
 }
 
+/**
+ * `<file>.vue?isotone=<id>` gets a plain 404. plugin-vue keeps one parse of
+ * each component, shared by every tab, so a copy compiled on its own would
+ * replace the page's; answering with the page's file instead would pass an
+ * agent's check of a copy it never compiled.
+ */
+function refuseComponentVersion(
+  req: { url?: string },
+  res: { statusCode: number; setHeader(name: string, value: string): void; end(body: string): void },
+  next: () => void,
+): void {
+  const url = req.url ?? '';
+  const at = url.indexOf('?');
+  if (at < 0 || !isSingleFileComponent(url.slice(0, at)) || !new URLSearchParams(url.slice(at + 1)).has(VERSION_QUERY)) {
+    next();
+    return;
+  }
+  res.statusCode = 404;
+  res.setHeader('content-type', 'text/plain; charset=utf-8');
+  res.end('isotone serves no copy of a .vue file on its own: switch to its variant with `npx isotone variant use <id>`.\n');
+}
+
 /** Say where the notes go after Vite's own banner, so it is not buried under
  *  it. Portable setups fail quietly otherwise: a reviewer writes notes and the
  *  agent looks in the wrong place. */
@@ -124,6 +147,8 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
   let isDev = false;
   let hasReact = false;
   let ssrHost = false;
+  // Vite 6 or later, whose environments mark it: decided in configureServer.
+  let vite6 = false;
   let resolved: ResolvedConfig | null = null;
   const variantsOptions = options.variants === false ? null : (options.variants ?? {});
   const overrides = createOverrides(variantsOptions ?? {});
@@ -180,10 +205,11 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       }
       // `?isotone=<id>`: one version of a tracked file. Live dispatchers import
       // each version this way, and on any dev server it shows that a copy
-      // compiles. Vite 5 cannot check it against `server.fs.deny` (below), so
-      // there it means nothing. Nor for a component: plugin-vue would take
-      // that copy for the real file's parse.
-      const versioned = isDev && vite.isFileLoadingAllowed !== undefined && !isSingleFileComponent(path);
+      // compiles. Only Vite 6 and later can check it against
+      // `server.fs.deny` (below), so on Vite 5 it means nothing. Nor for a
+      // component: plugin-vue would take that copy for the real file's
+      // parse, so the request is refused before it gets here.
+      const versioned = vite6 && !isSingleFileComponent(path);
       const version = versioned ? new URLSearchParams(query).get(VERSION_QUERY) : null;
       // Only a file some variant tracks has versions. Any other path is left
       // to Vite, whose `server.fs.deny` keeps `.env` and `.git/` out of reach;
@@ -191,7 +217,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       if (version !== null && overrides.versionsByFile().has(path)) {
         // A file tracked past the secret guard (`variant add … --force`)
         // still obeys `server.fs.deny`: left to Vite, the request gets 403.
-        if (resolved && vite.isFileLoadingAllowed && !vite.isFileLoadingAllowed(resolved, path)) return null;
+        if (!resolved || !vite.isFileLoadingAllowed(resolved, path)) return null;
         const from = version === BASE_VERSION ? (existsSync(path) ? path : null) : overrides.copyOf(version, path);
         return { code: from ? readFileSync(from, 'utf8') : 'export {};\n', map: null };
       }
@@ -213,12 +239,22 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
     hotUpdate(this: { environment: DevEnvironment }, ctx: HotUpdateOptions): EnvironmentModuleNode[] | undefined {
       if (!variantsOptions) return undefined;
       const env = this.environment;
-      return switching.hotModules(ctx.file, (f) => env.moduleGraph.getModulesByFile(f), env.name);
+      return switching.hotModules(
+        ctx.file,
+        (f) => env.moduleGraph.getModulesByFile(f),
+        env.name,
+        (mod) => env.moduleGraph.invalidateModule(mod),
+      );
     },
     handleHotUpdate(ctx: HmrContext) {
       if (!variantsOptions) return undefined;
       const { server } = ctx;
-      return switching.hotModules(ctx.file, (f) => server.moduleGraph.getModulesByFile(f), null) as HmrContext['modules'] | undefined;
+      return switching.hotModules(
+        ctx.file,
+        (f) => server.moduleGraph.getModulesByFile(f),
+        null,
+        (mod) => server.moduleGraph.invalidateModule(mod),
+      ) as HmrContext['modules'] | undefined;
     },
     configureServer(server) {
       if (!isDev) return;
@@ -251,12 +287,14 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
         // Live switching needs the host's React for the wrappers and Vite 6's
         // per-environment hot updates, so the server render keeps its swap
         // while the browser's dispatchers are left alone.
-        const live = (variantsOptions.live ?? hasReact) && server.environments !== undefined;
+        vite6 = server.environments !== undefined;
+        const live = (variantsOptions.live ?? hasReact) && vite6;
         const activate = switching.attach(server, { live, ignored: variantsOptions.ignored });
         server.middlewares.use(
           VARIANTS_ENDPOINT,
           variantsEndpoint(() => overrides.opts, activate, allowedHosts),
         );
+        server.middlewares.use(refuseComponentVersion);
       }
 
       // The tab's variant store has to exist before the app's modules run,
