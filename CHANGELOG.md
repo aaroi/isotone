@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.7.0
+
 ### Added
 
 - **The panel comes back after a reload.** The tools you had open stay open when the page reloads, as it does for every variant switch on Vue, already in place and at the same spot in the Variants list, so comparing options is one click each. A new visit to a page starts with the panel folded, and select mode isn't restored. The pill reopens the tool you used last.
