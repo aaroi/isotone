@@ -431,7 +431,11 @@ type Middleware = (
 ) => void;
 
 interface FakeServer {
-  config: { root: string; logger: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> } };
+  config: {
+    root: string;
+    logger: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn> };
+    server: { fs: { strict: boolean; deny: string[] } };
+  };
   httpServer: null;
   middlewares: { use: ReturnType<typeof vi.fn> };
   watcher: {
@@ -494,7 +498,8 @@ function plugin(root: string, command: 'serve' | 'build', options: IsotoneViteOp
 
 function fakeServer(root: string): FakeServer {
   return {
-    config: { root, logger: { info: vi.fn(), warn: vi.fn() } },
+    // Vite's file access check, off as in `plugin()`: tests that need it set it.
+    config: { root, logger: { info: vi.fn(), warn: vi.fn() }, server: { fs: { strict: false, deny: [] } } },
     httpServer: null,
     middlewares: { use: vi.fn() },
     watcher: { add: vi.fn(), on: vi.fn(), emit: vi.fn() },
@@ -642,6 +647,35 @@ describe('overlay variants in load()', () => {
   });
 });
 
+describe('a copy where the real file is refused', () => {
+  it('serves no copy where the dev server would refuse the real file, and a server render keeps its swap', () => {
+    const { root, source } = tempProject();
+    writeFileSync(join(root, '.env'), 'SECRET_TOKEN=sk_live_FAKE_ENV\n');
+    createVariant({ root }, { id: 'forced' });
+    addVariantFile({ root }, 'forced', '.env', { force: true });
+    writeActive({ root }, ['forced', 'b']);
+    const env = id(root, '.env');
+    // Vite 5: no environments, so the deny list is matched as Vite matches it.
+    const hooks = plugin(root, 'serve') as unknown as { load: (id: string, opts?: { ssr?: boolean }) => { code: string } | null } & Hooks;
+    const server = fakeServer(root);
+    server.config.server.fs = { strict: true, deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/.isotone/**'] };
+    hooks.configureServer(server);
+    expect(hooks.load(env)).toBeNull();
+    expect(hooks.load(`${env}?import`)).toBeNull();
+    // Any other copy is served as before, and a server render, which Vite
+    // loads without the check, keeps the swap.
+    expect(hooks.load(source)?.code).toContain('variant b');
+    expect(hooks.load(env, { ssr: true })?.code).toContain('FAKE_ENV');
+    // `server.fs.strict: false` turns Vite's check off, and Isotone's with it.
+    const loose = plugin(root, 'serve');
+    loose.configureServer(fakeServer(root));
+    expect(loose.load(env)?.code).toContain('FAKE_ENV');
+    // A build serves no files; `ISOTONE_VARIANT` bakes the copy in as before.
+    process.env.ISOTONE_VARIANT = 'forced';
+    expect(plugin(root, 'build').load(env)?.code).toContain('FAKE_ENV');
+  });
+});
+
 describe('overlay variants in the dev server', () => {
   it('flips the active file and hot-swaps the loaded module on POST /active', async () => {
     const { root, source } = tempProject();
@@ -752,7 +786,7 @@ describe('overlay variants in the dev server', () => {
     const { root } = tempProject();
     const hooks = plugin(root, 'serve');
     const server = fakeServer(root);
-    (server.config as { server?: unknown }).server = { allowedHosts: ['.dev.example'] };
+    (server.config as { server?: unknown }).server = { ...server.config.server, allowedHosts: ['.dev.example'] };
     hooks.configureServer(server);
     const json = { 'content-type': 'application/json' };
     const note = { route: '/', feedback: 'From the network' };
@@ -866,7 +900,7 @@ describe('other devices on the network', () => {
   function exposed(): { root: string; server: FakeServer; lines: string[] } {
     const { root } = tempProject();
     const server = fakeServer(root);
-    (server.config as { server?: unknown }).server = { host: true, port: 5173 };
+    (server.config as { server?: unknown }).server = { ...server.config.server, host: true, port: 5173 };
     const listeners: Array<() => void> = [];
     (server as unknown as { httpServer: unknown }).httpServer = {
       once: (event: string, cb: () => void) => event === 'listening' && listeners.push(cb),
@@ -1255,6 +1289,8 @@ describe('project files through the dev server', () => {
     // A notes file from before 1.3 that stayed beside the new one.
     writeFileSync(join(project, '.iteration-feedback.json'), '[{"FAKE_NOTE_TEXT":1}]');
     writeFileSync(join(project, '.isotone', 'knobs.json'), '[{"id":"FAKE_KNOB"}]');
+    // Active, so its copy of `.env` is what load() would answer for the file.
+    writeActive({ root: project }, ['forced']);
     live = await createServer({
       root: project,
       configFile: false,
@@ -1292,6 +1328,10 @@ describe('project files through the dev server', () => {
   it('never serves secrets or Isotone’s own files, however the path is written', async () => {
     const secrets = /FAKE_(ENV|GIT_TOKEN|NOTE_TEXT|BLAST_STATE|KNOB)/;
     const paths = [
+      '/.env',
+      '/.env?import',
+      '/.env?t=1',
+      `/@fs${project}/.env`,
       '/.env?isotone=_base',
       '/.env?isotone=b',
       '/.env?isotone=forced',

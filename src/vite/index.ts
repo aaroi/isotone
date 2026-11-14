@@ -22,8 +22,9 @@ import {
   type ResolvedConfig,
   type ViteDevServer,
 } from 'vite';
-// A namespace, not a named import: Vite 5 has no `isFileLoadingAllowed`, and
-// a missing named export would fail the whole module there.
+// A namespace, not a named import: Vite 5.4.18 and earlier have no
+// `isFileLoadingAllowed`, and a missing named export would fail the whole
+// module there.
 import * as vite from 'vite';
 
 import { VARIANTS_ENDPOINT } from '../core/variants';
@@ -65,6 +66,27 @@ const VITE_DENY = ['.env', '.env.*', '*.{crt,pem}', '**/.git/**'];
  */
 const SPECIAL_QUERY = /[?&](raw|url|inline|no-inline|worker|sharedworker|html-proxy)(?:[&=]|$)/;
 
+/**
+ * Whether the dev server would serve `path` itself. A copy is served only
+ * where the real file would be, so `server.fs.deny` (`.env`, keys, `.git/`,
+ * Isotone's own files) refuses a copy as it refuses the file, even one
+ * tracked past the secret guard with `variant add … --force`. Vite 6 and
+ * later answer with their own check; Vite 5's takes the server from 5.4.19
+ * and is missing before it, so there the deny list is applied as Vite
+ * applies it.
+ */
+function servableBy(server: ViteDevServer): (path: string) => boolean {
+  if (server.environments !== undefined) return (path) => vite.isFileLoadingAllowed(server.config, path);
+  const { strict, deny } = server.config.server.fs;
+  // Vite matches a pattern without a slash at any depth.
+  const denied = vite.createFilter(
+    deny.map((glob) => (glob.includes('/') ? glob : `**/${glob}`)),
+    null,
+    { resolve: false },
+  );
+  return (path) => !strict || !denied(path);
+}
+
 /** Say where the notes go after Vite's own banner, so it is not buried under
  *  it. Portable setups fail quietly otherwise: a reviewer writes notes and the
  *  agent looks in the wrong place. */
@@ -88,7 +110,9 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
   let isDev = false;
   let hasReact = false;
   let ssrHost = false;
-  let resolved: ResolvedConfig | null = null;
+  // Whether the dev server would serve a path (see servableBy). A build
+  // serves no files, so it has no such check.
+  let servable: (path: string) => boolean = () => true;
   const variantsOptions = options.variants === false ? null : (options.variants ?? {});
   const overrides = createOverrides(variantsOptions ?? {});
   const switching = createSwitching(overrides);
@@ -110,7 +134,6 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
     },
     configResolved(config: ResolvedConfig) {
       isDev = config.command === 'serve';
-      resolved = config;
       file = resolve(config.root, options.file ?? NOTES_FILE);
       overrides.configure(config);
       hasReact = (config.plugins ?? []).some((p) => /react/i.test(p.name));
@@ -139,15 +162,16 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       const path = id.replace(/[?#].*$/, '');
       if (!overrides.overridable(path)) return null;
       const query = id.slice(path.length).replace(/^\?/, '').replace(/#.*$/, '');
+      // Every copy, version and dispatcher of a file obeys the dev server's
+      // `server.fs.deny` as the real file does: left to Vite, the request gets
+      // 403. A server render loads files without that check, so it keeps its
+      // swap.
+      if (!opts?.ssr && overrides.versionsByFile().has(path) && !servable(path)) return null;
       const version = switching.live ? new URLSearchParams(query).get(VERSION_QUERY) : null;
       // Only a file some variant tracks has versions. Any other path is left
       // to Vite, whose `server.fs.deny` keeps `.env` and `.git/` out of reach;
       // answering it here would read the file around that check.
       if (version !== null && overrides.versionsByFile().has(path)) {
-        // A file tracked past the secret guard (`variant add … --force`)
-        // still obeys `server.fs.deny`: left to Vite, the request gets 403.
-        // Live mode needs Vite 6, which has the check.
-        if (resolved && vite.isFileLoadingAllowed && !vite.isFileLoadingAllowed(resolved, path)) return null;
         const from = version === BASE_VERSION ? (existsSync(path) ? path : null) : overrides.copyOf(version, path);
         return { code: from ? readFileSync(from, 'utf8') : 'export {};\n', map: null };
       }
@@ -207,6 +231,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
         // Live switching needs the host's React for the wrappers and Vite 6's
         // per-environment hot updates, so the server render keeps its swap
         // while the browser's dispatchers are left alone.
+        servable = servableBy(server);
         const live = (variantsOptions.live ?? hasReact) && server.environments !== undefined;
         const activate = switching.attach(server, { live, ignored: variantsOptions.ignored });
         server.middlewares.use(

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **A variant's copy of a secret file is never served.** A variant that copied `.env`, or another file Vite's `server.fs.deny` refuses, with `variant add --force` served that copy to anyone requesting `/.env` while the variant was active. The dev server now serves a copy only where it would serve the real file.
+
 ## 1.5.0
 
 ### Changed
