@@ -35,7 +35,7 @@
     },
     "selections": {
       "type": "object",
-      "description": "The panel's selectors that sat off their defaults on this route when the note was filed, by axis id: a range's number without its unit, a colour's hex, or the chosen option's id. Pinned styles reflect these values, not the source's: write a value into the source only when the note asks for that.",
+      "description": "The panel's selectors that sat off their defaults on this route, by axis id: a range's number without its unit, a colour's hex, or the chosen option's id. The page showed these when the note was sent; the pinned elements' styles were read when each was pinned. Write a value into the source only when the note asks for that.",
       "additionalProperties": { "type": "string" }
     },
     "variant": {

@@ -5,6 +5,7 @@ import { afterEach, assert, describe, expect, it } from 'vitest';
 import { notesResponse } from '../../src/node/notes/handler';
 import { readNotes, updateNotes } from '../../src/node/notes/store';
 import { PAYLOAD_MAX } from '../../src/core/limits';
+import { overlayGroups } from '../../src/core/variants';
 import { tempNotesFile } from '../helpers/fs';
 
 const dirs: string[] = [];
@@ -250,8 +251,15 @@ describe('the selections a note was filed under', () => {
   it('keeps them beside a host payload, through an edit, and drops what no selector holds', () => {
     const file = tempFile();
     const payload = { flags: { beta: true } };
+    // An overlay group without a name is its members' ids joined with `+`, which runs long.
+    const group = overlayGroups([
+      { id: 'hero-bold-with-a-long-descriptive-name', files: { 'src/Hero.tsx': {} }, createdAt: '' },
+      { id: 'hero-minimal-with-a-long-descriptive-name', files: { 'src/Hero.tsx': {} }, createdAt: '' },
+    ] as never)[0]?.id as string;
+    expect(group.length).toBeGreaterThan(64);
     const selections = {
       'card-radius': '24',
+      [group]: 'hero-bold-with-a-long-descriptive-name',
       'Not An Id': '1',
       gap: 7,
       empty: '',
@@ -261,7 +269,7 @@ describe('the selections a note was filed under', () => {
       long: 'x'.repeat(65),
       _private: '1',
     };
-    const kept = { 'card-radius': '24', accent: '#2f6f4e', size: 'Large / 2:1' };
+    const kept = { 'card-radius': '24', [group]: 'hero-bold-with-a-long-descriptive-name', accent: '#2f6f4e', size: 'Large / 2:1' };
     const id = (post(file, { route: '/', feedback: 'rounder', element: null, payload, selections }).body as { id: string }).id;
     expect(readNotes(file)[0]?.selections).toEqual(kept);
     expect(readNotes(file)[0]?.payload).toEqual(payload);

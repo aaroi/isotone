@@ -372,6 +372,37 @@ describe('review dock interactions', () => {
     expect(tags.map((tag) => tag.textContent)).toEqual(['3 picks']);
     expect(tags[0]?.getAttribute('title')).toBe('pad: 24\ngap: 8\nradius: 12');
   });
+  it('shows one pin by its text and several as a count, beside the picks', async () => {
+    const note = (id: string, texts: string[]) => ({
+      id,
+      route: '/',
+      feedback: `Note ${id}`,
+      element: null,
+      elements: texts.map((text, i) => ({ tag: 'button', text, selector: `#${id}-${i}` })),
+      selections: { pad: '24', gap: '8' },
+      done: false,
+      createdAt: new Date().toISOString(),
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => [note('one', ['Start free trial']), note('three', ['Free', 'Pro', 'Team'])] })),
+    );
+    await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
+    await click(container.querySelector('.isotone-fab'));
+    const rows = [...container.querySelectorAll('.isotone-note-hit .isotone-meta')].map((meta) =>
+      [...meta.children].map((tag) => [tag.textContent, tag.getAttribute('title')]),
+    );
+    expect(rows).toEqual([
+      [
+        ['Start free trial', null],
+        ['2 picks', 'pad: 24\ngap: 8'],
+      ],
+      [
+        ['3 pins', 'Free\nPro\nTeam'],
+        ['2 picks', 'pad: 24\ngap: 8'],
+      ],
+    ]);
+  });
   it('pins several elements in one session, toggles a duplicate off, and saves every target', async () => {
     await render(createElement(IsotonePanel, { route: '/', store: { endpoint: '/notes' } }));
     await click(container.querySelector('.isotone-fab'));

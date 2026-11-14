@@ -100,63 +100,82 @@ interface StackFrame {
   url: string;
   line: number;
   column: number;
+  /** The function running there, as the stack names it: `Pricing`, `Foo.render`, or none. */
+  name?: string;
+  legacy?: true;
 }
 
 /**
- * Where an element was written: React 18's `_debugSource`, or the first frame
- * of React 19's creation stack after the frame that made the element (`jsxDEV`,
- * `createElement`, or the server-component client replaying the server's
- * stack). Frames below `react_stack_bottom_frame` are React calling the
- * component, not the component.
+ * Where a node's element was written: React 18's `_debugSource`, or the first
+ * frame of React 19's creation stack that is the app's own. The stack's first
+ * frame is the call that made the element (`jsxDEV`, `createElement`,
+ * `cloneElement`, or the server-component client replaying the server's
+ * stack); after it come any wrapping JSX runtime (Emotion's, a profiler's) and
+ * library code, all under `node_modules`. Frames below React's bottom frame are
+ * React calling the component, not the component.
  */
-function callsite(node: Made): (StackFrame & { legacy?: true }) | undefined {
+function callsite(node: Made): StackFrame | undefined {
   const legacy = node._debugSource;
-  if (legacy?.fileName) return { url: legacy.fileName, line: legacy.lineNumber ?? 0, column: 0, legacy: true };
-  const stack = node._debugStack ?? node.debugStack;
-  const frames: StackFrame[] = [];
-  for (const frame of (typeof stack === 'string' ? stack : stack?.stack)?.split('\n') ?? []) {
-    if (frame.includes('react_stack_bottom_frame')) break;
-    const [, url, line, column] = frame.match(/(?:\(|@|\bat )((?:[a-z-]+:\/\/\/?|\/)\S+?):(\d+):(\d+)\)?\s*$/i) ?? [];
-    if (url) frames.push({ url, line: Number(line), column: Number(column) });
+  if (legacy?.fileName) {
+    return /node_modules/.test(legacy.fileName)
+      ? undefined
+      : { url: legacy.fileName, line: legacy.lineNumber ?? 0, column: 0, legacy: true };
   }
-  return frames[1];
+  const stack = node._debugStack ?? node.debugStack;
+  const lines = (typeof stack === 'string' ? stack : stack?.stack)?.split('\n') ?? [];
+  let factory = true;
+  for (const text of lines) {
+    if (/react[_-]stack[_-]bottom[_-]frame/.test(text)) break;
+    const [, url, line, column] = text.match(/(?:\(|@|\bat )((?:[a-z-]+:\/\/\/?|\/)\S+?):(\d+):(\d+)\)?\s*$/i) ?? [];
+    if (!url) continue;
+    if (factory) factory = false;
+    else if (!/node_modules/.test(url)) {
+      const name = text.match(/^\s*at\s+(?:async\s+)?(?:new\s+)?([^\s(]+)\s+\(/)?.[1] ?? text.match(/^\s*([^@\s]+)@/)?.[1];
+      return { url, line: Number(line), column: Number(column), name };
+    }
+  }
+  return undefined;
+}
+
+/** A fiber's component name, for React 18, whose `_debugSource` names no function. */
+function typeName(node: Made | null | undefined): string | undefined {
+  const type = node?.type as { displayName?: string; name?: string; render?: Made; type?: Made } | string | undefined;
+  if (!type || typeof type === 'string') return node?.name;
+  const inner = type.render ?? type.type ?? type;
+  return type.displayName ?? inner.displayName ?? inner.name;
 }
 
 /**
- * The components that wrote the element, outermost first, and the first place
- * in the app's own code that did. The walk follows owners (who rendered what),
- * not parents, so providers and layout boundaries that only pass children
- * through never appear. Where a node was made in the app's code (its callsite
- * is outside `node_modules`), it and its owner are named: that callsite is a
- * line of the owner's render, whoever made the owner (a router, a framework).
- * Below the app's first such node the walk climbs past a library's insides;
- * above it, the first node made elsewhere ends the walk. Absent on other
- * frameworks and production builds, which leaves the fields out.
+ * The components whose code wrote the element, outermost first, and the line
+ * that wrote it. For the element and each of its owners (who rendered what,
+ * not parents, so layout providers stay out), the app's own frame on its
+ * creation stack names the function that wrote it: `at Pricing (…)`. Nodes a
+ * library made carry no such frame and are passed, so an app component a
+ * router, a framework, a `Slot` or a list renders is still named. `source` is
+ * the first of those frames. Absent on other frameworks and production builds,
+ * which leaves the fields out.
  */
-function reactOwners(el: Element): { names: string[]; at?: ReturnType<typeof callsite> } {
+function reactOwners(el: Element): { names: string[]; at?: StackFrame } {
   const key = Object.keys(el).find((name) => name.startsWith('__reactFiber$'));
   let node: Made | null | undefined = key ? (el as unknown as Record<string, Made | null>)[key] : null;
   const names: string[] = [];
-  const name = (made: Made | null | undefined) => {
-    const type = made?.type as { displayName?: string; name?: string; render?: Made; type?: Made } | string | undefined;
-    const inner = type && typeof type !== 'string' ? (type.render ?? type.type ?? type) : made;
-    const found = (type && typeof type !== 'string' ? type.displayName : undefined) ?? inner?.displayName ?? inner?.name;
-    // Capitalized is a component; anything else is a minified or internal name.
-    if (found && /^[A-Z]/.test(found) && names[0] !== found && names.length < 5) names.unshift(found);
-  };
-  let at: ReturnType<typeof callsite>;
-  let seen = false;
+  let at: StackFrame | undefined;
   for (let depth = 0; node && depth < 64; depth++) {
-    const made = callsite(node);
     const owner = node._debugOwner ?? node.owner;
-    if (made && !/node_modules/.test(made.url)) {
+    const made = callsite(node);
+    if (made) {
       // React's replay of a server component's stack names the server bundle, not a source file.
       if (!/^(?:about|rsc):/.test(made.url)) at ??= made;
-      // The element itself is a tag, not a component.
-      if (depth > 0) name(node);
-      name(owner);
-      seen = true;
-    } else if (seen) break;
+      // `Foo.render` is a class's method: the class is the component.
+      const name = made.legacy
+        ? typeName(owner)
+        : made.name
+            ?.split('.')
+            .reverse()
+            .find((part) => /^[A-Z]/.test(part));
+      // Capitalized is a component; anything else is a callback, a module's top level or a minified name.
+      if (name && /^[A-Z]/.test(name) && !names.includes(name) && names.length < 5) names.unshift(name);
+    }
     node = owner;
   }
   return { names, at };
@@ -279,7 +298,7 @@ function elementContext(el: Element): Partial<IsotoneElement> {
       .split(/\s+/)
       .map((id) => (id ? (up.getRootNode() as Document | ShadowRoot).getElementById?.(id)?.textContent : ''))
       .join(' ');
-    const label = oneLine(labelledBy) || up.getAttribute('aria-label');
+    const label = oneLine(labelledBy) || oneLine(up.getAttribute('aria-label'));
     const test = up.getAttribute('data-testid');
     const heading = ownHeading(up, el);
     if (label) within.unshift(`<${tag}> labelled "${label}"`);

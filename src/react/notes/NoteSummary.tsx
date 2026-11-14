@@ -2,13 +2,30 @@ import { showOverflowTitle } from '../tooltips';
 import type { IsotoneNote } from '../../core/types';
 import { updateNoteText } from '../../core/update';
 
+interface Reference {
+  key: string;
+  label: string;
+  /** A count ("3 pins", "2 picks") keeps its width and lists what it counts here. */
+  list?: string[];
+}
+
 /** Pinned references and saved defaults use the same compact tag. */
-function SummaryTag({ label, title }: { label: string; title?: string }) {
-  return (
-    <span className="isotone-chip" title={title}>
-      <span onPointerOver={title ? undefined : showOverflowTitle}>{label}</span>
+function SummaryTag({ label, list }: Omit<Reference, 'key'>) {
+  return list ? (
+    <span className="isotone-chip isotone-chip-count" title={list.join('\n')}>
+      <span>{label}</span>
+    </span>
+  ) : (
+    <span className="isotone-chip">
+      <span onPointerOver={showOverflowTitle}>{label}</span>
     </span>
   );
+}
+
+/** One tag per thing, or a count of several. */
+function counted(items: string[], one: string, key: string): Reference[] {
+  if (items.length < 2) return items.map((label) => ({ key: `${key}:${label}`, label }));
+  return [{ key, label: `${items.length} ${one}s`, list: items }];
 }
 
 /** The agent's question about a note, from `isotone --reply`; edit the note to answer.
@@ -37,7 +54,7 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
     );
   if (!note.feedback.startsWith('[set-defaults]')) {
     const elements = note.elements ?? (note.element ? [note.element] : []);
-    const references: { key: string; label: string; title?: string }[] = [
+    const references: Reference[] = [
       ...(page ? [{ key: `page:${page}`, label: page }] : []),
       ...(note.variant
         ? [
@@ -47,16 +64,15 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
             },
           ]
         : []),
-      ...elements.map((element) => ({ key: element.selector, label: element.text || element.tag })),
+      ...counted(
+        elements.map((element) => element.text || element.tag),
+        'pin',
+        'pins',
+      ),
     ];
     // The selections it was filed under, as one tag; hovering it lists them.
-    const picks = Object.entries(note.selections ?? {});
-    if (picks.length)
-      references.push({
-        key: 'selections',
-        label: `${picks.length} pick${picks.length === 1 ? '' : 's'}`,
-        title: picks.map(([id, value]) => `${id}: ${value}`).join('\n'),
-      });
+    const picks = Object.entries(note.selections ?? {}).map(([id, value]) => `${id}: ${value}`);
+    if (picks.length) references.push({ key: 'picks', label: `${picks.length} pick${picks.length === 1 ? '' : 's'}`, list: picks });
     return (
       <>
         <p>{note.feedback}</p>
@@ -64,7 +80,7 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
         {references.length > 0 && (
           <span className="isotone-meta">
             {references.map((reference) => (
-              <SummaryTag key={reference.key} label={reference.label} title={reference.title} />
+              <SummaryTag key={reference.key} label={reference.label} list={reference.list} />
             ))}
           </span>
         )}

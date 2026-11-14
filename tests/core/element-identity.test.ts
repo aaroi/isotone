@@ -262,39 +262,93 @@ describe('the React components that wrote the element', () => {
     expect(described.source).toBeUndefined();
   });
 
-  it('names a forwardRef component by its displayName', () => {
-    const at = (file: string) =>
-      made('exports.jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js:250:33)', file);
-    const page = { type: component('Pricing'), _debugStack: at('App (http://localhost:5173/src/App.tsx:3:3)'), _debugOwner: null };
-    const forwarded = { $$typeof: Symbol.for('react.forward_ref'), render: () => null, displayName: 'Button' };
-    const owner = { type: forwarded, _debugStack: at('Pricing (http://localhost:5173/src/Pricing.tsx:9:3)'), _debugOwner: page };
-    const button = pin({ type: 'button', _debugStack: at('render (http://localhost:5173/src/ui/button.tsx:20:3)'), _debugOwner: owner });
-    expect(describeIsotoneElement(elementAsNode(button)).component).toEqual(['Pricing', 'Button']);
+  const vite = (file: string) => `http://localhost:5173/${file}`;
+  /** A Vite creation stack: React's jsxDEV, then the given frames, then React calling the component. */
+  const viteStack = (...frames: string[]) =>
+    made(`exports.jsxDEV (${vite('node_modules/.vite/deps/react_jsx-dev-runtime.js')}:250:33)`, ...frames, reactBottom);
+  /** A fiber of `name`, made at `frames`, owned by `owner`. */
+  const fiber = (name: string, owner: object | null, ...frames: string[]) => ({
+    type: component(name),
+    _debugStack: viteStack(...frames),
+    _debugOwner: owner,
   });
 
-  it("climbs out of a library's insides to the app code that used it, and keeps app names a framework also uses", () => {
-    const at = (file: string) =>
-      made('exports.jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js:250:33)', file);
-    const app = { type: component('AppRouter'), _debugStack: at('main (http://localhost:5173/src/main.tsx:8:3)'), _debugOwner: null };
-    const pricing = { type: component('Pricing'), _debugStack: at('AppRouter (http://localhost:5173/src/App.tsx:20:7)'), _debugOwner: app };
-    const kitButton = {
-      type: component('Button'),
-      _debugStack: at('Pricing (http://localhost:5173/src/Pricing.tsx:12:7)'),
-      _debugOwner: pricing,
-    };
-    const base = {
-      type: component('ButtonBase'),
-      _debugStack: at('Button (http://localhost:5173/node_modules/.vite/deps/ui-kit.js:40:9)'),
-      _debugOwner: kitButton,
-    };
+  it('names the function that wrote each element, not the library component around it', () => {
+    const app = fiber('App', null, `${vite('src/main.tsx')}:8:3`);
+    const pricing = fiber('Pricing', app, `App (${vite('src/App.tsx')}:20:7)`);
+    const kitButton = fiber('Button', pricing, `Pricing (${vite('src/Pricing.tsx')}:12:7)`);
+    const base = fiber('ButtonBase', kitButton, `Button (${vite('node_modules/.vite/deps/ui-kit.js')}:40:9)`);
     const button = pin({
       type: 'button',
-      _debugStack: at('ButtonBase (http://localhost:5173/node_modules/.vite/deps/ui-kit.js:90:9)'),
+      _debugStack: viteStack(`ButtonBase (${vite('node_modules/.vite/deps/ui-kit.js')}:90:9)`),
       _debugOwner: base,
     });
+    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['App', 'Pricing'], source: '/src/Pricing.tsx:12' });
+  });
+
+  it('looks past a wrapping JSX runtime such as Emotion', () => {
+    const emotion = `jsxDEV (${vite('node_modules/.vite/deps/@emotion_react_jsx-dev-runtime.js')}:30:12)`;
+    const page = fiber('Pricing', null, emotion, `App (${vite('src/App.tsx')}:5:3)`);
+    const button = pin({ type: 'button', _debugStack: viteStack(emotion, `Pricing (${vite('src/Pricing.tsx')}:12:7)`), _debugOwner: page });
+    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['App', 'Pricing'], source: '/src/Pricing.tsx:12' });
+  });
+
+  it('names the app component through a Slot that cloned it (asChild)', () => {
+    const page = fiber('Pricing', null, `App (${vite('src/App.tsx')}:5:3)`);
+    const trigger = fiber('DialogTrigger', page, `Pricing (${vite('src/Pricing.tsx')}:14:7)`);
+    const slot = fiber('Slot', trigger, `DialogTrigger (${vite('node_modules/.vite/deps/@radix-ui_react-dialog.js')}:300:9)`);
+    const clone = fiber('SlotClone', slot, `Slot (${vite('node_modules/.vite/deps/@radix-ui_react-slot.js')}:40:9)`);
+    // cloneElement makes the clone's owner the Slot, and its stack the Slot's.
+    const cloned = {
+      type: component('Button'),
+      _debugStack: made(
+        `cloneElement (${vite('node_modules/.vite/deps/react.js')}:900:20)`,
+        `SlotClone (${vite('node_modules/.vite/deps/@radix-ui_react-slot.js')}:60:9)`,
+        reactBottom,
+      ),
+      _debugOwner: clone,
+    };
+    const button = pin({ type: 'button', _debugStack: viteStack(`Button (${vite('src/ui/button.tsx')}:20:3)`), _debugOwner: cloned });
     expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({
-      component: ['AppRouter', 'Pricing', 'Button'],
-      source: '/src/Pricing.tsx:12',
+      component: ['App', 'Pricing', 'Button'],
+      source: '/src/ui/button.tsx:20',
+    });
+  });
+
+  it("names the component around a render prop a library's own component calls", () => {
+    const page = fiber('Pricing', null, `App (${vite('src/App.tsx')}:5:3)`);
+    const list = fiber('Virtuoso', page, `Pricing (${vite('src/Pricing.tsx')}:30:7)`);
+    const item = fiber('VirtualItem', list, `Items (${vite('node_modules/.vite/deps/react-virtuoso.js')}:800:9)`);
+    // The callback is an arrow, so its frame has no name.
+    const row = pin({
+      type: 'div',
+      _debugStack: viteStack(
+        `${vite('src/Pricing.tsx')}:31:24`,
+        `VirtualItem (${vite('node_modules/.vite/deps/react-virtuoso.js')}:820:9)`,
+      ),
+      _debugOwner: item,
+    });
+    expect(describeIsotoneElement(elementAsNode(row))).toMatchObject({ component: ['App', 'Pricing'], source: '/src/Pricing.tsx:31' });
+  });
+
+  it("names a row component a list renders (react-window's rowComponent)", () => {
+    const page = fiber('Pricing', null, `App (${vite('src/App.tsx')}:5:3)`);
+    const list = fiber('List', page, `Pricing (${vite('src/Pricing.tsx')}:30:7)`);
+    const rowFiber = fiber('Row', list, `List (${vite('node_modules/.vite/deps/react-window.js')}:400:9)`);
+    const cell = pin({ type: 'div', _debugStack: viteStack(`Row (${vite('src/Row.tsx')}:6:10)`), _debugOwner: rowFiber });
+    expect(describeIsotoneElement(elementAsNode(cell))).toMatchObject({ component: ['App', 'Pricing', 'Row'], source: '/src/Row.tsx:6' });
+  });
+
+  it('names a forwardRef component by its render function, and an anonymous one not at all', () => {
+    const page = fiber('Pricing', null, `App (${vite('src/App.tsx')}:3:3)`);
+    const forwarded = { $$typeof: Symbol.for('react.forward_ref'), render: () => null, displayName: 'Button' };
+    const owner = { type: forwarded, _debugStack: viteStack(`Pricing (${vite('src/Pricing.tsx')}:9:3)`), _debugOwner: page };
+    const named = pin({ type: 'button', _debugStack: viteStack(`Button (${vite('src/ui/button.tsx')}:20:3)`), _debugOwner: owner });
+    expect(describeIsotoneElement(elementAsNode(named)).component).toEqual(['App', 'Pricing', 'Button']);
+    const anonymous = pin({ type: 'button', _debugStack: viteStack(`${vite('src/ui/button.tsx')}:20:3`), _debugOwner: owner });
+    expect(describeIsotoneElement(elementAsNode(anonymous))).toMatchObject({
+      component: ['App', 'Pricing'],
+      source: '/src/ui/button.tsx:20',
     });
   });
 

@@ -53,7 +53,7 @@ export interface NoteContext {
   elements?: IsotoneElement[];
   variant?: VariantReference | null;
   /** The panel's selectors that sat off their defaults on the note's route
-   *  when it was filed. Pinned styles reflect these values, not the source's. */
+   *  when it was sent: what the page showed then, not the defaults. */
   selections?: VariantSelections;
   /** The user's request to upgrade Isotone, built by the local server from
    *  its own update check. At most one is open at a time. */
