@@ -98,7 +98,9 @@ window.watch = () => {
 };
 </script>`;
 
-describe.skipIf(!binary)('Getting into the panel (headless Chrome)', () => {
+// Its motion checks share dock-motion's limit: a starved CI runner can finish an ease in one frame
+// (`ISOTONE_CPU_THROTTLE=6` reproduces it), so a test that hits it runs again.
+describe.skipIf(!binary)('Getting into the panel (headless Chrome)', { retry: 2 }, () => {
   let server: Server;
   let origin = '';
   let chrome: Chrome;
