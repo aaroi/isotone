@@ -472,6 +472,31 @@ describe('a host source beside the knobs of the server that answers notes', () =
     expect(listener).toHaveBeenCalledOnce();
   });
 
+  // #62 leaves out a knob sharing a file group's id; beside a host source (#64), one sharing a host
+  // selector's id is left out too, so its stored value no longer styles the page under the host's control.
+  it('leaves out a knob whose id one of the host’s selectors has, and says so', async () => {
+    const hostRadius = {
+      id: 'card-radius',
+      label: 'Card radius',
+      defaultOption: 'soft',
+      options: [
+        { id: 'soft', label: 'Soft' },
+        { id: 'sharp', label: 'Sharp' },
+      ],
+    };
+    const source = createVariantsSource({ axes: [hostRadius], onChange: () => {} });
+    const panel = await mountWithKnobs({ endpoint: notesEndpoint, variants: source, getRoute: () => '/' });
+    expect(document.documentElement.style.getPropertyValue('--knob-card-radius')).toBe('');
+    expect(Array.from(panel.shadow.querySelectorAll('.isotone-axis-label')).map((el) => el.textContent)).toEqual(['Card radius']);
+    expect(panel.button('Sharp')).toBeDefined();
+    expect(panel.shadow.querySelector('.isotone-vars-notice')?.textContent).toBe(
+      'Left out of .isotone/knobs.json: card-radius, since one of the app’s own selectors has this id, so the panel shows only that selector. Give the knob its own id.',
+    );
+    // The stored value is kept, for when the knob gets an id of its own.
+    expect(JSON.parse(localStorage.getItem('isotone:knobs') ?? '{}')).toEqual({ 'card-radius': '16' });
+    await panel.off();
+  });
+
   it('reads no knobs beside a notes endpoint that is not an Isotone server, and still files the host’s picks', async () => {
     const source = createVariantsSource({ axes, selections: { cta: 'start' } });
     const panel = await mountWithKnobs({ endpoint: '/review/notes', variants: source });

@@ -283,7 +283,8 @@ mountIsotone({ variants: source, endpoint: 'http://127.0.0.1:4123/api/isotone/no
 ```
 
 Any other notes endpoint gets no knobs unless `variantsEndpoint` names where they
-are. Compare holds every selector that can switch at once, whichever source owns
+are. A knob with the id of one of the source's selectors is left out, and the
+Variants view says so: give it an id of its own. Compare holds every selector that can switch at once, whichever source owns
 it. **Make default** files one `[set-defaults]` note naming every pick, the
 source's own in `payload.selectors` for the agent to make the defaults in code.
 A source's own `saveDefaults` still runs first with its picks; the note names

@@ -401,6 +401,12 @@ export function createOverlayVariantsSource(cfg: {
   live?: LiveVariantSelection | null;
   /** The page's query string, for a `?v=` the source does not apply. Default: `location.search`. */
   getSearch?: () => string;
+  /**
+   * Axis ids another source in the same panel already shows, such as a host's
+   * own selectors. A knob with one of them is left out, as one sharing a file
+   * group's id is: never shown, never on the page, and named in the notice.
+   */
+  takenIds?: () => Iterable<string>;
 }): VariantsSource & {
   refresh(): Promise<void>;
   /** For the reviewer: the page's `?v=` names picks the page does not show; else null. */
@@ -440,7 +446,13 @@ export function createOverlayVariantsSource(cfg: {
   };
   const current = (): string[] => live?.active ?? intended ?? list?.active ?? [];
   const selects = (): SelectVariantAxis[] => (list ? overlayAxes(list, cfg.getRoute()) : []);
-  const knobAxes = (): KnobAxis[] => (list ? overlayKnobs(list, cfg.getRoute()) : []);
+  /** The knobs on `route` (every route without one) that no other source's selector has taken. */
+  const ownKnobs = (route?: string): KnobAxis[] => {
+    if (!list) return [];
+    const taken = new Set(cfg.takenIds?.() ?? []);
+    return overlayKnobs(list, route).filter((knob) => !taken.has(knob.id));
+  };
+  const knobAxes = (): KnobAxis[] => ownKnobs(cfg.getRoute());
   const axes = (): VariantAxis[] => [...selects(), ...knobAxes()];
 
   // Knob values are review-time state, kept in the browser rather than on
@@ -490,7 +502,7 @@ export function createOverlayVariantsSource(cfg: {
     knobsRoute = cfg.getRoute();
     if (!knobRoot) return;
     const knobs = list ? overlayKnobs(list) : [];
-    const here = new Set((list ? overlayKnobs(list, knobsRoute) : []).map((k) => k.id));
+    const here = new Set(ownKnobs(knobsRoute).map((k) => k.id));
     const shown = previewing ? { ...knobValues, ...previewing } : knobValues;
     applyKnobValues(knobs, Object.fromEntries(Object.entries(shown).filter(([id]) => here.has(id))), knobRoot);
   };
@@ -557,7 +569,16 @@ export function createOverlayVariantsSource(cfg: {
     getError: () => error,
     // A live tab follows its own `?v=`, so only a source without one can leave a link unapplied.
     // Read as the picks are now; the view keeps what it showed until the panel closes.
-    getNotice: () => (live || !list ? null : unappliedLinkNotice(list, current(), search())),
+    getNotice: () => {
+      if (!list) return null;
+      const taken = new Set(cfg.takenIds?.() ?? []);
+      const clashes = overlayKnobs(list, cfg.getRoute()).filter((knob) => taken.has(knob.id));
+      const clash = clashes.length
+        ? `Left out of .isotone/knobs.json: ${clashes.map((knob) => knob.id).join(', ')}, since one of the app’s own selectors has ${clashes.length > 1 ? 'each' : 'this'} id, so the panel shows only that selector. Give ${clashes.length > 1 ? 'each knob its' : 'the knob its'} own id.`
+        : null;
+      const link = live ? null : unappliedLinkNotice(list, current(), search());
+      return [link, clash].filter(Boolean).join(' ') || null;
+    },
     get list() {
       return list;
     },

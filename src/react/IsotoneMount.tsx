@@ -88,7 +88,9 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
     : opts.variants
       ? (opts.variantsEndpoint ?? VARIANTS_ENDPOINT)
       : undefined;
-  const overlay = overlayEndpoint ? createOverlayVariantsSource({ endpoint: overlayEndpoint, getRoute }) : null;
+  // A knob whose id the host's own selectors have would style the page under the host's control: left out.
+  const takenIds = app ? () => app.getAxes().map((axis) => axis.id) : undefined;
+  const overlay = overlayEndpoint ? createOverlayVariantsSource({ endpoint: overlayEndpoint, getRoute, takenIds }) : null;
   // A wrapper this mount owns, so Make default can be added without changing the host's source.
   const combined =
     app && overlay ? combineSources([app, overlay]) : app && opts.endpoint && !app.saveDefaults ? combineSources([app]) : null;
