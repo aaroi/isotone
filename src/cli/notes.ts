@@ -21,6 +21,7 @@ import { filesWithoutBase, hasGit, listVariants, NO_GIT_SYNC, readActive, varian
 import { latestChange, mtime, snapshot } from './changes';
 import { docPath } from './docs';
 import { excludeLocalFiles } from './local-files';
+import { fileVariantSwitching } from './project';
 import { oneLine, quoted, shellCommand, shellQuote, toJson, utcStamp } from './text';
 import { type CliIO, errOut, findNoteByPrefix, has, out, parseArgs, valueFor } from './util';
 
@@ -401,10 +402,17 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
   }
   // Each tab keeps its own pick of a script in live switching, so `.isotone/active.json` may be another
   // tab's: a note about this variant's selector says what its reviewer was on (the option it is about, else
-  // the pick it was written with), and outranks it. A stylesheet follows active.json in every tab.
+  // the pick it was written with), and outranks it. A stylesheet follows active.json in every tab, and so
+  // does every file where picks are shared (no React, Vite 5, `live: false`): there it is what every tab shows.
+  const switching = fileVariantSwitching(dir);
+  const shared = switching === 'whole' || switching === 'whole-react';
   const groupOf = new Map(overlayGroups(variants).flatMap((group) => group.members.map((member) => [member.id, group.id] as const)));
   const article = (fixed: unknown[]) => (fixed.length > 1 ? 'a' : 'the');
   const showing = stale.flatMap(({ variant, files, notes: fixed }) => {
+    if (shared)
+      return active.includes(variant.id)
+        ? [{ id: variant.id, files, why: 'active in .isotone/active.json, which every tab shows here' }]
+        : [];
     const about = fixed.map(({ variant: ref }) => (ref?.axisId === groupOf.get(variant.id) ? ref : undefined));
     if (about.some((ref) => ref?.optionId === variant.id))
       return [{ id: variant.id, files, why: `${article(fixed)} note is about this option` }];
@@ -423,7 +431,9 @@ function variantAdvice(dir: string, notes: { note: StoredNote; since: number }[]
     for (const v of showing) lines.push(`  ${v.id} (${v.files.join(', ')}): ${v.why}`);
     const stylesheet = showing.some((v) => v.files.some((file) => !SCRIPT.test(file)));
     lines.push(
-      `Sync the fix into a copy it belongs in. Otherwise the reviewer sees your fix with Default picked on that selector${stylesheet ? ' (a stylesheet: once Default is the latest pick in any tab)' : ''}; leave the pick to them, since \`variant use\` moves every tab without a pick of its own.`,
+      shared
+        ? 'Sync the fix into a copy it belongs in. Otherwise the reviewer sees your fix once Default is picked on that selector; leave the pick to them, since `variant use` moves every tab here.'
+        : `Sync the fix into a copy it belongs in. Otherwise the reviewer sees your fix with Default picked on that selector${stylesheet ? ' (a stylesheet: once Default is the latest pick in any tab)' : ''}; leave the pick to them, since \`variant use\` moves every tab without a pick of its own.`,
     );
   }
   return lines;

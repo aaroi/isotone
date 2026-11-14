@@ -50,7 +50,7 @@ import { docPath } from './docs';
 import { hostSourceFiles } from './init';
 import { excludeLocalFiles } from './local-files';
 import { findNotesFile } from './notes';
-import { detectHost, vitePlugin, viteSwitching } from './project';
+import { detectHost, fileVariantSwitching, vitePlugin } from './project';
 import { toJson } from './text';
 import { type CliIO, errOut, extractFlag, findNoteByPrefix, has, out, parseArgs, printTable, valueFor } from './util';
 
@@ -481,19 +481,12 @@ function variantsProject(opts: VariantsStoreOptions): string | null {
 }
 
 /**
- * How the plugin will switch these variants, for what `variant add` warns about.
- * `live` also stands for "cannot tell": a project with neither a Vite config nor
- * the plugin may be served by a sibling (`variants: { root }`), and an unreadable
- * Vite version may be 6. Next serves none, which `warnUnserved` says.
+ * How the plugin will switch these variants, for what `variant add` warns about
+ * ({@link fileVariantSwitching}). Next serves none, which `warnUnserved` says.
  */
-function switchingOf(opts: VariantsStoreOptions): 'live' | 'whole-react' | 'whole' | 'none' {
+function switchingOf(opts: VariantsStoreOptions): ReturnType<typeof fileVariantSwitching> {
   const root = variantsProject(opts);
-  if (root === null) return 'live';
-  if (detectHost(root) === 'next') return 'none';
-  const { loaded, viteConfig } = vitePlugin(root);
-  if (!loaded && viteConfig === null) return 'live';
-  const { mode, why } = viteSwitching(root);
-  return mode !== 'shared' ? 'live' : why === 'no-react' ? 'whole' : 'whole-react';
+  return root === null ? 'live' : fileVariantSwitching(root);
 }
 
 /** Say up front what would otherwise look like a page that reloads for no

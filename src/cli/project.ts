@@ -138,3 +138,18 @@ export function safeRead(file: string): string {
     return '';
   }
 }
+
+/**
+ * How the Vite plugin in `root` will switch file variants: per tab (`live`, which
+ * also stands for "cannot tell": a project with neither a Vite config nor the
+ * plugin may be served by a sibling, and an unreadable Vite version may be 6),
+ * whole files that every tab follows through `.isotone/active.json` (`whole-react`
+ * with React, `whole` without), or not at all (`none`: Next runs no Vite plugin).
+ */
+export function fileVariantSwitching(root: string): 'live' | 'whole-react' | 'whole' | 'none' {
+  if (detectHost(root) === 'next') return 'none';
+  const { loaded, viteConfig } = vitePlugin(root);
+  if (!loaded && viteConfig === null) return 'live';
+  const { mode, why } = viteSwitching(root);
+  return mode !== 'shared' ? 'live' : why === 'no-react' ? 'whole' : 'whole-react';
+}

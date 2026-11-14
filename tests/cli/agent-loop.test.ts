@@ -408,6 +408,28 @@ describe('--done and variants', () => {
     }
   });
 
+  // #61 trusts a note's own pick over .isotone/active.json because a live tab keeps its own; #63 tells
+  // the setups apart. Where picks are shared (no React, Vite 5, `live: false`), every tab shows
+  // active.json, whatever the note was written on.
+  it('names an active copy every tab shows where picks are shared, whatever the note was written on', async () => {
+    const root = repo();
+    write(root, 'package.json', JSON.stringify({ devDependencies: { vite: '^7.0.0', vue: '^3.5.0' } }));
+    write(root, 'vite.config.ts', "import { isotone } from 'isotone/vite';\nexport default { plugins: [isotone()] };\n");
+    notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000), variant: { axisId: 'hero', label: 'Hero', optionId: 'default' } }]);
+    for (const id of ['hero-left', 'hero-centered']) {
+      expect(await runCli(['variant', 'new', id, '--route', '/', '--group', 'hero'], captureIo(root))).toBe(0);
+      expect(await runCli(['variant', 'add', id, 'src/App.jsx'], captureIo(root))).toBe(0);
+    }
+    // Picked after the note was written: in this setup it changed every tab.
+    expect(await runCli(['variant', 'use', 'hero-left'], captureIo(root))).toBe(0);
+    write(root, 'src/App.jsx', 'export default function App() { return <button>Start</button>; }\n', Date.now() + 2000);
+    const io = captureIo(root);
+    expect(await runCli(['--done', 'aaaa'], io)).toBe(0);
+    expect(io.text.out).toContain('  hero-left (src/App.jsx): active in .isotone/active.json, which every tab shows here');
+    expect(io.text.out).not.toContain('hero-centered (src/App.jsx): active');
+    expect(io.text.out).toContain('since `variant use` moves every tab here.');
+  });
+
   it('names copies on the route that still hold conflict markers', async () => {
     const root = repo();
     notes(root, [{ id: 'aaaa1111', createdAt: ago(60_000) }]);
