@@ -31,7 +31,7 @@ import { VARIANTS_ENDPOINT } from '../core/variants';
 import { blastFile } from '../node/blast';
 import { defaultNotesFile, LEGACY_NOTES_FILE, NOTES_FILE } from '../node/notes/location';
 import { ensureFileIgnored } from '../node/fs/git-exclude';
-import { realPath } from '../node/fs/paths';
+import { isWithin, realPath } from '../node/fs/paths';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
 import { autoUpdateNote } from '../node/update/note';
@@ -172,6 +172,28 @@ function requestedFile(server: ViteDevServer, path: string): string {
   return normalizePath(join(root, local));
 }
 
+/**
+ * Whether the dev server would serve `path` itself. A copy is served only
+ * where the real file would be, so `server.fs.deny` (`.env`, keys, `.git/`,
+ * Isotone's own files) and `server.fs.allow` refuse a copy as they refuse the
+ * file, even one tracked past the secret guard with `variant add … --force`.
+ * Vite 6 and later answer with their own check. Vite 5's takes the server
+ * from 5.4.19 and is missing before it, so there its steps are taken here
+ * with its own deny matcher (which ignores case); without that matcher no
+ * copy is served while `server.fs.strict` is on.
+ */
+function servableBy(server: ViteDevServer): (path: string) => boolean {
+  const { strict, allow } = server.config.server.fs;
+  if (server.environments !== undefined && typeof vite.isFileLoadingAllowed === 'function') {
+    return (path) => vite.isFileLoadingAllowed(server.config, path);
+  }
+  const vite5 = server as { _fsDenyGlob?: (path: string) => boolean; moduleGraph: { safeModulesPath?: Set<string> } };
+  const denied = vite5._fsDenyGlob;
+  if (typeof denied !== 'function') return () => !strict;
+  return (path) =>
+    !strict || (!denied(path) && (vite5.moduleGraph.safeModulesPath?.has(path) === true || allow.some((dir) => isWithin(dir, path))));
+}
+
 /** Say where the notes go after Vite's own banner, so it is not buried under
  *  it. Portable setups fail quietly otherwise: a reviewer writes notes and the
  *  agent looks in the wrong place. */
@@ -197,7 +219,9 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
   let ssrHost = false;
   // Vite 6 or later, whose environments mark it: decided in configureServer.
   let vite6 = false;
-  let resolved: ResolvedConfig | null = null;
+  // Whether the dev server would serve a path (see servableBy). A build
+  // serves no files, so it has no such check.
+  let servable: (path: string) => boolean = () => true;
   const variantsOptions = options.variants === false ? null : (options.variants ?? {});
   const overrides = createOverrides(variantsOptions ?? {});
   const switching = createSwitching(overrides);
@@ -219,7 +243,6 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
     },
     configResolved(config: ResolvedConfig) {
       isDev = config.command === 'serve';
-      resolved = config;
       file = resolve(config.root, options.file ?? NOTES_FILE);
       overrides.configure(config);
       hasReact = (config.plugins ?? []).some((p) => /react/i.test(p.name));
@@ -245,27 +268,34 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       if (id === RESOLVED_LIVE_MODULE) return { code: liveRuntimeModule(overrides.liveConfig(ssrHost)), map: null };
       // `?v=<hash>`, `?t=<timestamp>`, `?import`: vite's own request
       // decorations, never part of the path on disk.
-      const path = id.replace(/[?#].*$/, '');
-      if (!overrides.overridable(path)) return null;
-      const query = id.slice(path.length).replace(/^\?/, '').replace(/#.*$/, '');
+      const raw = id.replace(/[?#].*$/, '');
+      if (!overrides.overridable(raw)) return null;
+      const query = id.slice(raw.length).replace(/^\?/, '').replace(/#.*$/, '');
+      // One spelling per file, the one the variants and the check below
+      // know: `/@fs/` keeps a trailing slash (`…/.env/`), which would match
+      // no tracked file here while finding the copy further on.
+      const path = normalizePath(resolve(raw));
+      // Every copy, version, dispatcher and component part of a file obeys the
+      // dev server's `server.fs.deny` as the real file does: left to Vite, the
+      // request gets 403. A server render loads files without that check, so
+      // it keeps its swap.
+      if (!opts?.ssr && overrides.versionsByFile().has(path) && !servable(path)) return null;
       if (COMPONENT_PART.test(query) && !OWN_FILE.test(query)) {
         return overrides.versionsByFile().has(path) ? componentPart(this.environment, path) : null;
       }
       // `?isotone=<id>`: one version of a tracked file. Live dispatchers import
       // each version this way, and on any dev server it shows that a copy
-      // compiles. Only Vite 6 and later can check it against
-      // `server.fs.deny` (below); Vite 5's check takes a server, not a
-      // config. On Vite 5, as for a component (plugin-vue would take that
-      // copy for the real file's parse), refuseVersion answers 404 first.
+      // compiles: from Vite 6, since on Vite 5, as for a component (plugin-vue
+      // would take that copy for the real file's parse), refuseVersion answers
+      // 404 first.
       const versioned = vite6 && !isCompiledInParts(path);
       const version = versioned ? new URLSearchParams(query).get(VERSION_QUERY) : null;
       // Only a file some variant tracks has versions. Any other path is left
       // to Vite, whose `server.fs.deny` keeps `.env` and `.git/` out of reach;
       // answering it here would read the file around that check.
       if (version !== null && overrides.versionsByFile().has(path)) {
-        // A file tracked past the secret guard (`variant add … --force`)
-        // still obeys `server.fs.deny`: left to Vite, the request gets 403.
-        if (!resolved || !vite.isFileLoadingAllowed(resolved, path)) return null;
+        // One version asked for in a server render obeys `server.fs.deny` too.
+        if (!servable(path)) return null;
         const from = version === BASE_VERSION ? (existsSync(path) ? path : null) : overrides.copyOf(version, path);
         return { code: from ? readFileSync(from, 'utf8') : 'export {};\n', map: null };
       }
@@ -336,6 +366,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
         // per-environment hot updates, so the server render keeps its swap
         // while the browser's dispatchers are left alone.
         vite6 = server.environments !== undefined;
+        servable = servableBy(server);
         const live = (variantsOptions.live ?? hasReact) && vite6;
         const activate = switching.attach(server, { live, ignored: variantsOptions.ignored });
         server.middlewares.use(
