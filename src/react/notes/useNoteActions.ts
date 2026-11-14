@@ -2,7 +2,7 @@ import { type Dispatch, type SetStateAction, useCallback, useMemo, useRef, useSt
 import { createNoteId } from '../../core/id';
 import { MAX_FEEDBACK_LENGTH } from '../../core/limits';
 import type { IsotoneElement, IsotoneNote, VariantReference } from '../../core/types';
-import type { VariantAction } from '../../core/variants';
+import type { VariantAction, VariantSelections } from '../../core/variants';
 import type { UpdateMode } from '../dock/useDockMode';
 import { createDraftText, type DraftText, useDraft } from './useDraft';
 import type { useNotes } from './useNotes';
@@ -17,8 +17,8 @@ interface NoteActionsOptions {
   write: Notes['write'];
   setNotes: Dispatch<SetStateAction<IsotoneNote[]>>;
   getPayload?: () => unknown;
-  /** Knobs moved off their defaults on this route, recorded with each new note. */
-  getKnobs?: () => Record<string, string> | undefined;
+  /** Selectors off their defaults on this route, recorded with each new note. */
+  getSelections?: () => VariantSelections | undefined;
   update: UpdateMode;
   focusComposer: () => void;
 }
@@ -57,7 +57,7 @@ export function useNoteActions({
   write,
   setNotes,
   getPayload,
-  getKnobs,
+  getSelections,
   update,
   focusComposer,
 }: NoteActionsOptions) {
@@ -67,8 +67,8 @@ export function useNoteActions({
   const [editing, setEditing] = useState<IsotoneNote | null>(null);
   const [notice, setNotice] = useState('');
   // Handlers read the current render here, so they stay stable and memoized children skip unrelated renders.
-  const latest = useRef({ route, getPayload, getKnobs, targets, variantTarget, editing });
-  latest.current = { route, getPayload, getKnobs, targets, variantTarget, editing };
+  const latest = useRef({ route, getPayload, getSelections, targets, variantTarget, editing });
+  latest.current = { route, getPayload, getSelections, targets, variantTarget, editing };
   /** Saves in flight, by the temporary id of their optimistic note. */
   const saving = useRef(new Map<string, Promise<string>>());
 
@@ -86,14 +86,14 @@ export function useNoteActions({
       setNotice(`Feedback must be at most ${MAX_FEEDBACK_LENGTH} characters.`);
       return;
     }
-    const { editing: previous, targets, variantTarget, route, getPayload, getKnobs } = latest.current;
-    // The knobs a new note was written under; an edit keeps the ones it has.
-    const knobs = previous ? undefined : getKnobs?.();
+    const { editing: previous, targets, variantTarget, route, getPayload, getSelections } = latest.current;
+    // The selections a new note was filed under; an edit keeps the ones it has.
+    const selections = previous ? undefined : getSelections?.();
     const context = {
       elements: targets,
       variant: variantTarget,
       ...(previous?.variantAction ? { variantAction: previous.variantAction } : {}),
-      ...(knobs ? { knobs } : {}),
+      ...(selections ? { selections } : {}),
     };
     const noteRoute = previous?.route ?? route;
     const element = targets[0] ?? null;

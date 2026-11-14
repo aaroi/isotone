@@ -5,7 +5,7 @@
  */
 import type { RouteGateOptions } from './routes';
 import type { UpdateRequest } from './update';
-import type { VariantsSource } from './variants';
+import type { VariantSelections, VariantsSource } from './variants';
 
 /** A UI element picked with the panel's selector mode. */
 export interface IsotoneElement {
@@ -52,11 +52,9 @@ export interface NoteContext {
   variantAction?: VariantRemoval;
   elements?: IsotoneElement[];
   variant?: VariantReference | null;
-  /** The knobs and selectors on the note's route that sat off their defaults
-   *  when it was written, by id: a range's number (no unit), a colour's hex, or
-   *  the chosen option's id. What the page showed, the pinned elements'
-   *  `styles` included, reflects them, not the source. Recorded on create only. */
-  knobs?: Record<string, string>;
+  /** The panel's selectors that sat off their defaults on the note's route
+   *  when it was filed. Pinned styles reflect these values, not the source's. */
+  selections?: VariantSelections;
   /** The user's request to upgrade Isotone, built by the local server from
    *  its own update check. At most one is open at a time. */
   update?: UpdateRequest;

@@ -244,13 +244,13 @@ describe('pinned styles', () => {
   });
 });
 
-describe('the knobs a note was written under', () => {
+describe('the selections a note was filed under', () => {
   const post = (file: string, body: Record<string, unknown>) => notesResponse(file, { method: 'POST', url: '/api/notes', body });
 
-  it('keeps them beside a host payload, through an edit, and drops what is not a knob value', () => {
+  it('keeps them beside a host payload, through an edit, and drops what no selector holds', () => {
     const file = tempFile();
     const payload = { flags: { beta: true } };
-    const knobs = {
+    const selections = {
       'card-radius': '24',
       'Not An Id': '1',
       gap: 7,
@@ -260,29 +260,29 @@ describe('the knobs a note was written under', () => {
       long: 'x'.repeat(65),
       _private: '1',
     };
-    const id = (post(file, { route: '/', feedback: 'rounder', element: null, payload, knobs }).body as { id: string }).id;
-    expect(readNotes(file)[0]).toMatchObject({ payload, knobs: { 'card-radius': '24', accent: '#2f6f4e' } });
+    const id = (post(file, { route: '/', feedback: 'rounder', element: null, payload, selections }).body as { id: string }).id;
+    expect(readNotes(file)[0]).toMatchObject({ payload, selections: { 'card-radius': '24', accent: '#2f6f4e' } });
     post(file, { id, route: '/', feedback: 'rounder still', element: null });
     const [row] = notesResponse(file, { method: 'GET', url: '/api/notes?route=/' }).body as Array<Record<string, unknown>>;
-    expect(row).toMatchObject({ feedback: 'rounder still', payload, knobs: { 'card-radius': '24', accent: '#2f6f4e' } });
+    expect(row).toMatchObject({ feedback: 'rounder still', payload, selections: { 'card-radius': '24', accent: '#2f6f4e' } });
 
-    post(file, { route: '/plain', feedback: 'none moved', element: null, knobs: ['card-radius'] });
-    expect(readNotes(file).find((n) => n.route === '/plain')).not.toHaveProperty('knobs');
+    post(file, { route: '/plain', feedback: 'none moved', element: null, selections: ['card-radius'] });
+    expect(readNotes(file).find((n) => n.route === '/plain')).not.toHaveProperty('selections');
   });
 
   it('keeps at most 32', () => {
     const file = tempFile();
-    const knobs = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`knob-${i}`, String(i)]));
-    post(file, { route: '/', feedback: 'many', element: null, knobs });
-    expect(Object.keys(readNotes(file)[0]?.knobs ?? {})).toHaveLength(32);
+    const selections = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`knob-${i}`, String(i)]));
+    post(file, { route: '/', feedback: 'many', element: null, selections });
+    expect(Object.keys(readNotes(file)[0]?.selections ?? {})).toHaveLength(32);
   });
 
   it('leaves them off a saved default that replaces an earlier one', () => {
     const file = tempFile();
-    post(file, { route: '/', feedback: '[set-defaults] Use Bold.', element: null, knobs: { 'card-radius': '24' } });
+    post(file, { route: '/', feedback: '[set-defaults] Use Bold.', element: null, selections: { 'card-radius': '24' } });
     post(file, { route: '/', feedback: '[set-defaults] Use Plain.', element: null });
     const [defaults] = readNotes(file);
     expect(defaults?.feedback).toBe('[set-defaults] Use Plain.');
-    expect(defaults).not.toHaveProperty('knobs');
+    expect(defaults).not.toHaveProperty('selections');
   });
 });

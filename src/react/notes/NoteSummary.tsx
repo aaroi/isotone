@@ -2,21 +2,21 @@ import { createContext, useContext } from 'react';
 import { showOverflowTitle } from '../tooltips';
 import type { IsotoneNote } from '../../core/types';
 import { updateNoteText } from '../../core/update';
-import { axisSection, knobDelta, type VariantsSource } from '../../core/variants';
+import { axisSection, knobDelta, type VariantSelections, type VariantsSource } from '../../core/variants';
 
-/** The page's variants source, so a note's knobs read as the panel names them. */
+/** The page's variants source, so a note's selections read as the panel names them. */
 export const NoteAxes = createContext<VariantsSource | undefined>(undefined);
 
-/** Knob tags shown on a note; the rest are counted. */
-const KNOB_TAGS = 3;
+/** Selection tags shown on a note; the rest are counted. */
+const SELECTION_TAGS = 3;
 
-/** `Card radius 24px` for a knob on this page, `card-radius 24` for one elsewhere. */
-function knobTags(knobs: Record<string, string>, source: VariantsSource | undefined) {
+/** `Card radius 24px` for a selector on this page, `card-radius 24` for one elsewhere. */
+function selectionTags(selections: VariantSelections, source: VariantsSource | undefined) {
   const axes = source?.getAxes() ?? [];
-  return Object.entries(knobs).map(([id, value]) => {
+  return Object.entries(selections).map(([id, value]) => {
     const axis = axes.find((candidate) => candidate.id === id);
     const shown = axis && knobDelta([axis], { [id]: value })[0]?.shown;
-    return { key: `knob:${id}`, label: axis ? `${axisSection(axis).label} ${shown ?? value}` : `${id} ${value}` };
+    return { key: `pick:${id}`, label: axis ? `${axisSection(axis).label} ${shown ?? value}` : `${id} ${value}` };
   });
 }
 
@@ -68,18 +68,18 @@ export function NoteSummary({ note, page }: { note: IsotoneNote; page?: string }
         : []),
       ...elements.map((element) => ({ key: element.selector, label: element.text || element.tag })),
     ];
-    // The knobs it was written under, tagged and capped as a saved default's are.
-    const knobs = knobTags(note.knobs ?? {}, source);
+    // The selections it was filed under, tagged and capped as a saved default's are.
+    const picks = selectionTags(note.selections ?? {}, source);
     return (
       <>
         <p>{note.feedback}</p>
         <Reply note={note} />
-        {references.length + knobs.length > 0 && (
+        {references.length + picks.length > 0 && (
           <span className="isotone-meta">
-            {[...references, ...knobs.slice(0, KNOB_TAGS)].map((reference) => (
+            {[...references, ...picks.slice(0, SELECTION_TAGS)].map((reference) => (
               <SummaryTag key={reference.key} label={reference.label} />
             ))}
-            {knobs.length > KNOB_TAGS && <span className="isotone-request-more">+{knobs.length - KNOB_TAGS}</span>}
+            {picks.length > SELECTION_TAGS && <span className="isotone-request-more">+{picks.length - SELECTION_TAGS}</span>}
           </span>
         )}
       </>

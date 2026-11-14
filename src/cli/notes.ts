@@ -450,7 +450,7 @@ export function noteRecord(record: StoredNote, root: string) {
     createdAt: n.createdAt,
     viewport: n.viewport,
     payload: n.payload,
-    knobs: n.knobs,
+    selections: n.selections,
     variant: n.variant,
     variantAction: n.variantAction,
     update: n.update,
@@ -518,10 +518,10 @@ export function printNotes(io: CliIO, rows: StoredNote[], root: string): void {
         ),
       );
     }
-    if (n.knobs && Object.keys(n.knobs).length) {
-      const moved = Object.entries(n.knobs).map(([id, value]) => `${id}=${value}`);
+    if (n.selections && Object.keys(n.selections).length) {
+      const picked = Object.entries(n.selections).map(([id, value]) => `${id}=${value}`);
       const pinned = n.elements?.length || n.element;
-      out(io, `  ⊙ knobs moved: ${oneLine(moved.join(', '), 200)}${pinned ? " (styles show these values, not the source's)" : ''}`);
+      out(io, `  ⊙ selections: ${oneLine(picked.join(', '), 200)}${pinned ? " (styles show these values, not the source's)" : ''}`);
     }
     const context = n.payload === undefined ? '' : describePayload(n.payload);
     if (context) out(io, `  · ${oneLine(context)}`);

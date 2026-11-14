@@ -307,7 +307,7 @@ it('keeps the context through the store and prints it for the agent', async () =
   const res = notesResponse(file, {
     method: 'POST',
     url: '/',
-    body: { id: 'n1', route: '/', feedback: 'hi', element, elements: [element], knobs: { 'card-radius': '24' } },
+    body: { id: 'n1', route: '/', feedback: 'hi', element, elements: [element], selections: { 'card-radius': '24' } },
   });
   expect(res.status).toBeLessThan(300);
   const [note] = readNotes(file);
@@ -315,7 +315,7 @@ it('keeps the context through the store and prints it for the agent', async () =
   expect(note?.elements?.[0]?.rect).toEqual(element.rect);
   // Without a pin there are no styles to speak of; a long list is cut.
   const many = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`spacing-${i}`, '24']));
-  notesResponse(file, { method: 'POST', url: '/', body: { id: 'n2', route: '/', feedback: 'roomier', element: null, knobs: many } });
+  notesResponse(file, { method: 'POST', url: '/', body: { id: 'n2', route: '/', feedback: 'roomier', element: null, selections: many } });
 
   let text = '';
   const stream = {
@@ -330,7 +330,7 @@ it('keeps the context through the store and prints it for the agent', async () =
     'labelled "Usage"',
     'role="tab"',
     'at: 934,292 83×35',
-    "knobs moved: card-radius=24 (styles show these values, not the source's)",
+    "selections: card-radius=24 (styles show these values, not the source's)",
   ]) {
     expect(text).toContain(part);
   }

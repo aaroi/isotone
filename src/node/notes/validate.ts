@@ -86,13 +86,12 @@ export function variantOf(value: unknown): VariantReference | null {
   };
 }
 
-/** A knob's id, as `.isotone/knobs.json` allows it. */
 /**
- * The knobs a note was written under, from the browser: at most 32, each an id
- * and what a knob can hold (a number, a hex colour or an option id). Anything
- * else is dropped; null when nothing is left.
+ * The selections a note was filed under, from the browser: at most 32, each an
+ * axis id and what an axis holds (a number, a hex colour or an option id).
+ * Anything else is dropped; null when nothing is left.
  */
-export function knobsOf(value: unknown): Record<string, string> | null {
+export function selectionsOf(value: unknown): Record<string, string> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const entries = Object.entries(value)
     .filter(

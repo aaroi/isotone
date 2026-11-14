@@ -90,7 +90,7 @@ function notes(root: string): [Required<StoredNote>, StoredNote] {
       createdAt: '2026-01-08T09:00:00.000Z',
       viewport: { w: 1280, h: 800 },
       payload: { knobs: { radius: 12 } },
-      knobs: { 'card-radius': '24' },
+      selections: { 'card-radius': '24' },
       variant,
       variantAction,
       // Answered: the note changed since this fingerprint.
@@ -146,8 +146,8 @@ describe('the note record JSON Schema', () => {
   it('keeps every schema field a note posted through the endpoint carries', () => {
     const root = tempGitRepo('isotone-schema-', dirs);
     const file = join(root, '.isotone/notes.json');
-    const { id, route, feedback, viewport, payload, knobs } = notes(root)[0];
-    const body = { id, route, feedback, viewport, payload, knobs, element, elements: [element], variant, variantAction };
+    const { id, route, feedback, viewport, payload, selections } = notes(root)[0];
+    const body = { id, route, feedback, viewport, payload, selections, element, elements: [element], variant, variantAction };
     expect(notesResponse(file, { method: 'POST', url: '/', body }).status).toBe(201);
     const [stored] = readNotes(file);
     const record = noteRecord(stored as StoredNote, root) as Record<string, Record<string, unknown>[]>;
@@ -157,7 +157,7 @@ describe('the note record JSON Schema', () => {
     expect(keys(record.variant)).toEqual(keys(schema.properties.variant.properties));
     expect(keys(record.variantAction)).toEqual(keys(schema.properties.variantAction.properties));
     expect(record.viewport).toEqual(viewport);
-    expect(record.knobs).toEqual(knobs);
+    expect(record.selections).toEqual(selections);
   });
 
   it('rejects what it should', () => {

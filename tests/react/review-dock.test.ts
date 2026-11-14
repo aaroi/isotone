@@ -300,7 +300,7 @@ describe('review dock interactions', () => {
       value: 'a',
     });
   });
-  it('records the knobs moved on this route with a new note, and leaves them alone on an edit', async () => {
+  it('records the knobs moved on this route with a new note, and leaves its selections alone on an edit', async () => {
     const range = { kind: 'range' as const, min: 0, max: 40, step: 1, unit: 'px' };
     const knobs = [
       { ...range, id: 'card-radius', label: 'Card radius', defaultValue: 12 },
@@ -328,12 +328,12 @@ describe('review dock interactions', () => {
     await click(container.querySelector('.isotone-fab'));
     await typeFeedback('Rounder still');
     await click(byText('Send note'));
-    expect(posts[0]?.knobs).toEqual({ 'card-radius': '24' });
+    expect(posts[0]?.selections).toEqual({ 'card-radius': '24' });
     expect(container.querySelector('.isotone-note-hit')?.textContent).toContain('Card radius 24px');
     await click(container.querySelector('.isotone-note-hit'));
     await typeFeedback('Rounder still, and softer');
     await click(byText('Save edit'));
-    expect(posts[1]).not.toHaveProperty('knobs');
+    expect(posts[1]).not.toHaveProperty('selections');
   });
   it("records a host source's moved selectors and knobs too, and tags at most three", async () => {
     const posts: Record<string, unknown>[] = [];
@@ -361,7 +361,7 @@ describe('review dock interactions', () => {
     await typeFeedback('Tighter');
     await click(byText('Send note'));
     // The haze sits at its default.
-    expect(posts[0]?.knobs).toEqual({ headline: 'b', pad: '24', gap: '8', radius: '12' });
+    expect(posts[0]?.selections).toEqual({ headline: 'b', pad: '24', gap: '8', radius: '12' });
     const tags = [...(container.querySelector('.isotone-note-hit .isotone-meta')?.children ?? [])].map((tag) => tag.textContent);
     expect(tags).toEqual(['Headline Bold', 'Padding 24px', 'Gap 8px', '+1']);
   });

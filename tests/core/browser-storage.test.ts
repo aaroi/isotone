@@ -63,7 +63,7 @@ it('synchronizes offline feedback once and clears only acknowledged local copies
   expect(values.get(currentKey)).toBe('[]');
 });
 
-it('keeps the knobs a note was written under while it waits offline, and sends them', async () => {
+it('keeps the selections a note was filed under while it waits offline, and sends them', async () => {
   const posted: Record<string, unknown>[] = [];
   let online = false;
   vi.stubGlobal(
@@ -75,11 +75,11 @@ it('keeps the knobs a note was written under while it waits offline, and sends t
     }),
   );
   const store = createIsotoneStore({ endpoint: '/notes' });
-  const id = await store.saveNote('/', 'Rounder', null, null, undefined, undefined, { knobs: { 'card-radius': '24' } });
-  expect(JSON.parse(values.get(currentKey) ?? '[]')[0]).toMatchObject({ id, knobs: { 'card-radius': '24' } });
+  const id = await store.saveNote('/', 'Rounder', null, null, undefined, undefined, { selections: { 'card-radius': '24' } });
+  expect(JSON.parse(values.get(currentKey) ?? '[]')[0]).toMatchObject({ id, selections: { 'card-radius': '24' } });
   online = true;
   await store.listNotes();
-  expect(posted).toEqual([expect.objectContaining({ id, knobs: { 'card-radius': '24' } })]);
+  expect(posted).toEqual([expect.objectContaining({ id, selections: { 'card-radius': '24' } })]);
 });
 
 it('restores saved knob values and reads blocked storage as empty', () => {

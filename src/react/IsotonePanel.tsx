@@ -2,7 +2,7 @@ import { FEEDBACK_STORAGE_KEY } from '../core/browser-storage';
 import type { IsotoneStoreConfig } from '../core/types';
 import { isRouteVisible, normalizeRoute, type RouteGateOptions } from '../core/routes';
 import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
-import { knobDelta, type VariantsSource } from '../core/variants';
+import { knobDelta, type VariantSelections, type VariantsSource } from '../core/variants';
 import { type ReactElement, useEffect, useId, useRef } from 'react';
 import { Composer } from './notes/Composer';
 import { AwayButton, NotesPanel } from './notes/NotesPanel';
@@ -48,7 +48,7 @@ export interface IsotonePanelProps {
  * any source. A note written under them says so: what the page showed, the
  * pinned element's styles included, is not what the source holds.
  */
-function movedKnobs(source: VariantsSource | undefined): Record<string, string> | undefined {
+function offDefault(source: VariantsSource | undefined): VariantSelections | undefined {
   const moved = source ? knobDelta(source.getAxes(), source.getSelections()) : [];
   return moved.length ? Object.fromEntries(moved.map((m) => [m.axis.id, m.value])) : undefined;
 }
@@ -101,7 +101,7 @@ export function IsotonePanel({
     write,
     setNotes,
     getPayload,
-    getKnobs: () => movedKnobs(variants),
+    getSelections: () => offDefault(variants),
     update,
     focusComposer: focus.composer,
   });

@@ -4,7 +4,7 @@
 
 ### Added
 
-- **A note says which knobs you had moved.** A new note records every knob and selector on its page that sits off its default, so your agent knows the page it describes, and the pinned element's styles, showed those values rather than the source's. `--json` has them under `knobs`, `npx isotone` prints a `knobs moved:` line, and the note shows up to three as tags in the panel, named as the Variants panel names them.
+- **A note says which selectors you had moved.** A new note records every selector on its page that sits off its default (knobs, selects and variant picks), so your agent knows the page it describes, and the pinned element's styles, showed those values rather than the source's. `--json` has them under `selections`, `npx isotone` prints a `selections:` line, and the note shows up to three as tags in the panel, named as the Variants panel names them.
 
 ### Fixed
 
