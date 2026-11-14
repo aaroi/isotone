@@ -6,6 +6,12 @@
 
 - **Collect feedback from a deployed app, into your own database (experimental).** Ship the panel in a staging, preview or production app and each note a teammate writes lands as one row in your Postgres, with their name, the page, the elements they pinned, the window size and what their browser was like. Setup is one route, `feedback({ store: postgres(process.env.DATABASE_URL) })` from the new `isotone/feedback` and `isotone/postgres` entries, and `mountIsotone({ feedback: '/api/feedback' })`. The composer shows a name field beside Send, filled in when the app passes the signed-in person's `name`. People can edit and delete their own notes, and the row follows; a secret kept in their browser is what allows it, so nobody else can. The route only takes writes and no agent is involved. It runs on any server with Fetch requests, and on Express or `node:http` through `toNode`; it takes a connection URL from any Postgres provider (`{ ca }` for those with their own certificate authority, such as Aiven, RDS and Nevia), a database client you already have, or a store of your own. See [collecting feedback](docs/feedback.md). Development use is unchanged.
 
+## 1.6.1
+
+### Fixed
+
+- **On Windows, a variant copy's source map names the copy with forward slashes**, like every other path Isotone records, so a pinned element's `source` reads the same on every platform.
+
 ## 1.6.0
 
 ### Added
