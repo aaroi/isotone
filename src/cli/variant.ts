@@ -151,28 +151,28 @@ function cmdList(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOp
   // Grouped over every variant, not the filtered rows: a sibling on another
   // route still decides which selector this one belongs to.
   const groupOf = new Map<string, string>();
-  const selectors = new Map<SelectVariantAxis, string[]>();
+  // Sections come from the selectors a page shows, as in the panel: with a
+  // route, only the groups with a member there. Group ids get a prefix, since
+  // a knob may have the same id.
+  const selectors: SelectVariantAxis[] = [];
+  const membersOf = new Map<string, string[]>();
   for (const group of overlayGroups(variants)) {
+    for (const member of group.members) groupOf.set(member.id, group.id);
+    if (scope && !group.members.some((m) => variantAppliesTo(m.route, scope))) continue;
     const explicit = group.members.find((m) => m.section !== undefined)?.section;
-    const axis = {
-      id: group.id,
-      label: group.label,
-      ...(explicit !== undefined ? { section: explicit } : {}),
-      defaultOption: '',
-      options: [],
-    };
-    selectors.set(
-      axis,
+    const id = `group:${group.id}`;
+    selectors.push({ id, label: group.label, ...(explicit !== undefined ? { section: explicit } : {}), defaultOption: '', options: [] });
+    membersOf.set(
+      id,
       group.members.map((m) => m.id),
     );
-    for (const member of group.members) groupOf.set(member.id, group.id);
   }
   const knobs = knobReport(io, opts, scope);
   // The panel's rule, knobs included: a selector named after a knob's section sits in it.
   const sectionOf = new Map<string, string>();
-  for (const section of sectionAxes([...selectors.keys(), ...(knobs?.shown ?? [])])) {
+  for (const section of sectionAxes([...selectors, ...(knobs?.shown ?? [])])) {
     if (section.name === null) continue;
-    for (const { axis } of section.axes) for (const id of selectors.get(axis as SelectVariantAxis) ?? []) sectionOf.set(id, section.name);
+    for (const { axis } of section.axes) for (const id of membersOf.get(axis.id) ?? []) sectionOf.set(id, section.name);
   }
 
   if (has(args, '--json')) {

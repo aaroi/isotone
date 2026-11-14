@@ -377,6 +377,26 @@ describe('variant', () => {
     expect(await runCli(['variant', 'list', '--json'], io)).toBe(0);
     const { variants } = JSON.parse(io.text.out) as { variants: { id: string; section: string | null }[] };
     expect(Object.fromEntries(variants.map((v) => [v.id, v.section]))).toEqual({ 'pricing-a': 'Pricing card', apart: null });
+
+    // With a route, only that page's selectors make sections, and a knob's id is not a group's.
+    const scoped = tempRepo();
+    await runCli(['variant', 'new', 'card-a', '--group-label', 'Pricing card', '--route', '/a'], makeIo(scoped));
+    await runCli(['variant', 'new', 'layout-b', '--group-label', 'pricing CARD > Layout', '--route', '/b'], makeIo(scoped));
+    await runCli(['variant', 'new', 'head-b', '--group-label', 'header > Logo', '--route', '/b'], makeIo(scoped));
+    await runCli(['variant', 'new', 'nav-a', '--group-label', 'Header > Nav', '--route', '/a'], makeIo(scoped));
+    await runCli(['variant', 'new', 'accent-a', '--group', 'accent', '--group-label', 'Accent colour'], makeIo(scoped));
+    writeFileSync(
+      join(scoped, '.isotone/knobs.json'),
+      JSON.stringify([{ id: 'accent', label: 'Theme > Accent', kind: 'color', defaultColor: '#000000', swatches: [] }]),
+    );
+    const routed = makeIo(scoped);
+    expect(await runCli(['variant', 'list', '/a', '--json'], routed)).toBe(0);
+    const listed = JSON.parse(routed.text.out) as { variants: { id: string; section: string | null }[] };
+    expect(Object.fromEntries(listed.variants.map((v) => [v.id, v.section]))).toEqual({
+      'card-a': null,
+      'nav-a': 'Header',
+      'accent-a': null,
+    });
   });
 
   it('use activates alongside other groups and replaces only its own siblings', async () => {
