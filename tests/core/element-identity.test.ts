@@ -86,6 +86,9 @@ describe('a selector that names the element, not its place', () => {
     document.body.innerHTML = '<form><label for=":r1:">Email</label><label for=":r2:">Name</label><a href="#radix-:r3:">Tab</a></form>';
     expect(selectorOf('label', 1)).toBe('form:nth-child(1) > label:nth-child(2)');
     expect(selectorOf('a')).toBe('form:nth-child(1) > a:nth-child(3)');
+    // A test id is the author's, whatever it looks like.
+    document.body.innerHTML = '<div><button data-testid="cart:remove:btn">Remove</button><button>Keep</button></div>';
+    expect(selectorOf('button')).toBe('button[data-testid="cart:remove:btn"]');
   });
 
   it('anchors an ancestor only by its id or test id, so a moved state class cannot move the pin', () => {
@@ -219,8 +222,8 @@ describe('the React components that wrote the element', () => {
   /** The page's own download of each URL, as Resource Timing reports it: `decodedBodySize` bytes. */
   const pageLoaded = (sizes: Record<string, string>) =>
     vi.stubGlobal('performance', {
-      getEntriesByName: (url: string) =>
-        sizes[url] === undefined ? [] : [{ decodedBodySize: new TextEncoder().encode(sizes[url]).length }],
+      getEntriesByType: () =>
+        Object.entries(sizes).map(([name, code]) => ({ name, decodedBodySize: new TextEncoder().encode(code).length })),
     });
 
   const next = (file: string) => `webpack-internal:///(app-pages-browser)/./${file}`;
@@ -485,9 +488,18 @@ describe('the React components that wrote the element', () => {
       // A position that is no JSX call in that code is not the JSX that made the element: no line.
       expect(await resolveElementSource(at(1, 1))).toBeUndefined();
       expect(await resolveElementSource(at(2, 99))).toBeUndefined();
-      // Once the server sends other code than the page loaded, its map says nothing about the page.
+      // A hot update loads the module again under a later stamp: the element may predate the edit.
+      pageLoaded({ 'http://localhost:5173/src/tabs.tsx?t=1': served, 'http://localhost:5173/src/tabs.tsx?t=2': served });
+      expect(await resolveElementSource(at(2, 3))).toBeUndefined();
+      // Other bytes than the page loaded say nothing about it…
+      pageLoaded({ 'http://localhost:5173/src/tabs.tsx?t=1': served });
       served = module(';AAWAAAAA');
       expect(await resolveElementSource(at(2, 3))).toBeUndefined();
+      // …unless only Vite's stamps on its imports differ: a hot update to a module it imports.
+      const importer = (stamp: string) => `import { Card } from "/src/Card.tsx${stamp}";\n${module(';;AASA')}`;
+      pageLoaded({ 'http://localhost:5173/src/tabs.tsx?t=1': importer('') });
+      served = importer('?t=1794647198723');
+      expect(await resolveElementSource(at(3, 3))).toBe('/src/tabs.tsx:10');
       // React 18's own field is already exact: nothing to fetch.
       expect(await resolveElementSource(pin({ type: 'button', _debugSource: { fileName: 'a.tsx', lineNumber: 1 } }))).toBeUndefined();
     } finally {
@@ -563,6 +575,10 @@ describe('the React components that wrote the element', () => {
       const hot = pin({ type: 'button', _debugStack: made(`jsxDEV (${chunk}:1:1)`, `Counter (${updated}:51:215)`, reactBottom) });
       expect(describeIsotoneElement(elementAsNode(hot)).source).toBe('src/components/Counter.tsx');
       expect(await resolveElementSource(hot)).toBeUndefined();
+      // A chunk the page's downloads do not show (a buffer that overflowed before the panel) gives no line.
+      vi.stubGlobal('performance', { getEntriesByType: () => [] });
+      served = build(0);
+      expect(await resolveElementSource(at(8))).toBeUndefined();
       // Under a basePath the chunk still names no file.
       const based = made(
         'jsxDEV (http://localhost:3000/docs/_next/static/chunks/a.js:1:1)',
@@ -589,7 +605,8 @@ describe('the React components that wrote the element', () => {
     const scope = globalThis as unknown as Record<string, unknown>;
     // Another runtime on the page, without the module, is passed over.
     scope.webpackChunk_widget = runtime({ m: {} }, []);
-    scope.webpackChunk_N_E = runtime({ m: { [id]: factory(2, ';;;;AAUA') } }, [[['app/page'], { [id]: factory(0, ';;AAQA') }]]);
+    const require: { m: Record<string, { toString(): string }> } = { m: { [id]: factory(2, ';;;;AAUA') } };
+    scope.webpackChunk_N_E = runtime(require, [[['app/page'], { [id]: factory(0, ';;AAQA') }]]);
     const at = (line: number) =>
       pin({
         type: 'button',
@@ -607,6 +624,9 @@ describe('the React components that wrote the element', () => {
       expect(await resolveElementSource(at(3))).toBe('/Users/me/app/src/components/Counter.tsx:9');
       // A position no version has a JSX call at.
       expect(await resolveElementSource(at(1))).toBeUndefined();
+      // A version that cannot be read leaves the others.
+      require.m[id] = { toString: () => '(module) => { eval("\\x41") }' };
+      expect(await resolveElementSource(at(3))).toBe('/Users/me/app/src/components/Counter.tsx:9');
     } finally {
       delete scope.webpackChunk_N_E;
       delete scope.webpackChunk_widget;

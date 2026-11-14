@@ -41,10 +41,10 @@ import { npm } from './npm.mjs';
 // and its notes in the shipped variants guide and changelog.
 // The figures above are each change on its own over 1.5.0. Merged together (#60 to #69), the bundle is
 // 402.6 kB and the tarball 457.6 kB: bundle raised to 403.5 kB and tarball to 459 kB.
-// Bundle raised to 406.5 kB and tarball to 465.5 kB (405.4 and 464.4 kB; note source): source maps read
-// for Turbopack, webpack and variant copies, Vue components, selectors without classes, sources relative
-// to the app, and their docs.
-const BUDGET = { bundle: 406_500, tarball: 465_500 };
+// Bundle raised to 407 kB and tarball to 466.5 kB (406.1 and 465.7 kB; note source): source maps read
+// for Turbopack, webpack and variant copies, checked against the page's downloads, Vue components,
+// selectors without classes, sources relative to the app, and their docs.
+const BUDGET = { bundle: 407_000, tarball: 466_500 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

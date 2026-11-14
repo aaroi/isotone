@@ -34,7 +34,7 @@ export interface NodeLike {
  * React's `useId` (`:r1:`, `«r1»`, `_r_1_`, with any `identifierPrefix`) and
  * the libraries built on it.
  */
-const GENERATED_ID = /:r[\da-z]*:|«r[\da-z]*»|_r_[\da-z]+_|^(?:radix|headlessui|mui|mantine|react-aria|downshift)-/i;
+const GENERATED_ID = /:r[\da-z]{1,5}:|«r[\da-z]{1,5}»|_r_[\da-z]{1,5}_|^(?:radix|headlessui|mui|mantine|react-aria|downshift)-/i;
 
 /**
  * Descriptor of a picked element for locating it in code. Walks up the tree
@@ -287,9 +287,14 @@ function frameSource({ url, line, legacy }: StackFrame): string | undefined {
   const path = sourcePath(url);
   if (path.includes('/_next/static/')) {
     // A Turbopack hot update names its module in the query: `?id=%255Bproject%255D/src/…`.
-    const id = url.match(/[?&]id=([^&#]+)/)?.[1];
+    let id = url.match(/[?&]id=([^&#]+)/)?.[1];
+    try {
+      id = id && decodeURIComponent(id);
+    } catch {
+      return undefined;
+    }
     return id
-      ? sourcePath(decodeURIComponent(id))
+      ? sourcePath(id)
           .replace(/^\[project\]\//, '')
           .replace(/\s.*$/, '')
       : undefined;
@@ -385,17 +390,49 @@ async function withMap(url: string, code: string): Promise<Loaded | undefined> {
 /** Served modules by URL, with their maps, so unchanged code is not mapped twice. */
 const served = new Map<string, Loaded>();
 
+/** Every URL the page downloaded, with the size of its first download, kept past Resource Timing's 250-entry buffer. */
+const downloads = new Map<string, number>();
+const record = (entries: PerformanceEntryList, into: Map<string, number>) => {
+  for (const entry of entries as PerformanceResourceTiming[]) if (!into.has(entry.name)) into.set(entry.name, entry.decodedBodySize);
+  return into;
+};
+try {
+  new PerformanceObserver((list) => record(list.getEntries(), downloads)).observe({ type: 'resource', buffered: true });
+} catch {}
+
+/** The page's downloads: those the observer kept, and any still in Resource Timing's buffer. */
+const pageDownloads = () => record(globalThis.performance?.getEntriesByType?.('resource') ?? [], new Map(downloads));
+
+/** A module URL without Vite's hot-update stamp, and the stamp (`?t=`). */
+function stamped(url: string): [string, number] {
+  const parsed = new URL(url);
+  const at = Number(parsed.searchParams.get('t') ?? 0);
+  parsed.searchParams.delete('t');
+  return [parsed.href, at];
+}
+
+/** Code without the stamps Vite adds to an importer's imports after a hot update (`./Header.tsx?t=…`). */
+const unstamped = (code: string) => code.replace(/\?t=\d+&/g, '?').replace(/\?t=\d+/g, '');
+
 /**
- * A served module as the page loaded it, or nothing once the server sends
- * other code at its URL: a Next chunk and a module's first URL keep theirs
- * across a hot update (Vite gives the update a new one, `?t=`). The page's own
- * download says how many bytes it loaded.
+ * A served module as the page loaded it, or nothing once that code may have
+ * changed. The browser keeps no copy a page can read (Vite's `Vary: Origin`
+ * keeps a module script's cache entry from `fetch`), so the check is the
+ * page's own download: the server must send as many bytes, Vite's import
+ * stamps aside, and on Vite the page must not have loaded the module again
+ * since (a hot update, `?t=`). Next serves a chunk at the URL a hot update
+ * keeps, so an edit that keeps the chunk's length (one line number for
+ * another) can still give a wrong line.
  */
 async function servedModule(url: string): Promise<Loaded | undefined> {
+  const loads = pageDownloads();
+  const [bare, at] = stamped(url);
+  if ([...loads.keys()].some((name) => /^https?:/.test(name) && stamped(name)[0] === bare && stamped(name)[1] > at)) return undefined;
+  const loaded = loads.get(url);
+  if (!loaded && url.includes('/_next/static/')) return undefined;
   const bytes = await (await fetch(url)).arrayBuffer();
-  const loaded = (globalThis.performance?.getEntriesByName?.(url)[0] as PerformanceResourceTiming | undefined)?.decodedBodySize;
-  if (loaded && loaded !== bytes.byteLength) return undefined;
   const code = new TextDecoder().decode(bytes);
+  if (loaded && loaded !== bytes.byteLength && loaded !== new TextEncoder().encode(unstamped(code)).length) return undefined;
   const known = served.get(url);
   if (known?.code === code) return known;
   const module = await withMap(url, code);
@@ -430,7 +467,11 @@ function webpackModules(url: string): Promise<Loaded | undefined>[] {
     const delivered = Array.from(chunks ?? [], (chunk) => (chunk as [unknown, Record<string, unknown>?])[1]?.[id]);
     return [...new Set([current, ...delivered])].flatMap((factory) => {
       const literal = factory ? String(factory).match(/eval\((?:__webpack_require__\.ts\()?("(?:[^"\\]+|\\.)*")/)?.[1] : undefined;
-      return literal ? [withMap(url, JSON.parse(literal))] : [];
+      try {
+        return literal ? [withMap(url, JSON.parse(literal))] : [];
+      } catch {
+        return [];
+      }
     });
   }
   return [];
@@ -710,8 +751,8 @@ const STABLE_ATTRIBUTES = ['name', 'for', 'href', 'alt', 'placeholder'];
 function anchors(n: Element, pinned: boolean): string[] {
   const attribute = (name: string) => {
     const value = n.getAttribute(name);
-    // A generated id in `for` or a `#fragment` changes with each render, as the id does.
-    const generated = value && GENERATED_ID.test(value.slice(value.indexOf('#') + 1));
+    // An id that `for` or a `#fragment` points at changes with each render when the page generated it.
+    const generated = value && (name === 'for' || name === 'href') && GENERATED_ID.test(value.slice(value.indexOf('#') + 1));
     return value && !generated && value.length <= 80 && !/["\\\n]/.test(value) ? [`${n.localName}[${name}="${value}"]`] : [];
   };
   return [...TEST_IDS, ...(pinned ? STABLE_ATTRIBUTES : [])].flatMap(attribute);
