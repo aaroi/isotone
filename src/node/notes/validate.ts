@@ -3,28 +3,56 @@
  * what it keeps and drops anything malformed, so a hostile or buggy page
  * cannot bloat or corrupt the notes file.
  */
+import { basename, dirname, resolve } from 'node:path';
+
 import type { IsotoneElement, VariantReference, VariantRemoval } from '../../core/types';
 import { MAX_SELECTOR, PAYLOAD_MAX } from '../../core/limits';
+import { realPath, toPosixPath } from '../fs/paths';
 
 function cap(v: string, max: number): string {
   return v.slice(0, max);
 }
 
-/** A pinned element, or null without an object and a selector. */
-export function elementOf(value: unknown): IsotoneElement | null {
+/** The app a notes file belongs to: the directory holding its `.isotone/`, where the agent runs the CLI. */
+export function notesApp(file: string): string {
+  const own = dirname(resolve(file));
+  return basename(own) === '.isotone' ? dirname(own) : own;
+}
+
+/**
+ * A `source` the page gave as an absolute path (Vue's `__file`, a source map's
+ * `file://` source) as a path from the app. A file outside the app stays absolute.
+ */
+function fromApp(source: string, app: string): string {
+  let real = app;
+  try {
+    real = realPath(app);
+  } catch {}
+  const posix = source.replaceAll('\\', '/');
+  for (const dir of [app, real]) {
+    const base = toPosixPath(dir).replace(/\/?$/, '/');
+    if (posix.startsWith(base)) return source.slice(base.length);
+  }
+  return source;
+}
+
+/** A pinned element, or null without an object and a selector. `app` makes an absolute `source` relative. */
+export function elementOf(value: unknown, app?: string): IsotoneElement | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const selector = (value as { selector?: unknown }).selector;
-  return typeof selector === 'string' && selector ? elementFields(value) : null;
+  return typeof selector === 'string' && selector ? elementFields(value, app) : null;
 }
 
 /** Every element field, each bounded, from any object; a missing selector is empty. */
-export function elementFields(value: object): IsotoneElement {
+export function elementFields(value: object, app?: string): IsotoneElement {
   const v = value as { tag?: unknown; text?: unknown; selector?: unknown };
+  const context = elementContext(value);
+  if (context.source && app) context.source = fromApp(context.source, app);
   return {
     tag: cap(String(v.tag ?? ''), 30),
     text: cap(String(v.text ?? ''), 120),
     selector: cap(String(v.selector ?? ''), MAX_SELECTOR),
-    ...elementContext(value),
+    ...context,
   };
 }
 

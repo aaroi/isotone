@@ -1,4 +1,5 @@
-import { rmSync } from 'node:fs';
+import { mkdirSync, realpathSync, rmSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { afterEach, assert, describe, expect, it } from 'vitest';
 
@@ -242,6 +243,35 @@ describe('pinned styles', () => {
     });
     const styles = readNotes(file)[0]?.elements?.[0]?.styles;
     expect(styles).toEqual({ padding: '8px 12px', 'font-size': '14px', color: 'x'.repeat(160) });
+  });
+});
+
+describe("a pinned element's source", () => {
+  it('is relative to the app holding .isotone/ when the page gave an absolute path inside it', () => {
+    const dir = dirname(tempFile());
+    const app = join(dir, 'app');
+    const file = join(app, '.isotone', 'notes.json');
+    mkdirSync(dirname(file), { recursive: true });
+    const sources = [
+      `${app}/src/components/PricingCard.vue`,
+      // A source map names the file after symlinks (macOS's /var is /private/var).
+      `${realpathSync(app)}/src/components/Counter.tsx:9`,
+      '/src/components/Header.tsx:6',
+      '/elsewhere/packages/ui/Button.tsx:3',
+    ];
+    const body = {
+      route: '/',
+      feedback: 'here',
+      element: null,
+      elements: sources.map((source, at) => ({ tag: 'a', text: '', selector: `#a${at}`, source })),
+    };
+    expect(notesResponse(file, { method: 'POST', url: '/api/notes', body }).status).toBe(201);
+    expect(readNotes(file)[0]?.elements?.map((el) => el.source)).toEqual([
+      'src/components/PricingCard.vue',
+      'src/components/Counter.tsx:9',
+      '/src/components/Header.tsx:6',
+      '/elsewhere/packages/ui/Button.tsx:3',
+    ]);
   });
 });
 

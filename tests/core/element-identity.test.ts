@@ -49,20 +49,51 @@ it('climbs past an id the page repeats', () => {
   expect(document.querySelector(describeIsotoneElement(elementAsNode(second)).selector)).toBe(second);
 });
 
-it('names an element by a unique class or attribute before its position, never by a generated class', () => {
-  const selectorOf = (target: string) => describeIsotoneElement(elementAsNode(document.querySelector(target) as Element)).selector;
-  document.body.innerHTML = `
-    <div class="app"><div class="promo-banner">Launch <button class="theme-toggle">Dark</button></div>
-      <section class="grid"><article><a class="cta" href="#buy-hobby">Hobby</a></article><article><a class="cta" href="#buy-pro">Pro</a></article></section>
-      <form><input class="Card_input__x7Yz1 css-1q2w3e kTeiLM md:w-1/2" name="email"></form>
-      <ul class="list"><li class="item">One</li><li class="item">Two</li></ul>
-      <button data-testid="save" class="primary">Save</button><button class="primary">Cancel</button></div>`;
-  expect(selectorOf('.theme-toggle')).toBe('button.theme-toggle');
-  expect(selectorOf('a[href="#buy-pro"]')).toBe('a[href="#buy-pro"]');
-  expect(selectorOf('input')).toBe('input[name="email"]');
-  expect(selectorOf('[data-testid]')).toBe('button[data-testid="save"]');
-  // Nothing of its own is unique, so it takes its position under one that is.
-  expect(selectorOf('li + li')).toBe('ul.list > li:nth-child(2)');
+describe('a selector that names the element, not its place', () => {
+  const selectorOf = (target: Element | string) =>
+    describeIsotoneElement(elementAsNode(typeof target === 'string' ? (document.querySelector(target) as Element) : target)).selector;
+
+  it('takes a unique stable class or attribute of the pinned element before its position', () => {
+    document.body.innerHTML = `
+      <div class="app"><div class="promo-banner">Launch <button class="theme-toggle">Dark</button></div>
+        <section class="grid"><article><a class="cta" href="#buy-hobby">Hobby</a></article><article><a class="cta" href="#buy-pro">Pro</a></article></section>
+        <form><input class="Card_input__x7Yz1 css-1q2w3e kTeiLM md:w-1/2" name="email"><label for="email">Email</label></form>
+        <h2 class="card__title">Plans</h2>
+        <button data-testid="save" class="primary">Save</button><button class="primary">Cancel</button></div>`;
+    expect(selectorOf('.theme-toggle')).toBe('button.theme-toggle');
+    expect(selectorOf('a[href="#buy-pro"]')).toBe('a[href="#buy-pro"]');
+    expect(selectorOf('input')).toBe('input[name="email"]');
+    expect(selectorOf('label')).toBe('label[for="email"]');
+    // A BEM element is the author's own name.
+    expect(selectorOf('h2')).toBe('h2.card__title');
+    expect(selectorOf('[data-testid]')).toBe('button[data-testid="save"]');
+  });
+
+  it('never takes a class the page state or a build set, nor a label that changes with state', () => {
+    const unstable = [
+      ...['active', 'is-open', 'has-error', 'is-hovered', 'nav-open', 'highlighted', 'card--highlighted', 'selected', 'current'],
+      // CSS modules, Emotion, styled-components, styled-jsx, Stitches, Svelte, Tailwind.
+      ...['Card_cta__x7Yz1', 'Card_cta__qWerT', 'button-module__primary', 'css-1q2w3e', 'sc-bdVaJa', 'bZkfAO', 'jsx-123456'],
+      ...['c-PJLV', 'svelte-1abc2de', '_card_1k2j3_5', 'md:flex'],
+    ];
+    for (const name of unstable) {
+      document.body.innerHTML = `<nav><a>Home</a><a class="${name}" aria-label="Open menu" title="Menu">Docs</a></nav>`;
+      const pinned = document.querySelectorAll('a')[1] as Element;
+      expect(selectorOf(pinned), name).toBe('nav:nth-child(1) > a:nth-child(2)');
+    }
+  });
+
+  it('anchors an ancestor only by its id or test id, so a moved state class cannot move the pin', () => {
+    document.body.innerHTML = `
+      <section><article class="card"><h2>Hobby</h2></article><article class="card highlighted"><h2>Pro</h2></article></section>
+      <div data-testid="team"><article class="card"><h2>Team</h2></article></div>`;
+    const pro = selectorOf(document.querySelectorAll('h2')[1] as Element);
+    expect(pro).not.toContain('highlighted');
+    expect(document.querySelector(pro)?.textContent).toBe('Pro');
+    expect(selectorOf(document.querySelectorAll('h2')[2] as Element)).toBe(
+      'div[data-testid="team"] > article:nth-child(1) > h2:nth-child(1)',
+    );
+  });
 });
 
 it('says which element it is in terms an agent can search for', () => {
@@ -208,7 +239,7 @@ describe('the React components that wrote the element', () => {
       // The parents above it are the framework's and the layout's providers.
       return: { type: component('ThemeProvider'), return: { type: component('Providers'), return: { type: component('AppRouter') } } },
     });
-    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['Pricing'], source: 'src/app/pricing/page.tsx:24' });
+    expect(describeIsotoneElement(elementAsNode(button))).toMatchObject({ component: ['Pricing'], source: 'src/app/pricing/page.tsx' });
   });
 
   // Node on Windows prints the files it loaded as `C:\…` paths: the tests' React runs there in CI.
@@ -407,7 +438,7 @@ describe('the React components that wrote the element', () => {
       'jsxDEV (webpack-internal:///(app-pages-browser)/./node_modules/react/cjs/react-jsx-dev-runtime.development.js:10:1)',
       'TabButton (webpack-internal:///(app-pages-browser)/./src/app/tabs.tsx:30:5)',
     );
-    expect(describeIsotoneElement(elementAsNode(pin({ type: 'button', _debugStack: webpack }))).source).toBe('src/app/tabs.tsx:30');
+    expect(describeIsotoneElement(elementAsNode(pin({ type: 'button', _debugStack: webpack }))).source).toBe('src/app/tabs.tsx');
     // Firefox and Safari: no message line, `name@url` frames.
     const fs = [
       'jsxDEV@http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js:1:1',
@@ -435,6 +466,9 @@ describe('the React components that wrote the element', () => {
     try {
       expect(await resolveElementSource(button)).toBe('/src/tabs.tsx:10');
       expect(fetch).toHaveBeenCalledWith('http://localhost:5173/src/tabs.tsx?t=1');
+      // Vite serves a hot update at a new URL (`?t=`), so a module's map is read once.
+      expect(await resolveElementSource(button)).toBe('/src/tabs.tsx:10');
+      expect(fetch).toHaveBeenCalledTimes(1);
       // React 18's own field is already exact: nothing to fetch.
       expect(await resolveElementSource(pin({ type: 'button', _debugSource: { fileName: 'a.tsx', lineNumber: 1 } }))).toBeUndefined();
     } finally {
@@ -471,21 +505,40 @@ describe('the React components that wrote the element', () => {
     vi.stubGlobal('fetch', fetch);
     try {
       expect(describeIsotoneElement(elementAsNode(at(8))).source).toBeUndefined();
-      expect(await resolveElementSource(at(8))).toBe('src/components/Counter.tsx:9');
-      expect(await resolveElementSource(at(3))).toBe('src/components/Providers.tsx:3');
-      expect(fetch.mock.calls.map(([url]) => String(url))).toContain(`${chunk}.map`);
+      // The absolute path is made relative to the app by the notes endpoint.
+      expect(await resolveElementSource(at(8))).toBe('/Users/me/app/src/components/Counter.tsx:9');
+      expect(await resolveElementSource(at(3))).toBe('/Users/me/app/src/components/Providers.tsx:3');
+      // Turbopack serves a hot update's chunk at the same URL, so the map is read again.
+      map.sections[1] = section(4, 'Counter.tsx', ';;;AAUA');
+      expect(await resolveElementSource(at(8))).toBe('/Users/me/app/src/components/Counter.tsx:11');
+      // A hot update runs the module from the whole chunk, at lines its map does not describe.
+      const updated = `${chunk}?id=%255Bproject%255D/src/components/Counter.tsx`;
+      const hot = pin({ type: 'button', _debugStack: made(`jsxDEV (${chunk}:1:1)`, `Counter (${updated}:51:215)`, reactBottom) });
+      expect(describeIsotoneElement(elementAsNode(hot)).source).toBeUndefined();
+      expect(await resolveElementSource(hot)).toBeUndefined();
+      // Under a basePath the chunk still names no file.
+      const based = made(
+        'jsxDEV (http://localhost:3000/docs/_next/static/chunks/a.js:1:1)',
+        'Counter (http://localhost:3000/docs/_next/static/chunks/b.js:4:2)',
+      );
+      expect(describeIsotoneElement(elementAsNode(pin({ type: 'button', _debugStack: based }))).source).toBeUndefined();
     } finally {
       vi.unstubAllGlobals();
     }
   });
 
-  it("maps webpack's eval'd module through the inline map its factory carries", async () => {
+  it("maps webpack's eval'd module through the live factory's inline map, after a hot update too", async () => {
     const id = '(app-pages-browser)/./src/components/Counter.tsx';
-    const map = btoa(JSON.stringify({ version: 3, sources: ['/Users/me/app/src/components/Counter.tsx'], mappings: ';;AAQA' }));
-    // Next's eval-source-map: the module's code and map are a string in the factory.
-    const factory = `(module) => { eval(__webpack_require__.ts("jsxDEV(1);\\n\\njsxDEV(\\"button\\");\\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,${map}\\n//# sourceURL=webpack-internal:///${id}\\n")); }`;
+    /** Next's eval-source-map: the module's code and map are a string in the factory. */
+    const factory = (mappings: string) => {
+      const map = btoa(JSON.stringify({ version: 3, sources: ['/Users/me/app/src/components/Counter.tsx'], mappings }));
+      const code = `(module) => { eval(__webpack_require__.ts("jsxDEV(1);\\n\\njsxDEV(\\"button\\");\\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,${map}\\n//# sourceURL=webpack-internal:///${id}\\n")); }`;
+      return { toString: () => code };
+    };
+    // The runtime hands a pushed chunk's callback its `require`, whose `m` a hot update rewrites.
+    const require = { m: { [id]: factory(';;AAQA') } };
     const scope = globalThis as unknown as Record<string, unknown>;
-    scope.webpackChunk_N_E = [[['app/page'], { [id]: { toString: () => factory } }]];
+    scope.webpackChunk_N_E = { push: ([, , runtime]: [unknown, unknown, (r: unknown) => void]) => runtime(require) };
     const button = pin({
       type: 'button',
       _debugStack: made(
@@ -494,9 +547,11 @@ describe('the React components that wrote the element', () => {
       ),
     });
     try {
-      // The transformed line until the map is read.
-      expect(describeIsotoneElement(elementAsNode(button)).source).toBe('src/components/Counter.tsx:3');
-      expect(await resolveElementSource(button)).toBe('src/components/Counter.tsx:9');
+      // The eval'd line is never the file's: only the file until the map is read.
+      expect(describeIsotoneElement(elementAsNode(button)).source).toBe('src/components/Counter.tsx');
+      expect(await resolveElementSource(button)).toBe('/Users/me/app/src/components/Counter.tsx:9');
+      require.m[id] = factory(';;AAUA');
+      expect(await resolveElementSource(button)).toBe('/Users/me/app/src/components/Counter.tsx:11');
     } finally {
       delete scope.webpackChunk_N_E;
     }
@@ -533,6 +588,21 @@ describe('the React components that wrote the element', () => {
     );
     try {
       expect(await resolveElementSource(pin({ type: 'a', _debugStack: stack }))).toBe('/.isotone/variants/bold/src/Card.tsx:15');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("asks only the module's own server for its map", async () => {
+    const stack = made(
+      'exports.jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js:250:33)',
+      'Card (http://localhost:5173/src/Card.tsx:2:7)',
+    );
+    const fetch = vi.fn(async () => ({ text: async () => 'x;\n//# sourceMappingURL=http://elsewhere.test/Card.tsx.map\n' }));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      expect(await resolveElementSource(pin({ type: 'a', _debugStack: stack }))).toBeUndefined();
+      expect(fetch).toHaveBeenCalledTimes(1);
     } finally {
       vi.unstubAllGlobals();
     }
