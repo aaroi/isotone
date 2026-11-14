@@ -5,18 +5,20 @@
  * ./live.ts) are tracked here, since a change to what they hold is a reload.
  */
 import { mkdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 import { normalizePath, type ViteDevServer } from 'vite';
 
 import { ensureDirIgnored, ensureFileIgnored } from '../node/fs/git-exclude';
 import { isWithin } from '../node/fs/paths';
 import { overrideSourcePath, readVariant } from '../node/variants';
-import { ACTIVE_EVENT } from '../core/variants/overlay';
+import { ACTIVE_EVENT, VARIANTS_EVENT } from '../core/variants/overlay';
 import { BASE_VERSION, RESOLVED_LIVE_MODULE, VERSION_QUERY } from './live';
 import { type Overrides, reloadsOnSwitch } from './overrides';
 
 const MANIFEST = 'variant.json';
+/** The variants lock every change takes (`.mutation.lock`, and its temporary files): not a change itself. */
+const MUTATION_LOCK = '.mutation.lock';
 
 /** The version a module id names (`?isotone=<id>`), or null for any other module. */
 function versionOfId(id: string | null): string | null {
@@ -288,7 +290,7 @@ export function createSwitching(overrides: Overrides) {
     if (announceTimer) clearTimeout(announceTimer);
     announceTimer = setTimeout(() => {
       announceTimer = null;
-      server.ws.send({ type: 'custom', event: ACTIVE_EVENT, data: { active: overrides.active() } });
+      server.ws.send({ type: 'custom', event: VARIANTS_EVENT });
     }, 50);
   };
 
@@ -308,7 +310,7 @@ export function createSwitching(overrides: Overrides) {
       const path = resolve(changed);
       if (path === activeFile) {
         void activate(overrides.readActive());
-      } else if (isWithin(overrides.dir, path)) {
+      } else if (isWithin(overrides.dir, path) && !basename(path).startsWith(MUTATION_LOCK)) {
         // Covers adds and unlinks, which hot updates never see.
         forgetManifests();
         // A variant deleted by hand leaves its id in the file. Pages are

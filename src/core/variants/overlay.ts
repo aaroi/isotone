@@ -165,12 +165,17 @@ export function knobDelta(knobs: KnobAxis[], values: VariantSelections): { axis:
 export const VARIANTS_ENDPOINT = '/api/isotone/variants';
 
 /**
- * The server's variants changed: its active set (another tab's pick, `variant
- * use`) or anything under the variants dir, such as a copy gaining or losing
- * conflict markers. `{ active }`, sent over the dev server's HMR channel; the
- * overlay source reads its listing again.
+ * The server's active set changed (another tab's pick, `variant use`, a copy
+ * gaining or losing conflict markers): `{ active }`, sent over the dev
+ * server's HMR channel once a server render has the swap. A live tab without
+ * a pick of its own follows it; the overlay source reads its listing again.
  */
 export const ACTIVE_EVENT = 'isotone:active';
+
+/** Something else under the variants dir changed, such as a copy gaining or
+ *  losing conflict markers. Only the overlay source listens: a live tab
+ *  follows the server's set on {@link ACTIVE_EVENT} alone. */
+export const VARIANTS_EVENT = 'isotone:variants';
 
 /** Why `id` cannot be shown: copies holding conflict markers from `variant sync`.
  *  The CLI, the endpoint and the panel all refuse it with this. */
@@ -511,8 +516,8 @@ export function createOverlayVariantsSource(cfg: {
     const base = new URL(cfg.endpoint, typeof location === 'undefined' ? 'http://localhost/' : location.href);
     channel = (cfg.hot ?? importHot)(new URL(client, base).href).then(
       (hot) => {
-        hot.on(ACTIVE_EVENT, onChange);
-        if (disposed) hot.off?.(ACTIVE_EVENT, onChange);
+        for (const event of [ACTIVE_EVENT, VARIANTS_EVENT]) hot.on(event, onChange);
+        if (disposed) for (const event of [ACTIVE_EVENT, VARIANTS_EVENT]) hot.off?.(event, onChange);
         // Anything that changed while connecting.
         else onChange();
         return hot;
@@ -598,6 +603,7 @@ export function createOverlayVariantsSource(cfg: {
       const groups = [...touched];
       touched = new Set();
       const sentRevision = revision;
+      let sent = false;
       try {
         const res = await request(`${cfg.endpoint}/active`, {
           method: 'POST',
@@ -620,11 +626,14 @@ export function createOverlayVariantsSource(cfg: {
         );
         if (list) list = { ...list, active: shown };
         error = null;
+        sent = true;
       } catch (cause) {
         error = cause instanceof Error ? cause.message : 'Could not activate this variant. Try again.';
       }
       // Newer picks include the full intended set, including other groups.
-      // Completing or failing an older request must not discard that intent.
+      // Completing or failing an older request must not discard that intent,
+      // nor the selectors it was set in.
+      if (!sent || sentRevision !== revision) for (const group of groups) touched.add(group);
       if (sentRevision === revision) intended = null;
       emit();
     }
@@ -708,7 +717,9 @@ export function createOverlayVariantsSource(cfg: {
     },
     dispose() {
       disposed = true;
-      void channel?.then((hot) => hot?.off?.(ACTIVE_EVENT, onChange));
+      void channel?.then((hot) => {
+        for (const event of [ACTIVE_EVENT, VARIANTS_EVENT]) hot?.off?.(event, onChange);
+      });
     },
     routeChanged() {
       // Before the first listing nothing is on the page; `refresh` applies it.
@@ -769,9 +780,10 @@ export function createOverlayVariantsSource(cfg: {
       knobValues = {};
       persistKnobs();
       applyKnobs();
+      // Every group, on every route: a reset leaves no pick anywhere, hidden ones included.
       activate(
         [],
-        selects().map((axis) => axis.id),
+        overlayGroups(list?.variants ?? []).map((group) => group.id),
       );
     },
     subscribe(listener) {

@@ -597,20 +597,22 @@ describe('what the overlay source says the page shows', () => {
   /** A source without a live store, as on Vite 5 or without React, against a stand-in
    *  server (what it shows, which copies hold conflict markers) and HMR channel. */
   function source(live: Parameters<typeof createOverlayVariantsSource>[0]['live'] = null) {
-    const server = { active: ['card-bold'], conflicts: new Set<string>(['card-merged']) };
+    const server = { active: ['card-bold'], conflicts: new Set<string>(['card-merged']), fail: false };
     const listing = (): OverlayVariantsList => ({
       variants: [
         ['card-bold', 'Bold'],
         ['card-compact', 'Compact'],
         ['card-merged', 'Merged'],
-      ].map(([id, label]) =>
-        variant(id as string, {
-          label,
-          group: 'pricing-card',
-          files: ['src/Card.tsx'],
-          conflicts: server.conflicts.has(id as string) ? ['src/Card.tsx'] : [],
-        }),
-      ),
+      ]
+        .map(([id, label]) =>
+          variant(id as string, {
+            label,
+            group: 'pricing-card',
+            files: ['src/Card.tsx'],
+            conflicts: server.conflicts.has(id as string) ? ['src/Card.tsx'] : [],
+          }),
+        )
+        .concat(variant('hero-split', { group: 'hero', route: '/other', files: ['src/Hero.tsx'] })),
       active: server.active,
       hmr: '/@vite/client',
     });
@@ -625,6 +627,7 @@ describe('what the overlay source says the page shows', () => {
         }
         const body = JSON.parse(String(init.body)) as { active: string[]; groups: string[] };
         posted.push(body);
+        if (server.fail) return Response.json({ error: 'busy' }, { status: 503 });
         // Like the endpoint: it answers with what it shows, never a conflicted copy.
         server.active = body.active.filter((id) => !server.conflicts.has(id));
         return Response.json({ active: server.active });
@@ -643,13 +646,21 @@ describe('what the overlay source says the page shows', () => {
         },
       };
     };
-    const overlay = createOverlayVariantsSource({ endpoint: '/variants', getRoute: () => '/', storage: null, knobRoot: null, live, hot });
+    const page = { route: '/' };
+    const overlay = createOverlayVariantsSource({
+      endpoint: '/variants',
+      getRoute: () => page.route,
+      storage: null,
+      knobRoot: null,
+      live,
+      hot,
+    });
     const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
     const announce = async () => {
       for (const listener of listeners) listener();
       await settle();
     };
-    return { overlay, server, posted, connected, listeners, settle, announce, gets: () => gets };
+    return { overlay, server, page, posted, connected, listeners, settle, announce, gets: () => gets };
   }
   const disabled = (overlay: ReturnType<typeof createOverlayVariantsSource>) =>
     (overlay.getAxes()[0] as { options: { id: string; disabled?: boolean }[] }).options.filter((o) => o.disabled).map((o) => o.id);
@@ -703,8 +714,25 @@ describe('what the overlay source says the page shows', () => {
     await settle();
     overlay.setSelection('pricing-card', OVERLAY_DEFAULT_OPTION);
     await vi.waitFor(() => expect(posted).toEqual([{ active: [], groups: ['pricing-card'] }]));
+    // A reset sets every group, on every route.
     overlay.reset?.();
-    await vi.waitFor(() => expect(posted[1]).toEqual({ active: [], groups: ['pricing-card'] }));
+    await vi.waitFor(() => expect(posted[1]).toEqual({ active: [], groups: ['pricing-card', 'hero'] }));
+  });
+
+  it('carries the selectors of a pick that failed into the next one', async () => {
+    const { overlay, server, page, posted, settle } = source();
+    await overlay.refresh();
+    await settle();
+    server.fail = true;
+    overlay.setSelection('pricing-card', OVERLAY_DEFAULT_OPTION);
+    await vi.waitFor(() => expect(overlay.getError?.()).toBe('busy'));
+    server.fail = false;
+    page.route = '/other';
+    overlay.setSelection('hero', 'hero-split');
+    await vi.waitFor(() => expect(posted[1]).toEqual({ active: ['card-bold', 'hero-split'], groups: ['pricing-card', 'hero'] }));
+    // Sent once it went through.
+    overlay.setSelection('hero', OVERLAY_DEFAULT_OPTION);
+    await vi.waitFor(() => expect(posted[2]).toEqual({ active: ['card-bold'], groups: ['hero'] }));
   });
 
   it('shows a copy with conflict markers as an option nobody can pick, and says why', async () => {

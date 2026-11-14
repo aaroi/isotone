@@ -963,13 +963,30 @@ describe('overlay variants in the dev server', () => {
     expect(JSON.parse(readFileSync(join(root, ACTIVE_FILE), 'utf8')).active).toEqual(['b']);
 
     // A copy nothing shows gaining markers changes no set, but what the panels
-    // list: they hear of it too.
+    // list: they hear of it on an event of its own, which a live tab does not
+    // follow (it could reload before a server render has a swap).
     writeActive({ root }, []);
     onAll('change', join(root, ACTIVE_FILE));
     server.ws.send.mockClear();
     writeFileSync(join(variantDir({ root }, 't'), 'src', 'Table.tsx'), markers);
     onAll('change', join(variantDir({ root }, 't'), 'src', 'Table.tsx'));
-    await vi.waitFor(() => expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:active', data: { active: [] } }));
+    await vi.waitFor(() => expect(server.ws.send).toHaveBeenCalledWith({ type: 'custom', event: 'isotone:variants' }));
+    expect(server.ws.send).not.toHaveBeenCalledWith(expect.objectContaining({ event: 'isotone:active' }));
+
+    // The lock every change takes is not a change.
+    server.ws.send.mockClear();
+    onAll('add', join(root, '.isotone', 'variants', '.mutation.lock'));
+    onAll('unlink', join(root, '.isotone', 'variants', '.mutation.lock'));
+    await new Promise((r) => setTimeout(r, 120));
+    expect(server.ws.send).not.toHaveBeenCalled();
+  });
+
+  it('keeps a live tab off the panels’ announcements: it follows only the server’s set', () => {
+    const { root } = tempProject();
+    const { hooks } = livePlugin(root);
+    const runtime = hooks.load('\0isotone-live')?.code ?? '';
+    expect(runtime).toContain('import.meta.hot.on("isotone:active"');
+    expect(runtime).not.toContain('isotone:variants');
   });
 
   it('names the HMR client under the dev server’s origin, and none without a WebSocket server', async () => {
