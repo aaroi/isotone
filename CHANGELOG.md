@@ -10,7 +10,7 @@
 
 ### Fixed
 
-- **`variant add` no longer warns that a copy reloads the page, or is served whole, where every variant is swapped whole anyway** (Vite 5, Vue and other hosts without React, or `variants: { live: false }`). Those warnings are about per-tab switching, so they now appear only there.
+- **`variant add` warns only about what happens in your setup.** On Vue and other hosts without React, where a switch swaps the whole file, it no longer says a copy reloads the page or is served whole. On React with Vite 5 or `variants: { live: false }`, it says a copy exporting helpers may reload the page, rather than that it will.
 
 ## 1.5.0
 

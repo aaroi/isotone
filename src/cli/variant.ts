@@ -365,8 +365,10 @@ function cmdAdd(pos: string[], args: string[], io: CliIO, opts: VariantsStoreOpt
   }
   for (const file of files) addVariantFile(opts, id, file, { create, force: has(args, '--force') });
   out(io, create ? `created ${files.length} new file(s) in "${id}"` : `added ${files.length} file(s) to "${id}"`);
-  // Only live mode switches a file per tab, in place; whole-file mode swaps every file the same way.
-  if (!create && liveSwitching(opts)) for (const file of files) warnNoHotSwap(io, file);
+  if (!create) {
+    const switching = switchingOf(opts);
+    for (const file of files) warnNoHotSwap(io, file, switching);
+  }
   warnOverlaps(io, opts, id);
   warnUnserved(io, opts);
   return 0;
@@ -410,30 +412,48 @@ function variantsProject(opts: VariantsStoreOptions): string | null {
   return basename(dirname(dir)) === '.isotone' ? dirname(dirname(dir)) : null;
 }
 
-/** Whether the plugin will switch these variants live (per tab, in place), or may: an unreadable Vite version counts. */
-function liveSwitching(opts: VariantsStoreOptions): boolean {
-  const root = variantsProject(opts) ?? opts.root;
-  return detectHost(root) === 'vite' && viteSwitching(root).mode !== 'shared';
+/**
+ * How the plugin will switch these variants, for what `variant add` warns about.
+ * `live` also stands for "cannot tell": a project with neither a Vite config nor
+ * the plugin may be served by a sibling (`variants: { root }`), and an unreadable
+ * Vite version may be 6. Next serves none, which `warnUnserved` says.
+ */
+function switchingOf(opts: VariantsStoreOptions): 'live' | 'whole-react' | 'whole' | 'none' {
+  const root = variantsProject(opts);
+  if (root === null) return 'live';
+  if (detectHost(root) === 'next') return 'none';
+  const { loaded, viteConfig } = vitePlugin(root);
+  if (!loaded && viteConfig === null) return 'live';
+  const { mode, why } = viteSwitching(root);
+  return mode !== 'shared' ? 'live' : why === 'no-react' ? 'whole' : 'whole-react';
 }
 
 /** Say up front what would otherwise look like a page that reloads for no
- *  reason, in live mode. Reads the export names only, so a capitalized constant slips by. */
-function warnNoHotSwap(io: CliIO, file: string): void {
+ *  reason. Reads the export names only, so a capitalized constant slips by. */
+function warnNoHotSwap(io: CliIO, file: string, switching: ReturnType<typeof switchingOf>): void {
+  // A host without React swaps the file over HMR, which its own components accept.
+  if (switching === 'whole' || switching === 'none') return;
   const names = scanExports(readFileSync(resolve(io.cwd, file), 'utf8'));
   if (!names || isRouteModule(names)) {
-    errOut(
-      io,
-      `warning: ${file} is served whole, so it follows .isotone/active.json in every tab instead of switching per tab. See "Live switching" in the variants guide.`,
-    );
+    // Every file is served whole outside live mode; only there is this one the exception.
+    if (switching === 'live') {
+      errOut(
+        io,
+        `warning: ${file} is served whole, so it follows .isotone/active.json in every tab instead of switching per tab. See "Live switching" in the variants guide.`,
+      );
+    }
     return;
   }
   const fixed = names.filter((name) => name !== 'default' && !/^[A-Z]/.test(name));
-  if (fixed.length) {
-    errOut(
-      io,
-      `warning: ${file} exports ${fixed.join(', ')}, so switching this variant reloads the page. Move ${fixed.length === 1 ? 'it' : 'them'} to a file the variant leaves alone to switch in place.`,
-    );
-  }
+  if (!fixed.length) return;
+  const move = `Move ${fixed.length === 1 ? 'it' : 'them'} to a file the variant leaves alone to switch in place.`;
+  errOut(
+    io,
+    switching === 'live'
+      ? `warning: ${file} exports ${fixed.join(', ')}, so switching this variant reloads the page. ${move}`
+      : // Fast Refresh cannot swap such a file alone: the update climbs to its importers, and reloads at an entry.
+        `warning: ${file} exports ${fixed.join(', ')}, so a switch re-runs the files that import it and may reload the page. ${move}`,
+  );
 }
 
 function warnOverlaps(io: CliIO, opts: VariantsStoreOptions, id: string): void {
