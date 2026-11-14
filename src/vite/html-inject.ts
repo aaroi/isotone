@@ -58,11 +58,12 @@ const local = (req: IncomingMessage): boolean => isFromThisMachine(nodeRequestFa
 /**
  * Serve the panel to the dev server's pages: the bundle, and the scripts
  * added to every HTML navigation. `mount` is the mount module, or null when
- * the host mounts the panel itself; `head` is the live variant store, when
- * there is one. A device on the network gets the store, which the app's
- * modules need, but never the panel.
+ * the host mounts the panel itself; `head` is the script that runs before the
+ * page does (the live variant store, the stored knob values) for the requested
+ * URL, when there is one. A device on the network gets it, since the app's
+ * modules need the store, but never the panel.
  */
-export function servePanel(use: Use, mount: string | null, head: (() => string) | null): void {
+export function servePanel(use: Use, mount: string | null, head: ((url: string) => string) | null): void {
   if (mount === null && head === null) return;
   if (mount !== null) {
     // A self-contained bundle keeps the panel out of the host's dependency
@@ -90,12 +91,14 @@ export function servePanel(use: Use, mount: string | null, head: (() => string) 
     // gets 304 and never sees the panel. Ask for the full document.
     delete req.headers['if-none-match'];
     delete req.headers['if-modified-since'];
-    injectHtmlResponse(res, local(req) ? mount : null, head ?? undefined);
+    // The URL as asked for: an SPA fallback rewrites `req.url` before the page is sent.
+    const url = req.url ?? '/';
+    injectHtmlResponse(res, local(req) ? mount : null, () => head?.(url) ?? null);
     next();
   });
 }
 
-function injectHtmlResponse(res: ServerResponse, code: string | null, head: () => string | null = () => null): void {
+function injectHtmlResponse(res: ServerResponse, code: string | null, head: () => string | null): void {
   if (INJECTED.has(res)) return;
   INJECTED.add(res);
 
@@ -164,11 +167,12 @@ function injectHtmlResponse(res: ServerResponse, code: string | null, head: () =
     const cb = args.find((a): a is () => void => typeof a === 'function');
     buffering = false;
     const body = Buffer.concat(chunks).toString('utf8');
-    if (body.includes('<html') && (HEAD_OPEN.test(body) || body.includes('</body>'))) {
+    const page = body.includes('<html') && (HEAD_OPEN.test(body) || body.includes('</body>'));
+    // Classic, not a module: it runs during parsing, before any module.
+    const before = page ? head() : null;
+    if (page && (code !== null || before)) {
       const script = code === null ? '' : `<script type="module" data-isotone-inject>${code}</script>`;
-      // Classic, not a module: it runs during parsing, before any module.
-      const store = head();
-      const early = store ? `<script data-isotone-live>${store.replace(/<\/script/gi, '<\\/script')}</script>` : '';
+      const early = before ? `<script data-isotone-head>${before.replace(/<\/script/gi, '<\\/script')}</script>` : '';
       if (!res.headersSent) originalSetHeader('Cache-Control', 'no-store');
       return originalEnd(withNativeFetch(injectIntoHead(body, `${early}${script}`)), cb);
     }

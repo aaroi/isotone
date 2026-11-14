@@ -70,7 +70,7 @@ export interface OverlayVariantStatus extends OverlayVariant {
  * A knob: a range, colour or select axis the host declares in `.isotone/knobs.json`
  * next to its overlay variants. The panel renders it as a slider (or a colour
  * pick) on the routes it names, and the value reaches the page as a CSS
- * custom property on `<html>`, `--knob-<id>`, with the axis unit appended
+ * custom property on `:root`, `--knob-<id>`, with the axis unit appended
  * (`--knob-fade-from: 40%`). The host reads it with a fallback that is the
  * committed default: `var(--knob-fade-from, 0%)`. "Make default" files
  * the moved knobs in the same `[set-defaults]` note as the variant picks, so
@@ -116,6 +116,89 @@ export function knobsFor(knobs: KnobAxis[] | undefined, route?: string): KnobAxi
     const patterns = k.route === undefined ? [undefined] : ([] as (string | undefined)[]).concat(k.route);
     return patterns.some((p) => variantAppliesTo(p, route));
   });
+}
+
+/**
+ * The declarations knob properties live in: a `:root` rule in Isotone's own
+ * `<style>`, a child of `<html>` beside `<head>` and `<body>`. A framework that
+ * renders `<html>` (React Router, Next.js) hydrates its attributes, `style`
+ * included, but neither hydrates nor clears a style element there.
+ * Self-contained, so the Vite plugin's inline script carries it too.
+ */
+export function knobStyle(doc: Document): CSSStyleDeclaration {
+  let element = doc.querySelector('style[data-isotone-knobs]');
+  if (!element) {
+    element = doc.createElement('style');
+    element.setAttribute('data-isotone-knobs', '');
+    element.textContent = ':root{}';
+    doc.documentElement.appendChild(element);
+  }
+  const sheet = (element as HTMLStyleElement).sheet as CSSStyleSheet;
+  return (sheet.cssRules[0] as CSSStyleRule).style;
+}
+
+/**
+ * The page as `applyKnobValues` writes it: properties in {@link knobStyle},
+ * select attributes and the event on `<html>`. React compares the attributes of
+ * an `<html>` it renders while it hydrates, so while a React root on the document
+ * has not yet hydrated it, the attributes wait.
+ */
+function pageKnobRoot(doc: Document): Parameters<typeof applyKnobValues>[2] {
+  const html = doc.documentElement;
+  const has = (node: object, key: string) => Object.keys(node).some((k) => k.startsWith(key));
+  const pending = new Map<string, string | null>();
+  const flush = () => {
+    if (has(doc, '__reactContainer$') && !has(html, '__reactFiber$')) {
+      setTimeout(flush, 50);
+      return;
+    }
+    for (const [name, value] of pending) {
+      if (value === null) html.removeAttribute(name);
+      else html.setAttribute(name, value);
+    }
+    pending.clear();
+  };
+  const write = (name: string, value: string | null) => {
+    const idle = pending.size === 0;
+    pending.set(name, value);
+    if (idle) flush();
+  };
+  return {
+    get style() {
+      return knobStyle(doc);
+    },
+    setAttribute: (name, value) => write(name, value),
+    removeAttribute: (name) => write(name, null),
+    dispatchEvent: (event) => html.dispatchEvent(event),
+  };
+}
+
+/**
+ * The stored knob values, on the page before it first paints: the Vite plugin
+ * runs this in an inline `<head>` script with the requested route's knobs as
+ * `[id, unit, default, select]`. A server-rendered page gets no attributes
+ * (`attributes` false): React may hydrate its `<html>`, and the panel adds them
+ * once it has. Self-contained, for that script; the panel checks each value
+ * against its knob when it loads and puts the page right.
+ */
+export function applyStoredKnobs(
+  doc: Document,
+  key: string,
+  knobs: [id: string, unit: string, fallback: string, select: boolean][],
+  attributes: boolean,
+  style: typeof knobStyle,
+): void {
+  try {
+    const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
+    for (const [id, unit, fallback, select] of knobs) {
+      const value = stored[id];
+      if (typeof value !== 'string' || value === fallback) continue;
+      style(doc).setProperty(`--knob-${id}`, value + unit);
+      if (select && attributes) doc.documentElement.setAttribute(`data-knob-${id}`, value);
+    }
+  } catch {
+    // Storage blocked or unreadable: the panel applies what it can when it loads.
+  }
 }
 
 /** Write every knob's value onto the root element; missing values clear the property. */
@@ -308,7 +391,7 @@ export function overlayAxes(list: OverlayVariantsList, route?: string): SelectVa
  * share a selection, a `?v=` entry and a note reference, so the group keeps it;
  * `variant list` names the knob that is left out.
  */
-export function overlayKnobs(list: Pick<OverlayVariantsList, 'variants' | 'knobs'>, route?: string): KnobAxis[] {
+export function overlayKnobs(list: { variants: OverlayVariant[]; knobs?: KnobAxis[] }, route?: string): KnobAxis[] {
   const groups = new Set(overlayGroups(list.variants).map((group) => group.id));
   return knobsFor(list.knobs, route).filter((knob) => !groups.has(knob.id));
 }
@@ -395,7 +478,7 @@ export function createOverlayVariantsSource(cfg: {
   getRoute: () => string;
   /** Where knob values live between reloads; omit for none (tests). Default: `localStorage`. */
   storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
-  /** The element knobs write their properties on. Default: `document.documentElement`. */
+  /** Where knobs write their properties and attributes. Default: the page, through {@link knobStyle} and `<html>`. */
   knobRoot?: Parameters<typeof applyKnobValues>[2] | null;
   /** The tab's live store. Default: the one the Vite plugin put on the page, if any. */
   live?: LiveVariantSelection | null;
@@ -468,7 +551,7 @@ export function createOverlayVariantsSource(cfg: {
       return null;
     }
   })();
-  const knobRoot = cfg.knobRoot === undefined ? (typeof document === 'undefined' ? null : document.documentElement) : cfg.knobRoot;
+  const knobRoot = cfg.knobRoot === undefined ? (typeof document === 'undefined' ? null : pageKnobRoot(document)) : cfg.knobRoot;
   let knobValues: VariantSelections = (() => {
     const parse = (raw: string | null): VariantSelections => {
       try {
@@ -501,10 +584,12 @@ export function createOverlayVariantsSource(cfg: {
   let knobsRoute: string | null = null;
   // A knob is on the page only on its own routes, like its slider. Elsewhere its
   // property and attribute come off, and the stored value waits for its route.
+  // Every listed knob is written, so one the page's head script put on and the
+  // panel does not show (a taken id, an invalid value) comes off too.
   const applyKnobs = () => {
     knobsRoute = cfg.getRoute();
     if (!knobRoot) return;
-    const knobs = list ? overlayKnobs(list) : [];
+    const knobs = list?.knobs ?? [];
     const here = new Set(ownKnobs(knobsRoute).map((k) => k.id));
     const shown = previewing ? { ...knobValues, ...previewing } : knobValues;
     applyKnobValues(knobs, Object.fromEntries(Object.entries(shown).filter(([id]) => here.has(id))), knobRoot);

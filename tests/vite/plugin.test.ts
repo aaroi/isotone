@@ -19,6 +19,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+// @ts-expect-error jsdom ships no types; this file only parses a served page.
+import { JSDOM } from 'jsdom';
 import { createServer, normalizePath, type ViteDevServer } from 'vite';
 
 import { withNativeFetch } from '../../src/vite/html-inject';
@@ -232,6 +234,59 @@ describe('the Vite adapter, served', () => {
     // Before anything the app loads: directly inside <head>.
     expect(html.slice(html.indexOf('<head>') + '<head>'.length).startsWith('<script data-isotone-native')).toBe(true);
     expect(html).toContain('window.__isotoneFetch=window.fetch.bind(window)');
+  });
+
+  it('puts the route’s stored knob values on the page before it paints, outside <html style>', async () => {
+    const knobs = join(root, '.isotone', 'knobs.json');
+    mkdirSync(dirname(knobs), { recursive: true });
+    writeFileSync(
+      knobs,
+      JSON.stringify([
+        { kind: 'range', id: 'pad', label: 'Padding', min: 0, max: 40, step: 1, defaultValue: 8, unit: 'px' },
+        { kind: 'color', id: 'ink', label: 'Ink', defaultColor: '#000000', swatches: [], route: '/pricing' },
+        {
+          kind: 'select',
+          id: 'ticks',
+          label: 'Ticks',
+          defaultOption: 'lines',
+          options: [
+            { id: 'lines', label: 'Lines' },
+            { id: 'dots', label: 'Dots' },
+          ],
+        },
+      ]),
+    );
+    try {
+      const load = async (path: string) => {
+        const html = await (await fetch(`${origin}${path}`, { headers: { accept: 'text/html' } })).text();
+        let atBody: string | null = null;
+        const dom = new JSDOM(html.replace('<body>', '<body><script>window.atBody = document.documentElement.outerHTML</script>'), {
+          url: `${origin}${path}`,
+          runScripts: 'dangerously',
+          beforeParse(window: Window) {
+            window.localStorage.setItem('isotone:knobs', JSON.stringify({ pad: '24', ink: '#ff0000', ticks: 'dots' }));
+            Object.defineProperty(window, 'atBody', {
+              set: (value: string) => {
+                atBody = value;
+              },
+            });
+          },
+        });
+        const rule = dom.window.document.querySelector('style[data-isotone-knobs]') as HTMLStyleElement | null;
+        return { atBody, html: dom.window.document.documentElement, rule: (rule?.sheet?.cssRules[0] as CSSStyleRule | undefined)?.style };
+      };
+      const home = await load('/');
+      // Set before the parser reached <body>: nothing has painted yet.
+      expect(home.atBody).toContain('data-knob-ticks="dots"');
+      expect(home.atBody).toContain('data-isotone-knobs');
+      expect(home.rule?.getPropertyValue('--knob-pad')).toBe('24px');
+      expect(home.rule?.getPropertyValue('--knob-ticks')).toBe('dots');
+      expect(home.rule?.getPropertyValue('--knob-ink')).toBe('');
+      expect(home.html.hasAttribute('style')).toBe(false);
+      expect((await load('/pricing')).rule?.getPropertyValue('--knob-ink')).toBe('#ff0000');
+    } finally {
+      rmSync(knobs);
+    }
   });
 
   it('resolves a relative notes file against the Vite root, not the cwd', async () => {

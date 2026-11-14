@@ -135,12 +135,17 @@ A colour knob takes a `defaultColor` and named `swatches`, all as hex values:
 Ranges render as sliders and colours as swatches with a custom picker. An
 invalid entry is skipped, and so is a knob whose id a file variant group already
 has (a lone variant's id is its group's); `npx isotone variant list` names each one. Knobs work
-with `isotone serve` too. A value reaches the page as `--knob-<id>` on `<html>`,
+with `isotone serve` too. A value reaches the page as `--knob-<id>` on `:root`,
 unit appended, so the source reads it with the committed default as fallback:
 
 ```css
 mask-image: radial-gradient(ellipse, black var(--knob-fade-from, 0%), transparent 100%);
 ```
+
+The property sits in a `:root` rule of a `<style data-isotone-knobs>` beside
+`<head>`, not in `<html style>`, so a framework that renders `<html>` (React
+Router, Next.js) hydrates it without a mismatch. On Vite, the plugin's inline
+`<head>` script applies the stored values before the page first paints.
 
 A knob's value applies only on the routes its `route` names, where its control
 is. On any other page, after a full load or a client-side navigation, its
@@ -150,7 +155,9 @@ that should change on every page leaves `route` out.
 
 A select knob names a style that one line of CSS or a draw call can act on. Give
 it `options` of `{ "id", "label" }` and a `defaultOption`. Its value also lands
-as `data-knob-<id>` on `<html>`, since CSS cannot branch on a custom property:
+as `data-knob-<id>` on `<html>`, since CSS cannot branch on a custom property.
+Where React hydrates `<html>`, the attribute arrives once it has; in a Vite app
+without server rendering, before the first paint:
 
 ```css
 html[data-knob-tick-style="dots"] .tick { border-radius: 50%; }
@@ -159,8 +166,8 @@ html[data-knob-tick-style="dots"] .tick { border-radius: 50%; }
 When the alternative changes structure, use a file variant: a select knob leaves
 both branches in the source until someone removes one.
 
-Code that draws for itself, such as a canvas chart, reads the property and
-redraws on the `isotone:knob` event, which bubbles from `<html>` with
+Code that draws for itself, such as a canvas chart, reads the property with
+`getComputedStyle(document.documentElement)` and redraws on the `isotone:knob` event, which bubbles from `<html>` with
 `{ id, value }` (`null` when the knob returns to its default or leaves the page
 with its route):
 

@@ -27,7 +27,8 @@ import {
 // module there. (Later Vite 5 releases take a server, not a config.)
 import * as vite from 'vite';
 
-import { VARIANTS_ENDPOINT } from '../core/variants';
+import { axisDefault, KNOBS_STORAGE_KEY, overlayKnobs, VARIANTS_ENDPOINT } from '../core/variants';
+import { applyStoredKnobs, knobStyle } from '../core/variants/overlay';
 import { blastFile } from '../node/blast';
 import { defaultNotesFile, LEGACY_NOTES_FILE, NOTES_FILE } from '../node/notes/location';
 import { ensureFileIgnored } from '../node/fs/git-exclude';
@@ -35,7 +36,7 @@ import { canonicalPath, isWithin, realPath } from '../node/fs/paths';
 import { NOTES_ENDPOINT } from '../node/notes/handler';
 import { startUpdateCheck, UPDATE_ENDPOINT } from '../node/update/check';
 import { autoUpdateNote } from '../node/update/note';
-import { listVariants, variantsDir } from '../node/variants';
+import { listVariants, readKnobs, variantsDir } from '../node/variants';
 import { isLoopback } from '../node/http';
 import { mountModuleSource, servePanel } from './html-inject';
 import {
@@ -45,6 +46,7 @@ import {
   liveRuntimeModule,
   liveStoreScript,
   RESOLVED_LIVE_MODULE,
+  safeJson,
   VERSION_QUERY,
 } from './live';
 import { type Gate, notesEndpoint, updateEndpoint, variantsEndpoint } from './middleware';
@@ -418,7 +420,17 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
 
       // The tab's variant store has to exist before the app's modules run,
       // so it rides in the document itself, with the server's current set.
-      const liveScript = switching.live ? () => liveStoreScript(overrides.liveConfig(ssrHost)) : null;
+      // The route's stored knob values go on there too, before the first paint.
+      const knobsScript = (url: string): string => {
+        const route = new URL(url, 'http://localhost').pathname;
+        const knobs = overlayKnobs({ variants: overrides.readManifests(), knobs: readKnobs(overrides.opts) }, route);
+        if (knobs.length === 0) return '';
+        const rows = knobs.map((k) => [k.id, k.kind === 'range' ? (k.unit ?? '') : '', axisDefault(k), k.kind === 'select']);
+        return `(${applyStoredKnobs})(document, ${safeJson(KNOBS_STORAGE_KEY)}, ${safeJson(rows)}, ${!ssrHost}, ${knobStyle});`;
+      };
+      const headScript = variantsOptions
+        ? (url: string) => knobsScript(url) + (switching.live ? liveStoreScript(overrides.liveConfig(ssrHost)) : '')
+        : null;
       const mount =
         options.panel === false
           ? null
@@ -430,7 +442,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
               options.theme,
               options.compareShortcut,
             );
-      servePanel(server.middlewares.use.bind(server.middlewares) as never, mount, liveScript);
+      servePanel(server.middlewares.use.bind(server.middlewares) as never, mount, headScript);
     },
   } satisfies Plugin;
 
