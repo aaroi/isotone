@@ -41,9 +41,10 @@ import { npm } from './npm.mjs';
 // and its notes in the shipped variants guide and changelog.
 // The figures above are each change on its own over 1.5.0. Merged together (#60 to #69), the bundle is
 // 402.6 kB and the tarball 457.6 kB: bundle raised to 403.5 kB and tarball to 459 kB.
-// Tarball raised to 460.5 kB (459.3 kB; knobs without hydration errors): the knob stylesheet and the
-// Vite plugin's head script that applies stored values before the first paint, with their docs.
-const BUDGET = { bundle: 403_500, tarball: 460_500 };
+// Bundle raised to 404.5 kB and tarball to 462 kB (403.9 and 460.8 kB; knobs without hydration errors):
+// the adopted knob stylesheet, the wait for React's hydration of <html>, and the Vite plugin's head script
+// that applies stored values before the first paint, with their docs.
+const BUDGET = { bundle: 404_500, tarball: 462_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

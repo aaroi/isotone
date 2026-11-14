@@ -120,9 +120,8 @@ describe('the Vite adapter, served', () => {
   it('injects into <head>, never into the body a react tree owns', async () => {
     const html = await (await fetch(`${origin}/`, { headers: { accept: 'text/html' } })).text();
     expect(html).toContain('data-isotone-inject');
-    // The loader script sits inside <head> (right after the opening tag,
-    // sharing it with the native-fetch capture it must run after, and ahead
-    // of the host's own head content)...
+    // The loader script sits inside <head> (at its end, after the
+    // native-fetch capture it must run after and the host's own head content)...
     const head = html.slice(html.indexOf('<head>') + '<head>'.length, html.indexOf('</head>'));
     expect(head).toMatch(/(^|>)[ \t]*<script type="module" data-isotone-inject>/);
     // ...and nothing between <body> and </body> carries a script tag. A
@@ -231,8 +230,9 @@ describe('the Vite adapter, served', () => {
     const html = await (await fetch(`${origin}/`, { headers: { accept: 'text/html' } })).text();
     const capture = html.indexOf('data-isotone-native');
     expect(capture).toBeGreaterThan(-1);
-    // Before anything the app loads: directly inside <head>.
-    expect(html.slice(html.indexOf('<head>') + '<head>'.length).startsWith('<script data-isotone-native')).toBe(true);
+    // At the end of <head>, ahead of Isotone's other scripts; a classic script there runs before any module.
+    expect(capture).toBeLessThan(html.indexOf('data-isotone-inject'));
+    expect(html.slice(capture, html.indexOf('</head>'))).not.toContain('<title>');
     expect(html).toContain('window.__isotoneFetch=window.fetch.bind(window)');
   });
 
@@ -442,9 +442,10 @@ describe('the notes file from before 1.3', () => {
 });
 
 describe('withNativeFetch', () => {
-  it('lands right after <head>, and after <body> when there is no head', () => {
+  it('lands at the end of <head>, and after <body> when there is no head', () => {
+    // At the start of <head>, React 19 claims it for a script the app renders there and React 18 fails hydration.
     expect(withNativeFetch('<html><head lang="en"><title>x</title></head><body></body></html>')).toMatch(
-      /<head lang="en"><script data-isotone-native>/,
+      /<title>x<\/title><script data-isotone-native>.*<\/script><\/head>/,
     );
     expect(withNativeFetch('<html><body class="a"><p>x</p></body></html>')).toMatch(/<body class="a"><script data-isotone-native>/);
     // A document without a head tag: the app's <header> is not one.
@@ -457,6 +458,11 @@ describe('withNativeFetch', () => {
     const once = withNativeFetch('<html><head></head><body></body></html>');
     expect(withNativeFetch(once)).toBe(once);
     expect(withNativeFetch('<p>fragment</p>')).toBe('<p>fragment</p>');
+  });
+
+  it('still captures fetch beside the live store, whose source names the capture', () => {
+    const page = '<html><head><script data-isotone-head>win.__isotoneFetch ?? win.fetch</script></head><body></body></html>';
+    expect(withNativeFetch(page)).toContain('<script data-isotone-native>');
   });
 });
 
@@ -1043,6 +1049,33 @@ describe('other devices on the network', () => {
     // This machine, on the same exposed server, gets everything.
     expect(navigate(server, '/', { host: 'localhost:5173' }, '127.0.0.1').body).toContain('data-isotone-inject');
     expect((await request(server, NOTES_ENDPOINT, 'POST', '/', note, { 'content-type': 'application/json' })).status).toBe(201);
+  });
+
+  it('marks a page for React hydration only on a React server render', () => {
+    const { root } = tempProject();
+    writeFileSync(
+      join(root, '.isotone', 'knobs.json'),
+      JSON.stringify([{ kind: 'select', id: 'ticks', label: 'Ticks', defaultOption: 'a', options: [{ id: 'a', label: 'A' }] }]),
+    );
+    const hydrates = (appType: string, plugins: string[]) => {
+      const hooks = isotone() as unknown as Hooks;
+      (hooks.configResolved as (config: object) => void)({
+        root,
+        command: 'serve',
+        assetsInclude: () => false,
+        server: { fs: { strict: false } },
+        appType,
+        plugins: plugins.map((name) => ({ name })),
+      });
+      const server = fakeServer(root);
+      hooks.configureServer(server);
+      return navigate(server, '/', { host: 'localhost:5173' }, '127.0.0.1').body.match(/\]\], (true|false), function knobStyle/)?.[1];
+    };
+    expect(hydrates('custom', ['react-router'])).toBe('true');
+    expect(hydrates('spa', ['vite:react-babel'])).toBe('false');
+    // Preact's name holds "react"; Astro renders the document itself, with React islands at most.
+    expect(hydrates('custom', ['preact:config', 'prefresh'])).toBe('false');
+    expect(hydrates('custom', ['astro:build', 'vite:react-babel'])).toBe('false');
   });
 
   it('says nothing about other devices when the dev server stays on this machine', () => {

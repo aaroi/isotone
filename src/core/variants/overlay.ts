@@ -119,61 +119,108 @@ export function knobsFor(knobs: KnobAxis[] | undefined, route?: string): KnobAxi
 }
 
 /**
- * The declarations knob properties live in: a `:root` rule in Isotone's own
- * `<style>`, a child of `<html>` beside `<head>` and `<body>`. A framework that
- * renders `<html>` (React Router, Next.js) hydrates its attributes, `style`
- * included, but neither hydrates nor clears a style element there.
+ * The declarations knob properties live in: the `:root` rule of a stylesheet
+ * adopted by the document (`document.adoptedStyleSheets`). It is no node, so
+ * a framework that renders `<html>` (React Router, Next.js) has nothing of it
+ * to hydrate, and nothing a head swap removes. Where a document cannot adopt
+ * sheets, a `<style>` at the end of `<head>`. Null when there is none yet and
+ * `create` is false, or when the page will not take styles; it never throws.
  * Self-contained, so the Vite plugin's inline script carries it too.
  */
-export function knobStyle(doc: Document): CSSStyleDeclaration {
-  let element = doc.querySelector('style[data-isotone-knobs]');
-  if (!element) {
-    element = doc.createElement('style');
-    element.setAttribute('data-isotone-knobs', '');
-    element.textContent = ':root{}';
-    doc.documentElement.appendChild(element);
+export function knobStyle(doc: Document, create: boolean): CSSStyleDeclaration | null {
+  try {
+    const win = doc.defaultView as (Window & typeof globalThis & { __isotoneKnobs?: CSSStyleSheet }) | null;
+    let sheet = win?.__isotoneKnobs ?? doc.querySelector<HTMLStyleElement>('style[data-isotone-knobs]')?.sheet ?? null;
+    if (!sheet && create) {
+      if (win && 'adoptedStyleSheets' in doc) {
+        sheet = win.__isotoneKnobs = new win.CSSStyleSheet();
+      } else {
+        const element = doc.createElement('style');
+        element.setAttribute('data-isotone-knobs', '');
+        doc.head.appendChild(element);
+        sheet = element.sheet;
+      }
+    }
+    if (!sheet) return null;
+    // The app may have replaced the adopted list since.
+    if (sheet === win?.__isotoneKnobs && !doc.adoptedStyleSheets.includes(sheet))
+      doc.adoptedStyleSheets = [...doc.adoptedStyleSheets, sheet];
+    if (sheet.cssRules.length === 0) sheet.insertRule(':root{}');
+    return (sheet.cssRules[0] as CSSStyleRule).style;
+  } catch {
+    return null;
   }
-  const sheet = (element as HTMLStyleElement).sheet as CSSStyleSheet;
-  return (sheet.cssRules[0] as CSSStyleRule).style;
 }
 
+/** How long select attributes wait for a hydration the page expects; after it they apply anyway. */
+const HYDRATION_WAIT_MS = 5000;
+/** How long the panel keeps watching for that hydration to write them again. */
+const HYDRATION_WATCH_MS = 60_000;
+
 /**
- * The page as `applyKnobValues` writes it: properties in {@link knobStyle},
- * select attributes and the event on `<html>`. React compares the attributes of
- * an `<html>` it renders while it hydrates, so the attributes wait until React
- * has hydrated `<html>` while a React root on the document has not yet, or while
- * a page {@link applyStoredKnobs} marked as hydrated by React has no React root
- * at all. React's own markers on the nodes tell which.
+ * The page as `applyKnobValues` writes it: properties in {@link knobStyle}, at
+ * `!important` so a host's own `:root` rule does not win, and select attributes
+ * and the event on `<html>`. The event compares against what the panel last
+ * wrote, so a full load announces each moved knob even though the head script
+ * already put its value on.
+ *
+ * React compares the attributes of an `<html>` it renders while it hydrates, so
+ * the attributes wait while a React root on the document has not hydrated
+ * `<html>` yet, or while a page {@link applyStoredKnobs} marked as hydrated by
+ * React has no React root at all; React's own markers on the nodes tell which.
+ * After {@link HYDRATION_WAIT_MS} they apply anyway. When the wait ends, every
+ * attribute is written again, since React clears `<html>`'s when it falls back
+ * to rendering the page itself.
  */
 function pageKnobRoot(doc: Document): Parameters<typeof applyKnobValues>[2] {
-  const html = doc.documentElement;
+  // Read `<html>` each time: React 18 replaces it when it gives up hydrating the document.
+  const html = () => doc.documentElement;
   const has = (node: object, key: string) => Object.keys(node).some((k) => k.startsWith(key));
   const marked = () => (doc.defaultView as { __isotoneHydrates?: boolean } | null)?.__isotoneHydrates === true;
-  const hydrating = () => !has(html, '__reactFiber$') && (has(doc, '__reactContainer$') || (marked() && !has(doc, '_reactListening')));
-  const pending = new Map<string, string | null>();
-  const flush = () => {
-    if (hydrating()) {
-      setTimeout(flush, 50);
+  const hydrating = () => !has(html(), '__reactFiber$') && (has(doc, '__reactContainer$') || (marked() && !has(doc, '_reactListening')));
+  const written = new Map<string, string>();
+  const attributes = new Map<string, string | null>();
+  const writeAll = () => {
+    for (const [name, value] of attributes) {
+      if (value === null) html().removeAttribute(name);
+      else html().setAttribute(name, value);
+    }
+  };
+  let waitingSince: number | null = null;
+  const overdue = () => waitingSince !== null && Date.now() - waitingSince >= HYDRATION_WAIT_MS;
+  const settle = (capped: boolean) => {
+    if (waitingSince !== null && hydrating() && Date.now() - waitingSince < HYDRATION_WATCH_MS) {
+      if (!capped && overdue()) writeAll();
+      setTimeout(settle, 50, capped || overdue());
       return;
     }
-    for (const [name, value] of pending) {
-      if (value === null) html.removeAttribute(name);
-      else html.setAttribute(name, value);
-    }
-    pending.clear();
+    waitingSince = null;
+    writeAll();
+    // And the properties, should the render have taken a fallback `<style>` with it.
+    for (const [name, value] of written) knobStyle(doc, true)?.setProperty(name, value, 'important');
   };
   const write = (name: string, value: string | null) => {
-    const idle = pending.size === 0;
-    pending.set(name, value);
-    if (idle) flush();
+    attributes.set(name, value);
+    if (overdue()) writeAll();
+    if (waitingSince !== null) return;
+    waitingSince = Date.now();
+    settle(false);
   };
   return {
-    get style() {
-      return knobStyle(doc);
+    style: {
+      setProperty: (name, value) => {
+        written.set(name, value);
+        knobStyle(doc, true)?.setProperty(name, value, 'important');
+      },
+      removeProperty: (name) => {
+        written.delete(name);
+        knobStyle(doc, false)?.removeProperty(name);
+      },
+      getPropertyValue: (name) => written.get(name) ?? '',
     },
     setAttribute: (name, value) => write(name, value),
     removeAttribute: (name) => write(name, null),
-    dispatchEvent: (event) => html.dispatchEvent(event),
+    dispatchEvent: (event) => html().dispatchEvent(event),
   };
 }
 
@@ -192,17 +239,17 @@ export function applyStoredKnobs(
   hydrates: boolean,
   style: typeof knobStyle,
 ): void {
-  if (hydrates) (doc.defaultView as { __isotoneHydrates?: boolean }).__isotoneHydrates = true;
   try {
+    if (hydrates) (doc.defaultView as { __isotoneHydrates?: boolean }).__isotoneHydrates = true;
     const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
     for (const [id, unit, fallback, select] of knobs) {
       const value = stored[id];
       if (typeof value !== 'string' || value === fallback) continue;
-      style(doc).setProperty(`--knob-${id}`, value + unit);
+      style(doc, true)?.setProperty(`--knob-${id}`, value + unit, 'important');
       if (select && !hydrates) doc.documentElement.setAttribute(`data-knob-${id}`, value);
     }
   } catch {
-    // Storage blocked or unreadable: the panel applies what it can when it loads.
+    // Storage blocked or unreadable, or no window: the panel applies what it can when it loads.
   }
 }
 
@@ -211,7 +258,7 @@ export function applyKnobValues(
   knobs: KnobAxis[],
   values: VariantSelections,
   root: {
-    style: { setProperty(name: string, value: string): void; removeProperty(name: string): void };
+    style: { setProperty(name: string, value: string): void; removeProperty(name: string): void; getPropertyValue?(name: string): string };
     setAttribute?(name: string, value: string): void;
     removeAttribute?(name: string): void;
     getAttribute?(name: string): string | null;
@@ -222,7 +269,7 @@ export function applyKnobValues(
     const v = values[k.id];
     const cleared = v === undefined || v === axisDefault(k);
     const next = cleared ? null : knobCssValue(k, v);
-    const previous = (root.style as { getPropertyValue?(name: string): string }).getPropertyValue?.(knobVar(k.id)) || null;
+    const previous = root.style.getPropertyValue?.(knobVar(k.id)) || null;
     if (next === null) root.style.removeProperty(knobVar(k.id));
     else root.style.setProperty(knobVar(k.id), next);
     if (k.kind !== 'range' && k.kind !== 'color') {

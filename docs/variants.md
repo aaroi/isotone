@@ -142,10 +142,11 @@ unit appended, so the source reads it with the committed default as fallback:
 mask-image: radial-gradient(ellipse, black var(--knob-fade-from, 0%), transparent 100%);
 ```
 
-The property sits in a `:root` rule of a `<style data-isotone-knobs>` beside
-`<head>`, not in `<html style>`, so a framework that renders `<html>` (React
-Router, Next.js) hydrates it without a mismatch. On Vite, the plugin's inline
-`<head>` script applies the stored values before the page first paints.
+The property sits, marked `!important`, in a `:root` rule of a stylesheet the
+page adopts (`document.adoptedStyleSheets`), not in `<html style>`, so a
+framework that renders `<html>` (React Router, Next.js) hydrates the page
+without a mismatch. On Vite, the plugin's inline `<head>` script applies the
+stored values before the page first paints.
 
 A knob's value applies only on the routes its `route` names, where its control
 is. On any other page, after a full load or a client-side navigation, its
@@ -156,8 +157,9 @@ that should change on every page leaves `route` out.
 A select knob names a style that one line of CSS or a draw call can act on. Give
 it `options` of `{ "id", "label" }` and a `defaultOption`. Its value also lands
 as `data-knob-<id>` on `<html>`, since CSS cannot branch on a custom property.
-Where React hydrates `<html>`, the attribute arrives once it has; in a Vite app
-without server rendering, before the first paint:
+Where React hydrates `<html>`, the attribute arrives once it has (or after five
+seconds if hydration never shows); in a Vite app without server rendering,
+before the first paint:
 
 ```css
 html[data-knob-tick-style="dots"] .tick { border-radius: 50%; }

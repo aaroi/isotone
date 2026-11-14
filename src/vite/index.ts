@@ -249,6 +249,8 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
   let isDev = false;
   let hasReact = false;
   let ssrHost = false;
+  // A server render React hydrates whole: React (not Preact) on an SSR host other than Astro, whose islands are React.
+  let reactDocument = false;
   // Vite 6 or later, whose environments mark it: decided in configureServer.
   let vite6 = false;
   // Whether the dev server would serve a path (see servableBy). A build
@@ -282,6 +284,9 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       overrides.configure(config);
       hasReact = (config.plugins ?? []).some((p) => /react/i.test(p.name));
       ssrHost = config.appType !== 'spa' && config.appType !== 'mpa';
+      const names = (config.plugins ?? []).map((p) => p.name);
+      reactDocument =
+        ssrHost && names.some((name) => /react/i.test(name) && !/preact/i.test(name)) && !names.some((name) => /astro/i.test(name));
     },
     async resolveId(source: string, importer: string | undefined, opts: { ssr?: boolean; isEntry?: boolean } = {}) {
       if (!variantsOptions) return null;
@@ -426,7 +431,7 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
         const knobs = overlayKnobs({ variants: overrides.readManifests(), knobs: readKnobs(overrides.opts) }, route);
         if (knobs.length === 0) return '';
         const rows = knobs.map((k) => [k.id, k.kind === 'range' ? (k.unit ?? '') : '', axisDefault(k), k.kind === 'select']);
-        return `(${applyStoredKnobs})(document, ${safeJson(KNOBS_STORAGE_KEY)}, ${safeJson(rows)}, ${ssrHost && hasReact}, ${knobStyle});`;
+        return `(${applyStoredKnobs})(document, ${safeJson(KNOBS_STORAGE_KEY)}, ${safeJson(rows)}, ${reactDocument}, ${knobStyle});`;
       };
       const headScript = variantsOptions
         ? (url: string) => knobsScript(url) + (switching.live ? liveStoreScript(overrides.liveConfig(ssrHost)) : '')
