@@ -51,8 +51,8 @@ export function combineVariantsSources(...sources: VariantsSource[]): VariantsSo
       const picks: VariantSelections = {};
       const read = new Map<VariantsSource, VariantSelections>();
       for (const [axis, source] of owned()) {
-        let selections = read.get(source);
-        if (!selections) read.set(source, (selections = source.getSelections()));
+        const selections = read.get(source) ?? source.getSelections();
+        read.set(source, selections);
         const value = selections[axis.id];
         if (value !== undefined) picks[axis.id] = value;
       }

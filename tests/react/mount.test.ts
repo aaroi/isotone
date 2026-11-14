@@ -276,9 +276,9 @@ describe('a host source beside the knobs of the server that answers notes', () =
   });
 
   /** Mount `options` with fetch answering knobs, a moved knob in storage, and the panel open on Variants. */
-  async function mountWithKnobs(options: Parameters<typeof mountIsotone>[0]) {
+  async function mountWithKnobs(options: Parameters<typeof mountIsotone>[0], stored: Record<string, string> = { 'card-radius': '16' }) {
     vi.useRealTimers();
-    localStorage.setItem('isotone:knobs', JSON.stringify({ 'card-radius': '16' }));
+    localStorage.setItem('isotone:knobs', JSON.stringify(stored));
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => ({
       ok: true,
       status: 200,
@@ -325,7 +325,7 @@ describe('a host source beside the knobs of the server that answers notes', () =
   it('lists both, compares both, and files every pick in one note', async () => {
     const onChange = vi.fn();
     const source = createVariantsSource({ axes, onChange, compare: true });
-    const panel = await mountWithKnobs({ endpoint: notesEndpoint, variants: source });
+    const panel = await mountWithKnobs({ endpoint: notesEndpoint, variants: source, getRoute: () => '/pricing' });
     // The knobs come from the same server as the notes.
     expect(panel.fetchMock.mock.calls.map((c) => String(c[0]))).toContain('http://127.0.0.1:4123/api/isotone/variants');
     // Unsectioned first, as the panel always orders them.
@@ -357,7 +357,7 @@ describe('a host source beside the knobs of the server that answers notes', () =
     await panel.click(panel.button('Make default'));
     expect(panel.posted()).toEqual([
       expect.objectContaining({
-        route: '/',
+        route: '/pricing',
         feedback: '[set-defaults] App selectors: Hero › Call to action → Get started (cta). Knobs: Card radius 16px (card-radius).',
         payload: { variants: 'default', selectors: 'cta:start', knobs: 'card-radius:16' },
       }),
@@ -379,13 +379,20 @@ describe('a host source beside the knobs of the server that answers notes', () =
     ]);
 
     // With no knob moved, the host's own request is the only one.
-    localStorage.clear();
     await panel.off();
-    const quiet = await mountWithKnobs({ endpoint: notesEndpoint, variants: source });
-    localStorage.clear();
-    await quiet.click(quiet.button('Default'));
-    await quiet.click(quiet.button('Get started'));
-    expect(quiet.shadow.querySelector('.isotone-save-count')?.textContent).toBe('2 picks changed');
+    saveDefaults.mockClear();
+    const quiet = await mountWithKnobs({ endpoint: notesEndpoint, variants: source }, {});
+    expect(quiet.shadow.querySelector('.isotone-save-count')?.textContent).toBe('1 pick changed');
+    // Only what this click posts: the store may still resend the earlier panel's note.
+    const before = quiet.posted().length;
+    await quiet.click(quiet.button('Make default'));
+    expect(saveDefaults).toHaveBeenCalledWith({ cta: 'start' });
+    expect(
+      quiet
+        .posted()
+        .slice(before)
+        .filter((note) => note.id === null),
+    ).toEqual([]);
     await quiet.off();
   });
 

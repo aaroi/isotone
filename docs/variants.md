@@ -249,6 +249,36 @@ a preview out of the URL, storage and any server. Without `compare: true` the
 source has no preview and Compare leaves its selectors out. The axis types
 (`VariantAxis` and the select, range and colour axes) come from `isotone/core`.
 
+### Beside knobs and file variants
+
+Given the notes endpoint of the Vite plugin or `isotone serve`, `mountIsotone`
+also reads that server's knobs (and, on Vite, its file variants) and lists them
+after the source's selectors, so `.isotone/knobs.json` works in a host app too:
+
+```ts
+mountIsotone({ variants: source, endpoint: 'http://127.0.0.1:4123/api/isotone/notes' });
+```
+
+Any other notes endpoint gets no knobs unless `variantsEndpoint` names where they
+are. Compare holds every selector that can switch at once, whichever source owns
+it. **Make default** files one `[set-defaults]` note naming every pick, the
+source's own in `payload.selectors` for the agent to make the defaults in code.
+A source with its own `saveDefaults` saves its picks itself instead, and the
+note then covers only knobs and file variants; since a route keeps one open
+`[set-defaults]` note, such a `saveDefaults` should not file one of its own.
+
+To show several sources in one panel yourself, for an `IsotonePanel` or two
+variant systems of your own, combine them; earlier sources keep a shared axis
+id, and each pick, preview and request reaches the source that owns it:
+
+```ts
+import { combineVariantsSources } from 'isotone/core';
+
+mountIsotone({ variants: combineVariantsSources(themeSource, layoutSource) });
+```
+
+### Definitions, errors and Compare
+
 A host that manages its own definitions can use the source's `manage(action)`:
 its `onManage(axes, selections, action)` callback persists edited definitions or
 rejects to leave them unchanged (filing a note never calls it). A custom source

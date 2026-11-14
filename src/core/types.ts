@@ -135,7 +135,8 @@ export interface MountIsotoneOptions {
    *  variants passes a source and nothing else. */
   endpoint?: string;
   /**
-   * Variants for the panel. A `VariantsSource` is rendered as-is; `'overlay'`
+   * Variants for the panel. A `VariantsSource` is rendered with the knobs of
+   * its `variantsEndpoint`, if any; `'overlay'`
    * builds the overlay adapter against the Vite plugin's same-origin
    * endpoint. `'knobs'` is the same adapter for a server that has knobs but no
    * file variants (`isotone serve`), and its empty list says so. With neither
@@ -143,7 +144,9 @@ export interface MountIsotoneOptions {
    */
   variants?: VariantsSource | 'overlay' | 'knobs';
   /** Where `'overlay'` reads variants and knobs. Defaults to the Vite plugin's
-   *  same-origin endpoint; `isotone serve` passes its own absolute URL. */
+   *  same-origin endpoint; `isotone serve` passes its own absolute URL. Beside a
+   *  host source it defaults to the server of an `endpoint` ending
+   *  `/api/isotone/notes`, whose knobs then show after the source's selectors. */
   variantsEndpoint?: string;
   /** Which tab a tabbed panel opens on until the reviewer picks one. */
   defaultTab?: 'variants' | 'notes';

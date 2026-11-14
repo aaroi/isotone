@@ -83,7 +83,8 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
   // Knobs and file variants come from the Isotone server, beside a host's own
   // selectors too: the server that answers notes serves them next door.
   const overlayEndpoint = app
-    ? (opts.variantsEndpoint ?? (opts.endpoint && ISOTONE_NOTES.test(opts.endpoint) ? opts.endpoint.replace(ISOTONE_NOTES, VARIANTS_ENDPOINT) : undefined))
+    ? (opts.variantsEndpoint ??
+      (opts.endpoint && ISOTONE_NOTES.test(opts.endpoint) ? opts.endpoint.replace(ISOTONE_NOTES, VARIANTS_ENDPOINT) : undefined))
     : opts.variants
       ? (opts.variantsEndpoint ?? VARIANTS_ENDPOINT)
       : undefined;
@@ -92,7 +93,8 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
   if (app && overlay) variants = combineVariantsSources(app, overlay);
   // A host source that leaves promotion to Isotone gets Make default, wrapped rather than changed.
   else if (app && opts.endpoint && !app.saveDefaults) variants = combineVariantsSources(app);
-  if (opts.endpoint && variants && variants !== app) variants.saveDefaults = defaultsNote(variants, app, overlay, getRoute, opts.endpoint, opts.key);
+  if (opts.endpoint && variants && variants !== app)
+    variants.saveDefaults = defaultsNote(variants, app, overlay, getRoute, opts.endpoint, opts.key);
   // Nothing to show: no notes to write and no variants to pick. A production
   // host that forgot its source gets no empty launcher in the corner.
   if (!opts.endpoint && !variants) return () => {};
@@ -252,7 +254,12 @@ function defaultsNote(
         return [{ id, named, element: variant?.element ?? null }];
       });
     // The host's selectors the reviewer moved, named as the panel showed them, unless the host saved them.
-    const app = host?.saveDefaults ? [] : knobDelta(shown.filter((axis) => hostIds.has(axis.id)), selections);
+    const app = host?.saveDefaults
+      ? []
+      : knobDelta(
+          shown.filter((axis) => hostIds.has(axis.id)),
+          selections,
+        );
     // Knobs the reviewer moved off their defaults ride in the same note, as
     // the value the panel showed, so the agent can write the number in.
     const moved = knobDelta(knobs.axes, knobs.values);

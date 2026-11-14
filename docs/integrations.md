@@ -102,7 +102,9 @@ The printed setup URL offers a copyable tag and a bookmarklet. This path has
 notes and [knobs](variants.md#knobs) from `.isotone/knobs.json` where `serve`
 runs (the Variants tool appears once it holds a valid knob; reload after the
 first). Swapping source files needs the Vite plugin or a host `VariantsSource`;
-a host source built with `createVariantsSource` offers [hold to
+a host source mounted with this server's notes endpoint shows its knobs beside
+its own selectors ([details](variants.md#beside-knobs-and-file-variants)). A
+source built with `createVariantsSource` offers [hold to
 compare](variants.md#hold-to-compare) only with `compare: true`, once its
 `onChange` skips persisting calls marked `{ preview: true }`.
 
@@ -177,6 +179,10 @@ export function ReviewTools() {
   return null;
 }
 ```
+
+To review the app's own selectors too, pass `variants: source` beside the
+endpoint; the panel lists them first, then the knobs in `.isotone/knobs.json`
+([details](variants.md#beside-knobs-and-file-variants)).
 
 Render `<ReviewTools />` once in the app layout. The effect survives Strict Mode
 and route unmounts, and the guarded dynamic import keeps the panel out of

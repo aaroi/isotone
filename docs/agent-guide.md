@@ -158,7 +158,7 @@ them. Deleting a pending request cancels it.
 
 | Note starts with | Do |
 | --- | --- |
-| `[set-defaults]` | Make the named picks the defaults: `variant promote` each variant listed in `payload.variants`, and write each knob value in `payload.knobs` into the source and the knob's `defaultValue`. Leave other variants alone. |
+| `[set-defaults]` | Make the named picks the defaults: `variant promote` each variant listed in `payload.variants`, write each knob value in `payload.knobs` into the source and the knob's `defaultValue`, and make each of the app's own selectors in `payload.selectors` (`id:value`) default to that value in the app's code. Leave other variants alone. |
 | `[keep-option]` | Make that option the default and remove the selector and its other options. |
 | `[keep-default]` | Keep the current default; remove the selector and its alternatives. |
 | `[remove-option]`, `[remove-axis]` | Remove that option, or the whole selector. |
