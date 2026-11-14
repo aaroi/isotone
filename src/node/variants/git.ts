@@ -3,7 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 /** A failed lookup is an answer here (`null`), not something to print. */
 const GIT_QUIET: ['ignore', 'pipe', 'ignore'] = ['ignore', 'pipe', 'ignore'];
@@ -123,19 +123,35 @@ export function isConflictStatus(status: number | null): boolean {
   return status !== null && status >= 1 && status <= 127;
 }
 
+/** The blob HEAD holds for the file, or null: no commit yet, untracked, or not a repository. */
+function committedBlob(absPath: string): string | null {
+  try {
+    return execFileSync('git', ['rev-parse', '--verify', '-q', `HEAD:./${basename(absPath)}`], {
+      cwd: dirname(absPath),
+      encoding: 'utf8',
+      stdio: GIT_QUIET,
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Record the file as a base a later sync can merge from, and return its hash.
- * In a repository the blob goes into git's object store (a file git does not
- * track yet is in there only if this writes it). Outside one, or without git,
- * the bytes are kept in `store`, the variant's own bases directory, under the
- * same SHA-1 blob hash git would give them. Null when the file can't be read.
+ * When the file is as HEAD has it, the blob is in git's object store, reachable
+ * from a commit, so a teammate's clone has it and `git gc` keeps it. Otherwise
+ * (uncommitted changes, an untracked file, no commit yet, no repository or no
+ * git) the bytes are kept in `store`, the variant's own bases directory, which
+ * is committed with the variant, under the blob hash git would give them.
+ * Null when the file can't be read.
  */
 export function recordBase(absPath: string, store: string): string | null {
   const blob = blobOf(absPath);
-  if (blob) return blob;
+  if (blob && blob === committedBlob(absPath)) return blob;
   try {
     const contents = readFileSync(absPath);
-    const hash = blobHash(contents, false);
+    // In the repository's own format, so the name matches what git would hash.
+    const hash = blobHash(contents, blob?.length === 64);
     mkdirSync(store, { recursive: true });
     // Never through a link (`wx` refuses one), and once only: a checkout must
     // not convert line endings, or the bases no longer match their names.
