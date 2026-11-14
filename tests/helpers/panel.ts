@@ -46,10 +46,9 @@ export let container: HTMLDivElement;
 let root: Root | null = null;
 
 /**
- * Node 25 ships its own `localStorage` global that is unusable without a
- * `--localstorage-file` flag, and vitest's jsdom environment leaves that one
- * in place, so the panel's guarded reads silently fail. A Map-backed Storage
- * lets the tab-memory test observe what the panel writes.
+ * A fresh Map-backed Storage per test, so no test sees another's writes and
+ * the tab-memory test can observe what the panel writes. (jsdom's own storage
+ * is the global one: see dom-storage.ts.)
  */
 function memoryStorage(): Storage {
   const m = new Map<string, string>();
