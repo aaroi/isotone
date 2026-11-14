@@ -71,20 +71,19 @@ const SPECIAL_QUERY = /[?&](raw|url|inline|no-inline|worker|sharedworker|html-pr
  * where the real file would be, so `server.fs.deny` (`.env`, keys, `.git/`,
  * Isotone's own files) refuses a copy as it refuses the file, even one
  * tracked past the secret guard with `variant add … --force`. Vite 6 and
- * later answer with their own check; Vite 5's takes the server from 5.4.19
- * and is missing before it, so there the deny list is applied as Vite
- * applies it.
+ * later answer with their own check. Vite 5's takes the server from 5.4.19
+ * and is missing before it, so there Vite's own deny matcher answers (it
+ * ignores case, as Vite does). Without either, no copy is served while
+ * `server.fs.strict` is on.
  */
 function servableBy(server: ViteDevServer): (path: string) => boolean {
-  if (server.environments !== undefined) return (path) => vite.isFileLoadingAllowed(server.config, path);
-  const { strict, deny } = server.config.server.fs;
-  // Vite matches a pattern without a slash at any depth.
-  const denied = vite.createFilter(
-    deny.map((glob) => (glob.includes('/') ? glob : `**/${glob}`)),
-    null,
-    { resolve: false },
-  );
-  return (path) => !strict || !denied(path);
+  const { strict } = server.config.server.fs;
+  if (server.environments !== undefined && typeof vite.isFileLoadingAllowed === 'function') {
+    return (path) => vite.isFileLoadingAllowed(server.config, path);
+  }
+  const denied = (server as { _fsDenyGlob?: (path: string) => boolean })._fsDenyGlob;
+  if (typeof denied === 'function') return (path) => !strict || !denied(path);
+  return () => !strict;
 }
 
 /** Say where the notes go after Vite's own banner, so it is not buried under
@@ -159,9 +158,13 @@ export function isotone(options: IsotoneViteOptions = {}): IsotonePlugin {
       if (id === RESOLVED_LIVE_MODULE) return { code: liveRuntimeModule(overrides.liveConfig(ssrHost)), map: null };
       // `?v=<hash>`, `?t=<timestamp>`, `?import`: vite's own request
       // decorations, never part of the path on disk.
-      const path = id.replace(/[?#].*$/, '');
-      if (!overrides.overridable(path)) return null;
-      const query = id.slice(path.length).replace(/^\?/, '').replace(/#.*$/, '');
+      const raw = id.replace(/[?#].*$/, '');
+      if (!overrides.overridable(raw)) return null;
+      const query = id.slice(raw.length).replace(/^\?/, '').replace(/#.*$/, '');
+      // One spelling per file, the one the variants and the check below
+      // know: `/@fs/` keeps a trailing slash (`…/.env/`), which would match
+      // no tracked file here while finding the copy further on.
+      const path = normalizePath(resolve(raw));
       // Every copy, version and dispatcher of a file obeys the dev server's
       // `server.fs.deny` as the real file does: left to Vite, the request gets
       // 403. A server render loads files without that check, so it keeps its

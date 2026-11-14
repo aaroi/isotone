@@ -657,15 +657,27 @@ describe('a copy where the real file is refused', () => {
     const env = id(root, '.env');
     // Vite 5: no environments, so the deny list is matched as Vite matches it.
     const hooks = plugin(root, 'serve') as unknown as { load: (id: string, opts?: { ssr?: boolean }) => { code: string } | null } & Hooks;
-    const server = fakeServer(root);
+    const server = Object.assign(fakeServer(root), {
+      // Vite 5's own deny matcher, which ignores case.
+      _fsDenyGlob: (path: string) => /(?:^|\/)\.env(?:\..*)?$|\.(?:crt|pem)$|\/\.git\/|\/\.isotone\//i.test(path),
+    });
     server.config.server.fs = { strict: true, deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/.isotone/**'] };
     hooks.configureServer(server);
     expect(hooks.load(env)).toBeNull();
     expect(hooks.load(`${env}?import`)).toBeNull();
+    // `/@fs/` keeps a trailing slash in the module id; it names the same file.
+    expect(hooks.load(`${env}/`)).toBeNull();
+    expect(hooks.load(`${env}/?import`)).toBeNull();
     // Any other copy is served as before, and a server render, which Vite
     // loads without the check, keeps the swap.
     expect(hooks.load(source)?.code).toContain('variant b');
     expect(hooks.load(env, { ssr: true })?.code).toContain('FAKE_ENV');
+    // A Vite 5 without that matcher serves no copy while the check is on.
+    const bare = plugin(root, 'serve');
+    const strictServer = fakeServer(root);
+    strictServer.config.server.fs = { strict: true, deny: [] };
+    bare.configureServer(strictServer);
+    expect(bare.load(source)).toBeNull();
     // `server.fs.strict: false` turns Vite's check off, and Isotone's with it.
     const loose = plugin(root, 'serve');
     loose.configureServer(fakeServer(root));
@@ -1332,6 +1344,9 @@ describe('project files through the dev server', () => {
       '/.env?import',
       '/.env?t=1',
       `/@fs${project}/.env`,
+      `/@fs${project}/.env/`,
+      `/@fs${project}/.env/?import`,
+      `/@fs${project}/.env/?isotone=forced&import`,
       '/.env?isotone=_base',
       '/.env?isotone=b',
       '/.env?isotone=forced',
