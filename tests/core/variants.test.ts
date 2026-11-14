@@ -317,6 +317,34 @@ describe('overlay knobs and the route', () => {
     expect(source.getSelections()).toMatchObject({ 'header-border': '#f59e0b', density: 'compact' });
   });
 
+  it('announces a stored value once, and leaves it alone when the listing is read again', async () => {
+    const { source, props, events } = fixture('/pricing', { 'header-border': '#f59e0b' });
+    await source.refresh();
+    expect(events).toEqual([{ id: 'header-border', value: '#f59e0b' }]);
+    // The panel re-reads the listing as it opens.
+    await source.refresh();
+    expect(events).toHaveLength(1);
+    expect(props.get(knobVar('header-border'))).toBe('#f59e0b');
+  });
+
+  it('leaves a relabelled knob alone, and takes a select’s attribute off when it becomes another kind', async () => {
+    const { source, attrs, events } = fixture('/pricing', { density: 'compact' });
+    await source.refresh();
+    events.length = 0;
+    const listing = (knobs: KnobAxis[]) =>
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => Response.json({ variants: [], active: [], knobs })),
+      );
+    listing([border, { ...density, label: 'Spacing' }, gap]);
+    await source.refresh();
+    expect(events).toEqual([]);
+    expect(attrs.get('data-knob-density')).toBe('compact');
+    listing([border, { kind: 'range', id: 'density', label: 'Density', min: 0, max: 10, step: 1, defaultValue: 5 }, gap]);
+    await source.refresh();
+    expect(attrs.has('data-knob-density')).toBe(false);
+  });
+
   it('keeps a held compare off other routes’ knobs', async () => {
     const { source, page, props } = fixture('/', { 'header-border': '#f59e0b' });
     await source.refresh();

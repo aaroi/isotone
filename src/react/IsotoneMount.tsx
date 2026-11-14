@@ -208,6 +208,7 @@ export function mountIsotone(opts: MountIsotoneOptions): () => void {
   return () => {
     disposed = true;
     offTaken?.();
+    overlay?.dispose();
     for (const off of listeners) off();
     // The host's source outlives this mount: leave it with none of this panel's listeners.
     combined?.dispose();

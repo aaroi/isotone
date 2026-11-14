@@ -70,7 +70,7 @@ export interface OverlayVariantStatus extends OverlayVariant {
  * A knob: a range, colour or select axis the host declares in `.isotone/knobs.json`
  * next to its overlay variants. The panel renders it as a slider (or a colour
  * pick) on the routes it names, and the value reaches the page as a CSS
- * custom property on `<html>`, `--knob-<id>`, with the axis unit appended
+ * custom property on `:root`, `--knob-<id>`, with the axis unit appended
  * (`--knob-fade-from: 40%`). The host reads it with a fallback that is the
  * committed default: `var(--knob-fade-from, 0%)`. "Make default" files
  * the moved knobs in the same `[set-defaults]` note as the variant picks, so
@@ -121,12 +121,183 @@ export function knobsFor(knobs: KnobAxis[] | undefined, route?: string): KnobAxi
   });
 }
 
+/**
+ * The declarations knob properties live in: the `:root` rule of a stylesheet
+ * adopted by the document (`document.adoptedStyleSheets`). It is no node, so
+ * a framework that renders `<html>` (React Router, Next.js) has nothing of it
+ * to hydrate, and nothing a head swap removes. Where a document cannot adopt
+ * sheets, a `<style>` at the end of `<head>`. Null when there is none yet and
+ * `create` is false, or when the page will not take styles; it never throws.
+ * Self-contained, so the Vite plugin's inline script carries it too.
+ */
+export function knobStyle(doc: Document, create: boolean): CSSStyleDeclaration | null {
+  try {
+    const win = doc.defaultView as (Window & typeof globalThis & { __isotoneKnobs?: CSSStyleSheet }) | null;
+    let sheet = win?.__isotoneKnobs ?? doc.querySelector<HTMLStyleElement>('style[data-isotone-knobs]')?.sheet ?? null;
+    if (!sheet && create) {
+      if (win && 'adoptedStyleSheets' in doc) {
+        sheet = win.__isotoneKnobs = new win.CSSStyleSheet();
+      } else {
+        const element = doc.createElement('style');
+        element.setAttribute('data-isotone-knobs', '');
+        doc.head.appendChild(element);
+        sheet = element.sheet;
+      }
+    }
+    if (!sheet) return null;
+    // The app may have replaced the adopted list since.
+    if (sheet === win?.__isotoneKnobs && !doc.adoptedStyleSheets.includes(sheet))
+      doc.adoptedStyleSheets = [...doc.adoptedStyleSheets, sheet];
+    if (sheet.cssRules.length === 0) sheet.insertRule(':root{}');
+    return (sheet.cssRules[0] as CSSStyleRule).style;
+  } catch {
+    return null;
+  }
+}
+
+/** How long select attributes wait for a hydration the page expects; after it they apply anyway. */
+const HYDRATION_WAIT_MS = 5000;
+/** How long the panel keeps watching for that hydration to write them again; after it, it gives up. */
+const HYDRATION_WATCH_MS = 60_000;
+
+/**
+ * What every knob source on a document has written there, kept on its window so
+ * that a remount, a second source or a second copy of Isotone shares it: the
+ * properties (the event compares against them), the attributes, and the wait
+ * for hydration they are held in.
+ */
+interface PageKnobs {
+  written: Map<string, string>;
+  attributes: Map<string, string | null>;
+  waitingSince: number | null;
+  gaveUp: boolean;
+  timer: ReturnType<typeof setTimeout> | null;
+  users: number;
+}
+
+function pageKnobs(doc: Document): PageKnobs {
+  const win = (doc.defaultView ?? {}) as { __isotoneKnobPage?: PageKnobs };
+  win.__isotoneKnobPage ??= { written: new Map(), attributes: new Map(), waitingSince: null, gaveUp: false, timer: null, users: 0 };
+  return win.__isotoneKnobPage;
+}
+
+/**
+ * The page as `applyKnobValues` writes it: properties in {@link knobStyle}, at
+ * `!important` so a host's own `:root` rule does not win, and select attributes
+ * and the event on `<html>`. The event compares against what was last written
+ * on the page ({@link PageKnobs}), so a full load announces each moved knob once
+ * even though the head script already put its value on.
+ *
+ * React compares the attributes of an `<html>` it renders while it hydrates, so
+ * the attributes wait while a React root on the document has not hydrated
+ * `<html>` yet, or while a page {@link applyStoredKnobs} marked as hydrated by
+ * React has no React root at all; React's own markers on the nodes tell which.
+ * After {@link HYDRATION_WAIT_MS} they apply anyway. When the wait ends, every
+ * attribute is written again, since React clears `<html>`'s when it falls back
+ * to rendering the page itself. A watch that runs out gives up for good: later
+ * writes apply at once. `dispose` stops the watch once no source needs it.
+ */
+function pageKnobRoot(doc: Document): Parameters<typeof applyKnobValues>[2] & { dispose(): void } {
+  // Read `<html>` each time: React 18 replaces it when it gives up hydrating the document.
+  const html = () => doc.documentElement;
+  const page = pageKnobs(doc);
+  page.users++;
+  const has = (node: object, key: string) => Object.keys(node).some((k) => k.startsWith(key));
+  const marked = () => (doc.defaultView as { __isotoneHydrates?: boolean } | null)?.__isotoneHydrates === true;
+  const hydrating = () => !has(html(), '__reactFiber$') && (has(doc, '__reactContainer$') || (marked() && !has(doc, '_reactListening')));
+  const writeAll = () => {
+    for (const [name, value] of page.attributes) {
+      if (value === null) html().removeAttribute(name);
+      else html().setAttribute(name, value);
+    }
+  };
+  const waited = () => (page.waitingSince === null ? 0 : Date.now() - page.waitingSince);
+  const settle = (capped: boolean) => {
+    page.timer = null;
+    if (page.waitingSince === null) return;
+    if (hydrating()) {
+      if (waited() < HYDRATION_WATCH_MS) {
+        if (!capped && waited() >= HYDRATION_WAIT_MS) writeAll();
+        page.timer = setTimeout(settle, 50, capped || waited() >= HYDRATION_WAIT_MS);
+        return;
+      }
+      page.gaveUp = true;
+    }
+    page.waitingSince = null;
+    writeAll();
+    // And the properties, should the render have taken a fallback `<style>` with it.
+    for (const [name, value] of page.written) knobStyle(doc, true)?.setProperty(name, value, 'important');
+  };
+  const write = (name: string, value: string | null) => {
+    page.attributes.set(name, value);
+    if (page.gaveUp || waited() >= HYDRATION_WAIT_MS) writeAll();
+    if (page.gaveUp || page.waitingSince !== null) return;
+    page.waitingSince = Date.now();
+    settle(false);
+  };
+  let disposed = false;
+  return {
+    style: {
+      setProperty: (name, value) => {
+        page.written.set(name, value);
+        knobStyle(doc, true)?.setProperty(name, value, 'important');
+      },
+      removeProperty: (name) => {
+        page.written.delete(name);
+        knobStyle(doc, false)?.removeProperty(name);
+      },
+      getPropertyValue: (name) => page.written.get(name) ?? '',
+    },
+    setAttribute: (name, value) => write(name, value),
+    removeAttribute: (name) => write(name, null),
+    dispatchEvent: (event) => html().dispatchEvent(event),
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      page.users--;
+      if (page.users > 0) return;
+      if (page.timer !== null) clearTimeout(page.timer);
+      page.timer = null;
+      page.waitingSince = null;
+    },
+  };
+}
+
+/**
+ * The stored knob values, on the page before it first paints: the Vite plugin
+ * runs this in an inline `<head>` script with the requested route's knobs as
+ * `[id, unit, default, select]`. On a page React server-renders and hydrates
+ * (`hydrates`), select attributes wait for the panel, which adds them once React
+ * has hydrated `<html>`. Self-contained, for that script; the panel checks each
+ * value against its knob when it loads and puts the page right.
+ */
+export function applyStoredKnobs(
+  doc: Document,
+  key: string,
+  knobs: [id: string, unit: string, fallback: string, select: boolean][],
+  hydrates: boolean,
+  style: typeof knobStyle,
+): void {
+  try {
+    if (hydrates) (doc.defaultView as { __isotoneHydrates?: boolean }).__isotoneHydrates = true;
+    const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
+    for (const [id, unit, fallback, select] of knobs) {
+      const value = stored[id];
+      if (typeof value !== 'string' || value === fallback) continue;
+      style(doc, true)?.setProperty(`--knob-${id}`, value + unit, 'important');
+      if (select && !hydrates) doc.documentElement.setAttribute(`data-knob-${id}`, value);
+    }
+  } catch {
+    // Storage blocked or unreadable, or no window: the panel applies what it can when it loads.
+  }
+}
+
 /** Write every knob's value onto the root element; missing values clear the property. */
 export function applyKnobValues(
   knobs: KnobAxis[],
   values: VariantSelections,
   root: {
-    style: { setProperty(name: string, value: string): void; removeProperty(name: string): void };
+    style: { setProperty(name: string, value: string): void; removeProperty(name: string): void; getPropertyValue?(name: string): string };
     setAttribute?(name: string, value: string): void;
     removeAttribute?(name: string): void;
     getAttribute?(name: string): string | null;
@@ -137,7 +308,7 @@ export function applyKnobValues(
     const v = values[k.id];
     const cleared = v === undefined || v === axisDefault(k);
     const next = cleared ? null : knobCssValue(k, v);
-    const previous = (root.style as { getPropertyValue?(name: string): string }).getPropertyValue?.(knobVar(k.id)) || null;
+    const previous = root.style.getPropertyValue?.(knobVar(k.id)) || null;
     if (next === null) root.style.removeProperty(knobVar(k.id));
     else root.style.setProperty(knobVar(k.id), next);
     if (k.kind !== 'range' && k.kind !== 'color') {
@@ -336,7 +507,7 @@ export function overlayAxes(list: OverlayVariantsList, route?: string): SelectVa
  * share a selection, a `?v=` entry and a note reference, so the group keeps it;
  * `variant list` names the knob that is left out.
  */
-export function overlayKnobs(list: Pick<OverlayVariantsList, 'variants' | 'knobs'>, route?: string): KnobAxis[] {
+export function overlayKnobs(list: { variants: OverlayVariant[]; knobs?: KnobAxis[] }, route?: string): KnobAxis[] {
   const groups = new Set(overlayGroups(list.variants).map((group) => group.id));
   return knobsFor(list.knobs, route).filter((knob) => !groups.has(knob.id));
 }
@@ -439,7 +610,7 @@ export function createOverlayVariantsSource(cfg: {
   getRoute: () => string;
   /** Where knob values live between reloads; omit for none (tests). Default: `localStorage`. */
   storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
-  /** The element knobs write their properties on. Default: `document.documentElement`. */
+  /** Where knobs write their properties and attributes. Default: the page, through {@link knobStyle} and `<html>`. */
   knobRoot?: Parameters<typeof applyKnobValues>[2] | null;
   /** The tab's live store. Default: the one the Vite plugin put on the page, if any. */
   live?: LiveVariantSelection | null;
@@ -469,7 +640,7 @@ export function createOverlayVariantsSource(cfg: {
   /** Call when the ids `takenIds` gives may have changed (a host source loaded
    *  its axes): puts back or takes off the knobs they leave out. */
   takenChanged(): void;
-  /** Stop following the server's set. */
+  /** Call when the panel unmounts: stops following the server's set, and its wait for hydration once no other source on the page needs it. */
   dispose(): void;
 } {
   let list: OverlayVariantsList | null = null;
@@ -551,7 +722,8 @@ export function createOverlayVariantsSource(cfg: {
       return null;
     }
   })();
-  const knobRoot = cfg.knobRoot === undefined ? (typeof document === 'undefined' ? null : document.documentElement) : cfg.knobRoot;
+  const pageRoot = cfg.knobRoot === undefined && typeof document !== 'undefined' ? pageKnobRoot(document) : null;
+  const knobRoot = cfg.knobRoot === undefined ? pageRoot : cfg.knobRoot;
   let knobValues: VariantSelections = (() => {
     const parse = (raw: string | null): VariantSelections => {
       try {
@@ -584,10 +756,12 @@ export function createOverlayVariantsSource(cfg: {
   let knobsRoute: string | null = null;
   // A knob is on the page only on its own routes, like its slider. Elsewhere its
   // property and attribute come off, and the stored value waits for its route.
+  // Every listed knob is written, so one the page's head script put on and the
+  // panel does not show (a taken id, an invalid value) comes off too.
   const applyKnobs = () => {
     knobsRoute = cfg.getRoute();
     if (!knobRoot) return;
-    const knobs = list ? overlayKnobs(list) : [];
+    const knobs = list?.knobs ?? [];
     const here = new Set(ownKnobs(knobsRoute).map((k) => k.id));
     const shown = previewing ? { ...knobValues, ...previewing } : knobValues;
     applyKnobValues(knobs, Object.fromEntries(Object.entries(shown).filter(([id]) => here.has(id))), knobRoot);
@@ -677,7 +851,13 @@ export function createOverlayVariantsSource(cfg: {
     const previousKnobs = list?.knobs ?? [];
     list = list && (wasActivating || activation !== null || startedRevision !== revision) ? { ...next, active: list.active } : next;
     if (next.hmr) follow(next.hmr);
-    if (knobRoot) applyKnobValues(previousKnobs, {}, knobRoot);
+    // Knobs the listing dropped, or that now write differently (another kind drops a stale
+    // `data-knob-*`, another unit changes the value), come off; `applyKnobs` below writes every listed
+    // one, so re-reading the listing as the panel opens, or after a label edit, leaves the page and the
+    // `isotone:knob` event alone.
+    const writes = (knob: KnobAxis) => `${knob.id} ${knob.kind} ${knob.kind === 'range' ? (knob.unit ?? '') : ''}`;
+    const listed = new Set((list.knobs ?? []).map(writes));
+    if (knobRoot) applyKnobValues(previousKnobs.filter((knob) => !listed.has(writes(knob))), {}, knobRoot);
     // A stored value for a knob a group now hides is dropped too, so it cannot style the page unseen.
     const valid = new Map(overlayKnobs(list).map((knob) => [knob.id, knob]));
     knobValues = Object.fromEntries(
@@ -717,6 +897,7 @@ export function createOverlayVariantsSource(cfg: {
     },
     dispose() {
       disposed = true;
+      pageRoot?.dispose();
       void channel?.then((hot) => {
         for (const event of [ACTIVE_EVENT, VARIANTS_EVENT]) hot?.off?.(event, onChange);
       });

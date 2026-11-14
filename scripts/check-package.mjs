@@ -41,10 +41,11 @@ import { npm } from './npm.mjs';
 // and its notes in the shipped variants guide and changelog.
 // The figures above are each change on its own over 1.5.0. Merged together (#60 to #69), the bundle is
 // 402.6 kB and the tarball 457.6 kB: bundle raised to 403.5 kB and tarball to 459 kB.
-// Bundle raised to 404.5 kB and tarball to 463 kB (403.8 and 462.4 kB over the merged #60 to #69; panel
-// truth): the panel reading the listing again on the server's word over its HMR channel, a conflicted
-// copy held back in the CLI, endpoint, live store and panel, and their docs and changelog lines.
-const BUDGET = { bundle: 404_500, tarball: 463_000 };
+// Bundle raised to 405.5 kB and tarball to 464 kB (404.7 and 462.8 kB over integration/all; knobs without
+// hydration errors): the adopted knob stylesheet, the page-wide record of what knobs wrote and the wait for
+// React's hydration of <html>, and the Vite plugin's head script that applies stored values before the
+// first paint, with their docs.
+const BUDGET = { bundle: 405_500, tarball: 464_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));
@@ -137,8 +138,94 @@ console.log('Packed package: isolated install, public imports, CLI, bundle and n
   );
   execFileSync(process.execPath, ['check.mjs'], { cwd: consumer, stdio: 'inherit' });
   typecheckAsConsumer(consumer);
+  checkHeadScript(consumer);
 } finally {
   rmSync(scratch, { recursive: true, force: true });
+}
+
+/**
+ * Run the Vite plugin's inline `<head>` script, as the built plugin writes it into
+ * a page, against a minimal DOM. The script carries functions as their source
+ * text, so a build change that gave one an outside reference would break it in
+ * the browser with every test still passing. Needs Vite, which
+ * `typecheckAsConsumer` links in.
+ * @param {string} consumer
+ */
+function checkHeadScript(consumer) {
+  writeFileSync(
+    join(consumer, 'head-script.mjs'),
+    `
+import { strict as assert } from 'node:assert';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { isotone } from 'isotone/vite';
+
+mkdirSync('.isotone', { recursive: true });
+writeFileSync('.isotone/knobs.json', JSON.stringify([
+  { kind: 'range', id: 'pad', label: 'Pad', min: 0, max: 40, step: 1, defaultValue: 8, unit: 'px' },
+  { kind: 'select', id: 'ticks', label: 'Ticks', defaultOption: 'lines', options: [{ id: 'lines', label: 'Lines' }, { id: 'dots', label: 'Dots' }] },
+]));
+
+/** The head script the plugin writes into a page, for an app of this type with these plugins. */
+function headScript(appType, plugins) {
+  const plugin = isotone({ checkForUpdates: false, variants: { live: false } });
+  const noop = () => {};
+  plugin.configResolved({ root: process.cwd(), command: 'serve', assetsInclude: () => false, server: { fs: { strict: false } }, appType, plugins });
+  const pages = [];
+  plugin.configureServer({
+    config: { root: process.cwd(), logger: { info: noop, warn: noop }, server: { fs: { strict: false, deny: [] } } },
+    httpServer: null,
+    middlewares: { use: (...args) => { if (typeof args[0] === 'function') pages.push(args[0]); } },
+    watcher: { add: noop, on: noop, emit: noop },
+    moduleGraph: { getModulesByFile: noop, invalidateModule: noop },
+    ws: { send: noop },
+    transformRequest: async () => null,
+  });
+  let html = '';
+  const req = { method: 'GET', url: '/', headers: { host: 'localhost:5173', accept: 'text/html' }, socket: { remoteAddress: '127.0.0.1' }, on: noop };
+  const res = { statusCode: 200, headersSent: false, setHeader: () => res, writeHead: () => res, write: () => true, end: (body) => { html = String(body ?? ''); } };
+  const run = (i) => (pages[i] ? pages[i](req, res, () => run(i + 1)) : res.end('<!doctype html><html><head><title>app</title></head><body></body></html>'));
+  run(0);
+  const script = html.match(/<script data-isotone-head>([\\s\\S]*?)<\\/script>/);
+  assert.ok(script, 'the plugin writes its head script into the page');
+  return script[1];
+}
+
+/** Run it against just enough DOM: an adoptable sheet, <html> and storage. */
+function runInPage(source) {
+  const props = new Map();
+  const attributes = new Map();
+  class CSSStyleSheet {
+    cssRules = [];
+    insertRule() {
+      this.cssRules.push({ style: { setProperty: (name, value, priority) => props.set(name, value + ' ' + priority) } });
+    }
+  }
+  const window = { CSSStyleSheet };
+  const document = {
+    defaultView: window,
+    adoptedStyleSheets: [],
+    querySelector: () => null,
+    documentElement: { setAttribute: (name, value) => attributes.set(name, value) },
+  };
+  const localStorage = { getItem: () => JSON.stringify({ pad: '24', ticks: 'dots' }) };
+  new Function('window', 'document', 'localStorage', source)(window, document, localStorage);
+  return { props, attributes, window, document };
+}
+
+const spa = runInPage(headScript('spa', []));
+assert.deepEqual(Object.fromEntries(spa.props), { '--knob-pad': '24px important', '--knob-ticks': 'dots important' });
+assert.deepEqual(Object.fromEntries(spa.attributes), { 'data-knob-ticks': 'dots' });
+assert.equal(spa.document.adoptedStyleSheets.length, 1);
+assert.equal(spa.window.__isotoneHydrates, undefined);
+
+const rendered = runInPage(headScript('custom', [{ name: 'react-router' }]));
+assert.deepEqual(Object.fromEntries(rendered.props), { '--knob-pad': '24px important', '--knob-ticks': 'dots important' });
+assert.deepEqual(Object.fromEntries(rendered.attributes), {});
+assert.equal(rendered.window.__isotoneHydrates, true);
+console.log('Packed head script: stored knob values apply from the built plugin, with select attributes held on a React server render.');
+`,
+  );
+  execFileSync(process.execPath, ['head-script.mjs'], { cwd: consumer, stdio: 'inherit' });
 }
 
 /**

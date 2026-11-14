@@ -548,7 +548,8 @@ export function dispatcherModule(key: string, basename: string, versions: (strin
   return lines.join('\n');
 }
 
-function safeJson(value: unknown): string {
+/** JSON for an inline script: nothing in it can close the tag. */
+export function safeJson(value: unknown): string {
   return JSON.stringify(value)
     .replace(/</g, '\\u003c')
     .replace(/\u2028/g, '\\u2028')
