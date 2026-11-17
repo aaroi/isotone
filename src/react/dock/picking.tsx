@@ -147,6 +147,10 @@ function usePicker(context: PickerContext) {
         if (!e.repeat) toggleTarget(el);
         return;
       }
+      // A text field of the dock's own beside the composer, such as the name on collected feedback, keeps
+      // its keys: a name is typed where it is, and Enter there is the field's. Escape still ends selecting.
+      const own = e.composedPath().find((node): node is Element => node instanceof Element);
+      if (e.key !== 'Escape' && own?.matches('input[type="text"]') && own.closest('[data-isotone]')) return;
       // The composer is covered while selecting. Typing a character finishes
       // selecting and lands in the composer, unless the page has an input focused.
       // In the field itself, a key that edits or moves the caret finishes it too, so no edit is unseen.

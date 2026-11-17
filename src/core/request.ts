@@ -15,7 +15,7 @@ export async function request<T>(
   const abort = () => controller.abort(signal?.reason);
   if (signal?.aborted) abort();
   else signal?.addEventListener('abort', abort, { once: true });
-  const timeout = setTimeout(() => controller.abort(new DOMException('The local server did not respond in time.', 'TimeoutError')), 5_000);
+  const timeout = setTimeout(() => controller.abort(new DOMException('The server did not respond in time.', 'TimeoutError')), 5_000);
   let aborted: () => void = () => {};
   const cancelled = new Promise<never>((_, reject) => {
     aborted = () => reject(controller.signal.reason);

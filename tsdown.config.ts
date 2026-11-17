@@ -12,6 +12,8 @@ export default defineConfig([
       core: 'src/core/index.ts',
       serve: 'src/serve/index.ts',
       vite: 'src/vite/index.ts',
+      feedback: 'src/feedback/index.ts',
+      postgres: 'src/postgres/index.ts',
       cli: 'src/cli/index.ts',
       bin: 'src/cli/bin.ts',
     },
@@ -34,7 +36,8 @@ export default defineConfig([
     deps: {
       // The host provides these; keeping them external avoids a second React/Vite
       // install whose types clash with the consumer's own.
-      neverBundle: ['react', 'react-dom', /^react\//, /^react-dom\//, 'vite'],
+      // `pg` is the app's too, and only `isotone/postgres` loads it.
+      neverBundle: ['react', 'react-dom', /^react\//, /^react-dom\//, 'vite', 'pg'],
       // Ship only the icons we use; CLI/standalone users need no React peers.
       onlyBundle: ['lucide-react'],
     },

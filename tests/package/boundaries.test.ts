@@ -14,17 +14,21 @@ const ALLOWED: Record<string, readonly string[]> = {
   react: ['core', 'react'],
   standalone: ['core', 'react', 'standalone'],
   node: ['core', 'node'],
+  // The deployed app's feedback route: Fetch API only, so it runs on any runtime.
+  feedback: ['core', 'feedback'],
+  postgres: ['core', 'feedback', 'postgres'],
   serve: ['core', 'node', 'serve'],
   vite: ['core', 'node', 'vite'],
   // Only to start `isotone serve`, loaded on demand.
   cli: ['core', 'node', 'serve', 'cli'],
 };
-/** Layers that run in a browser: no `node:*`. */
-const BROWSER = ['core', 'react', 'standalone'];
+/** Layers that run in a browser, or on any server runtime: no `node:*`. */
+const BROWSER = ['core', 'react', 'standalone', 'feedback', 'postgres'];
 /** Packages only some layers may import. */
 const PACKAGES: [RegExp, readonly string[]][] = [
   [/^(react|react-dom|lucide-react)(\/|$)/, ['react', 'standalone']],
   [/^vite(\/|$)/, ['vite']],
+  [/^pg(\/|$)/, ['postgres']],
 ];
 
 function sources(dir: string): string[] {

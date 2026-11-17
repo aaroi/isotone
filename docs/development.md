@@ -32,6 +32,7 @@ Each topic lives in one file, for one reader; other files link to it.
 | `docs/agent-guide.md` | The agent in a user's app | Setup steps, the notes loop, the note record, update notes, variant procedure |
 | The section `init` writes | The same agent, every session | Dev-only rule, the loop, trust, where the guide is |
 | `docs/integrations.md` | Whoever wires up a host | Hosts, endpoint rules, themes, production guards |
+| `docs/feedback.md` | A developer shipping the panel to teammates | The feedback route, the saved record, Postgres and other stores |
 | `docs/variants.md` | Agent and host developer | Making file variants, knobs, sections and host sources well; how switching works, last |
 | `docs/blast.md`, `updates.md` | The person using Isotone | Blast, update checks |
 | `AGENTS.md`, `docs/development.md`, `design.md`, `releasing.md`, `onboarding.md` | Maintainers | Not shipped |
@@ -60,7 +61,7 @@ what it is. The outline, in `.github/pull_request_template.md` and for
 
 | Layer | Responsibility | May import |
 | --- | --- | --- |
-| `src/core` | Note descriptors, browser persistence, variant sources and selection rules, shared config types and size limits. No React, Vite or Node. | — |
+| `src/core` | Note descriptors and the validators for their fields, browser persistence (the development notes client and the one that collects feedback), variant sources and selection rules, shared config types and size limits. No React, Vite or Node. | — |
 | `src/react` | Shadow-root panel, shared materials, controls, themes and motion. | core |
 | `src/standalone` | Private bundled React runtime for hosts without React. | core, react |
 | `src/node` | Node-only stores and helpers, used by the Vite plugin, `serve` and the CLI. No React. | core |
@@ -72,12 +73,14 @@ what it is. The outline, in `.github/pull_request_template.md` and for
 | `src/node/serve-owner.ts` | Which checkout an `isotone serve` port belongs to. | |
 | `src/vite`, `src/serve` | Development-server integration and self-contained panel delivery. | core, node |
 | `src/cli` | Setup, feedback and variant commands over the same stores. | core, node, serve (only to start `isotone serve`) |
+| `src/feedback` | The route a deployed app serves to collect feedback, its adapter for Node's `(req, res)`, and the Postgres store. Fetch API only: no Node built-ins, React or Vite, so it runs on any server runtime. | core |
+| `src/postgres` | `postgres(url)`: the same store from a connection URL, the one place that loads `pg`. | core, feedback |
 
 `tests/package/boundaries.test.ts` enforces the last column (dynamic `import()`
 included) and keeps `node:*` out of core, react and standalone and React out of
 everything but react and standalone. Biome refuses import cycles.
 
-Public entry points are `react`, `core`, `serve`, `vite` and `cli`,
+Public entry points are `react`, `core`, `serve`, `vite`, `feedback`, `postgres` and `cli`,
 built to `dist/<name>.js`; the `isotone` binary is `dist/bin.js`. Each barrel
 (`src/<name>/index.ts`) exports only names the docs or the demo use, listed in
 `tests/package/exports.test.ts`: add one there on purpose, and list a removal
@@ -103,6 +106,7 @@ The sample app's selectors sit in two sections, Cards and Theme. Other demo URLs
 | `/?stress=1` | 500 selectors in sections of a dozen (one with a long name) and 500 notes, with long labels and large feedback |
 | `/?review=1` | Feedback stays open across variant reloads |
 | `/?shared=1` | What Variants says about a link's `?v=` where picks are shared by every tab: the Layout options stand in for file variants, and the link asks for Feature (or what `v` names) |
+| `/?collect=1` | The panel as a deployed app mounts it: a name field beside Send, and each note handed to the real `isotone/feedback` handler, running in the page, whose records the page lists; editing or deleting a note changes its record. No pretend agent, tour or Make default. Works in the hosted demo too. |
 | `/?review=1&update-preview=1` | A fictional update result; **Ask agent to update** files a demo update note (built by the same server code in the dev demo) that the pretend agent closes. Nothing contacts npm. |
 
 `/preview.html` frames the live demo for the README image: `?scene=both`

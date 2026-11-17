@@ -13,8 +13,10 @@ directory (holding `.isotone/notes.json`) or below it, or pass `--file <path>`.
    routes, then do the printed first run unless the user asked for something else.
 
 Isotone is development-only: keep the panel and its endpoints behind the
-framework's development check unless the user explicitly asks otherwise. The
-[integration guide](integrations.md) covers every host. `init --yes` also
+framework's development check unless the user explicitly asks otherwise. When
+they ask to collect feedback from teammates in a deployed app, follow
+[collecting feedback](feedback.md); those notes go to the app's database, not to
+you. The [integration guide](integrations.md) covers every host. `init --yes` also
 writes the Isotone section of `AGENTS.md`; run it again after an upgrade to
 refresh just that section.
 

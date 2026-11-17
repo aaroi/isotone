@@ -119,6 +119,16 @@ h1 { margin: 0; font-size: 26px; font-weight: 650; letter-spacing: -.025em; line
 .status[data-status='in-review'] { background: rgb(78 167 252 / .14); color: #4ea7fc; }
 .status[data-status='ready'] { background: color-mix(in srgb, var(--positive) 15%, transparent); color: var(--positive); }
 .demo-hint { max-width: 520px; margin: 28px 0 0; color: var(--muted); font-size: 12.5px; }
+.demo-hint + .demo-hint { margin-top: 12px; }
+.demo-hint a { color: var(--fg-2); }
+.demo-hint code { font-size: 12px; }
+.collected { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.collected article { display: grid; gap: 3px; padding: 12px 18px; }
+.collected article + article { border-top: 1px solid var(--line); }
+.collected p { margin: 0; overflow-wrap: anywhere; }
+.collected small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.collected small b { color: var(--fg-2); font-weight: 500; }
+.collected .collected-empty { padding: 16px 18px; color: var(--muted); font-size: 12.5px; }
 
 .demo-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; min-width: 180px; padding: 4px; display: flex; flex-direction: column; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--pop); box-shadow: var(--shadow); }
 .demo-menu button { height: 30px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--fg); font-size: 12.5px; text-align: left; cursor: pointer; }

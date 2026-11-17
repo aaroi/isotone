@@ -3,7 +3,7 @@ import type { IsotoneStoreConfig } from '../core/types';
 import { isRouteVisible, normalizeRoute, type RouteGateOptions } from '../core/routes';
 import type { IsotoneShortcut, IsotoneTheme } from '../core/types';
 import { knobDelta, type VariantSelections, type VariantsSource, visibleAxes } from '../core/variants';
-import { type ReactElement, useEffect, useId, useRef } from 'react';
+import { type ReactElement, useCallback, useEffect, useId, useRef } from 'react';
 import { Composer } from './notes/Composer';
 import { AwayButton, NotesPanel } from './notes/NotesPanel';
 import { PickOverlay, useSelectMode } from './dock/picking';
@@ -74,7 +74,9 @@ export function IsotonePanel({
   // One page, however the URL spells it: `/about/` and `/about?tab=2` are `/about`, as for the CLI.
   const route = normalizeRoute(pageRoute);
   const nsKey = storeCfg.key ?? FEEDBACK_STORAGE_KEY;
-  const notesAvailable = Boolean(storeCfg.endpoint);
+  // Collecting in a deployed app: notes are signed and go to the host's own store, and no agent reads or changes them.
+  const collecting = Boolean(storeCfg.feedback);
+  const notesAvailable = Boolean(storeCfg.endpoint) || collecting;
   const memoryKey = `${nsKey}::panels`;
   // A reload, such as a variant switch on a host that reloads, comes back to the panels that were open.
   const [mode, update] = useDockMode(() => restoredMode(memoryKey, route, { notes: notesAvailable, variants: Boolean(variants) }));
@@ -83,6 +85,7 @@ export function IsotonePanel({
   const open = notesOpen || variantsOpen;
   const rootRef = useRef<HTMLDivElement>(null);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
   const floatRef = useRef<HTMLDivElement>(null);
   const fabRef = useRef<HTMLButtonElement>(null);
   const id = useId();
@@ -90,6 +93,7 @@ export function IsotonePanel({
   const variantsAvailable = useVariantsSnapshot(variants).shown.length > 0;
   const visible = isRouteVisible(route, rule) && (notesAvailable || variantsAvailable || variantsOpen);
   const { store, notes, setNotes, clock, load: loadNotes, write } = useNotes(storeCfg, visible);
+  const focusName = useCallback(() => requestAnimationFrame(() => nameRef.current?.focus()), []);
   const { view, updateRequested, pendingActions } = useNoteView(notes, route, clock);
   useDockMotion(rootRef, visible);
   useKeyboardInset(rootRef, visible);
@@ -106,6 +110,7 @@ export function IsotonePanel({
     getSelections: () => offDefault(variants),
     update,
     focusComposer: focus.composer,
+    focusName,
   });
   const { draft, setTargets } = actions;
   const shortcutLabel = shortcutText(shortcut);
@@ -197,6 +202,8 @@ export function IsotonePanel({
     <Composer
       draft={draft}
       fieldRef={fieldRef}
+      nameRef={nameRef}
+      author={store.author}
       active={notesOpen}
       picking={picking}
       pickingWithPanel={pickingWithPanel}
@@ -297,7 +304,7 @@ export function IsotonePanel({
             active={variantsOpen}
             onFeedback={notesAvailable ? actions.referVariant : undefined}
             onSaved={loadNotes}
-            onManage={notesAvailable ? actions.queueRemoval : undefined}
+            onManage={notesAvailable && !collecting ? actions.queueRemoval : undefined}
             pendingActions={pendingActions}
             emptyText={variantsEmptyText}
             compareKey={isUnderEscape(compareShortcut)}

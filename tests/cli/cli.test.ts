@@ -942,6 +942,8 @@ describe('init', () => {
     const guide = readFileSync(join(root, 'AGENTS.md'), 'utf8').replace(/\s+/g, ' ');
     expect(guide).toContain('Never ship the panel or its endpoints to production unless the user explicitly asks.');
     expect(guide).toContain('node_modules/isotone/docs/agent-guide.md');
+    // The one case that does ship has its own guide, named where the rule is.
+    expect(guide).toContain('node_modules/isotone/docs/feedback.md');
     const again = makeIo(root);
     expect(await runCli(['init', '--yes'], again)).toBe(0);
     expect(again.text.out).toContain('AGENTS.md has the current Isotone section.');

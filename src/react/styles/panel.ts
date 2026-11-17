@@ -438,6 +438,12 @@ ${APPEARANCE_CSS}
 .isotone-pick::after, .isotone-send::after { content: ''; position: absolute; inset: -2px; border-radius: inherit; }
 .isotone-send { display: grid; place-items: center; margin-left: auto; flex: none; }
 .isotone-notice { font-size: 10px; color: var(--iso-muted); }
+/* The reviewer's name reads as a signature beside Send; like the text field, focus shows only the caret. */
+.isotone-root .isotone-name { flex: 1 1 0; min-width: 0; height: 30px; margin: 0; padding: 0 2px 0 6px; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--iso-muted); font: inherit; font-size: 11.5px; text-align: right; text-overflow: ellipsis; cursor: text; }
+.isotone-root .isotone-name:focus { color: var(--iso-fg); }
+.isotone-root .isotone-name:focus-visible { outline: none; }
+.isotone-name::placeholder { color: var(--iso-faint); }
+.isotone-name + .isotone-send { margin-left: 0; }
 .isotone-entry { position: relative; display: flex; flex-direction: column; gap: 8px; }
 /* Select mode covers the field and says how to finish, next to the elements the user is picking. */
 .isotone-picking { position: absolute; inset: -4px; z-index: 1; display: flex; align-items: center; gap: 10px; padding: 0 4px 0 8px; border-radius: 10px; background: var(--iso-well); cursor: default; }

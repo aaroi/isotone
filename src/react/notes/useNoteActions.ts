@@ -21,6 +21,8 @@ interface NoteActionsOptions {
   getSelections?: () => VariantSelections | undefined;
   update: UpdateMode;
   focusComposer: () => void;
+  /** Where focus goes when a note needs a name before it can be sent. */
+  focusName: () => void;
 }
 
 /** What the composer shows, besides its text: one object that changes only when one of these does. */
@@ -60,6 +62,7 @@ export function useNoteActions({
   getSelections,
   update,
   focusComposer,
+  focusName,
 }: NoteActionsOptions) {
   const [text] = useState(createDraftText);
   const [targets, setTargets] = useState<IsotoneElement[]>([]);
@@ -84,6 +87,12 @@ export function useNoteActions({
     if (!value) return;
     if (value.length > MAX_FEEDBACK_LENGTH) {
       setNotice(`Feedback must be at most ${MAX_FEEDBACK_LENGTH} characters.`);
+      return;
+    }
+    // Collected feedback is signed: without a name the note stays in the field.
+    if (store.author && !store.author.get().trim()) {
+      setNotice('Add your name to send.');
+      focusName();
       return;
     }
     const { editing: previous, targets, variantTarget, route, getPayload, getSelections } = latest.current;
@@ -137,7 +146,7 @@ export function useNoteActions({
         if (!previous) setTimeout(() => saving.current.delete(tempId), 0);
       }
     });
-  }, [text, store, write, setNotes, cancelEdit, update, focusComposer]);
+  }, [text, store, write, setNotes, cancelEdit, update, focusComposer, focusName]);
 
   const beginEdit = useCallback(
     (note: IsotoneNote) => {
@@ -164,9 +173,11 @@ export function useNoteActions({
         }
         try {
           await store.deleteNote(id);
-        } catch {
+        } catch (error) {
           setNotes((prev) => [...prev, { ...note, id }]);
-          setNotice('Could not delete the note. Try again.');
+          // Where feedback is collected, a host that refuses the delete will refuse it again.
+          const refused = store.author && /\(4\d\d\)/.test(String(error));
+          setNotice(refused ? 'This note cannot be deleted here.' : 'Could not delete the note. Try again.');
         }
       });
     },

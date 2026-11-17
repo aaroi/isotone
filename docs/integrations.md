@@ -233,6 +233,11 @@ and `IsotonePanel`. The standalone CLI accepts the same values with `--theme`:
 | `isotone serve` | A separate local process bound to loopback that accepts only localhost origins. The tag that loads it is either behind the framework's development check or the localhost-only loader above. |
 | `mountIsotone`, `IsotonePanel` | No guard, by design. Import them dynamically behind the development check. |
 
+To put the panel in a deployed app on purpose, so teammates' feedback lands in
+your own database, see [collecting feedback](feedback.md). That route is
+separate from everything above: the development endpoints never answer outside
+this machine.
+
 ## Confirm the integration
 
 1. Open the app in development and submit a note on an element.

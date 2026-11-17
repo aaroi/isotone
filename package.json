@@ -1,6 +1,6 @@
 {
   "name": "isotone",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "type": "module",
   "license": "MIT",
   "description": "Design variants and feedback for your running web app. Switch between variants your coding agent builds, pin elements, and give the agent the context to make the change.",
@@ -25,6 +25,14 @@
       "types": "./dist/vite.d.ts",
       "default": "./dist/vite.js"
     },
+    "./feedback": {
+      "types": "./dist/feedback.d.ts",
+      "default": "./dist/feedback.js"
+    },
+    "./postgres": {
+      "types": "./dist/postgres.d.ts",
+      "default": "./dist/postgres.js"
+    },
     "./cli": {
       "types": "./dist/cli.d.ts",
       "default": "./dist/cli.js"
@@ -36,6 +44,7 @@
     "docs/agent-guide.md",
     "docs/note.schema.json",
     "docs/integrations.md",
+    "docs/feedback.md",
     "docs/updates.md",
     "docs/blast.md",
     "docs/variants.md",
@@ -67,20 +76,24 @@
   "peerDependencies": {
     "react": "^18 || ^19",
     "react-dom": "^18 || ^19",
-    "vite": "^5 || ^6 || ^7 || ^8"
+    "vite": "^5 || ^6 || ^7 || ^8",
+    "pg": "^8"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@biomejs/biome": "2.5.7",
+    "@electric-sql/pglite": "^0.5.16",
     "@stryker-mutator/core": "10.1.1",
     "@stryker-mutator/vitest-runner": "10.1.1",
     "@types/node": "24.13.3",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitest/coverage-v8": "4.1.11",
     "jsdom": "^30.0.1",
     "knip": "^6.44.2",
     "lucide-react": "^1.55.0",
+    "pg": "^8.23.1",
     "publint": "^0.3.25",
     "react": "^19",
     "react-dom": "^19",
@@ -115,6 +128,9 @@
       "optional": true
     },
     "vite": {
+      "optional": true
+    },
+    "pg": {
       "optional": true
     }
   }

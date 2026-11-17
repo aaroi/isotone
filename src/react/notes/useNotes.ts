@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createFeedbackStore, type TextStore } from '../../core/feedback-client';
 import { createIsotoneStore } from '../../core/notes-client';
+import { FEEDBACK_STORAGE_KEY } from '../../core/browser-storage';
 import type { IsotoneStoreConfig } from '../../core/types';
 import type { IsotoneNote } from '../../core/types';
 
@@ -28,6 +30,12 @@ function mergeNotes(previous: IsotoneNote[], fresh: IsotoneNote[]): IsotoneNote[
   return changed ? merged : previous;
 }
 
+/** What the panel asks of a store: the development one, or the one that collects in a deployed app. */
+type NotesStore = Pick<ReturnType<typeof createIsotoneStore>, 'pollNotes' | 'pendingNotes' | 'saveNote' | 'deleteNote'> & {
+  /** The reviewer's name, where notes are signed. */
+  author?: TextStore;
+};
+
 const minute = () => Math.floor(Date.now() / 60_000) * 60_000;
 
 /**
@@ -36,10 +44,14 @@ const minute = () => Math.floor(Date.now() / 60_000) * 60_000;
  * or undoes an edit. `write` wraps one optimistic change and its request.
  */
 export function useNotes(config: IsotoneStoreConfig, visible: boolean) {
+  const collect = config.feedback;
   // A new endpoint or storage key is a new store; the same config spelled anew each render is not.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the store depends on these fields only.
-  const store = useMemo(() => createIsotoneStore(config), [config.endpoint, config.key]);
-  const available = Boolean(config.endpoint);
+  const store = useMemo<NotesStore>(
+    () => (collect ? createFeedbackStore({ ...collect, key: config.key ?? FEEDBACK_STORAGE_KEY }) : createIsotoneStore(config)),
+    [config.endpoint, config.key, collect?.endpoint, collect?.name, collect?.release],
+  );
+  const available = Boolean(config.endpoint || collect);
   const [notes, setNotes] = useState<IsotoneNote[]>([]);
   // Coarse on purpose: the value only ages out stale claims, and an unchanged minute lets React skip the render.
   const [clock, setClock] = useState(minute);
