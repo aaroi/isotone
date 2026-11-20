@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.8.1
+
+- Merge pull request #79 from aaroi/feedback-grow-crosshair
+
 ## 1.8.0
 
 ### Added
