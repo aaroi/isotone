@@ -56,7 +56,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   document.body.innerHTML = '';
-  document.body.style.cursor = '';
+  for (const style of document.head.querySelectorAll('style[data-isotone]')) style.remove();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -143,6 +143,23 @@ it('never takes focus back from a host input clicked while the panel opens', asy
   await frame();
   expect($('.isotone-notes-panel').dataset.open).toBe('true');
   expect(document.activeElement).toBe(input);
+});
+
+it('shows the crosshair over page elements with their own cursor while selecting', async () => {
+  await render();
+  const button = document.getElementById('host-button') as HTMLButtonElement;
+  button.style.cursor = 'pointer';
+  const forced = () => document.head.querySelector('style[data-isotone="cursor"]');
+  await act(async () => {
+    $('.isotone-fab').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, detail: 1 }));
+  });
+  expect(forced()?.textContent).toContain('cursor: crosshair !important');
+  expect(button.matches('html :not([data-isotone], [data-isotone] *)')).toBe(true);
+  expect(host.matches('html :not([data-isotone], [data-isotone] *)')).toBe(false);
+  await act(async () => {
+    $('[aria-label="Select elements"]').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, detail: 0 }));
+  });
+  expect(forced()).toBeNull();
 });
 
 it('swallows presses on the page while selecting, unless Shift is held', async () => {

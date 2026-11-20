@@ -177,17 +177,37 @@ it('drags the top edge of the only open panel, both ways, and persists on releas
   expect(stored()).toEqual({ variants: 240 });
 });
 
-it('does not store a bigger value than the content, so ArrowUp is announced truthfully', async () => {
+it('stops at the content, and a panel showing all of it keeps growing as content is added', async () => {
   await toggle('Variants');
   size('variants', 300, 320);
+  await measure();
+  expect(variantsTop().getAttribute('aria-valuemax')).toBe('320');
+  // All of the content shows, so it keeps fitting its content rather than storing 320.
   await drag(variantsTop(), 400, 0);
-  expect(stored()).toEqual({ variants: 320 });
+  expect(stored()).toEqual({ variants: 'fit' });
   size('variants', 320);
   await measure();
   expect(variantsTop().getAttribute('aria-valuenow')).toBe('320');
   expect(variantsTop().getAttribute('aria-valuemax')).toBe('320');
   await key(variantsTop(), 'ArrowUp');
-  expect(stored()).toEqual({ variants: 320 });
+  expect(stored()).toEqual({ variants: 'fit' });
+});
+
+it('keeps a feedback panel that shows every note growing as notes are added', async () => {
+  await toggle('Feedback');
+  size('notes', 200, 260);
+  await drag(notesTop(), 400, 0);
+  expect(stored()).toEqual({ notes: 'fit' });
+  // The list's own cap is lifted, and only the viewport limits the panel.
+  expect(dock().dataset.sizedNotes).toBe('true');
+  expect(cssVar('--iso-notes-height')).toBe('');
+  await remount();
+  if (panel('notes').dataset.open !== 'true') await toggle('Feedback');
+  expect(dock().dataset.sizedNotes).toBe('true');
+  // Shrunk below its notes, the panel keeps the height it was given.
+  size('notes', 260, 400);
+  await drag(notesTop(), 400, 380);
+  expect(stored()).toEqual({ notes: 280 });
 });
 
 it('grows a panel when its content is taller than its size', async () => {

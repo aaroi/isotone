@@ -13,8 +13,12 @@ import { readBrowserStorage } from '../../core/browser-storage';
 
 type Panel = 'variants' | 'notes';
 type Handle = 'width' | Panel;
-/** Panel heights are max-heights in px; the width is the dock's. */
-type DockSize = { width?: number; variants?: number; notes?: number };
+/**
+ * Panel heights are max-heights in px, or 'fit' for a panel dragged open to show all of its content,
+ * which then follows its content up to the viewport. The width is the dock's.
+ */
+type Height = number | 'fit';
+type DockSize = { width?: number; variants?: Height; notes?: Height };
 type Open = Record<Panel, boolean>;
 interface Extent {
   now: number;
@@ -55,10 +59,12 @@ function load(key: string): DockSize {
   try {
     const parsed: unknown = JSON.parse(readBrowserStorage(localStorage, key) ?? 'null');
     if (typeof parsed !== 'object' || parsed === null) return {};
-    const valid = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
+    const valid = (v: unknown, name: string) => (typeof v === 'number' && Number.isFinite(v) && v > 0) || (v === 'fit' && name !== 'width');
     const record = parsed as Record<string, unknown>;
     // The first release stored one dock-wide `height`; it has no per-panel meaning and is dropped on the next save.
-    return Object.fromEntries((['width', ...PANELS] as const).filter((name) => valid(record[name])).map((name) => [name, record[name]]));
+    return Object.fromEntries(
+      (['width', ...PANELS] as const).filter((name) => valid(record[name], name)).map((name) => [name, record[name]]),
+    );
   } catch {
     return {};
   }
@@ -110,14 +116,21 @@ function extent(panel: Panel, frame: Frame): Extent {
   return { now: clamp(own.height, own.min, max), min: own.min, max };
 }
 
+/**
+ * A panel dragged to show all of its content keeps showing all of it as content is added. Storing
+ * today's content height instead would cap the feedback panel at the notes it had then.
+ */
+const keep = (height: number, own: Measured): Height => (height >= own.content ? 'fit' : height);
+
 /** The heights to store for a panel edge dragged to `target`; a split also gives its height to the upper panel. */
 function resize(panel: Panel, target: number, frame: Frame): DockSize {
   const { min, max } = extent(panel, frame);
+  const own = frame.panels[panel] as Measured;
   const next = clamp(target, min, max);
   const above = frame.panels[UPPER];
-  if (panel !== LOWER || !above) return { [panel]: next };
-  const grown = next - (frame.panels[LOWER] as Measured).height;
-  return { [LOWER]: next, [UPPER]: clamp(above.height - grown, above.min, above.content) };
+  if (panel !== LOWER || !above) return { [panel]: keep(next, own) };
+  const grown = next - own.height;
+  return { [LOWER]: keep(next, own), [UPPER]: keep(clamp(above.height - grown, above.min, above.content), above) };
 }
 
 /** The reviewer's dock size: CSS variables for the root and props for its three handles. */
@@ -186,7 +199,7 @@ export function useDockSize(rootRef: RefObject<HTMLElement | null>, key: string,
 
   const vars: Record<string, string> = {};
   if (size.width) vars['--iso-width'] = `min(${size.width}px, calc(100vw - ${INSET}px))`;
-  for (const name of PANELS) if (size[name]) vars[`--iso-${name}-height`] = `${size[name]}px`;
+  for (const name of PANELS) if (typeof size[name] === 'number') vars[`--iso-${name}-height`] = `${size[name]}px`;
   const root = {
     style: vars as CSSProperties,
     'data-sized-notes': size.notes !== undefined,
