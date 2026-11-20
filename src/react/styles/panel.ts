@@ -500,7 +500,9 @@ ${EDGES_CSS}
 @media (min-width: 641px) and (min-height: 501px) {
   .isotone-root[data-open='true'] { width: var(--iso-width, var(--iso-dock-width)); }
   .isotone-variants-panel { max-height: min(var(--iso-variants-height, 100vh), var(--iso-variants-hold, 100vh), calc(var(--iso-view-height) - 76px)); }
-  .isotone-notes-panel { max-height: min(var(--iso-notes-height, 100vh), var(--iso-notes-hold, 100vh), calc(var(--iso-view-height) - 76px)); min-height: var(--iso-notes-hold-min, 0px); }
+  /* A stored size or a hold never caps Feedback below its own parts (see useNotesFloor): it stacks from
+     the bottom, so the page chips and the composer would spill out past its top edge. */
+  .isotone-notes-panel { max-height: min(max(var(--iso-notes-floor, 0px), min(var(--iso-notes-height, 100vh), var(--iso-notes-hold, 100vh))), calc(var(--iso-view-height) - 76px)); min-height: var(--iso-notes-hold-min, 0px); }
   /* Held under a resting pointer, the list takes up the difference, so the rows and the composer stay put. */
   .isotone-notes-panel[data-held] > .isotone-list { flex-grow: 1; max-height: none; }
   .isotone-root[data-sized-notes='true'] .isotone-list { max-height: none; }
