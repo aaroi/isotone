@@ -343,7 +343,8 @@ ${APPEARANCE_CSS}
    Cancelling margin/padding keeps the first row in place at scroll start; the
    expanded height preserves the content allowance and composer position.
    The side gutters contain the corner action and keyboard focus outlines. */
-.isotone-list { display: flex; flex-direction: column; gap: 0; flex: 0 1 auto; max-height: calc(var(--iso-list-height) + 2 * var(--iso-space) - 8px); min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; margin: calc(0px - var(--iso-space)) calc(-8px - var(--iso-note-outset)) calc(-2px - var(--iso-space)); padding: var(--iso-space) 8px; scroll-padding-block: var(--iso-space); }
+/* The rows' offset parent, so the reflow in useLayoutMotion measures them in the list, not in a panel whose height may be easing. */
+.isotone-list { position: relative; display: flex; flex-direction: column; gap: 0; flex: 0 1 auto; max-height: calc(var(--iso-list-height) + 2 * var(--iso-space) - 8px); min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; margin: calc(0px - var(--iso-space)) calc(-8px - var(--iso-note-outset)) calc(-2px - var(--iso-space)); padding: var(--iso-space) 8px; scroll-padding-block: var(--iso-space); }
 .isotone-empty { color: var(--iso-muted); font-size: 11px; line-height: 1.7; padding: 8px; }
 /* A note about what the page shows (a link's ?v= it does not apply): quiet, wrapping, above the selectors. */
 .isotone-vars-notice { flex: none; color: var(--iso-muted); font-size: 11px; line-height: 1.6; padding: 2px 8px; }
