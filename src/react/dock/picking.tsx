@@ -49,6 +49,30 @@ interface PickerContext {
 const MAX_PINS = 50;
 const EDIT_KEYS = /^(Backspace|Delete|Arrow\w+|Home|End|Page(Up|Down))$/;
 
+/**
+ * The page's own cursors (pointer on links and buttons, text on inputs) are set on the elements
+ * themselves and would win over one on body, so the crosshair is forced on everything but Isotone.
+ * A layered !important outranks the host's unlayered !important rules, and a constructed sheet is
+ * allowed by a style-src CSP that blocks inline <style>.
+ */
+const CROSSHAIR = '@layer isotone-picking { html, html :not([data-isotone], [data-isotone] *) { cursor: crosshair !important; } }';
+
+function forceCrosshair(): () => void {
+  if (typeof CSSStyleSheet !== 'undefined' && 'replaceSync' in CSSStyleSheet.prototype && 'adoptedStyleSheets' in document) {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(CROSSHAIR);
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    return () => {
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter((s) => s !== sheet);
+    };
+  }
+  const style = document.createElement('style');
+  style.setAttribute('data-isotone', 'cursor');
+  style.textContent = CROSSHAIR;
+  document.head.append(style);
+  return () => style.remove();
+}
+
 const isPanelElement = (node: EventTarget | null) => node instanceof Element && Boolean(node.closest('[data-isotone]'));
 
 /**
@@ -80,8 +104,7 @@ function usePicker(context: PickerContext) {
   const { picking } = context;
   useEffect(() => {
     if (!picking) return;
-    const cursor = document.body.style.cursor;
-    document.body.style.cursor = 'crosshair';
+    const restoreCursor = forceCrosshair();
     const elementAt = (e: MouseEvent) => {
       const el =
         e.detail === 0 && e.type === 'click'
@@ -184,7 +207,7 @@ function usePicker(context: PickerContext) {
     window.addEventListener('click', onClick, true);
     window.addEventListener('keydown', onKey, true);
     return () => {
-      document.body.style.cursor = cursor;
+      restoreCursor();
       for (const type of presses) window.removeEventListener(type, onPress, true);
       window.removeEventListener('click', onClick, true);
       window.removeEventListener('keydown', onKey, true);
