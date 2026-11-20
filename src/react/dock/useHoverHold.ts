@@ -44,9 +44,25 @@ export function releaseOnLeave(root: HTMLElement, release: (eased: boolean) => v
   return () => done();
 }
 
+/** Ease Feedback from the height that showed to the one it now needs, in one ease of its own. */
+function ease(root: HTMLElement, panel: HTMLElement, from: number, to: number) {
+  if (Math.abs(to - from) < 0.5 || stillMotion(panel) || typeof panel.animate !== 'function') return;
+  const box = { boxSizing: 'border-box', flexShrink: 0 };
+  whileSettling(
+    root,
+    panel.animate(
+      [
+        { ...box, height: `${from}px` },
+        { ...box, height: `${to}px` },
+      ],
+      { duration: MOTION.enter, easing: MOTION.easeOut },
+    ),
+  );
+}
+
 /**
- * While the pointer rests on the dock, Feedback keeps its height whenever its contents would change it (a
- * note arriving or leaving, a note opened for editing or put back): the list takes the difference and
+ * While the pointer rests on the dock, Feedback keeps its height whenever its contents would make it taller (a
+ * note arriving, a note opened for editing): the list takes the difference and
  * scrolls, so the composer, the rows and the panel beside it stay where they are. Once the pointer
  * leaves, the panel takes its new height, which the dock eases. A finger never holds it.
  */
@@ -72,7 +88,15 @@ export function useHoverHold(panelRef: RefObject<HTMLElement | null>, active: bo
     const panel = panelRef.current;
     const root = panel?.closest<HTMLElement>('.isotone-root');
     if (!active || held.current || !panel || !root || !seen.current || root.dataset.easing || !pointerResting(root)) return;
-    if (Math.abs(panel.getBoundingClientRect().height - seen.current) < 0.5) return;
+    const now = panel.getBoundingClientRect().height;
+    if (Math.abs(now - seen.current) < 0.5) return;
+    // Only growth is held. Feedback stacks from the bottom, so a panel that gets shorter (a note removed or
+    // put back) keeps its composer and the panel beside it where they are anyway; holding it would only
+    // leave a blank where the note was until the pointer leaves. It takes its new height at once, eased.
+    if (now < seen.current) {
+      ease(root, panel, seen.current, now);
+      return;
+    }
     const height = `${seen.current}px`;
     panel.style.setProperty('--iso-notes-hold', height);
     panel.style.setProperty('--iso-notes-hold-min', height);
@@ -85,19 +109,7 @@ export function useHoverHold(panelRef: RefObject<HTMLElement | null>, active: bo
       panel.style.removeProperty('--iso-notes-hold-min');
       delete panel.dataset.held;
       // Then to the height it now needs, in one ease of its own.
-      const to = panel.getBoundingClientRect().height;
-      if (!eased || Math.abs(to - from) < 0.5 || stillMotion(panel) || typeof panel.animate !== 'function') return;
-      const box = { boxSizing: 'border-box', flexShrink: 0 };
-      whileSettling(
-        root,
-        panel.animate(
-          [
-            { ...box, height: `${from}px` },
-            { ...box, height: `${to}px` },
-          ],
-          { duration: MOTION.enter, easing: MOTION.easeOut },
-        ),
-      );
+      if (eased) ease(root, panel, from, panel.getBoundingClientRect().height);
     });
   };
   useLayoutEffect(hold);
