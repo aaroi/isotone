@@ -7,12 +7,13 @@
  * - anything that does move (a panel's edges, a panel sliding over) never covers most of its way between
  *   two frames;
  * - a keyboard resize step lands exactly; a long list (over `MAX_ANIMATED_ITEMS`) never animates a size;
- * - a fold resizes Variants at once, in one ease, pointer or not; a size held under a resting pointer
- *   (Feedback closing over Variants) lets go in one ease, and a finger never holds one.
+ * - a size changes at once, in one ease, wherever the pointer is: no panel is ever kept at a size its
+ *   content no longer needs.
  *
  * Every step also checks what must hold whatever the transition was (`sound()`): a list never reaches
- * past its panel, on any frame, and once settled a panel that is not held has no spare room after its
- * list. A new transition gets these for free by going through `step`.
+ * past its panel, on any frame; once settled no panel has spare room; and taking the pointer off the
+ * dock then changes no panel's size, so nothing waited for it. A new transition gets these for free by
+ * going through `step`.
  *
  * `ISOTONE_BUNDLE=<path>` runs the same transitions against another build, to compare; the measured
  * steps are logged as `motion:` lines either way.
@@ -150,18 +151,33 @@ window.newestShows = () => {
   const [box, view, row] = [p, list, note].map((n) => n.getBoundingClientRect());
   return row.top >= Math.max(box.top, view.top) - 1 && row.bottom <= Math.min(box.bottom, view.bottom) + 1;
 };
-// Room Variants shows after its list once settled, in px: a panel is as tall as its list needs, so there
-// is none, unless a size is held under a resting pointer ('held').
+// Room a settled panel shows that its content does not need, in px, by panel: after Variants' list, and
+// above Feedback's parts, which stack from its foot. A panel is as tall as its content needs, so none.
 window.spare = () => {
-  const p = panel('variants');
-  if (p?.dataset.open !== 'true') return 0;
-  if (p.style.getPropertyValue('--iso-variants-hold')) return 'held';
-  const body = p.querySelector('.isotone-vars-body');
-  const tail = body.querySelector(':scope > .isotone-vars-tail');
-  if (tail.style.height) return 'room left in the tail: ' + tail.style.height;
-  if (body.scrollHeight > body.clientHeight + 1) return 0;
-  return Math.round((body.getBoundingClientRect().bottom - parseFloat(getComputedStyle(body).paddingBottom) - tail.getBoundingClientRect().bottom) * 10) / 10;
+  const out = {};
+  const v = panel('variants');
+  if (v?.dataset.open === 'true') {
+    const body = v.querySelector('.isotone-vars-body');
+    const tail = body.querySelector(':scope > .isotone-vars-tail');
+    out.variants = tail.style.height
+      ? 'room left in the tail: ' + tail.style.height
+      : body.scrollHeight > body.clientHeight + 1
+        ? 0
+        : Math.round((body.getBoundingClientRect().bottom - parseFloat(getComputedStyle(body).paddingBottom) - tail.getBoundingClientRect().bottom) * 10) / 10;
+  }
+  const n = panel('notes');
+  if (n?.dataset.open === 'true') {
+    const inner = n.getBoundingClientRect().top + parseFloat(getComputedStyle(n).paddingTop);
+    const tops = [...n.children].flatMap((child) => {
+      const style = getComputedStyle(child);
+      const box = child.getBoundingClientRect();
+      return style.position === 'absolute' || !box.height ? [] : [box.top - parseFloat(style.marginTop)];
+    });
+    out.feedback = Math.round((Math.min(...tops) - inner) * 10) / 10;
+  }
+  return out;
 };
+window.heights = () => Object.fromEntries([...root().querySelectorAll('.isotone-panel[data-open="true"]:not(.isotone-exit)')].map((p) => [p.classList.contains('isotone-notes-panel') ? 'feedback' : 'variants', Math.round(p.getBoundingClientRect().height)]));
 </script>`;
 
 interface Motion {
@@ -300,23 +316,38 @@ describe.skipIf(!binary)('No sudden movement in the dock (headless Chrome)', { r
     await chrome.eval('settle().then(() => new Promise((r) => setTimeout(r, 300)))');
     return motion(await chrome.eval('stop()'), stay);
   }
-  /** One transition: what should stay moves under a pixel, and nothing jumps. */
-  async function step(label: string, act: () => Promise<void>, stay: RegExp) {
+  /**
+   * One transition: what should stay moves under a pixel, and nothing jumps. `follows` matches what
+   * changes with its own content at once, as a field does with its text, and so is no jump.
+   */
+  async function step(label: string, act: () => Promise<void>, stay: RegExp, follows?: RegExp) {
     const result = await through(act, stay);
     note(
       `motion: ${label}: still ${result.still}px${result.moved ? ` (${result.moved})` : ''}, jumps ${JSON.stringify(result.jumps)}, eased ${result.eased}`,
     );
     expect.soft(result.still, `${label}: what should stay moved`).toBeLessThanOrEqual(1);
-    expect.soft(result.jumps, `${label}: jumps`).toEqual([]);
+    expect
+      .soft(
+        result.jumps.filter((jump) => !follows?.test(jump)),
+        `${label}: jumps`,
+      )
+      .toEqual([]);
     await sound(label, result);
     return result;
   }
-  /** What holds after any transition: lists stayed inside their panels, and Variants has no spare room. */
+  /**
+   * What holds after any transition (docs/design.md, Invariants): lists stayed inside their panels, no
+   * panel has room its content does not need, and no size was waiting for the pointer to leave the dock.
+   */
   async function sound(label: string, result: Motion) {
     const where = result.spill > 1 ? await chrome.eval<string>('window.spillAt') : '';
     expect.soft(result.spill, `${label}: a list reached past its panel (${where})`).toBeLessThanOrEqual(1);
-    const spare = await chrome.eval<number | string>('spare()');
-    if (spare !== 'held') expect.soft(spare, `${label}: room after the Variants list`).toBeLessThanOrEqual(1);
+    for (const [name, room] of Object.entries(await chrome.eval<Record<string, number | string>>('spare()')))
+      expect.soft(room, `${label}: room ${name} does not need`).toBeLessThanOrEqual(1);
+    const resting = await chrome.eval<Record<string, number>>('heights()');
+    await chrome.move(20, 300);
+    await chrome.eval('settle()');
+    expect.soft(await chrome.eval('heights()'), `${label}: a size changed once the pointer left the dock`).toEqual(resting);
   }
   const pressEscape = () => chrome.key('Escape', 'Escape');
   const NONE = /^$/;
@@ -403,8 +434,6 @@ describe.skipIf(!binary)('No sudden movement in the dock (headless Chrome)', { r
       expect.soft(result.jumps, label).toEqual([]);
       expect.soft(count, `${label}: eases`).toBe(1);
       await sound(label, result);
-      // The pointer never left the dock, and nothing waits for it to.
-      expect.soft(await chrome.eval<string>(`panel('variants').style.getPropertyValue('--iso-variants-hold')`), label).toBe('');
       if (taller) expect.soft(Math.abs((await height()) - open), label).toBeLessThanOrEqual(1);
       else expect.soft(await height(), label).toBeLessThan(open - 20);
     }
@@ -439,7 +468,7 @@ describe.skipIf(!binary)('No sudden movement in the dock (headless Chrome)', { r
     await step('scrolled to its end: the pointer leaves', () => chrome.move(20, 300), OPTIONS);
   });
 
-  it('a saved note opened for editing, and put back, with the pointer resting moves no row', async () => {
+  it('a saved note opened for editing, and put back, with the pointer resting moves no row and holds no size', async () => {
     const saved = Array.from({ length: 12 }, (_, i) => ({
       id: `n${i}`,
       route: '/',
@@ -455,10 +484,13 @@ describe.skipIf(!binary)('No sudden movement in the dock (headless Chrome)', { r
     const [x, y] = await chrome.eval<[number, number]>(`centre(${row})`);
     await chrome.move(x, y);
     await chrome.eval('settle()');
-    const RESTING = /^(note |send$|option )/;
-    await step('a note opens for editing', () => chrome.click(x, y), RESTING);
+    // The dock is full, so Feedback grows downward into room Variants gives from its top: every row and
+    // every option stays, and the card's foot glides. The field and Send follow the field's text at once.
+    const RESTING = /^(note |option )/;
+    const COMPOSER = /^(send|field) /;
+    await step('a note opens for editing', () => chrome.click(x, y), RESTING, COMPOSER);
     expect(await chrome.eval<string>('panel("notes").querySelector("textarea").value')).toBe('Saved note 11');
-    await step('the note is put back', pressEscape, RESTING);
+    await step('the note is put back', pressEscape, RESTING, COMPOSER);
     await step('the pointer leaves after editing', () => chrome.move(20, 300), NONE);
   });
 
@@ -478,7 +510,6 @@ describe.skipIf(!binary)('No sudden movement in the dock (headless Chrome)', { r
     const [x, y] = await chrome.eval<[number, number]>(`centre(${toggle})`);
     await step('a finger folds a section', () => chrome.tap(x, y), NONE);
     const folded = await height();
-    expect(await chrome.eval<string>(`panel('variants').style.getPropertyValue('--iso-variants-hold')`)).toBe('');
     expect(folded).toBeLessThan(open - 20);
     const [ux, uy] = await chrome.eval<[number, number]>(`centre(${toggle})`);
     await step('a finger unfolds it', () => chrome.tap(ux, uy), NONE);
@@ -516,6 +547,36 @@ describe.skipIf(!binary)('No sudden movement in the dock (headless Chrome)', { r
     const [, squeezed, needs] = tags[2] as [string, number, number];
     expect(squeezed).toBeLessThan(needs);
     expect(squeezed).toBeGreaterThanOrEqual(52);
+  });
+
+  it('page tabs in Feedback, with the pointer resting on them, size the panel each time, down to no notes', async () => {
+    const on = (id: string, route: string) => ({
+      id,
+      route,
+      feedback: `A note on ${route}`,
+      createdAt: new Date(Date.UTC(2026, 0, 1)).toISOString(),
+      done: false,
+    });
+    await fresh(3, [on('a', '/pricing'), on('b', '/pricing'), on('c', '/settings')]);
+    await tool('Feedback');
+    await pressEscape();
+    await chrome.eval('settle()');
+    const height = () => chrome.eval<number>(`panel('notes').getBoundingClientRect().height`);
+    const empty = await height();
+    const tab = (index: number) => async () => {
+      const [x, y] = await chrome.eval<[number, number]>(`centre(panel('notes').querySelectorAll('.isotone-page')[${index}])`);
+      await chrome.click(x, y);
+    };
+    // Each tab adds or takes away a page's notes. The pointer stays on the tabs throughout: `step` checks
+    // no size waits for it to leave. Rows are swapped at once; the card around them eases.
+    const ROWS = /^note /;
+    await step('a page with two notes is added', tab(1), NONE, ROWS);
+    expect.soft(await height()).toBeGreaterThan(empty + 40);
+    await step('a page with one note is added', tab(2), NONE, ROWS);
+    await step('the first is taken away', tab(1), NONE, ROWS);
+    await step('the second too, leaving this page, which has none', tab(2), NONE, ROWS);
+    expect.soft(await chrome.eval(`panel('notes').querySelectorAll('.isotone-note').length`)).toBe(0);
+    expect.soft(Math.abs((await height()) - empty)).toBeLessThanOrEqual(1);
   });
 
   it("a resize handle's cursor promises only what a drag can do", async () => {

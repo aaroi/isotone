@@ -14,7 +14,8 @@ with its test.
 
 | Invariant | Held by |
 | --- | --- |
-| A panel is as tall as its content needs, up to its limits: never taller, with blank room after its list, and never held shorter than what the reviewer just asked to see. The one exception is a height held under a resting pointer, for a change the reviewer did not make to that panel. | `spare()` after every step of `tests/browser/dock-motion.test.ts` |
+| A panel is as tall as its content needs, up to its limits: never taller, with blank room, and never shorter than what the reviewer just asked to see. | `spare()` after every step of `tests/browser/dock-motion.test.ts` |
+| No size depends on where the pointer is. Nothing is held while it rests on the dock, and nothing changes when it leaves. | `sound()` there takes the pointer off the dock after every step and compares; `tests/react/styles.test.ts` refuses a hold in the source |
 | A list stays inside its panel on every frame, with its foot, bottom edge and the end of its scroll. | `spilled()`, every frame of every step there |
 | What was just saved can be seen: a new note shows in full once it lands. | `newestShows()` there |
 | Nothing moves suddenly: every size or position change eases, in one ease. | `motion()` and `stages()` there |
@@ -22,7 +23,7 @@ with its test.
 | What happens at one end of a list happens at the other (fade, blur, receding rows). | `tests/browser/variants-layout.test.ts` |
 
 A new transition goes through `step()` in the motion test and gets the first
-four for free; a fix for something a reviewer saw adds the invariant it broke
+five for free; a fix for something a reviewer saw adds the invariant it broke
 here, not only a case for that one transition.
 
 ## Materials and states
@@ -121,16 +122,12 @@ foot and held until the reviewer scrolls or presses there. Select mode and a
 floating composer never come back. Where panels take turns, only the one used
 last does.
 
-Variants sits on the pill and Feedback above it. Opening Feedback, a note
-saved into it or closing it never moves a selector: when room runs out,
-Variants gives it from its top edge and its list scrolls by as much; room given
-back is taken only as far as that scroll absorbs, and while the pointer rests on
-the dock the rest waits until it leaves (or a resize handle is taken up by
-pointer or key); closed from the keyboard, the list simply grows, easing (see
-Motion). Opening Variants under an open Feedback reveals Variants from the pill
-and glides Feedback up: the one movement left, caused by the reviewer's own
-click. In a full dock, a note saved while the pointer rests there scrolls the
-list rather than growing Feedback into Variants.
+Variants sits on the pill and Feedback above it. Opening Feedback or a note
+saved into it never moves a selector: when room runs out, Variants gives it from
+its top edge and its list scrolls by as much. Room given back as Feedback closes
+is taken at once, easing (see Motion): the list scrolls back as far as it had
+scrolled, and past that its selectors glide with its top edge. Opening Variants
+under an open Feedback reveals Variants from the pill and glides Feedback up.
 
 Escape returns focus to the control that opened the dock: the host's, or the
 launcher when the dock was opened from the keyboard, or the keyboard (or a screen
@@ -376,25 +373,22 @@ while the keyboard is in use, each named one by one (a rule over every
 descendant restyles the dock on each change of input). Reduced motion removes
 spatial movement; hover stays brief.
 
-Nothing in the dock moves suddenly, and nothing under a resting pointer moves
-at all. The dock hangs from its bottom-right corner, so a panel moves when its
-bottom or right edge does, and slides there. While the pointer rests on the
-dock, a panel keeps its height when something other than the reviewer's own
-change to it would resize it (a note arriving, a note opened for editing,
-Feedback closing over Variants): its list scrolls instead, keeping its scroll as
-Feedback closes, and the panel takes its new height in one ease once the
-pointer leaves or a resize handle is taken up. A hold never costs what the
-panel is for. A section folded or unfolded is the reviewer's own change to the
-list, so Variants takes the height its sections need at once, in one ease,
-pointer or not, the rows after the fold gliding into place: held, it showed
-blank room that scrolled, or opened a section into a panel too short to show
-it. Feedback getting shorter (a note removed or put back) eases at once too, and
-so does one whose list is too short to take the difference and still show its
-newest note, as when the first note arrives. Room a list keeps meanwhile is its
-tail's, never padding, which a short panel cannot shrink below. A finger never
-holds a size: the hover a tap leaves behind is no resting pointer, so a tap's
-change eases at once. A height that does change (Feedback
-opening over a long list, room given back, the pointer gone) eases the card's
+Nothing in the dock moves suddenly, and no size waits. The dock hangs from its
+bottom-right corner, so a panel moves when its bottom or right edge does, and
+slides there. A panel takes the height its content needs the moment that
+changes (a note arriving, leaving or opened for editing, a page tab, a section
+folded or unfolded, Feedback closing over Variants), in one ease, wherever the
+pointer is. No size is ever held for a pointer resting on the dock: three
+releases tried it, to keep the control under the pointer still, and each left a
+panel showing blank room, a note out of sight or a section that would not open
+until the pointer moved away. What stays still is what can: content keeps to
+the edge of its card that does not move, so in a dock with room rows hold to the
+foot while the top edge glides, and in a full dock, where Feedback grows
+downward into room Variants gives, its rows hold to the top while the composer
+below them is uncovered. A field and its buttons follow the field's text at
+once, as when typing. Room a list keeps while its panel eases is its tail's,
+never padding, which a short panel cannot shrink below. A height that changes (Feedback
+opening over a long list, room given back) eases the card's
 height from what showed to what it needs, every changed panel on the same clock;
 Variants' list scrolls by as much as its top edge moves, so its controls stay
 still, and the dock lets its stack run past its room at the top meanwhile, never

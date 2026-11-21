@@ -17,7 +17,6 @@ import { Icon } from '../icons';
 import { dotPulse, fadeInContent, MAX_ANIMATED_ITEMS } from '../motion';
 import { NoteSummary } from './NoteSummary';
 import type { Anchor } from '../dock/picking';
-import { useHoverHold } from '../dock/useHoverHold';
 import { useNotesFloor } from './useNotesFloor';
 import { showOverflowTitle } from '../tooltips';
 import { useLayoutMotion } from '../useLayoutMotion';
@@ -44,7 +43,6 @@ export function NotesPanel({ id, open, route, view, editingId, resizeHandle, com
   const { pages, selectedPages, notes, working, togglePage } = view;
   const panelRef = useRef<HTMLElement | null>(null);
   // A change under a resting pointer scrolls the list rather than moving the composer or the rows.
-  useHoverHold(panelRef, open);
   // No cap, held or stored, may push the page chips or the composer out past the panel's top.
   useNotesFloor(panelRef, open);
   return (
@@ -141,12 +139,7 @@ const NoteList = memo(function NoteList({
   useEffect(() => {
     const list = listRef.current;
     if (!list || typeof ResizeObserver === 'undefined') return;
-    // A panel held under a resting pointer keeps its top edge, so the list resizes only at its foot (the
-    // composer below it growing as a note opens for editing): its rows stay where they are on screen.
-    const observer = new ResizeObserver(() => {
-      if (list.closest<HTMLElement>('.isotone-panel')?.dataset.held === undefined) keepPlace();
-      else if (list.clientHeight) fromEnd.current = list.scrollHeight - list.clientHeight - list.scrollTop;
-    });
+    const observer = new ResizeObserver(keepPlace);
     observer.observe(list);
     return () => observer.disconnect();
   }, [keepPlace]);

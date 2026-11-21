@@ -1,7 +1,28 @@
 import { useLayoutEffect, type RefObject } from 'react';
 import { MAX_ANIMATED_ITEMS, MOTION } from '../motion';
 
-type Position = { x: number; y: number; width: number; height: number; animation?: Animation; scrolls?: number[] };
+const settlingCount = new WeakMap<HTMLElement, number>();
+
+/**
+ * Mark the dock as settling while `animation` runs: a list easing out the room it kept drives its panel's
+ * layout itself, and the dock's motion stands aside until every such ease has landed.
+ */
+export function whileSettling(root: HTMLElement, animation: Animation) {
+  settlingCount.set(root, (settlingCount.get(root) ?? 0) + 1);
+  root.dataset.settling = 'true';
+  let done = false;
+  animation.addEventListener('finish', end);
+  animation.addEventListener('cancel', end);
+  function end() {
+    if (done) return;
+    done = true;
+    const left = (settlingCount.get(root) ?? 1) - 1;
+    settlingCount.set(root, left);
+    if (left <= 0) delete root.dataset.settling;
+  }
+}
+
+type Position = { x: number; y: number; width: number; height: number; animation?: Animation; scrolls?: number[]; list?: number };
 
 const SCROLLERS = '.isotone-list, .isotone-vars-body';
 /** Where a panel's lists are scrolled, so its exit snapshot shows them as they were, not from the top. */
@@ -69,6 +90,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       for (const [element, animation] of sizing) {
         showing.set(element, element.getBoundingClientRect().height);
         animation.cancel();
+        delete element.dataset.anchor;
       }
       sizing.clear();
       // Finish all reads before cancelling animations or adding exit snapshots.
@@ -76,7 +98,9 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         const open = element.dataset.open === 'true';
         const transform = open ? getComputedStyle(element).transform : 'none';
         const matrix = transform !== 'none' && typeof DOMMatrix !== 'undefined' ? new DOMMatrix(transform) : undefined;
-        return { element, open, rect: open ? element.getBoundingClientRect() : null, dx: matrix?.m41 ?? 0, dy: matrix?.m42 ?? 0 };
+        // How tall its note list is: whether a change of height came from the list or from what is under it.
+        const list = open ? (element.querySelector<HTMLElement>(':scope > .isotone-list')?.offsetHeight ?? 0) : 0;
+        return { element, open, rect: open ? element.getBoundingClientRect() : null, dx: matrix?.m41 ?? 0, dy: matrix?.m42 ?? 0, list };
       });
       const shown = panels.filter((panel) => panel.rect);
       restored ??= shown.length > 0;
@@ -93,11 +117,18 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         typeof root.animate !== 'function';
       const resizing = still
         ? []
-        : shown.flatMap(({ element, rect }) => {
+        : shown.flatMap(({ element, rect, list }) => {
             const old = previous.get(element);
             const from = showing.get(element) ?? old?.height;
             const to = (rect as DOMRect).height;
-            return old && from !== undefined && Math.abs(from - to) > 0.5 ? [{ element, from, to }] : [];
+            if (!old || from === undefined || Math.abs(from - to) < 0.5) return [];
+            // Which edge moves, and what grew. In a dock with room a panel grows upward from its foot. In a
+            // full one the top panel keeps its top edge and grows downward, into room the panel below gives
+            // it: when its list is as tall as it was, what grew is under the list (the composer, as a note
+            // opens for editing), and the rows above stay where they are.
+            const r = rect as DOMRect;
+            const downward = old.list === list && Math.abs(old.y - r.y) < 0.5 && Math.abs(old.y + old.height - r.bottom) > 0.5;
+            return [{ element, from, to, downward }];
           });
       const current = new Set(panels.map(({ element }) => element));
       for (const [element, item] of previous) {
@@ -106,7 +137,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         previous.delete(element);
         removeExit(element);
       }
-      for (const { element, open, rect, dx, dy } of panels) {
+      for (const { element, open, rect, dx, dy, list } of panels) {
         const old = previous.get(element);
         if (!open || !rect) {
           if (!old) continue;
@@ -162,7 +193,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         // panel above it keep the gap between them the whole way.
         if (!old && beside) reveal(element, rect.height + (Number.parseFloat(getComputedStyle(root).rowGap) || 0));
         if (old && (resizing.length > 0 || (Math.abs(shiftX) < 0.5 && Math.abs(shiftY) < 0.5))) {
-          Object.assign(old, { x, y, width: rect.width, height: rect.height, scrolls: scrollsOf(element) });
+          Object.assign(old, { x, y, width: rect.width, height: rect.height, scrolls: scrollsOf(element), list });
           // A rise still running (a panel just opened, now growing as its list arrives) carries on.
           if (instant) old.animation?.cancel();
           continue;
@@ -178,15 +209,20 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
                 { duration: MOTION.enter, easing: MOTION.easeOut },
               )
             : undefined;
-        previous.set(element, { x, y, width: rect.width, height: rect.height, animation, scrolls: scrollsOf(element) });
+        previous.set(element, { x, y, width: rect.width, height: rect.height, animation, scrolls: scrollsOf(element), list });
       }
       // A changed height eases from what showed to what the panel needs, every changed panel on the same
       // clock, so the stack's total moves evenly between two layouts; the panel's content keeps to its foot
       // (a list above it gives way and scrolls), and the dock anchors its stack at the foot, so a panel
       // opening above runs past the room, not over the pill.
       if (resizing.length) root.dataset.easing = 'true';
-      for (const { element, from, to } of resizing) {
-        const box = { boxSizing: 'border-box', flexShrink: 0, justifyContent: 'flex-end' };
+      for (const { element, from, to, downward } of resizing) {
+        // The content keeps to the edge that stays, so nothing in it jumps to meet the edge that moves: what
+        // grew at the far end (the composer, as a note opens for editing in a full dock) is uncovered there
+        // as the card reaches it, cut at the card's moving edge meanwhile rather than hanging out past it.
+        const box = downward
+          ? { boxSizing: 'border-box', flexShrink: 0, justifyContent: 'flex-start', clipPath: 'inset(-24px -24px 0px -24px)' }
+          : { boxSizing: 'border-box', flexShrink: 0, justifyContent: 'flex-end' };
         const animation = element.animate(
           [
             { ...box, height: `${from}px` },
@@ -195,9 +231,12 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
           { duration: MOTION.enter, easing: MOTION.easeOut },
         );
         sizing.set(element, animation);
+        // While it grows downward its list keeps its height (panel.ts), so the rows stay where they are.
+        if (downward) element.dataset.anchor = 'top';
         animation.onfinish = () => {
           if (sizing.get(element) !== animation) return;
           sizing.delete(element);
+          delete element.dataset.anchor;
           if (sizing.size) return;
           delete root.dataset.easing;
           // Whatever changed while it eased is measured now.
@@ -267,7 +306,10 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       delete root.dataset.easing;
       for (const element of exits.keys()) removeExit(element);
       for (const item of previous.values()) item.animation?.cancel();
-      for (const animation of sizing.values()) animation.cancel();
+      for (const [element, animation] of sizing) {
+        animation.cancel();
+        delete element.dataset.anchor;
+      }
       for (const animation of reveals.values()) animation.cancel();
     };
   }, [ref, visible]);

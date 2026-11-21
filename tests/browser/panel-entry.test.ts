@@ -370,48 +370,36 @@ describe.skipIf(!binary)('Getting into the panel (headless Chrome)', { retry: 2 
     await expectVariantsSteady();
   });
 
-  it('moves no Variants control when Feedback, open before it, closes over a list at its top', async () => {
+  it('gives Variants its room back at once when Feedback closes over a list at its top, pointer or not', async () => {
     await fresh(1024, 768);
     await start(12);
     await tool('Feedback');
     await tool('Variants');
     expect(await chrome.eval('panel("variants").querySelector(".isotone-vars-body").scrollTop')).toBe(0);
-    const before = await chrome.eval<object>('controls()');
-    await chrome.eval('watch()');
+    const beside = await chrome.eval<number>('panel("variants").offsetHeight');
+    // Closed with the pointer on the pill: the list takes the room at once, and leaving changes nothing.
     await tool('Feedback');
     expect(await chrome.eval('isOpen("notes")')).toBe(false);
-    const result = await chrome.eval<{ count: number; moved: unknown[] }>(`kept(${JSON.stringify(before)})`);
-    expect(result.count).toBeGreaterThan(2);
-    expect(result.moved).toEqual([]);
-    expect(await chrome.eval<number>('unwatch()')).toBeLessThanOrEqual(0.5);
-    // With the pointer gone from the dock, the list takes the room back.
-    const height = await chrome.eval<number>('panel("variants").offsetHeight');
+    const alone = await chrome.eval<number>('panel("variants").offsetHeight');
+    expect(alone).toBeGreaterThan(beside + 40);
     await chrome.move(20, 300);
     await chrome.eval('settle()');
-    expect(await chrome.eval<number>('panel("variants").offsetHeight')).toBeGreaterThan(height);
+    expect(await chrome.eval<number>('panel("variants").offsetHeight')).toBe(alone);
   });
 
-  it('lets a keyboard close and a keyboard resize size Variants, with no height held', async () => {
+  it('lets a keyboard close and a keyboard resize size Variants', async () => {
     await fresh(1024, 768);
     await start(12);
     await tool('Feedback');
     await tool('Variants');
-    const hold = `panel('variants').style.getPropertyValue('--iso-variants-hold')`;
-    // Closed by pointer, the height is held; taking up the resize handle by key lets it go.
-    await tool('Feedback');
-    expect(await chrome.eval(hold)).not.toBe('');
-    await chrome.eval(`panel('variants').querySelector('[role=separator][aria-label^="Resize variants"]').focus()`);
-    expect(await chrome.eval(hold)).toBe('');
-    // Closed from the keyboard, with the pointer away, nothing is held, and arrows resize.
-    await tool('Feedback');
-    await chrome.key('Escape', 'Escape'); // select mode
     await chrome.move(20, 300);
+    const beside = await chrome.eval<number>('panel("variants").offsetHeight');
     await chrome.eval(`root().querySelector('.isotone-rail-button[aria-label^="Feedback"]').focus()`);
     await chrome.key('Enter', 'Enter', 0, '\r');
     await chrome.eval('settle()');
     expect(await chrome.eval('isOpen("notes")')).toBe(false);
-    expect(await chrome.eval(hold)).toBe('');
     const height = await chrome.eval<number>('panel("variants").offsetHeight');
+    expect(height).toBeGreaterThan(beside + 40);
     await chrome.eval(`panel('variants').querySelector('[role=separator][aria-label^="Resize variants"]').focus()`);
     await chrome.key('ArrowDown', 'ArrowDown');
     await chrome.eval('settle()');

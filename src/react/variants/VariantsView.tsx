@@ -38,7 +38,7 @@ import { Icon } from '../icons';
 import { keyboardInstant, MAX_ANIMATED_ITEMS, MOTION, stillMotion } from '../motion';
 import { PanelClose } from '../notes/NotesPanel';
 import { useLayoutMotion } from '../useLayoutMotion';
-import { pointerResting, releaseOnLeave, whileSettling } from '../dock/useHoverHold';
+import { whileSettling } from '../dock/useDockMotion';
 import { useRenderLimit } from '../useRenderLimit';
 import { showOverflowTitle } from '../tooltips';
 import { useCompareHeld } from './useCompare';
@@ -84,11 +84,11 @@ function SourceNotice({ notice: { text, detail } }: { notice: VariantNotice }) {
 /**
  * The panel sits on the pill, so it keeps its bottom edge whatever opens above it. When it has to give up
  * room, as Feedback opens or grows over a long list, it gives it from its top edge and the list scrolls by
- * as much, so every control in view stays where it was; given room back, it scrolls back. While the
- * pointer rests on the dock, a change it cannot absorb that way (Feedback closing over a list at its top,
- * a section folding or unfolding) waits: the panel keeps its height, and takes its new one, easing, once
- * the pointer leaves or a resize handle is taken up. A resize the reviewer drags, an open dialog or a
- * panel still unfolding is left alone.
+ * as much, so every control in view stays where it was; given room back, it scrolls back. A change it
+ * cannot absorb that way (Feedback closing over a list at its top, a section folding or unfolding) resizes
+ * it at once, in one ease, wherever the pointer is: the panel is never kept at a size its content no longer
+ * needs (docs/design.md, Invariants). A resize the reviewer drags, an open dialog or a panel still
+ * unfolding is left alone.
  */
 function useSteadyBody(
   bodyRef: RefObject<HTMLDivElement | null>,
@@ -183,11 +183,9 @@ function useSteadyBody(
     // The panel's new size, in one ease. Room Feedback gave back is eased by the dock, the list scrolling
     // by as much, and the room after the list goes once it lands. Room a fold took out goes gliding, the
     // panel following it in the layout while the dock stands aside.
-    const settle = (eased: boolean) => {
-      // From the height that shows: a held one, unless the layout gave the hold no say (a narrow window).
-      const from = panel.style.getPropertyValue('--iso-variants-hold') ? panel.getBoundingClientRect().height : height;
-      panel.style.removeProperty('--iso-variants-hold');
-      const glide = eased && !stillMotion(body) && typeof panel.animate === 'function';
+    const settle = () => {
+      const from = height;
+      const glide = !stillMotion(body) && typeof panel.animate === 'function';
       if (!glide || !tail) return clear();
       // One ease, driven here, with the dock standing aside. Room a fold took out goes gliding, and the
       // panel follows it in the layout. Otherwise the panel grows (room Feedback gave back, a section
@@ -229,16 +227,8 @@ function useSteadyBody(
       ease.addEventListener('cancel', done);
       whileSettling(root, ease);
     };
-    // A fold is the reviewer's own change to the list, so the panel takes the size its sections need at
-    // once, eased: held, it showed blank room that scrolled, or a section opened into a panel too short
-    // to show it. Room Feedback gives back is not the reviewer's doing here, so under a pointer resting on
-    // the dock it waits until the pointer leaves; a finger, or the keyboard, gets it at once.
-    if (folded || !pointerResting(root)) {
-      settle(true);
-      return;
-    }
-    panel.style.setProperty('--iso-variants-hold', `${height}px`);
-    return releaseOnLeave(root, settle);
+    // At once, whatever the pointer rests on: a panel is never kept at a size its content no longer needs.
+    settle();
   }, [bodyRef, active, besideFeedback, folds, anchor]);
 }
 

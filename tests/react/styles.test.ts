@@ -128,6 +128,27 @@ describe('input modality', () => {
   });
 });
 
+describe('panel sizes', () => {
+  // docs/design.md, Invariants: a panel is as tall as its content needs, wherever the pointer is. Three
+  // releases held a height while the pointer rested on the dock, and each showed blank room, a hidden note
+  // or a section that would not open until the pointer left.
+  it('never depend on where the pointer rests', () => {
+    const sources = import.meta.glob('../../src/react/**/*.{ts,tsx}', { query: '?raw', import: 'default', eager: true }) as Record<
+      string,
+      string
+    >;
+    expect(Object.keys(sources).length).toBeGreaterThan(20);
+    for (const [file, text] of Object.entries(sources)) {
+      expect(text, `${file} reads :hover from script`).not.toMatch(/matches\(\s*['"`][^'"`]*:hover/);
+      expect(text, `${file} holds a size`).not.toMatch(/--iso-[a-z-]*hold|data-held|dataset\.held/);
+    }
+    // In the stylesheet, hover may restyle a control; it never sets a size of a panel or a list.
+    for (const rule of PANEL_CSS.match(/[^{}]*:hover[^{}]*\{[^}]*\}/g) ?? [])
+      if (/isotone-(panel|list|vars)\b(?!-close|-head)/.test(rule.split('{')[0] ?? ''))
+        expect(rule, 'a hover rule sizes a panel').not.toMatch(/(?<![\w-])(min-|max-)?(height|flex|flex-grow|flex-shrink|flex-basis)\s*:/);
+  });
+});
+
 describe('dock lists', () => {
   // A label of one long word used to make its segment as wide as the word, so the list scrolled sideways.
   // On touch, a note's enlarged delete target reached past the note list's edge and did the same.
