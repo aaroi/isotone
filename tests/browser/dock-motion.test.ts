@@ -132,8 +132,10 @@ window.spilled = () => {
       const b = list.getBoundingClientRect();
       const style = getComputedStyle(list);
       const padded = list.classList.contains('isotone-list');
+      // Variants' content riding its card's top edge is cut at the card's foot meanwhile: what shows counts.
+      const cut = /^inset\\(\\S+ \\S+ (-?[\\d.]+)px/.exec(getComputedStyle(list.parentElement).clipPath);
       const top = b.top + (padded ? parseFloat(style.paddingTop) : 0);
-      const bottom = b.bottom - (padded ? parseFloat(style.paddingBottom) : 0);
+      const bottom = b.bottom - (padded ? parseFloat(style.paddingBottom) : cut ? Number(cut[1]) : 0);
       // An empty note list is not rendered.
       if (bottom - top < 1) continue;
       const d = Math.max(box.top - top, bottom - box.bottom);
@@ -161,7 +163,10 @@ window.spare = () => {
   if (v?.dataset.open === 'true') {
     const body = v.querySelector('.isotone-vars-body');
     const tail = body.querySelector(':scope > .isotone-vars-tail');
-    out.variants = tail.style.height
+    // Room an open dialog or colour picker asked for is room it needs.
+    out.variants = body.parentElement.style.getPropertyValue('--iso-menu-need')
+      ? 0
+      : tail.style.height
       ? 'room left in the tail: ' + tail.style.height
       : body.scrollHeight > body.clientHeight + 1
         ? 0
@@ -579,6 +584,45 @@ describe.skipIf(!binary)('No sudden movement in the dock (headless Chrome)', { r
     await pressEscape();
     await chrome.eval('settle()');
     await step('the newest note is removed, in a full dock', remove, /^(note |option )/);
+  });
+
+  it("a selector's dialog opening in a short panel carries the selectors and itself on the panel's top edge", async () => {
+    // One selector: a panel shorter than its dialog.
+    await fresh(1);
+    await tool('Variants');
+    const height = () => chrome.eval<number>(`panel('variants').getBoundingClientRect().height`);
+    const short = await height();
+    // After every frame: how far the first selector strays from its place under the panel's top edge, and
+    // how far the dialog reaches above that edge. Laid out at once at the size the panel was easing to,
+    // they stood above the card until it caught up.
+    await chrome.eval(`(() => {
+      const p = panel('variants');
+      const head = p.querySelector('.isotone-axis');
+      const offset = () => head.getBoundingClientRect().top - p.getBoundingClientRect().top;
+      const base = offset();
+      const worst = { strayed: 0, above: 0 };
+      let on = true;
+      const sample = () => {
+        if (!on) return;
+        worst.strayed = Math.max(worst.strayed, Math.abs(offset() - base));
+        const menu = p.querySelector('.isotone-axis-menu[data-open="true"]');
+        if (menu) worst.above = Math.max(worst.above, p.getBoundingClientRect().top - menu.getBoundingClientRect().top);
+        requestAnimationFrame(() => setTimeout(sample));
+      };
+      sample();
+      window.rode = () => { on = false; return worst; };
+    })()`);
+    const opener = `panel('variants').querySelector('.isotone-axis button[aria-haspopup], .isotone-axis-head button')`;
+    const [x, y] = await chrome.eval<[number, number]>(`centre(${opener})`);
+    const opened = await step('a dialog opens in a short panel', () => chrome.click(x, y), NONE);
+    expect.soft(opened.eased, 'the panel eased taller').toBe(true);
+    expect.soft(await height()).toBeGreaterThan(short + 40);
+    const rode = await chrome.eval<{ strayed: number; above: number }>('rode()');
+    note(
+      `motion: a dialog opens in a short panel: selectors strayed ${rode.strayed.toFixed(1)}px, dialog above the panel ${rode.above.toFixed(1)}px`,
+    );
+    expect.soft(rode.strayed, 'the selectors left the top edge').toBeLessThanOrEqual(1);
+    expect.soft(rode.above, 'the dialog stood above the panel').toBeLessThanOrEqual(1);
   });
 
   it('a fold that takes out more than a short panel is tall keeps the list inside it', async () => {

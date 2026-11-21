@@ -55,6 +55,8 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
     const exits = new Map<HTMLElement, { ghost: HTMLElement; animation: Animation }>();
     // Heights easing now. While they run, the dock's own resizes come from them and are not measured.
     const sizing = new Map<HTMLElement, Animation>();
+    // Variants' content riding its card's top edge through one of them.
+    const riding = new Map<HTMLElement, Animation>();
     const reveals = new Map<HTMLElement, Animation>();
     const reduced = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
     const removeExit = (element: HTMLElement) => {
@@ -96,6 +98,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       for (const [element, animation] of sizing) {
         showing.set(element, element.getBoundingClientRect().height);
         animation.cancel();
+        riding.get(element)?.cancel();
         delete element.dataset.anchor;
       }
       sizing.clear();
@@ -109,6 +112,10 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         const notes = open ? element.querySelector<HTMLElement>(':scope > .isotone-list') : null;
         const list = notes?.offsetHeight ?? 0;
         const fits = !notes || notes.scrollHeight <= notes.clientHeight + 1;
+        // Variants' selectors, when all of them show: then nothing scrolls to keep them still as its height
+        // changes, and they ride its top edge instead (see the eases below).
+        const body = open ? element.querySelector<HTMLElement>(':scope > .isotone-vars > .isotone-vars-body') : null;
+        const rides = body !== null && body.scrollHeight <= body.clientHeight + 1 && body.scrollTop === 0;
         return {
           element,
           open,
@@ -117,6 +124,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
           dy: matrix?.m42 ?? 0,
           list,
           fits,
+          rides,
         };
       });
       const shown = panels.filter((panel) => panel.rect);
@@ -134,7 +142,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         typeof root.animate !== 'function';
       const resizing = still
         ? []
-        : shown.flatMap(({ element, rect, list, fits }) => {
+        : shown.flatMap(({ element, rect, list, fits, rides }) => {
             const old = previous.get(element);
             const from = showing.get(element) ?? old?.height;
             const to = (rect as DOMRect).height;
@@ -155,7 +163,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
                   : fits
                     ? 'rise'
                     : undefined;
-            return [{ element, from, to, anchor }];
+            return [{ element, from, to, anchor, rides }];
           });
       const current = new Set(panels.map(({ element }) => element));
       for (const [element, item] of previous) {
@@ -243,7 +251,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       // (a list above it gives way and scrolls), and the dock anchors its stack at the foot, so a panel
       // opening above runs past the room, not over the pill.
       if (resizing.length) root.dataset.easing = 'true';
-      for (const { element, from, to, anchor } of resizing) {
+      for (const { element, from, to, anchor, rides } of resizing) {
         // The content keeps to the edge that stays, so nothing in it jumps to meet the edge that moves
         // (`data-anchor`, panel.ts). Top: the rows stay, and what changed under them (the composer as a
         // note opens for editing, a row removed) is uncovered or let go as the card's foot passes, cut at
@@ -260,6 +268,26 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
           { duration: MOTION.enter, easing: MOTION.easeOut },
         );
         sizing.set(element, animation);
+        // Variants' card eases from its foot, and its content is laid out from its top at the size it is
+        // going to (room made under a short list for a dialog or the colour picker, and given back). Left
+        // there, the selectors and the dialog stood at once where the card's top edge was still on its way
+        // to, outside it or under blank card. They ride the edge: moved by what the card has left to
+        // travel, and cut at its foot while it is still shorter than they are.
+        const content = rides ? element.querySelector<HTMLElement>(':scope > .isotone-vars') : null;
+        if (content) {
+          const left = to - from;
+          const ride = content.animate(
+            [
+              { transform: `translateY(${left}px)`, clipPath: `inset(0px 0px ${Math.max(0, left)}px 0px)` },
+              { transform: 'translateY(0px)', clipPath: 'inset(0px 0px 0px 0px)' },
+            ],
+            { duration: MOTION.enter, easing: MOTION.easeOut },
+          );
+          riding.set(element, ride);
+          ride.onfinish = ride.oncancel = () => {
+            if (riding.get(element) === ride) riding.delete(element);
+          };
+        }
         if (anchor) element.dataset.anchor = anchor;
         else delete element.dataset.anchor;
         animation.onfinish = () => {
@@ -350,6 +378,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         animation.cancel();
         delete element.dataset.anchor;
       }
+      for (const animation of riding.values()) animation.cancel();
       for (const animation of reveals.values()) animation.cancel();
     };
   }, [ref, visible]);
