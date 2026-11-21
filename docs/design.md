@@ -17,13 +17,13 @@ with its test.
 | A panel is as tall as its content needs, up to its limits: never taller, with blank room, and never shorter than what the reviewer just asked to see. | `spare()` after every step of `tests/browser/dock-motion.test.ts` |
 | No size depends on where the pointer is. Nothing is held while it rests on the dock, and nothing changes when it leaves. | `sound()` there takes the pointer off the dock after every step and compares; `tests/react/styles.test.ts` refuses a hold in the source |
 | A list stays inside its panel on every frame, with its foot, bottom edge and the end of its scroll. | `spilled()`, every frame of every step there |
-| What was just saved can be seen: a new note shows in full once it lands. | `newestShows()` there |
-| Nothing moves suddenly: every size or position change eases, in one ease. | `motion()` and `stages()` there |
+| What was just asked for can be seen: a new note shows in full once it lands, and a section unfolded at the foot of a full panel is scrolled into view. | `newestShows()` and the unfold at the end of a list, there |
+| Nothing moves suddenly: every size or position change eases, in one ease, and goes one way. Nothing sets off and comes back. | `motion()`, every step there (jumps and turns); `stages()` where one ease is the point |
 | A cursor or control promises only what it can do. | The resize handles' `data-can`, there and in `tests/react/resize.test.ts` |
 | What happens at one end of a list happens at the other (fade, blur, receding rows). | `tests/browser/variants-layout.test.ts` |
 
-A new transition goes through `step()` in the motion test and gets the first
-five for free; a fix for something a reviewer saw adds the invariant it broke
+A new transition goes through `step()` in the motion test, which checks the
+first three and the jumps and turns of the fifth on every frame; a fix for something a reviewer saw adds the invariant it broke
 here, not only a case for that one transition.
 
 ## Materials and states
@@ -390,7 +390,13 @@ downward into room Variants gives, its rows hold to the top while the composer
 below them is uncovered, and a row removed there lets the foot come up to rows
 that have not moved. Variants' selectors and a dialog over them keep to its card's top edge the same
 way as a short panel grows to hold the dialog, and the panel starts back as the
-dialog fades. Whatever has to stay with an easing edge is moved by layout, in
+dialog fades. A dialog asks for no more height than its card can have: beside
+Feedback or in a short window it scrolls in the room there is, never held taller
+than the card and out over the pill. A section unfolded where its rows would
+arrive out of view, under a toggle at the foot of a panel already as tall as it
+may be, scrolls the list by what is hidden, its rows gliding there. One
+transition goes one way: a row, an edge or a list's scroll never sets off and
+comes back. Whatever has to stay with an easing edge is moved by layout, in
 the same pass as the height, never by a transform: a transform runs on the
 compositor's clock, and in a real browser the two drift apart mid-ease. A change made while a height is easing turns the ease round
 from the height that shows, rather than letting it run on to a size nothing
@@ -399,7 +405,8 @@ never padding, which a short panel cannot shrink below. A height that changes (F
 opening over a long list, room given back) eases the card's
 height from what showed to what it needs, every changed panel on the same clock;
 Variants' list scrolls by as much as its top edge moves, so its controls stay
-still, and the dock lets its stack run past its room at the top meanwhile, never
+still (not while a fold eases it shorter: the room after the list goes on that
+ease's clock, and the scroll with it), and the dock lets its stack run past its room at the top meanwhile, never
 over the pill. A panel opening beside another lays out at once and is revealed
 from its foot upward, fading in, by as much as the one above slides, so the gap
 between them stays the same the whole way; one opening alone

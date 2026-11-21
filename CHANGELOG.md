@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **Sending a note written in select mode goes back to select mode.** After you pin an element, write beside it and send, the crosshair is on again for the next element, with the caret waiting in the note field as when Feedback opens; Escape or the crosshair button ends it. A note written in the docked field, or an edit, leaves you in the field as before, and so does a phone-sized window, where select mode hides the saved notes.
+- **Sending a note written in select mode goes back to select mode.** After you pin an element, write beside it and send, the crosshair is on again for the next element, with the caret waiting in the note field as when Feedback opens; Escape or the crosshair button ends it. A note written in the docked field, or an edit, leaves you in the field as before, and so does a phone-sized window, where select mode hides the saved notes. A note that could not be saved comes back in the field out of select mode, where it can be read.
 
 ### Fixed
 
@@ -15,6 +15,8 @@
 - **Changing your mind mid-animation turns the panel round at once.** A fold, a page tab or a note undone while the panel was still resizing let it run on to the size nothing needed, then resized again.
 - **The Variants list no longer reaches past its panel.** In a short window, or when a fold took out more than the panel's height, the list grew taller than the panel for the length of the change (or for as long as the pointer stayed), putting its bottom edge and the end of its scroll out of reach.
 - **Rows shrink at the bottom of the Variants list while the defaults bar shows.** Scrolled rows recede a little as they leave at either end; at the bottom this happened only inside the last few pixels, where the bar hid all of it. It now happens under the bar's own fade, as it does under a section header at the top, and stays within the list's edge fade when the bar is hidden, so no row ever resizes in plain view.
+- **A selector's dialog stays inside its panel when there is no room to grow.** Beside Feedback, or in a short window, the Variants panel cannot grow to the height a dialog asks for; the dialog then hung out below the panel, over the pill. It now scrolls in the room there is.
+- **Selectors no longer drop when Feedback gives Variants room.** Removing a note or closing a page tab beside a scrolled Variants list that then fits made every selector drop by what was scrolled and ride back up.
 - **A short tag on a saved note is as wide as its label.** A tag such as “Due” was padded out to the width kept for a long label being cut off, so short tags looked stretched beside their notes.
 - **The resize cursor shows only where a panel can be resized.** The top edge of a panel that cannot grow (all of its content shows, or the dock fills the window) showed the two-way resize cursor anyway. It now shows one arrow where the edge can only go one way, and the ordinary pointer where it cannot move.
 

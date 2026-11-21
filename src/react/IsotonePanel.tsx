@@ -111,6 +111,8 @@ export function IsotonePanel({
     update,
     focusComposer: focus.composer,
     afterSend: (fresh) => afterSend(fresh),
+    // Select mode resumed as the note was sent would leave what came back under the cover.
+    afterFail: () => dockComposer(),
     focusName,
   });
   const { draft, setTargets } = actions;

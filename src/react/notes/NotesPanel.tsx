@@ -42,8 +42,7 @@ interface NotesPanelProps {
 export function NotesPanel({ id, open, route, view, editingId, resizeHandle, compose, onClose, onEdit, onRemove }: NotesPanelProps) {
   const { pages, selectedPages, notes, working, togglePage } = view;
   const panelRef = useRef<HTMLElement | null>(null);
-  // A change under a resting pointer scrolls the list rather than moving the composer or the rows.
-  // No cap, held or stored, may push the page chips or the composer out past the panel's top.
+  // No stored height may push the page chips or the composer out past the panel's top.
   useNotesFloor(panelRef, open);
   return (
     <section

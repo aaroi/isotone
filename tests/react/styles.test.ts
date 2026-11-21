@@ -229,6 +229,16 @@ describe('scroll edges', () => {
     }
   });
 
+  it('has one value for where a fade rests at each edge of a list, read by its band and by the rows receding', () => {
+    // Two values that happened to be equal came apart: rows resized in plain view, clear of the fade.
+    // A band's rest is only ever the list's own value, and so are the insets rows recede from.
+    const rests = [...PANEL_CSS.matchAll(/--iso-edge-rest:\s*([^;]+);/g)].map((match) => match[1]);
+    expect(rests.sort()).toEqual(['var(--iso-fade-bottom)', 'var(--iso-fade-top)']);
+    const view = /view\(block ([^;]+)\);/.exec(PANEL_CSS)?.[1] ?? '';
+    expect(view).toMatch(/^var\(--iso-fade-top, [^)]+\)\) var\(--iso-fade-bottom, [^)]+\)\)$/);
+    expect(PANEL_CSS).not.toMatch(/--iso-recede-(top|bottom)/);
+  });
+
   it('lets forced colours keep a solid face on stuck section headers', () => {
     // The material that replaces a header's face must not outrank the forced-colours rule.
     const cleared = PANEL_CSS.split('\n').filter((line) => /\.isotone-section-head \{ background: none/.test(line));

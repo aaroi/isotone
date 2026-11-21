@@ -93,6 +93,9 @@ window.record = () => {
     }
     const body = r.querySelector('.isotone-variants-panel[data-open="true"] .isotone-vars-body');
     if (body) {
+      // Where the list is scrolled: nothing jumps by it (rows glide to where a scroll puts them), but it
+      // never goes one way and comes back within a transition.
+      f['variants scroll'] = body.scrollTop;
       const view = body.getBoundingClientRect();
       for (const n of body.querySelectorAll('[role=radio], .isotone-section-toggle')) {
         const b = n.getBoundingClientRect();
@@ -132,10 +135,8 @@ window.spilled = () => {
       const b = list.getBoundingClientRect();
       const style = getComputedStyle(list);
       const padded = list.classList.contains('isotone-list');
-      // Variants' content riding its card's top edge is cut at the card's foot meanwhile: what shows counts.
-      const cut = /^inset\\(\\S+ \\S+ (-?[\\d.]+)px/.exec(getComputedStyle(list.parentElement).clipPath);
       const top = b.top + (padded ? parseFloat(style.paddingTop) : 0);
-      const bottom = b.bottom - (padded ? parseFloat(style.paddingBottom) : cut ? Number(cut[1]) : 0);
+      const bottom = b.bottom - (padded ? parseFloat(style.paddingBottom) : 0);
       // An empty note list is not rendered.
       if (bottom - top < 1) continue;
       const d = Math.max(box.top - top, bottom - box.bottom);
@@ -193,11 +194,16 @@ interface Motion {
   moved?: string;
   /** Things that moved, each covering most of its way between two frames. */
   jumps: string[];
+  /** What went one way and came back within the transition, and by how much. */
+  turns: string[];
   /** Whether any height eased. */
   eased: boolean;
   /** The furthest a list reached past its panel on any frame, in px. */
   spill: number;
 }
+
+/** How far, in px, something has to come back the way it went to have turned round rather than settled. */
+const TURN = 2;
 
 /** A gap between samples, in ms, past which a step says nothing about an ease of 180 ms. */
 const SLOW_FRAME = 50;
@@ -209,15 +215,26 @@ function motion({ frames, eased, spill = 0 }: { frames: Record<string, number>[]
   let still = 0;
   let moved: string | undefined;
   const jumps: string[] = [];
+  const turns: string[] = [];
   for (const key of keys) {
     let span = 0;
     let travel = 0;
     let first: number | undefined;
+    // The way it is going, and how far it has come back since it last went furthest that way.
+    let heading = 0;
+    let furthest: number | undefined;
+    let back = 0;
     for (let i = 1; i < frames.length; i++) {
       const a = frames[i - 1]?.[key];
       const b = frames[i]?.[key];
       first ??= a ?? b;
       if (a === undefined || b === undefined) continue;
+      furthest ??= a;
+      if (heading === 0 && Math.abs(b - furthest) > TURN) heading = Math.sign(b - furthest);
+      if (heading !== 0) {
+        if ((b - furthest) * heading > 0) furthest = b;
+        back = Math.max(back, (furthest - b) * heading);
+      }
       travel = Math.max(travel, Math.abs(b - (first as number)));
       // A step across a frame that took most of an ease (a loaded machine) shows nothing of how it moved:
       // only steps between frames a 60 Hz screen could have shown count toward a jump. What must stay
@@ -229,10 +246,11 @@ function motion({ frames, eased, spill = 0 }: { frames: Record<string, number>[]
       still = Math.max(span, travel);
       moved = key;
       // Something that glides out of view has no end to judge its steps against.
-    } else if (frames.at(-1)?.[key] !== undefined && travel > 4 && span > 4 && span > travel * 0.8)
+    } else if (!key.endsWith(' scroll') && frames.at(-1)?.[key] !== undefined && travel > 4 && span > 4 && span > travel * 0.8)
       jumps.push(`${key} jumped ${Math.round(span)}px of ${Math.round(travel)}px`);
+    if (back > TURN) turns.push(`${key} came back ${Math.round(back)}px`);
   }
-  return { still: Math.round(still * 10) / 10, moved, jumps, eased, spill };
+  return { still: Math.round(still * 10) / 10, moved, jumps, turns, eased, spill };
 }
 
 /** How many separate movements `key` makes: one ease moves on every frame from its start to where it lands. */
@@ -279,6 +297,11 @@ describe.skipIf(!binary)('No sudden movement in the dock (headless Chrome)', { r
             res.end(JSON.stringify({ id }));
           });
           return;
+        }
+        // A note deleted stays deleted, so a list read again after one is as the reviewer left it.
+        if (req.method === 'DELETE') {
+          const id = new URL(req.url, origin).searchParams.get('id');
+          notes = notes.filter((n) => n.id !== id);
         }
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify(notes));
@@ -337,6 +360,15 @@ describe.skipIf(!binary)('No sudden movement in the dock (headless Chrome)', { r
       .soft(
         result.jumps.filter((jump) => !follows?.test(jump)),
         `${label}: jumps`,
+      )
+      .toEqual([]);
+    // One transition goes one way: a row, an edge or a list's scroll that sets off and comes back was
+    // carried somewhere it was not going (a list scrolled up out of its card and pulled back, rows swung
+    // out by room that then went).
+    expect
+      .soft(
+        result.turns.filter((turn) => !follows?.test(turn)),
+        `${label}: went one way and came back`,
       )
       .toEqual([]);
     await sound(label, result);
@@ -665,6 +697,158 @@ describe.skipIf(!binary)('No sudden movement in the dock (headless Chrome)', { r
     note(`motion: a dialog closes in a short panel: ${Math.round(during)}px tall 80ms in, of ${Math.round(short)}px`);
     await check('a dialog closes in a short panel');
     await sound('a dialog closes in a short panel', motion(recorded, NONE));
+  });
+
+  it('the first fold in a list that fills its panel keeps the list at rest in its card', async () => {
+    // A window short enough that the selectors that fit alone fill the panel and scroll.
+    await fresh(FITS_ALONE);
+    await chrome.viewport(1024, 600);
+    await chrome.eval('settle()');
+    await tool('Variants');
+    await chrome.move(20, 300);
+    const body = `panel('variants').querySelector('.isotone-vars-body')`;
+    expect(await chrome.eval<boolean>(`${body}.scrollHeight > ${body}.clientHeight + 40`), 'the list scrolls').toBe(true);
+    const toggle = `panel('variants').querySelector('.isotone-section-toggle')`;
+    // How far the toggle strays from its place under the card's top edge, after every frame. The scroll
+    // kept for Feedback taking room ran during the fold's own ease too: the list went up out of its card
+    // for a frame, toggle and all, and was pulled back.
+    await chrome.eval(`window.lead = () => {
+      const offset = () => ${toggle}.getBoundingClientRect().top - panel('variants').getBoundingClientRect().top;
+      const base = offset();
+      let worst = 0;
+      let on = true;
+      const sample = () => {
+        if (!on) return;
+        worst = Math.max(worst, Math.abs(offset() - base));
+        requestAnimationFrame(() => setTimeout(sample));
+      };
+      sample();
+      window.led = () => { on = false; return worst; };
+    }`);
+    await chrome.eval(`${toggle}.focus()`);
+    await chrome.eval('lead()');
+    await step('the first fold in a full panel', () => chrome.key('Enter', 'Enter', 0, '\r'), NONE);
+    expect.soft(await chrome.eval<number>('led()'), 'the toggle left its place under the top edge').toBeLessThanOrEqual(1);
+    expect.soft(await chrome.eval<boolean>(`${body}.scrollHeight <= ${body}.clientHeight + 1`), 'folded, the list fits').toBe(true);
+  });
+
+  it('a section unfolded at the end of a scrolled list is scrolled into view, its rows gliding there', async () => {
+    await fresh(9);
+    await chrome.viewport(1024, 600);
+    await chrome.eval('settle()');
+    await tool('Variants');
+    const body = `panel('variants').querySelector('.isotone-vars-body')`;
+    const toggle = `[...panel('variants').querySelectorAll('.isotone-section-toggle')].at(-1)`;
+    // How much of the last section's rows shows above the room kept at the list's foot.
+    const showing = () =>
+      chrome.eval<{ shown: number; of: number }>(`(() => {
+        const rows = ${toggle}.closest('.isotone-section').querySelector('.isotone-section-body')?.getBoundingClientRect();
+        const view = ${body}.getBoundingClientRect();
+        return rows?.height ? { shown: Math.round(Math.min(rows.bottom, view.bottom) - Math.max(rows.top, view.top)), of: Math.round(rows.height) } : { shown: 0, of: 0 };
+      })()`);
+    await chrome.eval(`${body}.scrollTop = ${body}.scrollHeight`);
+    await chrome.eval('settle()');
+    const before = await showing();
+    expect(before.shown, 'the last section shows at the end of the list').toBeGreaterThan(40);
+    const click = async () => {
+      const [x, y] = await chrome.eval<[number, number]>(`centre(${toggle})`);
+      await chrome.click(x, y);
+    };
+    await step('the last section folds at the end of the list', click, NONE);
+    // The panel is as tall as it may be, so the rows arrive under a toggle at its foot: the list scrolls.
+    await step('and unfolds', click, NONE);
+    expect.soft(await showing(), 'the section just unfolded shows as it did').toEqual(before);
+  });
+
+  it('Variants given room by Feedback, its list now fitting, follows its top edge without dropping', async () => {
+    const saved = Array.from({ length: 3 }, (_, i) => ({
+      id: `n${i}`,
+      route: '/',
+      feedback: `Saved note ${i}`,
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+      done: false,
+    }));
+    await fresh(FITS_ALONE, saved);
+    // Tall enough that the selectors fit beside an empty Feedback, and scroll beside three notes.
+    await chrome.viewport(1024, 850);
+    await chrome.eval('settle()');
+    await tool('Variants');
+    await tool('Feedback');
+    await pressEscape();
+    await chrome.eval('settle()');
+    const body = `panel('variants').querySelector('.isotone-vars-body')`;
+    expect(await chrome.eval<boolean>(`${body}.scrollHeight > ${body}.clientHeight + 1`), 'squeezed beside Feedback').toBe(true);
+    // The first selector's place under the card's top edge. Held there only when a dialog holds the
+    // content taller than its card: with nothing holding it, starting lower by what the card had left to
+    // grow dropped the rows by as much and brought them back.
+    await chrome.eval(`window.lead = () => {
+      const offset = () => panel('variants').querySelector('.isotone-section-toggle').getBoundingClientRect().top - panel('variants').getBoundingClientRect().top;
+      let worst = 0;
+      let on = true;
+      const sample = () => {
+        if (!on) return;
+        if (${body}.scrollTop < 1) worst = Math.max(worst, Math.abs(offset() - 14));
+        requestAnimationFrame(() => setTimeout(sample));
+      };
+      sample();
+      window.led = () => { on = false; return worst; };
+    }`);
+    const remove = async () => {
+      const row = `[...panel('notes').querySelectorAll('.isotone-note')].at(-1)`;
+      const [rx, ry] = await chrome.eval<[number, number]>(`centre(${row})`);
+      await chrome.move(rx, ry);
+      await chrome.eval('settle()');
+      const [x, y] = await chrome.eval<[number, number]>(`centre(${row}.querySelector('.isotone-x'))`);
+      await chrome.eval('lead()');
+      await chrome.click(x, y);
+    };
+    for (let left = saved.length; left > 0; left--) {
+      await step(`a note removed beside Variants, ${left - 1} left`, remove, NONE);
+      expect
+        .soft(await chrome.eval<number>('led()'), `${left - 1} left: the first selector left its place under the top edge`)
+        .toBeLessThanOrEqual(1);
+    }
+    expect.soft(await chrome.eval<boolean>(`${body}.scrollHeight <= ${body}.clientHeight + 1`), 'the list fits in the end').toBe(true);
+  });
+
+  it("a selector's dialog asking for more height than its card can have stays inside the card and scrolls", async () => {
+    const saved = Array.from({ length: 4 }, (_, i) => ({
+      id: `n${i}`,
+      route: '/',
+      feedback: `Saved note ${i}`,
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+      done: false,
+    }));
+    // Beside Feedback in a short window, and alone in a shorter one.
+    for (const [label, height, notes] of [
+      ['beside Feedback', 600, saved],
+      ['in a short window', 400, []],
+    ] as const) {
+      await fresh(
+        1,
+        notes.map((n) => ({ ...n })),
+      );
+      await chrome.viewport(1280, height);
+      await chrome.eval('settle()');
+      if (notes.length) {
+        await tool('Feedback');
+        await pressEscape();
+      }
+      await tool('Variants');
+      const opener = `panel('variants').querySelector('.isotone-axis-head button')`;
+      const [x, y] = await chrome.eval<[number, number]>(`centre(${opener})`);
+      await step(`a dialog opens ${label}`, () => chrome.click(x, y), NONE);
+      const out = await chrome.eval<{ content: number; dialog: number }>(`(() => {
+        const card = panel('variants').getBoundingClientRect();
+        const content = panel('variants').querySelector('.isotone-vars').getBoundingClientRect();
+        const dialog = panel('variants').querySelector('.isotone-axis-menu').getBoundingClientRect();
+        return { content: Math.round(content.height - card.height), dialog: Math.round(Math.max(card.top - dialog.top, dialog.bottom - card.bottom)) };
+      })()`);
+      expect.soft(out.content, `${label}: the content is held taller than its card`).toBeLessThanOrEqual(1);
+      expect.soft(out.dialog, `${label}: the dialog reaches outside its card`).toBeLessThanOrEqual(0);
+      await pressEscape();
+      await chrome.eval('settle()');
+    }
   });
 
   it('a fold that takes out more than a short panel is tall keeps the list inside it', async () => {

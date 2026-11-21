@@ -23,6 +23,8 @@ interface NoteActionsOptions {
   focusComposer: () => void;
   /** A note went out: where the dock and the caret go next. `fresh` is false for an edit. */
   afterSend: (fresh: boolean) => void;
+  /** A save that failed put the note back in the field: the field has to be where it can be read. */
+  afterFail: () => void;
   /** Where focus goes when a note needs a name before it can be sent. */
   focusName: () => void;
 }
@@ -65,6 +67,7 @@ export function useNoteActions({
   update,
   focusComposer,
   afterSend,
+  afterFail,
   focusName,
 }: NoteActionsOptions) {
   const [text] = useState(createDraftText);
@@ -73,8 +76,8 @@ export function useNoteActions({
   const [editing, setEditing] = useState<IsotoneNote | null>(null);
   const [notice, setNotice] = useState('');
   // Handlers read the current render here, so they stay stable and memoized children skip unrelated renders.
-  const latest = useRef({ route, getPayload, getSelections, targets, variantTarget, editing, afterSend });
-  latest.current = { route, getPayload, getSelections, targets, variantTarget, editing, afterSend };
+  const latest = useRef({ route, getPayload, getSelections, targets, variantTarget, editing, afterSend, afterFail });
+  latest.current = { route, getPayload, getSelections, targets, variantTarget, editing, afterSend, afterFail };
   /** Saves in flight, by the temporary id of their optimistic note. */
   const saving = useRef(new Map<string, Promise<string>>());
 
@@ -143,6 +146,7 @@ export function useNoteActions({
         setVariantTarget(context.variant);
         setEditing(previous);
         setNotice('Could not save. Your feedback is still here.');
+        latest.current.afterFail();
       } finally {
         // Kept a moment past the save, for an edit or delete that read the temporary id meanwhile.
         if (!previous) setTimeout(() => saving.current.delete(tempId), 0);

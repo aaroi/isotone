@@ -99,6 +99,8 @@ function useSteadyBody(
   anchor: RefObject<{ toggle: Element; top: number } | null>,
 ) {
   const seen = useRef({ height: 0, scroll: 0, content: 0 });
+  // Whether a fold is easing the panel shorter now.
+  const shortening = useRef(false);
   useLayoutEffect(() => {
     const body = bodyRef.current;
     const panel = body?.closest<HTMLElement>('.isotone-panel');
@@ -123,7 +125,11 @@ function useSteadyBody(
       const before = last;
       last = now;
       const steady = before && Math.abs(now.foot - before.foot) <= 1;
-      if (steady && root.dataset.resizing !== 'true' && !body.hasAttribute('inert'))
+      // Not while a fold eases the panel shorter: the room after the list goes on that ease's clock and
+      // the scroll with it. Scrolling by what the card gave up as well sent the list up out of its card's
+      // top for a frame, toggle and all, before the going room pulled it back.
+      if (shortening.current) exact = body.scrollTop;
+      else if (steady && root.dataset.resizing !== 'true' && !body.hasAttribute('inert'))
         if (!panel.querySelector('.isotone-colour')) {
           // The scroll the list would have, even past its top while the panel's edge passes the list's.
           const shown = Math.min(Math.max(exact, 0), body.scrollHeight - body.clientHeight);
@@ -155,13 +161,34 @@ function useSteadyBody(
     const body = bodyRef.current;
     // A toggle pressed while its header was held at the top of the list would be carried off with its
     // section: the list scrolls by as much, so the toggle stays under the pointer.
+    const pressed = anchor.current;
+    anchor.current = null;
     const keepToggle = () => {
-      const pressed = anchor.current;
-      anchor.current = null;
       if (folded && pressed?.toggle.isConnected && body) body.scrollTop += pressed.toggle.getBoundingClientRect().top - pressed.top;
+    };
+    // A section just unfolded is brought into view: in a panel already as tall as it may be, its rows
+    // arrive under the toggle, which may be at the list's foot, and nothing of them would show. The list
+    // scrolls by what is hidden, no further than leaves its header at the top, and the rows glide there
+    // (useLayoutMotion counts the scroll). `grown` is how far the card's top edge has yet to rise, which
+    // the list scrolls back by as it does.
+    const reveal = (grown = 0) => {
+      const section = pressed?.toggle.isConnected ? pressed.toggle.closest<HTMLElement>('.isotone-section') : null;
+      if (!folded || !body || !section || section.dataset.collapsed !== 'false') return;
+      const style = getComputedStyle(body);
+      const box = body.getBoundingClientRect();
+      const head = section.querySelector<HTMLElement>(':scope > .isotone-section-head') ?? section;
+      const lands = Math.max(0, body.scrollTop - grown);
+      const moved = body.scrollTop - lands;
+      // Where things come to rest: the list's foot stays, and its content rises with the card's top edge.
+      const hidden =
+        section.getBoundingClientRect().bottom + moved - grown - (box.bottom - (Number.parseFloat(style.scrollPaddingBottom) || 0));
+      const spare = head.getBoundingClientRect().top + moved - (box.top + (Number.parseFloat(style.paddingTop) || 0));
+      const by = Math.min(hidden, Math.max(0, spare));
+      if (by > 0.5) body.scrollTop = lands + by + grown;
     };
     if (!(closed || folded) || !active || !panel || !root || !body || !height) {
       if (folded) keepToggle();
+      reveal();
       return;
     }
     // Room after the list, so the scroll is never clamped while the panel changes size: what a fold took
@@ -171,6 +198,7 @@ function useSteadyBody(
     const interrupted = running.current;
     running.current = null;
     interrupted?.cancel();
+    shortening.current = false;
     const tail = body.querySelector<HTMLElement>(':scope > .isotone-vars-tail');
     const tall = (extra: number) => `calc(var(--iso-bar-room) + ${extra}px)`;
     const give = (extra: number) => tail?.style.setProperty('height', tall(extra));
@@ -208,10 +236,19 @@ function useSteadyBody(
       // past them would carry them a few pixels a frame.
       const long = body.querySelectorAll('[data-motion-key]').length > MAX_ANIMATED_ITEMS;
       const glide = !long && !reducedMotion() && typeof panel.animate === 'function';
-      if (!glide || !tail) return clear();
+      if (!glide || !tail) {
+        clear();
+        return reveal();
+      }
       const scrolled = body.scrollTop;
       clear();
+      // What the panel needs, not what an ease of the dock's still shows of it: that ease is dropped as
+      // this one starts (the dock stands aside), and a height read under it was no target.
+      for (const animation of panel.getAnimations?.() ?? [])
+        if (animation.effect instanceof KeyframeEffect && animation.effect.getKeyframes().some((frame) => 'height' in frame))
+          animation.cancel();
       const to = panel.getBoundingClientRect().height;
+      shortening.current = folded && to < from - 0.5;
       const timing = { duration: MOTION.reflow, easing: MOTION.easeOut };
       const eases: Animation[] = [];
       if (Math.abs(to - from) > 0.5) {
@@ -229,6 +266,7 @@ function useSteadyBody(
         if (room > 0) give(room);
       }
       body.scrollTop = scrolled;
+      reveal(Math.max(0, to - from));
       if (!eases.length) return clear();
       // The room goes before the dock, standing aside until now, reads where the panel landed. A fold
       // made while this one still runs cancels it, and starts from what shows. An ease a newer one
@@ -243,6 +281,7 @@ function useSteadyBody(
       const done = () => {
         if (--left > 0 || running.current !== group) return;
         running.current = null;
+        shortening.current = false;
         clear();
       };
       for (const ease of eases) {
@@ -260,6 +299,8 @@ function useSteadyBody(
     // At once, whatever the pointer rests on: a panel is never kept at a size its content no longer needs.
     settle();
   }, [bodyRef, active, besideFeedback, folds, anchor]);
+  // A fold still easing as the list goes lets go of its room and the card's limit.
+  useEffect(() => () => running.current?.cancel(), []);
 }
 
 /**

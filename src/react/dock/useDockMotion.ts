@@ -28,6 +28,16 @@ export function whileSettling(root: HTMLElement, animation: Animation) {
   }
 }
 
+/** A height easing: where from and to, what it keeps to, and the layout it left. */
+type Sizing = {
+  animation: Animation;
+  from: number;
+  to: number;
+  anchor: Anchor | undefined;
+  ride: number;
+  origin: { y: number; height: number; list: number | undefined };
+};
+
 type Position = { x: number; y: number; width: number; height: number; animation?: Animation; scrolls?: number[]; list?: number };
 
 const SCROLLERS = '.isotone-list, .isotone-vars-body';
@@ -38,9 +48,9 @@ const scrollsOf = (element: HTMLElement) => Array.from(element.querySelectorAll<
  * Move and resize panels without scaling their text, hit targets or corner shapes. The dock hangs from its
  * bottom-right corner, so a panel moves when its bottom or right edge does, and slides there.
  *
- * A panel whose height changes (a note saved, Feedback taking room from Variants or giving it back) keeps
- * its bottom edge, and its card eases its height, so its top edge glides and a panel above follows it in
- * the layout. A panel opening beside another lays out at once and is revealed from its foot upward,
+ * A panel whose height changes (a note saved, Feedback taking room from Variants or giving it back) eases
+ * its card's height, every changed panel on one clock, and a panel above follows in the layout. Its content
+ * keeps to whichever edge of the card stays (`Anchor`, and the eases below). A panel opening beside another lays out at once and is revealed from its foot upward,
  * fading in, while the one above slides up; opening alone, it rises 6px and fades in; closing, it fades
  * where it was.
  *
@@ -54,10 +64,20 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
     const previous = new Map<HTMLElement, Position>();
     const exits = new Map<HTMLElement, { ghost: HTMLElement; animation: Animation }>();
     // Heights easing now. While they run, the dock's own resizes come from them and are not measured.
-    const sizing = new Map<HTMLElement, Animation>();
+    const sizing = new Map<HTMLElement, Sizing>();
     // Variants' list and what floats over it, coming up with its card's top edge through one of them.
     const riding = new Map<HTMLElement, Animation[]>();
     const reveals = new Map<HTMLElement, Animation>();
+    // Where Variants' list was scrolled in the last frame shown. A scroll event comes at the start of the
+    // frame after the scroll moved, ahead of anything measured here, so it counts once that frame is out.
+    const painted = new WeakMap<HTMLElement, number>();
+    const scrolledTo = (event: Event) => {
+      const list = event.target;
+      if (!(list instanceof HTMLElement) || !list.classList.contains('isotone-vars-body')) return;
+      const top = list.scrollTop;
+      requestAnimationFrame(() => setTimeout(() => painted.set(list, top)));
+    };
+    root.addEventListener('scroll', scrolledTo, true);
     const reduced = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
     const removeExit = (element: HTMLElement) => {
       const exit = exits.get(element);
@@ -95,9 +115,14 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       const instant = now || settling || root.dataset.instant === 'true' || root.dataset.resizing === 'true' || reduced?.matches;
       // An interrupted ease starts the next from the height that shows now.
       const showing = new Map<HTMLElement, number>();
-      for (const [element, animation] of sizing) {
+      // What was easing, and how far along: an ease measured again mid-way and still going to the same
+      // height carries on from there rather than starting over from what shows, at full speed again. A
+      // saved note's row is replaced as the server answers, which lands inside most such eases.
+      const underway = new Map<HTMLElement, Sizing & { time: CSSNumberish | null }>();
+      for (const [element, item] of sizing) {
         showing.set(element, element.getBoundingClientRect().height);
-        animation.cancel();
+        underway.set(element, { ...item, time: item.animation.currentTime });
+        item.animation.cancel();
         for (const ride of riding.get(element) ?? []) ride.cancel();
         riding.delete(element);
         delete element.dataset.anchor;
@@ -117,6 +142,10 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         // changes, and they ride its top edge instead (see the eases below).
         const body = open ? element.querySelector<HTMLElement>(':scope > .isotone-vars > .isotone-vars-body') : null;
         const rides = body !== null && body.scrollHeight <= body.clientHeight + 1 && body.scrollTop === 0;
+        // The height a dialog or the colour picker holds Variants' content at, whatever its card shows.
+        const held = rides && body?.parentElement ? Number.parseFloat(getComputedStyle(body.parentElement).minHeight) || 0 : 0;
+        // Its list, when it shows the end of its scroll: where the browser leaves a scroll it had to cut.
+        const ended = body && body.scrollTop >= body.scrollHeight - body.clientHeight - 1 ? body : null;
         return {
           element,
           open,
@@ -125,7 +154,8 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
           dy: matrix?.m42 ?? 0,
           list,
           fits,
-          rides,
+          held,
+          ended,
         };
       });
       const shown = panels.filter((panel) => panel.rect);
@@ -143,20 +173,26 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         typeof root.animate !== 'function';
       const resizing = still
         ? []
-        : shown.flatMap(({ element, rect, list, fits, rides }) => {
+        : shown.flatMap(({ element, rect, list, fits, held, ended }) => {
             const old = previous.get(element);
             const from = showing.get(element) ?? old?.height;
             const to = (rect as DOMRect).height;
-            if (!old || from === undefined || Math.abs(from - to) < 0.5) return [];
+            if (!old || from === undefined) return [];
+            const was = underway.get(element);
+            if (was && Math.abs(was.to - to) < 0.5)
+              return [{ element, from: was.from, to, anchor: was.anchor, ride: was.ride, origin: was.origin, time: was.time, cut: null }];
+            if (Math.abs(from - to) < 0.5) return [];
+            // The layout this ease leaves: the one before it began, however often it is retargeted.
+            const origin = was?.origin ?? { y: old.y, height: old.height, list: old.list };
             // Which edge of the card stays, so its content can keep to it (see the eases below): the foot,
             // in a dock with room, or the top, in a full dock, where the upper panel grows and shrinks at
             // its foot into room the panel below gives or takes.
             const r = rect as DOMRect;
-            const topStays = Math.abs(old.y - r.y) < 0.5 && Math.abs(old.y + old.height - r.bottom) > 0.5;
+            const topStays = Math.abs(origin.y - r.y) < 0.5 && Math.abs(origin.y + origin.height - r.bottom) > 0.5;
             const anchor: Anchor | undefined = !element.classList.contains('isotone-notes-panel')
               ? undefined
               : topStays
-                ? to > from && old.list !== list
+                ? to > from && origin.list !== list
                   ? 'top-list'
                   : 'top'
                 : to < from
@@ -164,7 +200,18 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
                   : fits
                     ? 'rise'
                     : undefined;
-            return [{ element, from, to, anchor, rides }];
+            return [
+              {
+                element,
+                from,
+                to,
+                anchor,
+                ride: Math.min(to, held) - from,
+                origin,
+                time: null as CSSNumberish | null,
+                cut: to > from ? ended : null,
+              },
+            ];
           });
       const current = new Set(panels.map(({ element }) => element));
       for (const [element, item] of previous) {
@@ -248,11 +295,11 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         previous.set(element, { x, y, width: rect.width, height: rect.height, animation, scrolls: scrollsOf(element), list });
       }
       // A changed height eases from what showed to what the panel needs, every changed panel on the same
-      // clock, so the stack's total moves evenly between two layouts; the panel's content keeps to its foot
-      // (a list above it gives way and scrolls), and the dock anchors its stack at the foot, so a panel
-      // opening above runs past the room, not over the pill.
+      // clock, so the stack's total moves evenly between two layouts; the panel's content keeps to the edge
+      // that stays (below), and the dock anchors its stack at the foot, so a panel opening above runs past
+      // the room, not over the pill.
       if (resizing.length) root.dataset.easing = 'true';
-      for (const { element, from, to, anchor, rides } of resizing) {
+      for (const { element, from, to, anchor, ride, origin, time, cut } of resizing) {
         // The content keeps to the edge that stays, so nothing in it jumps to meet the edge that moves
         // (`data-anchor`, panel.ts). Top: the rows stay, and what changed under them (the composer as a
         // note opens for editing, a row removed) is uncovered or let go as the card's foot passes, cut at
@@ -268,28 +315,36 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
           ],
           { duration: MOTION.enter, easing: MOTION.easeOut },
         );
-        sizing.set(element, animation);
+        if (time !== null) animation.currentTime = time;
+        sizing.set(element, { animation, from, to, anchor, ride, origin });
         // Variants' card eases from its foot. Easing shorter, its content fills it and follows its top edge
-        // in the layout. Easing taller for room made under a short list (a selector's dialog, the colour
-        // picker), the content is held at the size it is going to, and stood at once where the card's top
-        // edge was still on its way to, outside it. So the list and what floats over it start lower by what
-        // the card has left to travel and come up with it. By margin, in the same layout pass as the
+        // in the layout, as it does easing taller with nothing holding it (room Feedback gave back, a
+        // selector arriving). Easing taller for room made under a short list (a selector's dialog, the
+        // colour picker), the content is held at the size it is going to, and stood at once where the card's
+        // top edge was still on its way to, outside it. So the list and what floats over it start lower by
+        // what the card has left to travel to the height they are held at, and come up with it. By margin, in the same layout pass as the
         // card's height: a transform runs on the compositor's clock and a height on the main thread's, and
         // in a real browser the two drift apart mid-ease, the dialog over the pill and the list out of its
         // card. What hangs below the foot meanwhile is cut by the content's own box, which ends there.
-        const content = rides && to > from ? element.querySelector<HTMLElement>(':scope > .isotone-vars') : null;
+        const content = ride > 0.5 ? element.querySelector<HTMLElement>(':scope > .isotone-vars') : null;
         if (content) {
           const rode = Array.from(
             content.querySelectorAll<HTMLElement>(':scope > :is(.isotone-vars-body, .isotone-axis-menu, .isotone-colour)'),
-            (part) =>
-              part.animate([{ marginTop: `${to - from}px` }, { marginTop: '0px' }], { duration: MOTION.enter, easing: MOTION.easeOut }),
+            (part) => part.animate([{ marginTop: `${ride}px` }, { marginTop: '0px' }], { duration: MOTION.enter, easing: MOTION.easeOut }),
           );
+          if (time !== null) for (const part of rode) part.currentTime = time;
           riding.set(element, rode);
         }
+        // Given room, Variants' list was laid out at its new height before this ease began, and the browser
+        // cut its scroll to what that height leaves: every row dropped by as much, then rode back up with
+        // the card's edge. The scroll goes back to where it last showed, to wind down as the card grows
+        // (useSteadyBody).
+        const seen = cut ? painted.get(cut) : undefined;
+        if (cut && seen !== undefined && cut.scrollTop < seen - 1) cut.scrollTop = seen;
         if (anchor) element.dataset.anchor = anchor;
         else delete element.dataset.anchor;
         animation.onfinish = () => {
-          if (sizing.get(element) !== animation) return;
+          if (sizing.get(element)?.animation !== animation) return;
           sizing.delete(element);
           delete element.dataset.anchor;
           if (sizing.size) return;
@@ -367,13 +422,14 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       lifted.disconnect();
       reduced?.removeEventListener('change', reducedChange);
       window.removeEventListener('resize', resized);
+      root.removeEventListener('scroll', scrolledTo, true);
       window.removeEventListener('pointerdown', woke, true);
       window.removeEventListener('keydown', woke, true);
       delete root.dataset.easing;
       for (const element of exits.keys()) removeExit(element);
       for (const item of previous.values()) item.animation?.cancel();
-      for (const [element, animation] of sizing) {
-        animation.cancel();
+      for (const [element, item] of sizing) {
+        item.animation.cancel();
         delete element.dataset.anchor;
       }
       for (const rode of riding.values()) for (const ride of rode) ride.cancel();

@@ -66,10 +66,13 @@ import { npm } from './npm.mjs';
 // carries so an app without React can collect too; the tarball also gains the `feedback` and `postgres`
 // entries and their guide.
 // Panel invariants over 1.8.2: bundle 435.5 kB and tarball 538.5 kB (435.0 and 537.0 kB). 1.8.1 and 1.8.2 had taken the
-// bundle to 433.3 kB, past its budget, unnoticed. This removes the pointer hold and adds select mode resuming
+// bundle to 433.3 kB, past its budget. This removes the pointer hold and adds select mode resuming
 // after a sent note, the resize handles' `data-can`, the tail that keeps a list's spare room, and content that
 // keeps to the edge of its card that stays through an ease.
-const BUDGET = { bundle: 435_500, tarball: 538_500 };
+// Review fixes on the same change: bundle 437.5 kB and tarball 540.5 kB (437.0 and 539.6 kB): a height ease that
+// carries on when measured again mid-way, a list's scroll put back when the browser cuts it ahead of an
+// ease, a section unfolded out of view scrolled into it, and a dialog's room capped to its card.
+const BUDGET = { bundle: 437_500, tarball: 540_500 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));
