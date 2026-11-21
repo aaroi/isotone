@@ -174,6 +174,17 @@ function useSteadyBody(
     const reveal = (grown = 0) => {
       const section = pressed?.toggle.isConnected ? pressed.toggle.closest<HTMLElement>('.isotone-section') : null;
       if (!folded || !body || !section || section.dataset.collapsed !== 'false') return;
+      // Its selectors were out of view until now, where each stands in at a guessed height (panel.ts): laid
+      // out for real a frame later, they changed the list's length and the scroll with it, after the rows
+      // had set off for the place measured here. They are laid out now, and left to the browser again
+      // once they have been shown.
+      const rows = Array.from(section.querySelectorAll<HTMLElement>('.isotone-axis'));
+      for (const row of rows) row.style.contentVisibility = 'visible';
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          for (const row of rows) row.style.removeProperty('content-visibility');
+        }),
+      );
       const style = getComputedStyle(body);
       const box = body.getBoundingClientRect();
       const head = section.querySelector<HTMLElement>(':scope > .isotone-section-head') ?? section;

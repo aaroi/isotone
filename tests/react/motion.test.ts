@@ -182,6 +182,68 @@ describe('list motion', () => {
 });
 
 describe('dock motion', () => {
+  it('eases a changed height, carries on when measured again mid-way, and keeps held content and a cut scroll', async () => {
+    // A Variants card whose content a dialog holds 150px tall, and whose list is at the end of its scroll.
+    function Sized({ tall = 100, extra = false }) {
+      const ref = useRef<HTMLDivElement>(null);
+      useDockMotion(ref, true);
+      return h(
+        'div',
+        { ref, className: 'isotone-root' },
+        h(
+          'section',
+          { className: 'isotone-panel isotone-variants-panel', 'data-open': true, 'data-tall': tall },
+          h(
+            'div',
+            { className: 'isotone-vars', style: { minHeight: '150px' } },
+            h('div', { className: 'isotone-vars-body' }),
+            extra && h('i'),
+          ),
+        ),
+      );
+    }
+    rects.mockImplementation(function (this: HTMLElement) {
+      const height = Number(this.dataset.tall ?? 200);
+      return { x: 10, y: 220 - height, width: 320, height, top: 220 - height, left: 10, right: 330, bottom: 220, toJSON: () => ({}) };
+    });
+    await act(async () => root.render(h(Sized, {})));
+    // Styled and laid out, and the reviewer has acted: from here a change of height eases.
+    await act(async () => resize());
+    window.dispatchEvent(new Event('pointerdown'));
+    const dock = host.querySelector<HTMLElement>('.isotone-root');
+    const list = host.querySelector<HTMLElement>('.isotone-vars-body');
+    if (!dock || !list) throw new Error('Missing dock');
+    // Where the list was scrolled in the last frame shown, before the browser cut it for the taller card.
+    Object.defineProperty(list, 'scrollTop', { configurable: true, writable: true, value: 24 });
+    list.dispatchEvent(new Event('scroll'));
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    list.scrollTop = 0;
+    animate.mockClear();
+    await act(async () => root.render(h(Sized, { tall: 200 })));
+    await act(async () => resize());
+    const heights = () =>
+      animate.mock.calls.map(([frames]) => (frames as Keyframe[]).map((frame) => frame.height)).filter(([first]) => first);
+    expect(heights()).toEqual([['100px', '200px']]);
+    expect(dock.dataset.easing).toBe('true');
+    // The content rides by what it is held above the card, not by all the card grows.
+    expect(animate.mock.calls.map(([frames]) => (frames as Keyframe[])[0]?.marginTop).filter(Boolean)).toEqual(['50px']);
+    expect(list.scrollTop).toBe(24);
+    // A row arrives mid-ease and the card still needs the same height: the ease carries on from where it was.
+    const easing = animations.at(-2) as unknown as { currentTime: number; onfinish: (() => void) | null };
+    easing.currentTime = 80;
+    await act(async () => root.render(h(Sized, { tall: 200, extra: true })));
+    expect(heights()).toEqual([
+      ['100px', '200px'],
+      ['100px', '200px'],
+    ]);
+    const carried = animations.find(
+      (animation) => (animation as unknown as { currentTime?: number }).currentTime === 80 && animation !== (easing as unknown),
+    );
+    expect(carried).toBeDefined();
+    await act(async () => carried?.onfinish?.());
+    expect(dock.dataset.easing).toBeUndefined();
+  });
+
   it('does not remeasure unrelated renders and responds to resize', async () => {
     await act(async () => root.render(h(Dock, {})));
     const measured = rects.mock.calls.length;
