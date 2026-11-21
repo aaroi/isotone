@@ -386,8 +386,11 @@ the edge of its card that does not move, so in a dock with room rows hold to the
 foot while the top edge glides, and in a full dock, where Feedback grows
 downward into room Variants gives, its rows hold to the top while the composer
 below them is uncovered, and a row removed there lets the foot come up to rows
-that have not moved. Variants' content, when all of it shows, rides its card's top edge the same
-way, as when a short panel grows to hold a selector's dialog. A change made while a height is easing turns the ease round
+that have not moved. Variants' selectors and a dialog over them keep to its card's top edge the same
+way as a short panel grows to hold the dialog, and the panel starts back as the
+dialog fades. Whatever has to stay with an easing edge is moved by layout, in
+the same pass as the height, never by a transform: a transform runs on the
+compositor's clock, and in a real browser the two drift apart mid-ease. A change made while a height is easing turns the ease round
 from the height that shows, rather than letting it run on to a size nothing
 needs. A field and its buttons follow the field's text at once, as when typing. Room a list keeps while its panel eases is its tail's,
 never padding, which a short panel cannot shrink below. A height that changes (Feedback

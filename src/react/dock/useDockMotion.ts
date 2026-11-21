@@ -55,8 +55,8 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
     const exits = new Map<HTMLElement, { ghost: HTMLElement; animation: Animation }>();
     // Heights easing now. While they run, the dock's own resizes come from them and are not measured.
     const sizing = new Map<HTMLElement, Animation>();
-    // Variants' content riding its card's top edge through one of them.
-    const riding = new Map<HTMLElement, Animation>();
+    // Variants' list and what floats over it, coming up with its card's top edge through one of them.
+    const riding = new Map<HTMLElement, Animation[]>();
     const reveals = new Map<HTMLElement, Animation>();
     const reduced = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
     const removeExit = (element: HTMLElement) => {
@@ -98,7 +98,8 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       for (const [element, animation] of sizing) {
         showing.set(element, element.getBoundingClientRect().height);
         animation.cancel();
-        riding.get(element)?.cancel();
+        for (const ride of riding.get(element) ?? []) ride.cancel();
+        riding.delete(element);
         delete element.dataset.anchor;
       }
       sizing.clear();
@@ -268,25 +269,22 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
           { duration: MOTION.enter, easing: MOTION.easeOut },
         );
         sizing.set(element, animation);
-        // Variants' card eases from its foot, and its content is laid out from its top at the size it is
-        // going to (room made under a short list for a dialog or the colour picker, and given back). Left
-        // there, the selectors and the dialog stood at once where the card's top edge was still on its way
-        // to, outside it or under blank card. They ride the edge: moved by what the card has left to
-        // travel, and cut at its foot while it is still shorter than they are.
-        const content = rides ? element.querySelector<HTMLElement>(':scope > .isotone-vars') : null;
+        // Variants' card eases from its foot. Easing shorter, its content fills it and follows its top edge
+        // in the layout. Easing taller for room made under a short list (a selector's dialog, the colour
+        // picker), the content is held at the size it is going to, and stood at once where the card's top
+        // edge was still on its way to, outside it. So the list and what floats over it start lower by what
+        // the card has left to travel and come up with it. By margin, in the same layout pass as the
+        // card's height: a transform runs on the compositor's clock and a height on the main thread's, and
+        // in a real browser the two drift apart mid-ease, the dialog over the pill and the list out of its
+        // card. What hangs below the foot meanwhile is cut by the content's own box, which ends there.
+        const content = rides && to > from ? element.querySelector<HTMLElement>(':scope > .isotone-vars') : null;
         if (content) {
-          const left = to - from;
-          const ride = content.animate(
-            [
-              { transform: `translateY(${left}px)`, clipPath: `inset(0px 0px ${Math.max(0, left)}px 0px)` },
-              { transform: 'translateY(0px)', clipPath: 'inset(0px 0px 0px 0px)' },
-            ],
-            { duration: MOTION.enter, easing: MOTION.easeOut },
+          const rode = Array.from(
+            content.querySelectorAll<HTMLElement>(':scope > :is(.isotone-vars-body, .isotone-axis-menu, .isotone-colour)'),
+            (part) =>
+              part.animate([{ marginTop: `${to - from}px` }, { marginTop: '0px' }], { duration: MOTION.enter, easing: MOTION.easeOut }),
           );
-          riding.set(element, ride);
-          ride.onfinish = ride.oncancel = () => {
-            if (riding.get(element) === ride) riding.delete(element);
-          };
+          riding.set(element, rode);
         }
         if (anchor) element.dataset.anchor = anchor;
         else delete element.dataset.anchor;
@@ -378,7 +376,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         animation.cancel();
         delete element.dataset.anchor;
       }
-      for (const animation of riding.values()) animation.cancel();
+      for (const rode of riding.values()) for (const ride of rode) ride.cancel();
       for (const animation of reveals.values()) animation.cancel();
     };
   }, [ref, visible]);

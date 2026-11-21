@@ -424,9 +424,11 @@ function useMenuPlacement(
       root.style.removeProperty('--iso-menu-top');
       root.style.removeProperty('--iso-menu-max');
     };
-    // A closing dialog keeps its place and the room it took until its fade has
-    // finished; dropping them at once moved it to the panel's top mid-fade.
+    // A closing dialog keeps its place until its fade has finished: dropped at once, it moved to the
+    // panel's top mid-fade. The room it took goes at once, so the panel starts back to its own size as
+    // the dialog fades rather than standing tall and empty until the fade is over.
     if (!open) {
+      root.style.removeProperty('--iso-menu-need');
       release.current = setTimeout(clear, MOTION.exit + 20);
       return;
     }
@@ -440,7 +442,11 @@ function useMenuPlacement(
       root.style.setProperty('--iso-menu-need', `${natural + 12}px`);
       const from = opener.current?.isConnected ? opener.current : null;
       const anchor = (from?.closest<HTMLElement>('.isotone-opt') ?? from)?.getBoundingClientRect();
-      const rootTop = root.getBoundingClientRect().top;
+      // Where the opener rests: while a short panel eases taller to hold the dialog, the list starts lower
+      // and comes up with the card (useDockMotion), and a place measured then would be for somewhere the
+      // opener is only passing through.
+      const list = root.querySelector<HTMLElement>(':scope > .isotone-vars-body');
+      const rootTop = root.getBoundingClientRect().top + (list ? Number.parseFloat(getComputedStyle(list).marginTop) || 0 : 0);
       const { top, max } = placeDialog(
         natural,
         root.clientHeight,
