@@ -233,7 +233,11 @@ function useSteadyBody(
       // The room goes before the dock, standing aside until now, reads where the panel landed. A fold
       // made while this one still runs cancels it, and starts from what shows. An ease a newer one
       // replaced leaves the room alone: it is the newer one's now.
-      const group = { cancel: () => eases.forEach((ease) => ease.cancel()) };
+      const group = {
+        cancel: () => {
+          for (const ease of eases) ease.cancel();
+        },
+      };
       running.current = group;
       let left = eases.length;
       const done = () => {

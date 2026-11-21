@@ -118,7 +118,8 @@ const NoteList = memo(function NoteList({
   const fromEnd = useRef(0);
   const keepPlace = useCallback(() => {
     const list = listRef.current;
-    if (list) list.scrollTop = list.scrollHeight - list.clientHeight - fromEnd.current;
+    const anchor = list?.closest<HTMLElement>('.isotone-panel')?.dataset.anchor;
+    if (list && anchor !== 'top-list' && anchor !== 'rise') list.scrollTop = list.scrollHeight - list.clientHeight - fromEnd.current;
   }, []);
   // A fresh set comes with every change to the notes; the pages it names are what matter.
   const filter = [...selectedPages].join('\n');
@@ -139,12 +140,23 @@ const NoteList = memo(function NoteList({
   useEffect(() => {
     const list = listRef.current;
     if (!list || typeof ResizeObserver === 'undefined') return;
-    // A list giving way at its foot while its card grows downward keeps its rows where they are.
+    // While its card eases taller the list is squeezed, and scrolling it to keep its place would put every
+    // row a row higher in one frame (useDockMotion, `data-anchor`): left alone, the rows ride the card's
+    // edge and what is new is uncovered. The place is kept again once the ease lands.
+    const panel = list.closest<HTMLElement>('.isotone-panel');
+    const squeezed = () => panel?.dataset.anchor === 'top-list' || panel?.dataset.anchor === 'rise';
     const observer = new ResizeObserver(() => {
-      if (list.closest<HTMLElement>('.isotone-panel')?.dataset.anchor !== 'top-list') keepPlace();
+      if (!squeezed()) keepPlace();
     });
+    const landed = new MutationObserver(() => {
+      if (!panel?.dataset.anchor) keepPlace();
+    });
+    if (panel) landed.observe(panel, { attributes: true, attributeFilter: ['data-anchor'] });
     observer.observe(list);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      landed.disconnect();
+    };
   }, [keepPlace]);
   return (
     <ul

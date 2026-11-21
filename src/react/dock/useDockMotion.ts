@@ -1,8 +1,11 @@
 import { useLayoutEffect, type RefObject } from 'react';
 import { MAX_ANIMATED_ITEMS, MOTION } from '../motion';
 
-/** The edge of Feedback's card that stays through a height ease; `top-list` when its list is what grew. */
-type Anchor = 'top' | 'top-list' | 'foot';
+/**
+ * The edge of Feedback's card that stays through a height ease: `top-list` when its top stays and its list is
+ * what grew, `rise` when its foot stays and it grows, its list squeezed meanwhile and all in view once it lands.
+ */
+type Anchor = 'top' | 'top-list' | 'foot' | 'rise';
 
 const settlingCount = new WeakMap<HTMLElement, number>();
 
@@ -101,9 +104,20 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         const open = element.dataset.open === 'true';
         const transform = open ? getComputedStyle(element).transform : 'none';
         const matrix = transform !== 'none' && typeof DOMMatrix !== 'undefined' ? new DOMMatrix(transform) : undefined;
-        // How tall its note list is: whether a change of height came from the list or from what is under it.
-        const list = open ? (element.querySelector<HTMLElement>(':scope > .isotone-list')?.offsetHeight ?? 0) : 0;
-        return { element, open, rect: open ? element.getBoundingClientRect() : null, dx: matrix?.m41 ?? 0, dy: matrix?.m42 ?? 0, list };
+        // How tall its note list is (whether a change of height came from the list or from what is under it),
+        // and whether all of it shows.
+        const notes = open ? element.querySelector<HTMLElement>(':scope > .isotone-list') : null;
+        const list = notes?.offsetHeight ?? 0;
+        const fits = !notes || notes.scrollHeight <= notes.clientHeight + 1;
+        return {
+          element,
+          open,
+          rect: open ? element.getBoundingClientRect() : null,
+          dx: matrix?.m41 ?? 0,
+          dy: matrix?.m42 ?? 0,
+          list,
+          fits,
+        };
       });
       const shown = panels.filter((panel) => panel.rect);
       restored ??= shown.length > 0;
@@ -120,7 +134,7 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
         typeof root.animate !== 'function';
       const resizing = still
         ? []
-        : shown.flatMap(({ element, rect, list }) => {
+        : shown.flatMap(({ element, rect, list, fits }) => {
             const old = previous.get(element);
             const from = showing.get(element) ?? old?.height;
             const to = (rect as DOMRect).height;
@@ -138,7 +152,9 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
                   : 'top'
                 : to < from
                   ? 'foot'
-                  : undefined;
+                  : fits
+                    ? 'rise'
+                    : undefined;
             return [{ element, from, to, anchor }];
           });
       const current = new Set(panels.map(({ element }) => element));

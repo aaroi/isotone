@@ -515,6 +515,35 @@ describe.skipIf(!binary)('No sudden movement in the dock (headless Chrome)', { r
     await sound('a tab undone mid-ease', motion(recorded, NONE));
   });
 
+  it('a note sent with a click on Send, the pointer left there, glides the rows above it and shows at once', async () => {
+    const saved = Array.from({ length: 2 }, (_, i) => ({
+      id: `n${i}`,
+      route: '/',
+      feedback: `Saved note ${i}`,
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+      done: false,
+    }));
+    await fresh(3, saved);
+    await tool('Feedback');
+    await pressEscape();
+    await chrome.eval('settle()');
+    await chrome.insertText('A third note');
+    const [x, y] = await chrome.eval<[number, number]>(`centre(panel('notes').querySelector('.isotone-send'))`);
+    // Feedback grows upward from its foot: Send stays under the pointer, and the rows ride its top edge
+    // rather than hopping a row up to make room.
+    await step(
+      'a note sent by click',
+      async () => {
+        await chrome.click(x, y);
+        await chrome.eval(
+          `(async () => { for (let i = 0; i < 50 && root().querySelectorAll('.isotone-note').length < 3; i++) await new Promise((r) => setTimeout(r, 20)); })()`,
+        );
+      },
+      /^send$/,
+    );
+    expect.soft(await chrome.eval('newestShows()')).toBe(true);
+  });
+
   it('a note removed keeps the rows to the edge that stays: gliding in a dock with room, still in a full one', async () => {
     const saved = Array.from({ length: 3 }, (_, i) => ({
       id: `n${i}`,
