@@ -216,7 +216,12 @@ export function useDockSize(rootRef: RefObject<HTMLElement | null>, key: string,
         persist,
       );
     };
+    // The cursor promises only what a drag can do: both ways, one way, or nothing at all, as for a panel
+    // already showing all of its content with nothing to give up.
+    const grows = range.max > range.now;
+    const shrinks = range.now > range.min;
     return {
+      'data-can': grows && shrinks ? 'both' : grows ? 'grow' : shrinks ? 'shrink' : 'none',
       className:
         name === 'width'
           ? 'isotone-resize isotone-resize-w'

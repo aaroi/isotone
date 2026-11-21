@@ -9,7 +9,7 @@ const px = (value: string) => parseFloat(value) || 0;
  * a height stored when the panel held less) would push the page chips and the composer out past its top
  * edge. Published as `--iso-notes-floor`, the least its max-height can be.
  */
-export function floorOf(panel: HTMLElement): number {
+function floorOf(panel: HTMLElement): number {
   const style = getComputedStyle(panel);
   let floor = px(style.paddingTop) + px(style.paddingBottom) + px(style.borderTopWidth) + px(style.borderBottomWidth);
   let inFlow = 0;

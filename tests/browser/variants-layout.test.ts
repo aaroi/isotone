@@ -205,6 +205,35 @@ describe.skipIf(!binary)('Variants controls stay put (headless Chrome)', () => {
     await expectSteady(0);
   });
 
+  it("a row leaving at either edge recedes where it can be seen: below a stuck header, above the bar's room", async () => {
+    await open(1024, 768, 12);
+    // Scroll through the list and note, for each row caught receding, how much of it shows clear of the
+    // material at its edge: the stuck header at the top, the room kept for the defaults bar at the foot.
+    const seen = await chrome.eval<{ top: number; bottom: number }>(`(async () => {
+      const view = body().getBoundingClientRect();
+      const style = getComputedStyle(body());
+      const inset = parseFloat(style.paddingTop);
+      const head = parseFloat(style.scrollPaddingTop) - parseFloat(style.getPropertyValue('--iso-edge-length'));
+      const room = parseFloat(getComputedStyle(body().querySelector('.isotone-vars-tail')).height);
+      const best = { top: 0, bottom: 0 };
+      for (let at = 0; at <= body().scrollHeight - body().clientHeight; at += 5) {
+        body().scrollTop = at;
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        for (const row of body().querySelectorAll('.isotone-axis > *')) {
+          const scale = Number(getComputedStyle(row).scale);
+          if (!(scale < 0.995)) continue;
+          const rect = row.getBoundingClientRect();
+          if (rect.top < view.top + view.height / 2) best.top = Math.max(best.top, rect.bottom - (view.top + head));
+          else best.bottom = Math.max(best.bottom, view.bottom - inset - room - rect.top);
+        }
+      }
+      return best;
+    })()`);
+    // Receding inside the bare inset, a row at the foot was wholly under the bar's room: only the top showed it.
+    expect(seen.top).toBeGreaterThan(8);
+    expect(seen.bottom).toBeGreaterThan(8);
+  });
+
   it('with the bar hidden, the bottom band rests in the inset, so no control at rest is blurred', async () => {
     await open(1024, 768, 12);
     // At the end of the list the band is at rest; elsewhere it reaches further, over content passing under it.

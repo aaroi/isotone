@@ -144,6 +144,21 @@ function key(target: Element, name: string, shiftKey = false) {
   });
 }
 
+it('marks each handle with what a drag can do, and gives one that cannot move the default cursor', async () => {
+  await act(async () => element(shadow, '.isotone-rail-button[aria-label^="Variants"]').click());
+  // The width has room both ways. jsdom lays nothing out, so the panel's height has no range at all.
+  expect(element(shadow, '.isotone-resize-w').dataset.can).toBe('both');
+  expect(element(shadow, '.isotone-resize-h').dataset.can).toBe('none');
+  expect(PANEL_CSS).toContain(".isotone-resize[data-can='none'] { cursor: default; }");
+  for (const [edge, grow, shrink] of [
+    ['w', 'w-resize', 'e-resize'],
+    ['h', 'n-resize', 's-resize'],
+  ]) {
+    expect(PANEL_CSS).toContain(`.isotone-resize-${edge}[data-can='grow'] { cursor: ${grow}; }`);
+    expect(PANEL_CSS).toContain(`.isotone-resize-${edge}[data-can='shrink'] { cursor: ${shrink}; }`);
+  }
+});
+
 it('shows only the handles that apply to the open panels', async () => {
   expect(shadow.querySelector('[role="separator"]')).toBeNull();
   await toggle('Variants');

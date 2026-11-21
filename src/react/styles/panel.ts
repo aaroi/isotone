@@ -69,6 +69,13 @@ ${APPEARANCE_CSS}
 .isotone-resize-w { left: -4px; top: 20px; bottom: calc(var(--iso-rail-size) + var(--iso-view-gap) + 12px); width: 8px; cursor: ew-resize; }
 .isotone-resize-h { top: -4px; left: 20px; right: 20px; height: 8px; cursor: ns-resize; }
 .isotone-resize-split { top: calc(0px - var(--iso-view-gap)); }
+/* The cursor shows only what a drag can do (data-can, useDockSize): one arrow at a limit, none where the
+   edge cannot move, as on a panel that already shows all of its content. */
+.isotone-resize-w[data-can='grow'] { cursor: w-resize; }
+.isotone-resize-w[data-can='shrink'] { cursor: e-resize; }
+.isotone-resize-h[data-can='grow'] { cursor: n-resize; }
+.isotone-resize-h[data-can='shrink'] { cursor: s-resize; }
+.isotone-resize[data-can='none'] { cursor: default; }
 .isotone-resize:focus-visible::after { content: ''; position: absolute; border-radius: 2px; background: var(--iso-focus); }
 .isotone-resize-w:focus-visible::after { left: 3px; width: 2px; top: 0; bottom: 0; }
 .isotone-resize-h:focus-visible::after { top: 3px; height: 2px; left: 0; right: 0; }
@@ -371,7 +378,9 @@ ${APPEARANCE_CSS}
 /* A count ("3 pins", "2 picks") keeps its width; a single reference beside it keeps a few letters. */
 .isotone-meta .isotone-chip-count { flex-shrink: 0; }
 .isotone-chip > .isotone-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.isotone-meta .isotone-chip:not(.isotone-chip-count) { min-width: 52px; }
+/* The few letters are a floor for a label being squeezed, never padding for one that is short already:
+   "Due" stays as wide as "Due" (data-long, NoteSummary). */
+.isotone-meta .isotone-chip[data-long] { min-width: 52px; }
 /* The corner action floats outside the text column; its 24px hit target
    surrounds a 16px face without reserving trailing space in every row. */
 .isotone-note > .isotone-x { position: absolute; right: -8px; top: -8px; width: 24px; height: 24px; isolation: isolate; opacity: .6; background: none; box-shadow: none; }

@@ -65,7 +65,10 @@ import { npm } from './npm.mjs';
 // host's own route, edits and deletes them with a per-note key, and the name field, which the bundle
 // carries so an app without React can collect too; the tarball also gains the `feedback` and `postgres`
 // entries and their guide.
-const BUDGET = { bundle: 432_000, tarball: 532_000 };
+// Panel invariants over 1.8.2: bundle 435.5 kB and tarball 537 kB (434.6 and 535.9 kB). 1.8.1 and 1.8.2 had already taken the
+// bundle to 433.3 kB, past its budget, unnoticed; this adds select mode resuming after a sent note, the
+// resize handles' `data-can`, the tail that keeps a list's spare room, and Feedback growing for a first note.
+const BUDGET = { bundle: 435_500, tarball: 537_000 };
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const scratch = mkdtempSync(join(tmpdir(), 'iso-package-'));

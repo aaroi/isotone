@@ -64,7 +64,8 @@ function ease(root: HTMLElement, panel: HTMLElement, from: number, to: number) {
  * While the pointer rests on the dock, Feedback keeps its height whenever its contents would make it taller (a
  * note arriving, a note opened for editing): the list takes the difference and
  * scrolls, so the composer, the rows and the panel beside it stay where they are. Once the pointer
- * leaves, the panel takes its new height, which the dock eases. A finger never holds it.
+ * leaves, the panel takes its new height, which the dock eases. A finger never holds it, and neither does
+ * a list too short to take the difference and still show its newest note.
  */
 export function useHoverHold(panelRef: RefObject<HTMLElement | null>, active: boolean) {
   const seen = useRef(0);
@@ -96,6 +97,19 @@ export function useHoverHold(panelRef: RefObject<HTMLElement | null>, active: bo
     if (now < seen.current) {
       ease(root, panel, seen.current, now);
       return;
+    }
+    // The list takes up what a hold keeps back, and scrolls. One with too little to give (the first note
+    // arriving, a single row) would be squeezed to its padding, its newest note out of sight past the
+    // panel's top until the pointer left: the panel grows instead, eased, as it would with no pointer on it.
+    const list = panel.querySelector<HTMLElement>(':scope > .isotone-list');
+    const newest = list?.querySelector<HTMLElement>(':scope > .isotone-note:last-of-type');
+    if (list && newest) {
+      const style = getComputedStyle(list);
+      const row = newest.offsetHeight + Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+      if (list.offsetHeight - (now - seen.current) < row - 0.5) {
+        ease(root, panel, seen.current, now);
+        return;
+      }
     }
     const height = `${seen.current}px`;
     panel.style.setProperty('--iso-notes-hold', height);

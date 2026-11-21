@@ -138,7 +138,9 @@ const LISTS = `
 // size while its top row leaves. The timeline's insets are the bands' inner edges. A row is animated
 // only while it crosses one: one fully in view carries no animation, so it is no stacking context,
 // and the fading key over a picked thumbnail (keyFade) still slides between its slot and picture.
-// At the foot the inset ignores the defaults bar, so the bar coming or going never rescales a row.
+// At the foot the inset is the room the list keeps for the defaults bar, whether or not the bar shows:
+// a row recedes above that room, where it can be seen, as at the top, and the bar coming or going never
+// rescales one. Inside the bare inset the bar's room hid the whole of it.
 const RECEDE = `
 @keyframes isotone-recede-in { from { scale: var(--iso-depth-scale); } }
 @keyframes isotone-recede-out { to { scale: var(--iso-depth-scale); } }
@@ -150,6 +152,7 @@ const RECEDE = `
       animation-timeline: var(--iso-recede), var(--iso-recede);
       animation-range: entry, exit;
     }
+    .isotone-vars-body { --iso-recede-bottom: calc(${INSET} + var(--iso-bar-room)); }
     ${SECTIONS} { --iso-recede-top: var(--iso-head-h); }
     .isotone-list { --iso-recede-top: var(--iso-space); --iso-recede-bottom: var(--iso-space); }
     .isotone-pages + .isotone-list { --iso-recede-top: 18px; }

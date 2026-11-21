@@ -195,6 +195,40 @@ describe.skipIf(!binary)('Getting into the panel (headless Chrome)', { retry: 2 
     expect(await chrome.eval('selecting()')).toBe(false);
   });
 
+  it('goes back to selecting once a note written beside a pin is sent, and not after one written in the dock', async () => {
+    await fresh(1024, 768);
+    await start(3);
+    await tool('Feedback');
+    const sent = (count: number) =>
+      chrome.eval(
+        `(async () => { for (let i = 0; i < 100 && root().querySelectorAll('.isotone-note').length < ${count}; i++) await new Promise((r) => setTimeout(r, 20)); await settle(); })()`,
+      );
+    // Pin the link: the composer floats beside it, and typing there ends selecting.
+    await chrome.click(60, 48);
+    await chrome.eval('settle()');
+    expect(await chrome.eval('Boolean(root().querySelector(".isotone-float textarea"))')).toBe(true);
+    await chrome.insertText('Bolder');
+    await chrome.key('Enter', 'Enter', 0, '\r');
+    await sent(1);
+    // Sent: selecting is back on for the next element, the composer in the dock under the cover, no pin left.
+    expect(await chrome.eval('selecting()')).toBe(true);
+    expect(await chrome.eval('Boolean(root().querySelector(".isotone-float textarea"))')).toBe(false);
+    expect(await chrome.eval('root().querySelectorAll(".isotone-selected").length')).toBe(0);
+    await chrome.click(60, 48);
+    await chrome.eval('settle()');
+    expect(await chrome.eval('location.hash')).toBe('');
+    expect(await chrome.eval('root().querySelectorAll(".isotone-selected").length')).toBe(1);
+    await chrome.key('Escape', 'Escape');
+    await chrome.eval('settle()');
+    expect(await chrome.eval('selecting()')).toBe(false);
+    // A note written in the docked field was not made while selecting: the caret stays in the field.
+    await chrome.insertText('Plain');
+    await chrome.key('Enter', 'Enter', 0, '\r');
+    await sent(2);
+    expect(await chrome.eval('selecting()')).toBe(false);
+    expect(await chrome.eval('root().activeElement === field()')).toBe(true);
+  });
+
   it('leaves no ring on a face after Escape closes a dock opened by pointer, and returns focus after a key', async () => {
     await fresh(1024, 768);
     await start(3);

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Changed
+
+- **Sending a note written in select mode goes back to select mode.** After you pin an element, write beside it and send, the crosshair is on again for the next element, with the caret waiting in the note field as when Feedback opens; Escape or the crosshair button ends it. A note written in the docked field, or an edit, leaves you in the field as before, and so does a phone-sized window, where select mode hides the saved notes.
+
+### Fixed
+
+- **Folding a section resizes Variants at once.** With the pointer on the panel, folding a section left the panel at its old height, with blank room under the remaining selectors that could be scrolled until a header slid under the panel's top edge, and unfolding one opened it into a panel too short to show it. Both waited for the pointer to leave. The panel now takes the height its sections need as you click, in one ease.
+- **The Variants list no longer reaches past its panel.** In a short window, or when a fold took out more than the panel's height, the list grew taller than the panel for the length of the change (or for as long as the pointer stayed), putting its bottom edge and the end of its scroll out of reach.
+- **Your first note shows as soon as you send it.** Sent with a click, so with the pointer still on the panel, the first note of a page stayed out of sight above the panel until the pointer moved away.
+- **Rows shrink at the bottom of the Variants list again.** Scrolled rows recede a little as they leave at either end; at the bottom this happened only inside the room kept for the defaults bar, where it could not be seen. It now happens above that room, as at the top.
+- **A short tag on a saved note is as wide as its label.** A tag such as “Due” was padded out to the width kept for a long label being cut off, so short tags looked stretched beside their notes.
+- **The resize cursor shows only where a panel can be resized.** The top edge of a panel that cannot grow (all of its content shows, or the dock fills the window) showed the two-way resize cursor anyway. It now shows one arrow where the edge can only go one way, and the ordinary pointer where it cannot move.
+
 ## 1.8.2
 
 - Merge pull request #80 from aaroi/feedback-spill

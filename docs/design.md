@@ -6,6 +6,25 @@ cards with capsule controls. Light and dark share everything but paint tokens.
 The panel is a small physical control on the host page: depth explains function,
 and no decoration competes with the app.
 
+## Invariants
+
+What holds whatever else changes. A rule below that seems to ask for an
+exception to one of these is wrong, or needs the invariant changed here first,
+with its test.
+
+| Invariant | Held by |
+| --- | --- |
+| A panel is as tall as its content needs, up to its limits: never taller, with blank room after its list, and never held shorter than what the reviewer just asked to see. The one exception is a height held under a resting pointer, for a change the reviewer did not make to that panel. | `spare()` after every step of `tests/browser/dock-motion.test.ts` |
+| A list stays inside its panel on every frame, with its foot, bottom edge and the end of its scroll. | `spilled()`, every frame of every step there |
+| What was just saved can be seen: a new note shows in full once it lands. | `newestShows()` there |
+| Nothing moves suddenly: every size or position change eases, in one ease. | `motion()` and `stages()` there |
+| A cursor or control promises only what it can do. | The resize handles' `data-can`, there and in `tests/react/resize.test.ts` |
+| What happens at one end of a list happens at the other (fade, blur, receding rows). | `tests/browser/variants-layout.test.ts` |
+
+A new transition goes through `step()` in the motion test and gets the first
+four for free; a fix for something a reviewer saw adds the invariant it broke
+here, not only a case for that one transition.
+
 ## Materials and states
 
 | Role | Light | Dark |
@@ -85,6 +104,13 @@ Shift+Tab are how the keyboard reaches the page, where Space pins. Tabbing back
 into the note field ends selecting, as a click there does, since the field is
 where the next keys go.
 
+Sending a note written while selecting (beside a pin, or from under the cover)
+goes back to selecting, the composer docked under the cover with the caret
+waiting as when Feedback opens, so the next element is one click away; Escape or
+the crosshair ends it. A note written in the docked field, or an edit, leaves the
+caret in the field, and so does a small screen, where selecting hides the saved
+notes and the note just sent has to be seen arriving.
+
 The open panels are kept per tab (`sessionStorage`, `<namespace>::panels`, with
 the page and the document that wrote them) and come back when that page is
 reloaded, as a variant switch that reloads does, or when the panel remounts in
@@ -150,7 +176,8 @@ A section header ([naming](variants.md#sections)) is a quiet disclosure, never
 raised: chevron, name in 11px text between the foreground and muted, count in
 faint tabular figures, the axis label's hover face. Unsectioned selectors come first. A sectioned selector
 and its dialog title show the short name; controls, accessible names and notes
-keep the full one. Folding is immediate and keeps selections; unfolding eases the selectors in (see Motion).
+keep the full one. Folding is immediate and keeps selections; unfolding eases the selectors in, and
+either way the panel takes the height its sections need at once (see Motion).
 
 Saved feedback is one row per note, inline references, no gap between rows.
 Note text sits 3px outside the composer's text inset; references take at most
@@ -237,7 +264,10 @@ pointer entry, not by measuring rows during render.
 ## Resizing the dock
 
 Open panels resize by dragging invisible 8px edge handles, cued only by the
-resize cursor (nothing lights up). Width is the dock's left edge. Height is the
+resize cursor (nothing lights up). The cursor promises only what a drag can do
+(`data-can`): two arrows where the edge can go both ways, one at a limit, and
+the ordinary pointer where it cannot move at all, as on a panel that shows all
+of its content and has none to give up. Width is the dock's left edge. Height is the
 top edge of the top-most open panel, and with both open the strip between them
 is the split (up grows variants). A focused handle shows a 2px `--iso-focus`
 line inset clear of the corners.
@@ -302,7 +332,10 @@ above (sticking does not move its text) and its fade sits in the gap below,
 covering no control; scroll padding keeps focus from landing beneath it.
 
 In Variants, content leaving view dissolves: it blurs progressively and fades into
-the surface, and each row recedes a little (not with reduced motion). The notes
+the surface, and each row recedes a little (not with reduced motion), at both
+ends alike: below a stuck header at the top, and at the foot above the room kept
+for the defaults bar, whether or not the bar shows, so the bar never rescales a
+row and never hides the whole of the effect. The notes
 list does the same more lightly, and a dialog's scrolled rows fade with the same
 eased ends. A stuck
 header and the defaults bar are one material with that dissolve, nearly opaque
@@ -346,14 +379,21 @@ spatial movement; hover stays brief.
 Nothing in the dock moves suddenly, and nothing under a resting pointer moves
 at all. The dock hangs from its bottom-right corner, so a panel moves when its
 bottom or right edge does, and slides there. While the pointer rests on the
-dock, a panel keeps its height when its contents change (a note arriving or
-leaving, a note opened for editing or put back, a section folding or unfolding,
+dock, a panel keeps its height when something other than the reviewer's own
+change to it would resize it (a note arriving, a note opened for editing,
 Feedback closing over Variants): its list scrolls instead, keeping its scroll as
-Feedback closes, a fold keeps its toggle where it was and the rows after it
-glide into place, and the panel takes its new height in one ease once the
-pointer leaves or a resize handle is taken up. A finger never holds a size: the
-hover a tap leaves behind is no resting pointer, so a tap's change eases at
-once. A height that does change (Feedback
+Feedback closes, and the panel takes its new height in one ease once the
+pointer leaves or a resize handle is taken up. A hold never costs what the
+panel is for. A section folded or unfolded is the reviewer's own change to the
+list, so Variants takes the height its sections need at once, in one ease,
+pointer or not, the rows after the fold gliding into place: held, it showed
+blank room that scrolled, or opened a section into a panel too short to show
+it. Feedback getting shorter (a note removed or put back) eases at once too, and
+so does one whose list is too short to take the difference and still show its
+newest note, as when the first note arrives. Room a list keeps meanwhile is its
+tail's, never padding, which a short panel cannot shrink below. A finger never
+holds a size: the hover a tap leaves behind is no resting pointer, so a tap's
+change eases at once. A height that does change (Feedback
 opening over a long list, room given back, the pointer gone) eases the card's
 height from what showed to what it needs, every changed panel on the same clock;
 Variants' list scrolls by as much as its top edge moves, so its controls stay
@@ -368,7 +408,8 @@ panels a reload restored (until the first key or press) and long lists (over
 `MAX_ANIMATED_ITEMS`), whose size never animates. An ease never re-renders the
 dock: the resize handles are measured once it lands.
 `tests/browser/dock-motion.test.ts` samples every painted frame and fails when
-something that should stay moves, or anything jumps. The launcher expands on mouse or
+something that should stay moves, or anything jumps; every step there also
+checks the [invariants](#invariants). The launcher expands on mouse or
 hovering-pen entry, even where the primary pointer reports coarse; touch opens
 it by tap. The pill's hit surface spans its rim and the gap between icons.
 

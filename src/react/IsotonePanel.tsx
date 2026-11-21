@@ -20,7 +20,7 @@ import { useNotes } from './notes/useNotes';
 import { useNoteView } from './notes/useNoteView';
 import { refreshSource, useVariantsSnapshot, VariantsPanel } from './variants/VariantsView';
 import { DEFAULT_COMPARE_SHORTCUT, isUnderEscape, useCompareKey } from './variants/useCompare';
-import { useKeyboardInset } from './dock/viewport';
+import { isCompactViewport, useKeyboardInset } from './dock/viewport';
 
 export interface IsotonePanelProps {
   /** Auto follows the page at the dock. System follows the OS preference. */
@@ -110,6 +110,7 @@ export function IsotonePanel({
     getSelections: () => offDefault(variants),
     update,
     focusComposer: focus.composer,
+    afterSend: (fresh) => afterSend(fresh),
     focusName,
   });
   const { draft, setTargets } = actions;
@@ -126,6 +127,26 @@ export function IsotonePanel({
     update((m) => ({ notesOpen: true, picking: true, pickingWithPanel: !m.notesOpen }));
     if (events.touch) focus.cancel();
     else focus.openComposer();
+  };
+  /**
+   * Once a note is sent. One written while selecting (beside a pin, or sent from under the cover) goes back
+   * to selecting, so the next element is one click away: the composer returns to the dock under the cover
+   * with the caret waiting in it, as when Feedback opens, and a finger gets no caret, so the on-screen
+   * keyboard goes. An edit, or a note written in the docked field, leaves the caret in the field. So does
+   * a small screen, where selecting hides the saved notes: the note just sent has to be seen arriving.
+   */
+  const afterSend = (fresh: boolean) => {
+    const { picking, anchor } = latest.current.mode;
+    if (!fresh || !(picking || anchor) || isCompactViewport()) {
+      update({ picking: false, anchor: null });
+      focus.composer();
+      return;
+    }
+    update({ picking: true, pickingWithPanel: false, anchor: null });
+    if (events.touch) {
+      focus.cancel();
+      fieldRef.current?.blur();
+    } else focus.composerWhilePicking();
   };
   /** Close one panel. Focus inside it goes to its rail button, or the launcher once the rail folds away. */
   const closePanel = (panel: Surface) => {

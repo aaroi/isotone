@@ -142,6 +142,8 @@ function useSteadyBody(
   }, [bodyRef, active]);
   const wasBeside = useRef(besideFeedback);
   const wasFolds = useRef(folds);
+  // The ease of the last fold or release, while it runs.
+  const running = useRef<Animation | null>(null);
   useLayoutEffect(() => {
     const panel = bodyRef.current?.closest<HTMLElement>('.isotone-panel');
     const root = panel?.closest<HTMLElement>('.isotone-root');
@@ -163,12 +165,18 @@ function useSteadyBody(
       return;
     }
     // Room after the list, so the scroll is never clamped while the panel changes size: what a fold took
-    // out, or, as Feedback closes, room for all it gives back. The scroll stays where it was.
-    const base = getComputedStyle(body).paddingBottom;
+    // out, or, as Feedback closes, room for all it gives back. The scroll stays where it was. The room is
+    // the tail's, never the list's padding: a box cannot be shorter than its padding, so much room in a
+    // short panel pushed the list out past the panel's foot, with its bottom edge and the end of its scroll.
+    running.current?.cancel();
+    const tail = body.querySelector<HTMLElement>(':scope > .isotone-vars-tail');
+    const tall = (extra: number) => `calc(var(--iso-bar-room) + ${extra}px)`;
+    const give = (extra: number) => tail?.style.setProperty('height', tall(extra));
+    const clear = () => tail?.style.removeProperty('height');
     const room = Number.parseFloat(getComputedStyle(root).maxHeight) || innerHeight;
-    const slack = Math.max(0, folded ? content - body.scrollHeight : scroll + room - body.scrollHeight);
+    const slack = tail ? Math.max(0, folded ? content - body.scrollHeight : scroll + room - body.scrollHeight) : 0;
     if (slack > 0) {
-      body.style.paddingBottom = `calc(${base} + ${slack}px)`;
+      give(slack);
       body.scrollTop = scroll;
     }
     keepToggle();
@@ -180,8 +188,7 @@ function useSteadyBody(
       const from = panel.style.getPropertyValue('--iso-variants-hold') ? panel.getBoundingClientRect().height : height;
       panel.style.removeProperty('--iso-variants-hold');
       const glide = eased && !stillMotion(body) && typeof panel.animate === 'function';
-      const clear = () => body.style.removeProperty('padding-bottom');
-      if (!glide) return clear();
+      if (!glide || !tail) return clear();
       // One ease, driven here, with the dock standing aside. Room a fold took out goes gliding, and the
       // panel follows it in the layout. Otherwise the panel grows (room Feedback gave back, a section
       // unfolded) from the height it showed to the one its list needs, read without any room after the list
@@ -189,10 +196,7 @@ function useSteadyBody(
       let ease: Animation;
       if (folded && slack > 0) {
         clear();
-        ease = body.animate([{ paddingBottom: `calc(${base} + ${slack}px)` }, { paddingBottom: base }], {
-          duration: MOTION.reflow,
-          easing: MOTION.easeOut,
-        });
+        ease = tail.animate([{ height: tall(slack) }, { height: tall(0) }], { duration: MOTION.reflow, easing: MOTION.easeOut });
       } else {
         const scrolled = body.scrollTop;
         clear();
@@ -211,17 +215,25 @@ function useSteadyBody(
           grow.cancel();
         });
         ease = grow;
-        if (room > 0) body.style.paddingBottom = `calc(${base} + ${room}px)`;
+        if (room > 0) give(room);
         body.scrollTop = scrolled;
       }
-      // The room goes before the dock, standing aside until now, reads where the panel landed.
-      ease.addEventListener('finish', clear);
-      ease.addEventListener('cancel', clear);
+      // The room goes before the dock, standing aside until now, reads where the panel landed. A fold
+      // made while this one still runs cancels it, and starts from what shows.
+      running.current = ease;
+      const done = () => {
+        if (running.current === ease) running.current = null;
+        clear();
+      };
+      ease.addEventListener('finish', done);
+      ease.addEventListener('cancel', done);
       whileSettling(root, ease);
     };
-    // Only a pointer resting on the dock is kept from moving: the panel keeps its height until it leaves.
-    // A finger, or the keyboard, gets the new size at once, eased.
-    if (!pointerResting(root)) {
+    // A fold is the reviewer's own change to the list, so the panel takes the size its sections need at
+    // once, eased: held, it showed blank room that scrolled, or a section opened into a panel too short
+    // to show it. Room Feedback gives back is not the reviewer's doing here, so under a pointer resting on
+    // the dock it waits until the pointer leaves; a finger, or the keyboard, gets it at once.
+    if (folded || !pointerResting(root)) {
       settle(true);
       return;
     }
@@ -677,7 +689,8 @@ export const VariantsView = memo(function VariantsView({
             </SectionBlock>
           );
         })}
-        {source.saveDefaults && <div className="isotone-vars-tail" aria-hidden="true" />}
+        {/* Room at the list's end: the defaults bar's, and what a fold or Feedback closing leaves (useSteadyBody). */}
+        <div className="isotone-vars-tail" aria-hidden="true" />
         <ScrollEdge side="top" />
         <ScrollEdge side="bottom" />
       </div>

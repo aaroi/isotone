@@ -370,6 +370,7 @@ function stepContent(
             {agent === 'waiting' && <Status done={false}>Waiting for the agent</Status>}
             {agent === 'working' && <Status done={false}>The agent is on it. The dot by your note shows that.</Status>}
             {agent === 'done' && <Status done>Done. The agent closed your note.</Status>}
+            {panel.picking && <p className="tour-hint">Select mode is on again for your next note. {touch ? 'Done' : 'Escape'} ends it.</p>}
           </>
         ),
         highlight: panel.notes ? one('.isotone-list') : fab,
