@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.8.2
+
+- Merge pull request #80 from aaroi/feedback-spill
+
 ## 1.8.1
 
 - Merge pull request #79 from aaroi/feedback-grow-crosshair
