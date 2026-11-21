@@ -67,16 +67,24 @@ window.settle = async () => {
 };
 window.panel = () => root().querySelector('.isotone-variants-panel');
 window.body = () => root().querySelector('.isotone-vars-body');
-// Where every control in the panel sits, and how wide, to the tenth of a pixel.
+// The controls the bar's material never covers: those clear of the room kept for it at the list's foot.
+// Under that material a row recedes as it does at any scroll edge, so it eases a few percent beneath the
+// bar as the bar rises or leaves.
+const clear = (selector) => {
+  const foot = body().getBoundingClientRect().bottom - parseFloat(getComputedStyle(body()).paddingBottom) - body().querySelector('.isotone-vars-tail').offsetHeight;
+  return [...panel().querySelectorAll(selector)].filter((node) => !body().contains(node) || node.closest('.isotone-axis, .isotone-section-head').getBoundingClientRect().bottom <= foot);
+};
+// Where every such control sits, and how wide, to the tenth of a pixel.
 window.layout = () =>
-  [panel(), ...panel().querySelectorAll('[role=radio], .isotone-section-toggle')].map((node) => {
+  [panel(), ...clear('[role=radio], .isotone-section-toggle')].map((node) => {
     const rect = node.getBoundingClientRect();
     return [Math.round(rect.left * 10) / 10, Math.round(rect.top * 10) / 10, Math.round(rect.width * 10) / 10];
   });
 // Watch the panel, selectors and section headers on every frame until unwatched, for the furthest any
 // strays from where it was: a slide that settles back is still motion under the pointer.
 window.watch = () => {
-  const tops = () => [panel(), ...panel().querySelectorAll('.isotone-axis, .isotone-section-head')].map((node) => node.getBoundingClientRect().top);
+  const nodes = [panel(), ...clear('.isotone-axis, .isotone-section-head')];
+  const tops = () => nodes.map((node) => node.getBoundingClientRect().top);
   const base = tops();
   let worst = 0;
   let on = true;
@@ -205,33 +213,45 @@ describe.skipIf(!binary)('Variants controls stay put (headless Chrome)', () => {
     await expectSteady(0);
   });
 
-  it("a row leaving at either edge recedes where it can be seen: below a stuck header, above the bar's room", async () => {
+  it('a row is scaled only while it crosses a band at either edge, with the bar hidden and with it showing', async () => {
     await open(1024, 768, 12);
-    // Scroll through the list and note, for each row caught receding, how much of it shows clear of the
-    // material at its edge: the stuck header at the top, the room kept for the defaults bar at the foot.
-    const seen = await chrome.eval<{ top: number; bottom: number }>(`(async () => {
-      const view = body().getBoundingClientRect();
-      const style = getComputedStyle(body());
-      const inset = parseFloat(style.paddingTop);
-      const head = parseFloat(style.scrollPaddingTop) - parseFloat(style.getPropertyValue('--iso-edge-length'));
-      const room = parseFloat(getComputedStyle(body().querySelector('.isotone-vars-tail')).height);
-      const best = { top: 0, bottom: 0 };
-      for (let at = 0; at <= body().scrollHeight - body().clientHeight; at += 5) {
-        body().scrollTop = at;
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-        for (const row of body().querySelectorAll('.isotone-axis > *')) {
-          const scale = Number(getComputedStyle(row).scale);
-          if (!(scale < 0.995)) continue;
-          const rect = row.getBoundingClientRect();
-          if (rect.top < view.top + view.height / 2) best.top = Math.max(best.top, rect.bottom - (view.top + head));
-          else best.bottom = Math.max(best.bottom, view.bottom - inset - room - rect.top);
+    // Scroll through the list. A row caught scaled must be crossing the inner edge of the band at its end
+    // of the list (the stuck header's material at the top; the inset, and the bar's veil while it shows, at
+    // the foot), and some row must be caught at each end. A row scaled while wholly clear of its band
+    // resizes in plain view; one scaled only wholly under the bar is never seen receding at all.
+    const sweep = () =>
+      chrome.eval<{ top: number; bottom: number; clear: string[] }>(`(async () => {
+        const view = body().getBoundingClientRect();
+        const style = getComputedStyle(body());
+        const head = view.top + parseFloat(style.scrollPaddingTop) - parseFloat(style.getPropertyValue('--iso-edge-length'));
+        const foot = view.bottom - parseFloat(style.paddingBottom) - (parseFloat(style.getPropertyValue('--iso-bar-veil')) || 0);
+        const seen = { top: 0, bottom: 0, clear: [] };
+        for (let at = 0; at <= body().scrollHeight - body().clientHeight; at += 5) {
+          body().scrollTop = at;
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          for (const row of body().querySelectorAll('.isotone-axis > *')) {
+            const scale = Number(getComputedStyle(row).scale);
+            if (!(scale < 0.995)) continue;
+            const rect = row.getBoundingClientRect();
+            const upper = rect.top < view.top + view.height / 2;
+            if (upper ? rect.top >= head + 1 : rect.bottom <= foot - 1) seen.clear.push(row.className + ' at ' + Math.round(rect.top) + ', scroll ' + at);
+            if (upper) seen.top = Math.max(seen.top, rect.bottom - head);
+            else seen.bottom = Math.max(seen.bottom, foot - rect.top);
+          }
         }
-      }
-      return best;
-    })()`);
-    // Receding inside the bare inset, a row at the foot was wholly under the bar's room: only the top showed it.
-    expect(seen.top).toBeGreaterThan(8);
-    expect(seen.bottom).toBeGreaterThan(8);
+        return seen;
+      })()`);
+    const hidden = await sweep();
+    expect(hidden.clear, 'scaled clear of a band, the bar hidden').toEqual([]);
+    expect(hidden.top).toBeGreaterThan(8);
+    expect(hidden.bottom).toBeGreaterThan(8);
+    await chrome.eval('body().scrollTop = 0');
+    await pick(0, 'Bold');
+    expect(await chrome.eval('barShown()')).toBe(true);
+    const shown = await sweep();
+    expect(shown.clear, 'scaled clear of a band, the bar showing').toEqual([]);
+    expect(shown.top).toBeGreaterThan(8);
+    expect(shown.bottom).toBeGreaterThan(8);
   });
 
   it('with the bar hidden, the bottom band rests in the inset, so no control at rest is blurred', async () => {

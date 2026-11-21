@@ -330,9 +330,11 @@ covering no control; scroll padding keeps focus from landing beneath it.
 
 In Variants, content leaving view dissolves: it blurs progressively and fades into
 the surface, and each row recedes a little (not with reduced motion), at both
-ends alike: below a stuck header at the top, and at the foot above the room kept
-for the defaults bar, whether or not the bar shows, so the bar never rescales a
-row and never hides the whole of the effect. The notes
+ends alike, and only while it crosses a band, where it is already dissolving:
+under a stuck header at the top, and at the foot within the inset, or under the
+defaults bar's material while the bar shows. A row is never scaled in plain
+view, and a row under the bar as it rises or leaves eases a few percent beneath
+it. The notes
 list does the same more lightly, and a dialog's scrolled rows fade with the same
 eased ends. A stuck
 header and the defaults bar are one material with that dissolve, nearly opaque
