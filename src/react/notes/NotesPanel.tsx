@@ -18,6 +18,7 @@ import { dotPulse, fadeInContent, MAX_ANIMATED_ITEMS } from '../motion';
 import { NoteSummary } from './NoteSummary';
 import type { Anchor } from '../dock/picking';
 import { useHoverHold } from '../dock/useHoverHold';
+import { useNotesFloor } from './useNotesFloor';
 import { showOverflowTitle } from '../tooltips';
 import { useLayoutMotion } from '../useLayoutMotion';
 import { useRenderLimit } from '../useRenderLimit';
@@ -44,6 +45,8 @@ export function NotesPanel({ id, open, route, view, editingId, resizeHandle, com
   const panelRef = useRef<HTMLElement | null>(null);
   // A change under a resting pointer scrolls the list rather than moving the composer or the rows.
   useHoverHold(panelRef, open);
+  // No cap, held or stored, may push the page chips or the composer out past the panel's top.
+  useNotesFloor(panelRef, open);
   return (
     <section
       id={id}
