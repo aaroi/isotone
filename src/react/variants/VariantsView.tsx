@@ -35,7 +35,7 @@ import { AxisActionsDialog } from './AxisActionsDialog';
 import { AxisControl, type OpenMenu } from './AxisControl';
 import { ColorPicker } from './ColorPicker';
 import { Icon } from '../icons';
-import { keyboardInstant, MAX_ANIMATED_ITEMS, MOTION, stillMotion } from '../motion';
+import { keyboardInstant, MAX_ANIMATED_ITEMS, MOTION, reducedMotion, stillMotion } from '../motion';
 import { PanelClose } from '../notes/NotesPanel';
 import { useLayoutMotion } from '../useLayoutMotion';
 import { whileSettling } from '../dock/useDockMotion';
@@ -143,7 +143,7 @@ function useSteadyBody(
   const wasBeside = useRef(besideFeedback);
   const wasFolds = useRef(folds);
   // The ease of the last fold or release, while it runs.
-  const running = useRef<Animation | null>(null);
+  const running = useRef<{ cancel(): void } | null>(null);
   useLayoutEffect(() => {
     const panel = bodyRef.current?.closest<HTMLElement>('.isotone-panel');
     const root = panel?.closest<HTMLElement>('.isotone-root');
@@ -168,64 +168,90 @@ function useSteadyBody(
     // out, or, as Feedback closes, room for all it gives back. The scroll stays where it was. The room is
     // the tail's, never the list's padding: a box cannot be shorter than its padding, so much room in a
     // short panel pushed the list out past the panel's foot, with its bottom edge and the end of its scroll.
-    running.current?.cancel();
+    const interrupted = running.current;
+    running.current = null;
+    interrupted?.cancel();
     const tail = body.querySelector<HTMLElement>(':scope > .isotone-vars-tail');
     const tall = (extra: number) => `calc(var(--iso-bar-room) + ${extra}px)`;
     const give = (extra: number) => tail?.style.setProperty('height', tall(extra));
     const clear = () => tail?.style.removeProperty('height');
     const room = Number.parseFloat(getComputedStyle(root).maxHeight) || innerHeight;
-    const slack = tail ? Math.max(0, folded ? content - body.scrollHeight : scroll + room - body.scrollHeight) : 0;
+    let slack = tail ? Math.max(0, folded ? content - body.scrollHeight : scroll + room - body.scrollHeight) : 0;
     if (slack > 0) {
       give(slack);
       body.scrollTop = scroll;
     }
     keepToggle();
-    // The panel's new size, in one ease. Room Feedback gave back is eased by the dock, the list scrolling
-    // by as much, and the room after the list goes once it lands. Room a fold took out goes gliding, the
-    // panel following it in the layout while the dock stands aside.
+    // No more room than keeps the scroll where the toggle left it. More would go before the panel's edge
+    // starts to move, while the rows after the fold are already gliding to where that edge will carry
+    // them back from: they would swing out and return.
+    if (folded && slack > 0) {
+      const need = Math.max(0, Math.min(slack, body.scrollTop + body.clientHeight - (body.scrollHeight - slack)));
+      if (need < slack - 0.5) {
+        const at = body.scrollTop;
+        slack = need;
+        if (need > 0) give(need);
+        else clear();
+        body.scrollTop = at;
+      }
+    }
+    // The panel's new size, in one ease driven here, with the dock standing aside: the card's limit goes
+    // from the height that shows to the one its list needs, read without any room after the list, so its
+    // edge moves on one curve from the first frame, the same curve the rows after a fold glide on. Room a
+    // fold took out goes on that clock too, and the scroll it kept from clamping follows it. A panel
+    // growing (room Feedback gave back, a section unfolded) gets its scroll put back with room enough, the
+    // list scrolling by as much as it grows.
     const settle = () => {
       const from = height;
-      const glide = !stillMotion(body) && typeof panel.animate === 'function';
+      // After a key too: the height eases either way, and the room has to go on the same clock as the rows.
+      // A long list never animates a size: its rows lay out as they come into view, and an edge easing
+      // past them would carry them a few pixels a frame.
+      const long = body.querySelectorAll('[data-motion-key]').length > MAX_ANIMATED_ITEMS;
+      const glide = !long && !reducedMotion() && typeof panel.animate === 'function';
       if (!glide || !tail) return clear();
-      // One ease, driven here, with the dock standing aside. Room a fold took out goes gliding, and the
-      // panel follows it in the layout. Otherwise the panel grows (room Feedback gave back, a section
-      // unfolded) from the height it showed to the one its list needs, read without any room after the list
-      // and then the scroll put back with room enough, the list scrolling by as much as it grows.
-      let ease: Animation;
-      if (folded && slack > 0) {
-        clear();
-        ease = tail.animate([{ height: tall(slack) }, { height: tall(0) }], { duration: MOTION.reflow, easing: MOTION.easeOut });
-      } else {
-        const scrolled = body.scrollTop;
-        clear();
-        const to = panel.getBoundingClientRect().height;
-        if (to - from < 0.5) return;
-        const room = Math.max(0, scrolled + to - body.scrollHeight);
-        // The ease first, so the scroll is put back at the height that shows, where it fits. It holds its
-        // last frame until the room is gone, so no frame shows the panel with room and no limit.
-        const grow = panel.animate([{ maxHeight: `${from}px` }, { maxHeight: `${to}px` }], {
-          duration: MOTION.reflow,
-          easing: MOTION.easeOut,
-          fill: 'forwards',
+      const scrolled = body.scrollTop;
+      clear();
+      const to = panel.getBoundingClientRect().height;
+      const timing = { duration: MOTION.reflow, easing: MOTION.easeOut };
+      const eases: Animation[] = [];
+      if (Math.abs(to - from) > 0.5) {
+        // It holds its last frame until the room is gone, so no frame shows the panel with room and no limit.
+        const limit = panel.animate([{ maxHeight: `${from}px` }, { maxHeight: `${to}px` }], { ...timing, fill: 'forwards' });
+        limit.addEventListener('finish', () => {
+          if (running.current === group) clear();
+          limit.cancel();
         });
-        grow.addEventListener('finish', () => {
-          clear();
-          grow.cancel();
-        });
-        ease = grow;
-        if (room > 0) give(room);
-        body.scrollTop = scrolled;
+        eases.push(limit);
       }
+      if (folded && slack > 0) eases.push(tail.animate([{ height: tall(slack) }, { height: tall(0) }], timing));
+      else if (to > from) {
+        const room = Math.max(0, scrolled + to - body.scrollHeight);
+        if (room > 0) give(room);
+      }
+      body.scrollTop = scrolled;
+      if (!eases.length) return clear();
       // The room goes before the dock, standing aside until now, reads where the panel landed. A fold
-      // made while this one still runs cancels it, and starts from what shows.
-      running.current = ease;
+      // made while this one still runs cancels it, and starts from what shows. An ease a newer one
+      // replaced leaves the room alone: it is the newer one's now.
+      const group = { cancel: () => eases.forEach((ease) => ease.cancel()) };
+      running.current = group;
+      let left = eases.length;
       const done = () => {
-        if (running.current === ease) running.current = null;
+        if (--left > 0 || running.current !== group) return;
+        running.current = null;
         clear();
       };
-      ease.addEventListener('finish', done);
-      ease.addEventListener('cancel', done);
-      whileSettling(root, ease);
+      for (const ease of eases) {
+        let ended = false;
+        const end = () => {
+          if (ended) return;
+          ended = true;
+          done();
+        };
+        ease.addEventListener('finish', end);
+        ease.addEventListener('cancel', end);
+        whileSettling(root, ease);
+      }
     };
     // At once, whatever the pointer rests on: a panel is never kept at a size its content no longer needs.
     settle();
@@ -435,7 +461,14 @@ export const VariantsView = memo(function VariantsView({
   // First, so a fold keeps the scroll where it was before the rows after it are measured.
   const foldAnchor = useRef<{ toggle: Element; top: number } | null>(null);
   useSteadyBody(bodyRef, active, besideFeedback, collapsed, foldAnchor);
-  useLayoutMotion(bodyRef, reflow, active && shown.length <= MAX_ANIMATED_ITEMS);
+  // A fold glides the rows after it by key as by pointer: the panel's height eases with them, and rows
+  // that swapped at once would be carried off by the panel's edge and brought back.
+  const lastFolds = useRef(collapsed);
+  const folding = lastFolds.current !== collapsed;
+  useLayoutMotion(bodyRef, reflow, active && shown.length <= MAX_ANIMATED_ITEMS, folding);
+  useLayoutEffect(() => {
+    lastFolds.current = collapsed;
+  }, [collapsed]);
   useKeptScroll(bodyRef, active, scrollKey);
 
   // The action dialog: which selector, which option, and each opening's own session.

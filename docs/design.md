@@ -385,8 +385,10 @@ until the pointer moved away. What stays still is what can: content keeps to
 the edge of its card that does not move, so in a dock with room rows hold to the
 foot while the top edge glides, and in a full dock, where Feedback grows
 downward into room Variants gives, its rows hold to the top while the composer
-below them is uncovered. A field and its buttons follow the field's text at
-once, as when typing. Room a list keeps while its panel eases is its tail's,
+below them is uncovered, and a row removed there lets the foot come up to rows
+that have not moved. A change made while a height is easing turns the ease round
+from the height that shows, rather than letting it run on to a size nothing
+needs. A field and its buttons follow the field's text at once, as when typing. Room a list keeps while its panel eases is its tail's,
 never padding, which a short panel cannot shrink below. A height that changes (Feedback
 opening over a long list, room given back) eases the card's
 height from what showed to what it needs, every changed panel on the same clock;
@@ -434,7 +436,8 @@ whatever changed it, except Compare, which is instant both ways; a change landin
 in quick succession, as from a dragged slider, swaps at once so the figure stays readable. Opening a
 section eases its selectors in from 6px under the header. While an agent works on
 a note, a slow light passes along its text, quieter at rest; reduced motion keeps
-it still and quiet. Keys and reduced motion swap figures and sections at once.
+it still and quiet. Keys and reduced motion swap figures and a section's own selectors at once; the rows after a fold glide
+after a key too, on the clock of the panel's height, so its edge never carries them off and back.
 
 Scroll edges move with the scroll position rather than a clock: a band grows as
 content starts to pass under it, and a row shrinks to 96% while it crosses a band

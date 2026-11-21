@@ -194,7 +194,15 @@ export function useDockSize(rootRef: RefObject<HTMLElement | null>, key: string,
       if (root.dataset.easing !== 'true') refresh();
     });
     for (const panel of root.querySelectorAll('.isotone-panel')) observer.observe(panel);
-    return () => observer.disconnect();
+    // And once an ease lands, since nothing was measured through it.
+    const landed = new MutationObserver(() => {
+      if (!root.dataset.easing && !root.dataset.settling) refresh();
+    });
+    landed.observe(root, { attributes: true, attributeFilter: ['data-easing', 'data-settling'] });
+    return () => {
+      observer.disconnect();
+      landed.disconnect();
+    };
   }, [open.variants, open.notes, size, refresh, rootRef]);
 
   const vars: Record<string, string> = {};

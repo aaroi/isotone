@@ -514,9 +514,13 @@ ${EDGES_CSS}
      so the page chips and the composer would spill out past its top edge. */
   .isotone-notes-panel { max-height: min(max(var(--iso-notes-floor, 0px), var(--iso-notes-height, 100vh)), calc(var(--iso-view-height) - 76px)); }
   .isotone-root[data-sized-notes='true'] .isotone-list { max-height: none; }
-  /* Feedback easing taller from a top edge that stays (useDockMotion): the list keeps its height, so its
-     rows stay put and what grew below them is uncovered as the card's foot reaches it. */
+  /* Feedback's content through a height ease keeps to the edge of the card that stays (useDockMotion).
+     Top: the list keeps its height, so its rows stay put (or, where the list itself grew, gives way at
+     its foot). Foot: the list takes up the difference, so the page tabs ride the top edge. Either way the
+     composer keeps to the foot. */
   .isotone-notes-panel[data-anchor='top'] > .isotone-list { flex-shrink: 0; }
+  .isotone-notes-panel[data-anchor='foot'] > .isotone-list { flex-grow: 1; max-height: none; }
+  .isotone-notes-panel[data-anchor] > .isotone-compose { margin-top: auto; }
 }
 /* Phones. Panels take turns (see viewport.ts). Variants stop at about half the
    screen, so the page they change stays in view; action dialogs keep their

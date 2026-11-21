@@ -139,7 +139,10 @@ const NoteList = memo(function NoteList({
   useEffect(() => {
     const list = listRef.current;
     if (!list || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(keepPlace);
+    // A list giving way at its foot while its card grows downward keeps its rows where they are.
+    const observer = new ResizeObserver(() => {
+      if (list.closest<HTMLElement>('.isotone-panel')?.dataset.anchor !== 'top-list') keepPlace();
+    });
     observer.observe(list);
     return () => observer.disconnect();
   }, [keepPlace]);

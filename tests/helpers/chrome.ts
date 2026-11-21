@@ -148,7 +148,13 @@ export async function launchChrome(binary: string): Promise<Chrome> {
   return {
     async eval<T>(expression: string) {
       const result = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
-      if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);
+      if (result.exceptionDetails) {
+        // The page's stack names URLs, not files: left as stack lines, the test runner tries to read them
+        // as source files and dies reporting the failure instead of showing it.
+        const [message, ...frames] = String(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text).split('\n');
+        const where = frames.map((frame) => frame.trim().replace(/^at /, '')).filter(Boolean);
+        throw new Error(where.length ? `${message} (in the page: ${where.slice(0, 4).join(' < ')})` : message);
+      }
       return result.result.value as T;
     },
     async goto(url) {

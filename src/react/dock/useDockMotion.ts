@@ -1,6 +1,9 @@
 import { useLayoutEffect, type RefObject } from 'react';
 import { MAX_ANIMATED_ITEMS, MOTION } from '../motion';
 
+/** The edge of Feedback's card that stays through a height ease; `top-list` when its list is what grew. */
+type Anchor = 'top' | 'top-list' | 'foot';
+
 const settlingCount = new WeakMap<HTMLElement, number>();
 
 /**
@@ -122,13 +125,21 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
             const from = showing.get(element) ?? old?.height;
             const to = (rect as DOMRect).height;
             if (!old || from === undefined || Math.abs(from - to) < 0.5) return [];
-            // Which edge moves, and what grew. In a dock with room a panel grows upward from its foot. In a
-            // full one the top panel keeps its top edge and grows downward, into room the panel below gives
-            // it: when its list is as tall as it was, what grew is under the list (the composer, as a note
-            // opens for editing), and the rows above stay where they are.
+            // Which edge of the card stays, so its content can keep to it (see the eases below): the foot,
+            // in a dock with room, or the top, in a full dock, where the upper panel grows and shrinks at
+            // its foot into room the panel below gives or takes.
             const r = rect as DOMRect;
-            const downward = old.list === list && Math.abs(old.y - r.y) < 0.5 && Math.abs(old.y + old.height - r.bottom) > 0.5;
-            return [{ element, from, to, downward }];
+            const topStays = Math.abs(old.y - r.y) < 0.5 && Math.abs(old.y + old.height - r.bottom) > 0.5;
+            const anchor: Anchor | undefined = !element.classList.contains('isotone-notes-panel')
+              ? undefined
+              : topStays
+                ? to > from && old.list !== list
+                  ? 'top-list'
+                  : 'top'
+                : to < from
+                  ? 'foot'
+                  : undefined;
+            return [{ element, from, to, anchor }];
           });
       const current = new Set(panels.map(({ element }) => element));
       for (const [element, item] of previous) {
@@ -216,11 +227,13 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
       // (a list above it gives way and scrolls), and the dock anchors its stack at the foot, so a panel
       // opening above runs past the room, not over the pill.
       if (resizing.length) root.dataset.easing = 'true';
-      for (const { element, from, to, downward } of resizing) {
-        // The content keeps to the edge that stays, so nothing in it jumps to meet the edge that moves: what
-        // grew at the far end (the composer, as a note opens for editing in a full dock) is uncovered there
-        // as the card reaches it, cut at the card's moving edge meanwhile rather than hanging out past it.
-        const box = downward
+      for (const { element, from, to, anchor } of resizing) {
+        // The content keeps to the edge that stays, so nothing in it jumps to meet the edge that moves
+        // (`data-anchor`, panel.ts). Top: the rows stay, and what changed under them (the composer as a
+        // note opens for editing, a row removed) is uncovered or let go as the card's foot passes, cut at
+        // that foot meanwhile rather than hanging out past it. Foot: the composer stays and the page tabs
+        // ride the top edge, the list between them taking up the difference.
+        const box = anchor?.startsWith('top')
           ? { boxSizing: 'border-box', flexShrink: 0, justifyContent: 'flex-start', clipPath: 'inset(-24px -24px 0px -24px)' }
           : { boxSizing: 'border-box', flexShrink: 0, justifyContent: 'flex-end' };
         const animation = element.animate(
@@ -231,8 +244,8 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
           { duration: MOTION.enter, easing: MOTION.easeOut },
         );
         sizing.set(element, animation);
-        // While it grows downward its list keeps its height (panel.ts), so the rows stay where they are.
-        if (downward) element.dataset.anchor = 'top';
+        if (anchor) element.dataset.anchor = anchor;
+        else delete element.dataset.anchor;
         animation.onfinish = () => {
           if (sizing.get(element) !== animation) return;
           sizing.delete(element);
@@ -273,7 +286,18 @@ export function useDockMotion(ref: RefObject<HTMLElement | null>, visible: boole
           return panel;
         });
       });
-      if (changed) measure(records.some((record) => record.attributeName === 'data-settling'));
+      // Rows coming or going in a panel whose height is easing change where that ease should land: it is
+      // retargeted now, from the height that shows, rather than running on to a size nothing needs.
+      const retarget =
+        sizing.size > 0 &&
+        records.some(
+          (record) =>
+            record.type === 'childList' &&
+            record.target instanceof Element &&
+            Boolean(record.target.closest('.isotone-panel:not(.isotone-exit)')) &&
+            [...record.addedNodes, ...record.removedNodes].some((node) => node instanceof Element),
+        );
+      if (changed || retarget) measure(records.some((record) => record.attributeName === 'data-settling'));
     });
     mutations.observe(root, {
       subtree: true,

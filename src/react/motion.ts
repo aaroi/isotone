@@ -16,7 +16,8 @@ export function keyboardInstant(node: Element): boolean {
   return Boolean(node.closest('[data-instant="true"]'));
 }
 
-function reducedMotion(): boolean {
+/** The reviewer asked the system for less motion: nothing slides or eases. */
+export function reducedMotion(): boolean {
   return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 

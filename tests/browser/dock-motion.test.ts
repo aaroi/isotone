@@ -108,6 +108,8 @@ window.record = () => {
         if (b.top > view.top + 10 && b.bottom < view.bottom - 10) f['note ' + n.dataset.motionKey] = b.top;
       }
     }
+    const tabs = r.querySelector('.isotone-notes-panel[data-open="true"] .isotone-pages');
+    if (tabs) f.tabs = tabs.getBoundingClientRect().top;
     for (const [key, selector] of [['send', '.isotone-notes-panel[data-open="true"] .isotone-send'], ['field', '.isotone-notes-panel[data-open="true"] textarea']]) {
       const n = r.querySelector(selector);
       if (n) f[key] = n.getBoundingClientRect().top;
@@ -439,6 +441,117 @@ describe.skipIf(!binary)('No sudden movement in the dock (headless Chrome)', { r
     }
   });
 
+  it('a fold by key eases like one by pointer: the section after it stays where it is', async () => {
+    await fresh(FITS_ALONE);
+    await tool('Variants');
+    await chrome.move(20, 300);
+    const toggle = `panel('variants').querySelector('.isotone-section-toggle')`;
+    const height = () => chrome.eval<number>(`panel('variants').getBoundingClientRect().height`);
+    const open = await height();
+    await chrome.eval(`${toggle}.focus()`);
+    const enter = () => chrome.key('Enter', 'Enter', 0, '\r');
+    // The panel hangs from its foot, so the sections after the fold keep their place on screen. Swapped at
+    // once while the height eased, they were carried off by the panel's top edge and brought back.
+    const AFTER = /^option section Part [12]/;
+    const folded = await step('a fold by key', enter, AFTER);
+    expect.soft(folded.moved, 'a section after the fold was sampled').toBeDefined();
+    const least = await height();
+    expect.soft(least).toBeLessThan(open - 20);
+    await step('an unfold by key', enter, AFTER);
+    expect.soft(Math.abs((await height()) - open)).toBeLessThanOrEqual(1);
+    // Folded and unfolded again before the fold has landed: the panel turns round where it is, rather
+    // than running on to the folded height with the open list inside it.
+    await chrome.eval('record()');
+    await enter();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    await enter();
+    await chrome.eval('settle().then(() => new Promise((r) => setTimeout(r, 300)))');
+    const recorded = await chrome.eval<{ frames: Record<string, number>[]; eased: boolean; spill: number }>('stop()');
+    const tops = recorded.frames.map((f) => f['variants top']).filter((top): top is number => top !== undefined);
+    const travelled = Math.max(...tops) - (tops[0] as number);
+    note(`motion: a fold undone mid-ease: travelled ${Math.round(travelled)}px of ${Math.round(open - least)}px`);
+    expect.soft(travelled).toBeLessThan((open - least) * 0.9);
+    expect.soft(Math.abs((await height()) - open)).toBeLessThanOrEqual(1);
+    await sound('a fold undone mid-ease', motion(recorded, NONE));
+  });
+
+  it('a page tab undone mid-ease turns Feedback round where it is', async () => {
+    const on = (id: string, route = '/pricing') => ({
+      id,
+      route,
+      feedback: `Note ${id}`,
+      createdAt: new Date(Date.UTC(2026, 0, 1)).toISOString(),
+      done: false,
+    });
+    // Tabs show once notes sit on more than one other page.
+    await fresh(3, [...['a', 'b', 'c', 'd'].map((id) => on(id)), on('e', '/settings')]);
+    await tool('Feedback');
+    await pressEscape();
+    await chrome.eval('settle()');
+    const height = () => chrome.eval<number>(`panel('notes').getBoundingClientRect().height`);
+    const empty = await height();
+    // The tab rides the panel's top edge, away from a pointer that pressed it: pressed here without one, so
+    // the second press lands on it mid-ease.
+    const tab = () => chrome.eval(`panel('notes').querySelectorAll('.isotone-page')[1].click()`);
+    await tab();
+    await chrome.eval('settle()');
+    const full = await height();
+    expect(full).toBeGreaterThan(empty + 80);
+    await tab();
+    await chrome.eval('settle()');
+    // On, and off again 60ms later.
+    await chrome.eval('record()');
+    await tab();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    await tab();
+    await chrome.eval('settle().then(() => new Promise((r) => setTimeout(r, 300)))');
+    const recorded = await chrome.eval<{ frames: Record<string, number>[]; eased: boolean; spill: number }>('stop()');
+    expect.soft(await chrome.eval(`panel('notes').querySelectorAll('.isotone-note').length`)).toBe(0);
+    const tops = recorded.frames.map((f) => f['feedback top']).filter((top): top is number => top !== undefined);
+    const travelled = (tops[0] as number) - Math.min(...tops);
+    note(`motion: a tab undone mid-ease: travelled ${Math.round(travelled)}px of ${Math.round(full - empty)}px`);
+    expect.soft(travelled).toBeLessThan((full - empty) * 0.9);
+    expect.soft(Math.abs((await height()) - empty)).toBeLessThanOrEqual(1);
+    await sound('a tab undone mid-ease', motion(recorded, NONE));
+  });
+
+  it('a note removed keeps the rows to the edge that stays: gliding in a dock with room, still in a full one', async () => {
+    const saved = Array.from({ length: 3 }, (_, i) => ({
+      id: `n${i}`,
+      route: '/',
+      feedback: `Saved note ${i}`,
+      createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+      done: false,
+    }));
+    const remove = async () => {
+      const row = `[...panel('notes').querySelectorAll('.isotone-note')].at(-1)`;
+      const [rx, ry] = await chrome.eval<[number, number]>(`centre(${row})`);
+      await chrome.move(rx, ry);
+      await chrome.eval('settle()');
+      const [x, y] = await chrome.eval<[number, number]>(`centre(${row}.querySelector('.isotone-x'))`);
+      await chrome.click(x, y);
+    };
+    // With room, Feedback's foot stays: the rows left ride down with its top edge, and none jumps.
+    await fresh(
+      3,
+      saved.map((n) => ({ ...n })),
+    );
+    await tool('Feedback');
+    await pressEscape();
+    await chrome.eval('settle()');
+    await step('the newest note is removed, in a dock with room', remove, /^send$/);
+    // In a full dock its top stays, and Variants takes the room at its foot: no row moves at all.
+    await fresh(
+      12,
+      saved.map((n) => ({ ...n })),
+    );
+    await tool('Variants');
+    await tool('Feedback');
+    await pressEscape();
+    await chrome.eval('settle()');
+    await step('the newest note is removed, in a full dock', remove, /^(note |option )/);
+  });
+
   it('a fold that takes out more than a short panel is tall keeps the list inside it', async () => {
     await fresh(12);
     // A short window: the list scrolls, and each of its three sections is taller than the panel.
@@ -592,6 +705,10 @@ describe.skipIf(!binary)('No sudden movement in the dock (headless Chrome)', { r
     await chrome.eval('settle()');
     // Feedback with no notes shows all it has and has nothing to give up: its edge does not move, and says so.
     expect(await cursor('Resize feedback height')).toBe('default');
+    // Measured once the opening ease landed, with no pointer on a handle to ask for it.
+    expect(
+      await chrome.eval(`root().querySelector('[role=separator][aria-label^="Resize feedback height"]').getAttribute('aria-valuenow')`),
+    ).toBe(String(await chrome.eval<number>(`Math.round(panel('notes').getBoundingClientRect().height)`)));
   });
 
   it('a keyboard resize lands each step exactly', async () => {

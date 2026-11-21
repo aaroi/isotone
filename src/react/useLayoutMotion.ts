@@ -36,7 +36,13 @@ function clearPositions(positions: Map<string, Position>) {
  * pass) has a position that follows the scroll, not the list, so it neither
  * animates while stuck nor from a position remembered while stuck.
  */
-export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: unknown, active = true) {
+export function useLayoutMotion(
+  ref: RefObject<HTMLElement | null>,
+  revision: unknown,
+  active = true,
+  /** This change glides after a key too: its panel's height eases with it, and the two have to move as one. */
+  evenByKey = false,
+) {
   const previous = useRef(new Map<string, Position>());
   const sizes = useRef<ResizeObserver | null>(null);
   // The list's scroll as last painted. A change of contents can clamp the scroll as it lays out, which
@@ -64,7 +70,7 @@ export function useLayoutMotion(ref: RefObject<HTMLElement | null>, revision: un
       return;
     }
     const instant =
-      container.closest('[data-instant="true"]') ||
+      (!evenByKey && container.closest('[data-instant="true"]')) ||
       (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
     if (instant) {
       clear();
