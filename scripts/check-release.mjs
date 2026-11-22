@@ -1,64 +1,45 @@
-// Fails when CHANGELOG.md's Unreleased section holds more than fixes while
-// package.json's version is not above the published minor. Without it the
-// release workflow would publish features or breaking changes as a patch.
+// Fails when a change touches package.json's version without the maintainer's
+// approval. Every merge into main ships as the next patch, whatever its
+// changelog notes say; a minor or a major is the maintainer's deliberate
+// choice, never something a change set requires or a contributor or agent
+// decides.
 //
-//   node scripts/check-release.mjs [<published version>]
+//   node scripts/check-release.mjs [<base version>] [--minor-approved]
 //
-// With no argument it asks npm for the published version. Patch-level notes
-// sit under `### Fixed` or `### Security` (or start with `- fix:`); any other
-// heading under Unreleased, such as `### What you need to know`, `### Changed`
-// or `### Removed`, or a bullet starting with `- feat:` or `- change:`, needs at
-// least a minor version bump. Breaking changes ship as a minor too: a major is
-// the maintainer's deliberate choice, so the guard never asks for one.
-// docs/releasing.md documents the convention.
+// The base version is the one in package.json where the change branched from
+// main; with none given it is read from git. Comparing with main and not with
+// npm keeps other pull requests passing while a version waits to be published.
+// CI passes `--minor-approved` when the pull request carries the
+// `minor-release` label (.github/workflows/ci.yml). docs/releasing.md
+// documents the convention.
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-
-import { npm } from './npm.mjs';
-
-const PATCH_HEADINGS = new Set(['fixed', 'security']);
 
 /** @param {string} value */
 const parseVersion = (value) => {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(value.trim());
   if (!match) throw new Error(`Expected a stable version, received ${JSON.stringify(value)}`);
-  return match.slice(1).map(Number);
+  return match[0];
 };
 
-/** @param {string} changelog */
-function unreleased(changelog) {
-  const start = changelog.indexOf('\n## Unreleased\n');
-  if (start === -1) throw new Error('CHANGELOG.md needs an Unreleased section');
-  const body = changelog.slice(start + '\n## Unreleased\n'.length);
-  const end = body.indexOf('\n## ');
-  return end === -1 ? body : body.slice(0, end);
-}
+/** @param {string[]} args */
+const git = (args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+const fromGit = () => JSON.parse(git(['show', `${git(['merge-base', 'HEAD', 'origin/main'])}:package.json`])).version;
 
-/** The reasons the Unreleased notes need a minor release, if any. @param {string} notes */
-function featureLevel(notes) {
-  const reasons = [];
-  for (const line of notes.split('\n')) {
-    const heading = /^###\s+(.+?)\s*$/.exec(line);
-    if (heading?.[1] && !PATCH_HEADINGS.has(heading[1].toLowerCase())) reasons.push(`"### ${heading[1]}"`);
-    const prefix = /^- (feat|change)\b/.exec(line);
-    if (prefix) reasons.push(`a "- ${prefix[1]}" note`);
-  }
-  return [...new Set(reasons)];
-}
+const args = process.argv.slice(2);
+const unknown = args.find((arg) => arg.startsWith('--') && arg !== '--minor-approved');
+if (unknown) throw new Error(`Unknown option ${unknown}`);
+const approved = args.includes('--minor-approved');
+const base = parseVersion(args.find((arg) => !arg.startsWith('--')) ?? fromGit());
+const version = parseVersion(JSON.parse(readFileSync('package.json', 'utf8')).version);
 
-const published = process.argv[2] ?? npm(['view', 'isotone', 'version']);
-const [major = 0, minor = 0] = parseVersion(JSON.parse(readFileSync('package.json', 'utf8')).version);
-const [publishedMajor = 0, publishedMinor = 0] = parseVersion(published);
-const reasons = featureLevel(unreleased(readFileSync('CHANGELOG.md', 'utf8')));
-const raised = major > publishedMajor || (major === publishedMajor && minor > publishedMinor);
-
-if (reasons.length && !raised) {
+if (version !== base && !approved) {
   process.stderr.write(
-    `CHANGELOG.md's Unreleased section has ${reasons.join(', ')}, which needs at least a minor release, ` +
-      `but package.json's version is not above the published ${published.trim()}'s minor. ` +
-      `Raise the version in package.json (docs/releasing.md, "Before merging").\n`,
+    `package.json's version is ${version}, but main has ${base}. ` +
+      `Every merge ships as the next patch, which the release workflow sets: leave the version as main has it. ` +
+      `Only the maintainer decides a minor or major release, by raising the version and adding the "minor-release" ` +
+      `label to the pull request (docs/releasing.md, "Before merging").\n`,
   );
   process.exit(1);
 }
-process.stdout.write(
-  reasons.length ? `Unreleased needs a minor release and package.json raises it.\n` : 'Unreleased holds only patch-level notes.\n',
-);
+process.stdout.write(version === base ? 'Ships as the next patch.\n' : `The maintainer approved changing the version to ${version}.\n`);

@@ -20,19 +20,22 @@ npm; the archive's source maps contain source text. Keep the MIT notice and the
 
 ## Before merging
 
-1. Record notable changes under `Unreleased` in the changelog. If Unreleased
-   adds a feature or changes what users or agents type, read or import, raise
-   the minor version in `package.json` in that PR. Breaking changes ship as a
-   minor too, with what users must do under `### What you need to know`; a
-   major version is a deliberate maintainer decision, never required by a
-   change set. Routine fixes get the automatic patch. Preserve the lockfile's
-   resolved versions unless the release intentionally changes dependencies.
-   `pnpm check:release` (the `release guard` check, and the first step of
-   `Publish main`) enforces the minor: only `### Fixed` and `### Security`
-   headings (or `- fix:` notes) under Unreleased may ship as a patch. Any other
-   heading, such as `### What you need to know`, `### Changed` or `### Removed`,
-   or a `- feat:` or `- change:` note, fails it until `package.json` is above
-   the published minor.
+1. Record notable changes under `Unreleased` in the changelog, under whichever
+   heading fits (`### Added`, `### Changed`, `### Fixed`, …). Leave the version
+   in `package.json` alone: every merge ships as the next patch, whatever its
+   notes say, so a feature or a changed default is a patch too. A minor or a
+   major version is the maintainer's deliberate decision, never required by a
+   change set and never made by a contributor or an agent. To make one, the
+   maintainer raises the version in `package.json` in the PR and adds the
+   `minor-release` label to it (created the first time it is needed), then
+   re-runs the `release guard` check. That check fails any PR whose version
+   differs from the one on `main` unless the PR has the label; locally,
+   `pnpm check:release` does the same comparison and takes `--minor-approved`
+   in the label's place. It is a check and not a lock: a PR merged with it
+   failing still publishes its version, so do not merge one. Put what users
+   must do after a breaking change under `### What you need to know`. Preserve
+   the lockfile's resolved versions unless the release intentionally changes
+   dependencies.
 2. Run `pnpm install --frozen-lockfile`, `pnpm check`, `pnpm check:package` and
    `pnpm smoke` (which confirms a production Vite build contains no panel).
    Inspect both themes in the demo.
