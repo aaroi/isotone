@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.9.0
+
 ### Changed
 
 - **Sending a note written in select mode goes back to select mode.** After you pin an element, write beside it and send, the crosshair is on again for the next element, with the caret waiting in the note field as when Feedback opens; Escape or the crosshair button ends it. A note written in the docked field, or an edit, leaves you in the field as before, and so does a phone-sized window, where select mode hides the saved notes. A note that could not be saved comes back in the field out of select mode, where it can be read.
