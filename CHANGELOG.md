@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.9.1
+
+- Merge pull request #83 from aaroi/release/minor-by-decision
+
 ## 1.9.0
 
 ### Changed
