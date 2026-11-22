@@ -6,6 +6,10 @@ Follow [the agent guide](docs/agent-guide.md); it ships in the package as
 
 - Read [development](docs/development.md) first, and [the design
   language](docs/design.md) before changing the panel.
+- The panel answers to [its invariants](docs/design.md#invariants) before any
+  other rule in the design guide. A panel change keeps each one and its test; a
+  fix for something a reviewer saw adds the invariant it broke, not only a case
+  for that one transition.
 - Run `pnpm check` before every commit, and `pnpm check:package` when the
   package, an adapter or a shipped doc changes.
 - Every user-facing change updates the demo (`examples/demo`), at phone sizes

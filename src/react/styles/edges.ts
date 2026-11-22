@@ -49,28 +49,29 @@ const RIM = `
 // is always its full reach, edge to edge, taking no room beside the flex gap; its painted size grows.
 // Growing needs scroll-driven animations; without them a band stays at rest. The top band is last in
 // the markup, so it changes no sibling selector, and first in the column (order: -1), so it can stick
-// to the top. The bottom band's rest is the inset plus the defaults bar's veil (--iso-bar-veil), which
-// eases from nothing to the bar's room as the bar appears, so nothing at rest is blurred while it is
-// hidden. The layers' windows run along the band from its inner edge (0%) out, so the blur begins once
+// to the top. Where a band rests is its list's to say (--iso-fade-top, --iso-fade-bottom: see RECEDE). At
+// the foot that is the inset plus the defaults bar's veil (--iso-bar-veil), which eases from nothing to
+// the bar's room as the bar appears, so nothing at rest is blurred while it is hidden. The layers' windows run along the band from its inner edge (0%) out, so the blur begins once
 // the fade is under way.
 //
 // Scroll padding keeps keyboard focus clear of each band at its full reach.
 const BANDS = `
 .isotone-root { --iso-edge-blur: 8px; --iso-edge-length: 16px; --iso-depth-scale: .96; }
 .isotone-vars-body {
+  --iso-fade-top: ${INSET}; --iso-fade-bottom: calc(${INSET} + var(--iso-bar-veil, 0px));
   scroll-padding-block: calc(${INSET} + var(--iso-edge-length)) calc(${INSET} + var(--iso-bar-room) + var(--iso-edge-length));
 }
 .isotone-edge {
-  --iso-edge-rest: ${INSET}; --iso-edge-reach: calc(var(--iso-edge-rest) + var(--iso-edge-length));
+  --iso-edge-reach: calc(var(--iso-edge-rest) + var(--iso-edge-length));
   position: sticky; z-index: 1; flex: none; height: var(--iso-edge-reach); margin-inline: calc(0px - ${INSET}); pointer-events: none;
   background-repeat: no-repeat; background-size: 100% var(--iso-edge-rest); mask-size: 100% var(--iso-edge-rest);
 }
 .isotone-edge-top {
-  order: -1; top: calc(-1px - ${INSET}); margin-block: calc(0px - ${INSET}) calc(0px - var(--iso-edge-reach));
+  --iso-edge-rest: var(--iso-fade-top); order: -1; top: calc(-1px - ${INSET}); margin-block: calc(0px - ${INSET}) calc(0px - var(--iso-edge-reach));
   background-image: linear-gradient(to top, ${ramp(surface, '0%', '100%')});
 }
 .isotone-edge-bottom {
-  --iso-edge-rest: calc(${INSET} + var(--iso-bar-veil, 0px)); z-index: 4;
+  --iso-edge-rest: var(--iso-fade-bottom); z-index: 4;
   bottom: calc(-1px - ${INSET}); margin-block: calc(0px - var(--iso-edge-reach)) calc(0px - ${INSET});
   background-position: 0 100%; background-image: linear-gradient(to bottom, ${ramp(surface, '0%', '100%')});
 }
@@ -105,8 +106,8 @@ const BANDS = `
 const MATERIALS = `
 .isotone-vars-body { --iso-head-h: calc(${INSET} + 20px + var(--iso-space)); }
 .isotone-vars-body:has(> .isotone-section) { scroll-padding-top: calc(var(--iso-head-h) + var(--iso-edge-length)); }
+${SECTIONS} { --iso-fade-top: var(--iso-head-h); }
 ${SECTIONS} > .isotone-edge-top {
-  --iso-edge-rest: var(--iso-head-h);
   background-image: linear-gradient(to bottom, ${ramp(surface, '0px', 'calc(var(--iso-head-h) - 11px)', true, 0.94)}, ${ramp(surface, 'calc(var(--iso-head-h) - 11px)', '100%', true, 0, 0.94)});
 }
 ${SECTIONS}:not(:has(> .isotone-section[data-collapsed='false'])) { --iso-edge-length: 0px; }
@@ -123,36 +124,45 @@ ${SECTIONS}:not(:has(> .isotone-section[data-collapsed='false'])) { --iso-edge-l
 // The note list's mask fades with eased ends, with a light blur band at each; a dialog's scrolled rows
 // fade with the same eased ends.
 const LISTS = `
-.isotone-list { mask-image: linear-gradient(to bottom, ${ramp(ink, '0px', 'var(--iso-space)')}, ${ramp(ink, 'calc(100% - var(--iso-space))', '100%', true)}); }
-.isotone-pages + .isotone-list { mask-image: linear-gradient(to bottom, ${ramp(ink, '6px', '18px')}, ${ramp(ink, 'calc(100% - var(--iso-space))', '100%', true)}); }
+.isotone-list {
+  --iso-fade-top: var(--iso-space); --iso-fade-bottom: var(--iso-space);
+  mask-image: linear-gradient(to bottom, ${ramp(ink, 'var(--iso-fade-from, 0px)', 'var(--iso-fade-top)')}, ${ramp(ink, 'calc(100% - var(--iso-fade-bottom))', '100%', true)});
+}
+.isotone-pages + .isotone-list { --iso-fade-from: 6px; --iso-fade-top: 18px; }
 .isotone-list::before, .isotone-list::after {
-  content: ''; position: sticky; z-index: 1; flex: none; height: var(--iso-space); pointer-events: none;
+  content: ''; position: sticky; z-index: 1; flex: none; pointer-events: none;
   -webkit-backdrop-filter: blur(1.5px); backdrop-filter: blur(1.5px);
 }
-.isotone-list::before { top: calc(-1px - var(--iso-space)); margin: calc(0px - var(--iso-space)) -8px 0; mask-image: linear-gradient(to top, ${ramp(ink, '0%', '100%')}); }
-.isotone-list::after { bottom: calc(-1px - var(--iso-space)); margin: 0 -8px calc(0px - var(--iso-space)); mask-image: linear-gradient(to bottom, ${ramp(ink, '0%', '100%')}); }
-.isotone-pages + .isotone-list::before { top: -19px; height: 18px; margin-top: -18px; }
+.isotone-list::before { top: calc(-1px - var(--iso-fade-top)); height: var(--iso-fade-top); margin: calc(0px - var(--iso-fade-top)) -8px 0; mask-image: linear-gradient(to top, ${ramp(ink, '0%', '100%')}); }
+.isotone-list::after { bottom: calc(-1px - var(--iso-fade-bottom)); height: var(--iso-fade-bottom); margin: 0 -8px calc(0px - var(--iso-fade-bottom)); mask-image: linear-gradient(to bottom, ${ramp(ink, '0%', '100%')}); }
 .isotone-menu-scroll { mask-image: linear-gradient(to bottom, ${ramp(ink, '0px', 'var(--iso-space)')}, ${ramp(ink, 'calc(100% - var(--iso-scroll-fade-bottom))', '100%', true)}); }`;
 
 // Each row recedes on its own from where it meets a band, so a tall selector's lower rows stay full
-// size while its top row leaves. The timeline's insets are the bands' inner edges. A row is animated
-// only while it crosses one: one fully in view carries no animation, so it is no stacking context,
-// and the fading key over a picked thumbnail (keyFade) still slides between its slot and picture.
-// At the foot the inset ignores the defaults bar, so the bar coming or going never rescales a row.
+// size while its top row leaves. A row is animated only while it crosses a band: one fully in view carries
+// no animation, so it is no stacking context, and the fading key over a picked thumbnail (keyFade) still
+// slides between its slot and picture. It fills on neither side: a row wholly past a band goes back to
+// full size under the fade, unseen. Filling outward to spare that step kept every row out of view
+// animated, and in a long list the controls in view then strayed by a fraction of a pixel as Feedback
+// took and gave room (panel-entry.test.ts).
+//
+// One value at each edge of a list says where its fade rests (--iso-fade-top, --iso-fade-bottom, set on
+// the list), and the band, the mask and this timeline all read it, so a row is scaled only where it is
+// already dissolving. Kept as two values that happened to be equal, they came apart: receding above the
+// band, in the room kept for a bar that was not showing, rows resized in plain view, one after another,
+// as the list scrolled; receding inside the bare inset while the bar showed, the bar hid all of it.
+// Whatever comes to float over a list sets that one value. A row under the bar as it rises or leaves
+// eases a few percent beneath its material.
 const RECEDE = `
 @keyframes isotone-recede-in { from { scale: var(--iso-depth-scale); } }
 @keyframes isotone-recede-out { to { scale: var(--iso-depth-scale); } }
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
     .isotone-root :is(.isotone-axis > :not(.isotone-grid), .isotone-grid > *, .isotone-list > .isotone-note) {
-      --iso-recede: view(block var(--iso-recede-top, ${INSET}) var(--iso-recede-bottom, ${INSET}));
+      --iso-recede: view(block var(--iso-fade-top, ${INSET}) var(--iso-fade-bottom, ${INSET}));
       animation: isotone-recede-in linear none, isotone-recede-out linear none;
       animation-timeline: var(--iso-recede), var(--iso-recede);
       animation-range: entry, exit;
     }
-    ${SECTIONS} { --iso-recede-top: var(--iso-head-h); }
-    .isotone-list { --iso-recede-top: var(--iso-space); --iso-recede-bottom: var(--iso-space); }
-    .isotone-pages + .isotone-list { --iso-recede-top: 18px; }
   }
 }`;
 

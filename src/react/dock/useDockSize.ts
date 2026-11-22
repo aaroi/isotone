@@ -194,7 +194,15 @@ export function useDockSize(rootRef: RefObject<HTMLElement | null>, key: string,
       if (root.dataset.easing !== 'true') refresh();
     });
     for (const panel of root.querySelectorAll('.isotone-panel')) observer.observe(panel);
-    return () => observer.disconnect();
+    // And once an ease lands, since nothing was measured through it.
+    const landed = new MutationObserver(() => {
+      if (!root.dataset.easing && !root.dataset.settling) refresh();
+    });
+    landed.observe(root, { attributes: true, attributeFilter: ['data-easing', 'data-settling'] });
+    return () => {
+      observer.disconnect();
+      landed.disconnect();
+    };
   }, [open.variants, open.notes, size, refresh, rootRef]);
 
   const vars: Record<string, string> = {};
@@ -216,7 +224,12 @@ export function useDockSize(rootRef: RefObject<HTMLElement | null>, key: string,
         persist,
       );
     };
+    // The cursor promises only what a drag can do: both ways, one way, or nothing at all, as for a panel
+    // already showing all of its content with nothing to give up.
+    const grows = range.max > range.now;
+    const shrinks = range.now > range.min;
     return {
+      'data-can': grows && shrinks ? 'both' : grows ? 'grow' : shrinks ? 'shrink' : 'none',
       className:
         name === 'width'
           ? 'isotone-resize isotone-resize-w'

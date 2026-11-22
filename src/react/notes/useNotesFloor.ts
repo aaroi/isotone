@@ -5,11 +5,11 @@ const px = (value: string) => parseFloat(value) || 0;
 /**
  * The least height Feedback can take without its own parts spilling out: everything but the list, which
  * scrolls, at its full height. A list squeezed to nothing reaches only into the panel's top padding, which
- * its fade covers. Feedback stacks from the bottom, so a cap below this (a hold under a resting pointer, or
- * a height stored when the panel held less) would push the page chips and the composer out past its top
+ * its fade covers. Feedback stacks from the bottom, so a cap below this (a height stored
+ * when the panel held less) would push the page chips and the composer out past its top
  * edge. Published as `--iso-notes-floor`, the least its max-height can be.
  */
-export function floorOf(panel: HTMLElement): number {
+function floorOf(panel: HTMLElement): number {
   const style = getComputedStyle(panel);
   let floor = px(style.paddingTop) + px(style.paddingBottom) + px(style.borderTopWidth) + px(style.borderBottomWidth);
   let inFlow = 0;

@@ -412,6 +412,8 @@ function useMenuPlacement(
   content: unknown[],
 ) {
   const release = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // The height of a card that cannot grow to what the dialog needs, while it cannot.
+  const room = useRef<number | undefined>(undefined);
   // biome-ignore lint/correctness/useExhaustiveDependencies: the dialog's content changes with the selected selector and its options.
   useLayoutEffect(() => {
     const dialog = menuRef.current;
@@ -424,9 +426,12 @@ function useMenuPlacement(
       root.style.removeProperty('--iso-menu-top');
       root.style.removeProperty('--iso-menu-max');
     };
-    // A closing dialog keeps its place and the room it took until its fade has
-    // finished; dropping them at once moved it to the panel's top mid-fade.
+    // A closing dialog keeps its place until its fade has finished: dropped at once, it moved to the
+    // panel's top mid-fade. The room it took goes at once, so the panel starts back to its own size as
+    // the dialog fades rather than standing tall and empty until the fade is over.
     if (!open) {
+      room.current = undefined;
+      root.style.removeProperty('--iso-menu-need');
       release.current = setTimeout(clear, MOTION.exit + 20);
       return;
     }
@@ -438,9 +443,24 @@ function useMenuPlacement(
     const place = () => {
       const natural = dialog.offsetHeight + scroll.scrollHeight - scroll.clientHeight;
       root.style.setProperty('--iso-menu-need', `${natural + 12}px`);
+      // No more room than its card can have: beside Feedback, or in a short window, the card stops short
+      // of what the dialog asks, and content held taller than its card hung out over the pill. The dialog
+      // then scrolls in the room there is. A card still easing shows a height that is no measure of that
+      // room, so the last answer stands meanwhile.
+      const card = root.parentElement;
+      const dock = root.closest<HTMLElement>('.isotone-root');
+      if (card && !dock?.dataset.easing && !dock?.dataset.settling) {
+        const has = card.getBoundingClientRect().height;
+        room.current = root.offsetHeight > has + 0.5 ? has : undefined;
+      }
+      if (room.current !== undefined) root.style.setProperty('--iso-menu-need', `${Math.min(natural + 12, room.current)}px`);
       const from = opener.current?.isConnected ? opener.current : null;
       const anchor = (from?.closest<HTMLElement>('.isotone-opt') ?? from)?.getBoundingClientRect();
-      const rootTop = root.getBoundingClientRect().top;
+      // Where the opener rests: while a short panel eases taller to hold the dialog, the list starts lower
+      // and comes up with the card (useDockMotion), and a place measured then would be for somewhere the
+      // opener is only passing through.
+      const list = root.querySelector<HTMLElement>(':scope > .isotone-vars-body');
+      const rootTop = root.getBoundingClientRect().top + (list ? Number.parseFloat(getComputedStyle(list).marginTop) || 0 : 0);
       const { top, max } = placeDialog(
         natural,
         root.clientHeight,

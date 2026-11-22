@@ -211,6 +211,10 @@ it('puts a refused note back in the field', async () => {
   expect(field.value).toBe('Refused');
   expect(container.querySelector('.isotone-note')).toBeNull();
   expect(container.querySelector('.isotone-notice')?.textContent).toBe('Could not save. Your feedback is still here.');
+  // Written in select mode, which a sent note goes back to: what came back is not left under the cover,
+  // where the next click on the page would pin another element to it.
+  expect(container.querySelector('.isotone-picking')).toBeNull();
+  expect(document.activeElement).toBe(field);
 });
 
 it('says which selectors sat off their defaults when the note was written', async () => {

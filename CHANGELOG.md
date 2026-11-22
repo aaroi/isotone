@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Changed
+
+- **Sending a note written in select mode goes back to select mode.** After you pin an element, write beside it and send, the crosshair is on again for the next element, with the caret waiting in the note field as when Feedback opens; Escape or the crosshair button ends it. A note written in the docked field, or an edit, leaves you in the field as before, and so does a phone-sized window, where select mode hides the saved notes. A note that could not be saved comes back in the field out of select mode, where it can be read.
+
+### Fixed
+
+- **A panel is always the size of what is in it.** While the pointer rested on the panel, it kept its old height when its contents changed, and took the new one only once the pointer moved away: folding a section left blank room that scrolled a header under the top edge, unfolding one opened it into a panel too short to show it, turning off a page tab in Feedback left empty space above the tabs, and a first note sent with a click stayed out of sight. Panels no longer wait for the pointer: every such change resizes the panel as it happens, in one ease. This replaces 1.7.0's rule that nothing under a resting pointer moves, so a fold's toggle and the selectors under a closing Feedback now glide with their panel's edge.
+- **Notes and tabs no longer hop when Feedback changes height.** Saving a note lets the rows above it glide up with the panel instead of jumping a row first, opening a note for editing or removing one in a full dock leaves the rows above where they are, and turning a page tab off or removing a note elsewhere lets the tabs and rows ride the panel's edge instead of snapping to its foot first.
+- **A selector's dialog opens and closes smoothly in a short panel.** When the panel had to grow to hold the dialog, the selectors and the dialog appeared at once where the panel's top edge was still on its way to, outside the card until it caught up; closing, the panel stood tall and empty until the dialog had faded, then shrank. The selectors and the dialog now stay with that edge on every frame, and the panel starts back as the dialog fades; the colour picker too.
+- **Folding a section from the keyboard is as smooth as with the pointer.** The sections after the fold used to be thrown out of place for a frame and slide back, and in a short or scrolled list the next header swung away and returned with the pointer too.
+- **Changing your mind mid-animation turns the panel round at once.** A fold, a page tab or a note undone while the panel was still resizing let it run on to the size nothing needed, then resized again.
+- **The Variants list no longer reaches past its panel.** In a short window, or when a fold took out more than the panel's height, the list grew taller than the panel for the length of the change (or for as long as the pointer stayed), putting its bottom edge and the end of its scroll out of reach.
+- **Rows shrink at the bottom of the Variants list while the defaults bar shows.** Scrolled rows recede a little as they leave at either end; at the bottom this happened only inside the last few pixels, where the bar hid all of it. It now happens under the bar's own fade, as it does under a section header at the top, and stays within the list's edge fade when the bar is hidden, so no row ever resizes in plain view.
+- **A selector's dialog stays inside its panel when there is no room to grow.** Beside Feedback, or in a short window, the Variants panel cannot grow to the height a dialog asks for; the dialog then hung out below the panel, over the pill. It now scrolls in the room there is.
+- **Selectors no longer drop when Feedback gives Variants room.** Removing a note or closing a page tab beside a scrolled Variants list that then fits made every selector drop by what was scrolled and ride back up.
+- **A short tag on a saved note is as wide as its label.** A tag such as “Due” was padded out to the width kept for a long label being cut off, so short tags looked stretched beside their notes.
+- **The resize cursor shows only where a panel can be resized.** The top edge of a panel that cannot grow (all of its content shows, or the dock fills the window) showed the two-way resize cursor anyway. It now shows one arrow where the edge can only go one way, and the ordinary pointer where it cannot move.
+
 ## 1.8.2
 
 - Merge pull request #80 from aaroi/feedback-spill

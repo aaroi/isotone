@@ -128,6 +128,27 @@ describe('input modality', () => {
   });
 });
 
+describe('panel sizes', () => {
+  // docs/design.md, Invariants: a panel is as tall as its content needs, wherever the pointer is. Three
+  // releases held a height while the pointer rested on the dock, and each showed blank room, a hidden note
+  // or a section that would not open until the pointer left.
+  it('never depend on where the pointer rests', () => {
+    const sources = import.meta.glob('../../src/react/**/*.{ts,tsx}', { query: '?raw', import: 'default', eager: true }) as Record<
+      string,
+      string
+    >;
+    expect(Object.keys(sources).length).toBeGreaterThan(20);
+    for (const [file, text] of Object.entries(sources)) {
+      expect(text, `${file} reads :hover from script`).not.toMatch(/matches\(\s*['"`][^'"`]*:hover/);
+      expect(text, `${file} holds a size`).not.toMatch(/--iso-[a-z-]*hold|data-held|dataset\.held/);
+    }
+    // In the stylesheet, hover may restyle a control; it never sets a size of a panel or a list.
+    for (const rule of PANEL_CSS.match(/[^{}]*:hover[^{}]*\{[^}]*\}/g) ?? [])
+      if (/isotone-(panel|list|vars)\b(?!-close|-head)/.test(rule.split('{')[0] ?? ''))
+        expect(rule, 'a hover rule sizes a panel').not.toMatch(/(?<![\w-])(min-|max-)?(height|flex|flex-grow|flex-shrink|flex-basis)\s*:/);
+  });
+});
+
 describe('dock lists', () => {
   // A label of one long word used to make its segment as wide as the word, so the list scrolled sideways.
   // On touch, a note's enlarged delete target reached past the note list's edge and did the same.
@@ -206,6 +227,16 @@ describe('scroll edges', () => {
       // Still inside that block: more braces opened than closed since it began.
       expect(between.split('{').length - 1).toBeGreaterThan(between.split('}').length - 1);
     }
+  });
+
+  it('has one value for where a fade rests at each edge of a list, read by its band and by the rows receding', () => {
+    // Two values that happened to be equal came apart: rows resized in plain view, clear of the fade.
+    // A band's rest is only ever the list's own value, and so are the insets rows recede from.
+    const rests = [...PANEL_CSS.matchAll(/--iso-edge-rest:\s*([^;]+);/g)].map((match) => match[1]);
+    expect(rests.sort()).toEqual(['var(--iso-fade-bottom)', 'var(--iso-fade-top)']);
+    const view = /view\(block ([^;]+)\);/.exec(PANEL_CSS)?.[1] ?? '';
+    expect(view).toMatch(/^var\(--iso-fade-top, [^)]+\)\) var\(--iso-fade-bottom, [^)]+\)\)$/);
+    expect(PANEL_CSS).not.toMatch(/--iso-recede-(top|bottom)/);
   });
 
   it('lets forced colours keep a solid face on stuck section headers', () => {

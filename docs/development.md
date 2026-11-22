@@ -20,7 +20,9 @@ guide](releasing.md) and keep work on a branch until it is ready.
 | `pnpm mutate` | Stryker over the Node-side layers (weekly in CI, failing below its `break` score; `--mutate <glob>` narrows it), into `reports/mutation/index.html`. |
 
 Tests check observable behaviour, transport and store failures, lifecycle
-cleanup and design boundaries; add a small regression case for each bug.
+cleanup and design boundaries; add a small regression case for each bug. A
+panel bug also gets the [invariant](design.md#invariants) it broke, checked on
+every transition rather than the one that showed it.
 
 ## Documentation
 

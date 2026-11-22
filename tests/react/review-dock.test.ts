@@ -826,13 +826,10 @@ describe('review dock interactions', () => {
       expect(labels()).toEqual(['Layout', 'Before > After', 'Logo size', 'Ink', 'Links']);
       expect(headers()).toEqual(['Header', 'Footer']);
       const body = container.querySelector('.isotone-vars-body');
-      // The scroll edge layers close the list; they are decoration, not selectors.
-      expect(Array.from(body?.querySelectorAll(':scope > :not(.isotone-edge)') ?? []).map((el) => el.className)).toEqual([
-        'isotone-axis',
-        'isotone-axis',
-        'isotone-section',
-        'isotone-section',
-      ]);
+      // The tail (room at the list's end) and the scroll edge layers close the list; they are not selectors.
+      expect(
+        Array.from(body?.querySelectorAll(':scope > :not(.isotone-edge, .isotone-vars-tail)') ?? []).map((el) => el.className),
+      ).toEqual(['isotone-axis', 'isotone-axis', 'isotone-section', 'isotone-section']);
       const header = container.querySelector('.isotone-section');
       expect(header?.querySelector('.isotone-section-toggle small')?.textContent).toBe('2');
       expect(header?.querySelector('h3 > button')?.getAttribute('aria-label')).toBe('Header, 2 selectors');

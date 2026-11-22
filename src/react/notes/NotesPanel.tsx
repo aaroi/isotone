@@ -17,7 +17,6 @@ import { Icon } from '../icons';
 import { dotPulse, fadeInContent, MAX_ANIMATED_ITEMS } from '../motion';
 import { NoteSummary } from './NoteSummary';
 import type { Anchor } from '../dock/picking';
-import { useHoverHold } from '../dock/useHoverHold';
 import { useNotesFloor } from './useNotesFloor';
 import { showOverflowTitle } from '../tooltips';
 import { useLayoutMotion } from '../useLayoutMotion';
@@ -43,9 +42,7 @@ interface NotesPanelProps {
 export function NotesPanel({ id, open, route, view, editingId, resizeHandle, compose, onClose, onEdit, onRemove }: NotesPanelProps) {
   const { pages, selectedPages, notes, working, togglePage } = view;
   const panelRef = useRef<HTMLElement | null>(null);
-  // A change under a resting pointer scrolls the list rather than moving the composer or the rows.
-  useHoverHold(panelRef, open);
-  // No cap, held or stored, may push the page chips or the composer out past the panel's top.
+  // No stored height may push the page chips or the composer out past the panel's top.
   useNotesFloor(panelRef, open);
   return (
     <section
@@ -120,7 +117,8 @@ const NoteList = memo(function NoteList({
   const fromEnd = useRef(0);
   const keepPlace = useCallback(() => {
     const list = listRef.current;
-    if (list) list.scrollTop = list.scrollHeight - list.clientHeight - fromEnd.current;
+    const anchor = list?.closest<HTMLElement>('.isotone-panel')?.dataset.anchor;
+    if (list && anchor !== 'top-list' && anchor !== 'rise') list.scrollTop = list.scrollHeight - list.clientHeight - fromEnd.current;
   }, []);
   // A fresh set comes with every change to the notes; the pages it names are what matter.
   const filter = [...selectedPages].join('\n');
@@ -141,14 +139,23 @@ const NoteList = memo(function NoteList({
   useEffect(() => {
     const list = listRef.current;
     if (!list || typeof ResizeObserver === 'undefined') return;
-    // A panel held under a resting pointer keeps its top edge, so the list resizes only at its foot (the
-    // composer below it growing as a note opens for editing): its rows stay where they are on screen.
+    // While its card eases taller the list is squeezed, and scrolling it to keep its place would put every
+    // row a row higher in one frame (useDockMotion, `data-anchor`): left alone, the rows ride the card's
+    // edge and what is new is uncovered. The place is kept again once the ease lands.
+    const panel = list.closest<HTMLElement>('.isotone-panel');
+    const squeezed = () => panel?.dataset.anchor === 'top-list' || panel?.dataset.anchor === 'rise';
     const observer = new ResizeObserver(() => {
-      if (list.closest<HTMLElement>('.isotone-panel')?.dataset.held === undefined) keepPlace();
-      else if (list.clientHeight) fromEnd.current = list.scrollHeight - list.clientHeight - list.scrollTop;
+      if (!squeezed()) keepPlace();
     });
+    const landed = new MutationObserver(() => {
+      if (!panel?.dataset.anchor) keepPlace();
+    });
+    if (panel) landed.observe(panel, { attributes: true, attributeFilter: ['data-anchor'] });
     observer.observe(list);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      landed.disconnect();
+    };
   }, [keepPlace]);
   return (
     <ul

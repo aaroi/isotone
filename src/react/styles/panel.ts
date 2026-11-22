@@ -69,6 +69,13 @@ ${APPEARANCE_CSS}
 .isotone-resize-w { left: -4px; top: 20px; bottom: calc(var(--iso-rail-size) + var(--iso-view-gap) + 12px); width: 8px; cursor: ew-resize; }
 .isotone-resize-h { top: -4px; left: 20px; right: 20px; height: 8px; cursor: ns-resize; }
 .isotone-resize-split { top: calc(0px - var(--iso-view-gap)); }
+/* The cursor shows only what a drag can do (data-can, useDockSize): one arrow at a limit, none where the
+   edge cannot move, as on a panel that already shows all of its content. */
+.isotone-resize-w[data-can='grow'] { cursor: w-resize; }
+.isotone-resize-w[data-can='shrink'] { cursor: e-resize; }
+.isotone-resize-h[data-can='grow'] { cursor: n-resize; }
+.isotone-resize-h[data-can='shrink'] { cursor: s-resize; }
+.isotone-resize[data-can='none'] { cursor: default; }
 .isotone-resize:focus-visible::after { content: ''; position: absolute; border-radius: 2px; background: var(--iso-focus); }
 .isotone-resize-w:focus-visible::after { left: 3px; width: 2px; top: 0; bottom: 0; }
 .isotone-resize-h:focus-visible::after { top: 3px; height: 2px; left: 0; right: 0; }
@@ -371,7 +378,9 @@ ${APPEARANCE_CSS}
 /* A count ("3 pins", "2 picks") keeps its width; a single reference beside it keeps a few letters. */
 .isotone-meta .isotone-chip-count { flex-shrink: 0; }
 .isotone-chip > .isotone-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.isotone-meta .isotone-chip:not(.isotone-chip-count) { min-width: 52px; }
+/* The few letters are a floor for a label being squeezed, never padding for one that is short already:
+   "Due" stays as wide as "Due" (data-long, NoteSummary). */
+.isotone-meta .isotone-chip[data-long] { min-width: 52px; }
 /* The corner action floats outside the text column; its 24px hit target
    surrounds a 16px face without reserving trailing space in every row. */
 .isotone-note > .isotone-x { position: absolute; right: -8px; top: -8px; width: 24px; height: 24px; isolation: isolate; opacity: .6; background: none; box-shadow: none; }
@@ -500,13 +509,18 @@ ${EDGES_CSS}
 /* The dock's size is the reviewer's choice on a window with room for it. */
 @media (min-width: 641px) and (min-height: 501px) {
   .isotone-root[data-open='true'] { width: var(--iso-width, var(--iso-dock-width)); }
-  .isotone-variants-panel { max-height: min(var(--iso-variants-height, 100vh), var(--iso-variants-hold, 100vh), calc(var(--iso-view-height) - 76px)); }
-  /* A stored size or a hold never caps Feedback below its own parts (see useNotesFloor): it stacks from
-     the bottom, so the page chips and the composer would spill out past its top edge. */
-  .isotone-notes-panel { max-height: min(max(var(--iso-notes-floor, 0px), min(var(--iso-notes-height, 100vh), var(--iso-notes-hold, 100vh))), calc(var(--iso-view-height) - 76px)); min-height: var(--iso-notes-hold-min, 0px); }
-  /* Held under a resting pointer, the list takes up the difference, so the rows and the composer stay put. */
-  .isotone-notes-panel[data-held] > .isotone-list { flex-grow: 1; max-height: none; }
+  .isotone-variants-panel { max-height: min(var(--iso-variants-height, 100vh), calc(var(--iso-view-height) - 76px)); }
+  /* A stored size never caps Feedback below its own parts (see useNotesFloor): it stacks from the bottom,
+     so the page chips and the composer would spill out past its top edge. */
+  .isotone-notes-panel { max-height: min(max(var(--iso-notes-floor, 0px), var(--iso-notes-height, 100vh)), calc(var(--iso-view-height) - 76px)); }
   .isotone-root[data-sized-notes='true'] .isotone-list { max-height: none; }
+  /* Feedback's content through a height ease keeps to the edge of the card that stays (useDockMotion).
+     Top: the list keeps its height, so its rows stay put (or, where the list itself grew, gives way at
+     its foot). Foot: the list takes up the difference, so the page tabs ride the top edge. Either way the
+     composer keeps to the foot. */
+  .isotone-notes-panel[data-anchor='top'] > .isotone-list { flex-shrink: 0; }
+  .isotone-notes-panel[data-anchor='foot'] > .isotone-list { flex-grow: 1; max-height: none; }
+  .isotone-notes-panel[data-anchor] > .isotone-compose { margin-top: auto; }
 }
 /* Phones. Panels take turns (see viewport.ts). Variants stop at about half the
    screen, so the page they change stays in view; action dialogs keep their

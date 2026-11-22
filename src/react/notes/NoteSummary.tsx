@@ -9,6 +9,9 @@ interface Reference {
   list?: string[];
 }
 
+/** Letters that fit in the 52px a squeezed tag keeps (styles/panel.ts): a longer label can be cut off. */
+const LONG_LABEL = 6;
+
 /** Pinned references and saved defaults use the same compact tag. */
 function SummaryTag({ label, list }: Omit<Reference, 'key'>) {
   return list ? (
@@ -18,7 +21,8 @@ function SummaryTag({ label, list }: Omit<Reference, 'key'>) {
       <span className="isotone-hidden">: {list.join(', ')}</span>
     </span>
   ) : (
-    <span className="isotone-chip">
+    // A label long enough to be cut off keeps a few letters when squeezed; a short one keeps its own width.
+    <span className="isotone-chip" data-long={label.length > LONG_LABEL || undefined}>
       <span onPointerOver={showOverflowTitle}>{label}</span>
     </span>
   );
