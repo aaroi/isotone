@@ -18,5 +18,8 @@ Follow [the agent guide](docs/agent-guide.md); it ships in the package as
   Agent-facing rules live in [the agent guide](docs/agent-guide.md), the
   `AGENTS.md` section `init` writes (`src/cli/init.ts`) and the CLI's help and
   hints. Change a rule where it lives and link to it from elsewhere.
+- Never change the version in `package.json` or add the `minor-release` label:
+  every merge ships as the next patch, and a minor is the maintainer's
+  decision alone ([releasing](docs/releasing.md#before-merging)).
 - Write pull requests as [development](docs/development.md#pull-requests)
   describes. Merging into `main` publishes to npm ([releasing](docs/releasing.md)).

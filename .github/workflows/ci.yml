@@ -53,16 +53,33 @@ jobs:
     name: release guard
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The merge commit and its first parent, which is main as the change meets it.
+          fetch-depth: 2
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           package-manager-cache: false
-      # Unreleased notes beyond fixes need package.json above the published minor.
-      - run: node scripts/check-release.mjs
+      # Every merge ships as the next patch. A pull request that changes the
+      # version passes only once the maintainer labelled it `minor-release`; the
+      # label is read now, so re-running this job after labelling is enough.
+      - name: Check the version is not changed without the maintainer
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          approved=''
+          labelled=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json labels -q 'any(.labels[]; .name == "minor-release")' || true)
+          if [ "$labelled" = true ]; then approved='--minor-approved'; fi
+          base=$(git show HEAD^1:package.json | node -p 'JSON.parse(require("node:fs").readFileSync(0, "utf8")).version')
+          node scripts/check-release.mjs "$base" $approved
 
   workflows:
     name: workflow lint
